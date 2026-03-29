@@ -1,0 +1,132 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Local Ecosystem Ops Dashboard</title>
+    <link rel="stylesheet" href="/static/dashboard.css" />
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="page-header">
+        <div>
+          <h1>Local Ecosystem Ops Dashboard</h1>
+          <div id="summary" class="muted">Loading operational telemetry...</div>
+        </div>
+        <div class="toolbar">
+          <label for="refreshRate">Auto refresh:</label>
+          <select id="refreshRate">
+            <option value="5000">5s</option>
+            <option value="10000" selected>10s</option>
+            <option value="30000">30s</option>
+            <option value="60000">60s</option>
+            <option value="0">Manual</option>
+          </select>
+          <button id="refreshNow">Refresh now</button>
+          <span id="nextRefresh" class="small"></span>
+        </div>
+      </header>
+
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="overviewTab">Overview</button>
+        <button class="tab-btn" data-tab="logsTab">Logs</button>
+      </div>
+
+      <section id="overviewTab" class="tab-content active">
+        <section>
+          <h2>System Status</h2>
+          <div id="systemStatus" class="grid-mini"></div>
+        </section>
+
+        <section>
+          <h2>Docker Host & Capacity</h2>
+          <div id="dockerOverview" class="grid-mini"></div>
+        </section>
+
+        <section>
+          <h2>Live Graphs</h2>
+          <div class="charts">
+            <div class="chart-card">
+              <strong>Runtime Trends (Line)</strong>
+              <div class="chart-wrap"><canvas id="lineChart"></canvas></div>
+            </div>
+            <div class="chart-card">
+              <strong>Service Utilization (Bar)</strong>
+              <div class="chart-wrap"><canvas id="barChart"></canvas></div>
+            </div>
+            <div class="chart-card">
+              <strong>Service State Distribution (Pie)</strong>
+              <div class="chart-wrap"><canvas id="pieChart"></canvas></div>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <h2>Managed Services</h2>
+          <div id="services" class="grid"></div>
+        </section>
+
+        <section>
+          <h2>All Docker Containers</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Image</th>
+                <th>Status</th>
+                <th>Restart</th>
+                <th>Ports</th>
+              </tr>
+            </thead>
+            <tbody id="containers"></tbody>
+          </table>
+        </section>
+      </section>
+
+      <section id="logsTab" class="tab-content">
+        <h2>Service Logs</h2>
+        <div class="toolbar logs-toolbar">
+          <label for="logService">Service:</label>
+          <select id="logService"></select>
+          <label for="logLevel">Level:</label>
+          <select id="logLevel">
+            <option value="all">All</option>
+            <option value="error">Error</option>
+            <option value="warn">Warn</option>
+            <option value="info">Info</option>
+            <option value="other">Other</option>
+          </select>
+          <label for="logSince">Window:</label>
+          <select id="logSince">
+            <option value="300">5 min</option>
+            <option value="900">15 min</option>
+            <option value="1800" selected>30 min</option>
+            <option value="3600">60 min</option>
+          </select>
+          <label for="logTail">Tail:</label>
+          <select id="logTail">
+            <option value="200">200</option>
+            <option value="500" selected>500</option>
+            <option value="1000">1000</option>
+          </select>
+          <input id="logSearch" type="text" placeholder="Search logs..." />
+          <button id="logApply">Apply</button>
+        </div>
+        <div id="logSummary" class="muted">Loading logs...</div>
+        <table class="logs-table">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Level</th>
+              <th>Message</th>
+            </tr>
+          </thead>
+          <tbody id="logsBody"></tbody>
+        </table>
+      </section>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/static/dashboard.js"></script>
+  </body>
+</html>
