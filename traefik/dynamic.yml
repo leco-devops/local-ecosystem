@@ -1,0 +1,102 @@
+http:
+  routers:
+
+    # ========================
+    # TRAEFIK
+    # ========================
+    traefik-http:
+      rule: "Host(`traefik.lh`)"
+      service: api@internal
+      entryPoints:
+        - web
+
+    traefik-https:
+      rule: "Host(`traefik.lh`)"
+      service: api@internal
+      entryPoints:
+        - websecure
+      tls: true
+
+    # ========================
+    # AI (Open WebUI)
+    # ========================
+    ai-http:
+      rule: "Host(`ai.lh`)"
+      service: ai-service
+      entryPoints:
+        - web
+
+    ai-https:
+      rule: "Host(`ai.lh`)"
+      service: ai-service
+      entryPoints:
+        - websecure
+      tls: true
+
+    # ========================
+    # N8N
+    # ========================
+    n8n-http:
+      rule: "Host(`n8n.lh`)"
+      service: n8n-service
+      entryPoints:
+        - web
+
+    n8n-https:
+      rule: "Host(`n8n.lh`)"
+      service: n8n-service
+      entryPoints:
+        - websecure
+      tls: true
+
+    # ========================
+    # OLLAMA
+    # ========================
+    ollama-http:
+      rule: "Host(`ollama.lh`)"
+      service: ollama-service
+      entryPoints:
+        - web
+
+    ollama-https:
+      rule: "Host(`ollama.lh`)"
+      service: ollama-service
+      entryPoints:
+        - websecure
+      tls: true
+
+    # ========================
+    # SERVICE DASHBOARD
+    # ========================
+    dashboard-http:
+      rule: "Host(`localhost.lh`)"
+      service: dashboard-service
+      entryPoints:
+        - web
+
+  services:
+
+    ai-service:
+      loadBalancer:
+        servers:
+          - url: "http://open-webui:8080"
+
+    n8n-service:
+      loadBalancer:
+        servers:
+          - url: "http://n8n:5678"
+
+    ollama-service:
+      loadBalancer:
+        servers:
+          - url: "http://ollama:11434"
+
+    dashboard-service:
+      loadBalancer:
+        servers:
+          - url: "http://service-dashboard:8090"
+
+tls:
+  certificates:
+    - certFile: "/Users/rmaurya/Working/GitHub/local-ecosystem/certs/wildcard.lh.pem"
+      keyFile: "/Users/rmaurya/Working/GitHub/local-ecosystem/certs/wildcard.lh-key.pem"

@@ -1,0 +1,131 @@
+CORE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$CORE_DIR/.." && pwd)"
+SERVICES_DIR="$CORE_DIR/services"
+NETWORK_NAME="${NETWORK_NAME:-lh-network}"
+NETWORK_CONTAINERS="traefik open-webui ollama n8n_postgres n8n service-dashboard"
+START_ORDER="traefik postgres ollama webui n8n dashboard"
+
+get_services() {
+  for file in $SERVICES_DIR/*.sh; do
+    basename "$file" .sh
+  done
+}
+
+get_services_in_start_order() {
+  for svc in $START_ORDER; do
+    if [ -f "$SERVICES_DIR/$svc.sh" ]; then
+      echo "$svc"
+    fi
+  done
+}
+
+service_exists() {
+  [ -f "$SERVICES_DIR/$1.sh" ]
+}
+
+ensure_network_exists() {
+  if ! docker network inspect "$NETWORK_NAME" >/dev/null 2>&1; then
+    echo "🛠️ Creating missing Docker network: $NETWORK_NAME"
+    docker network create "$NETWORK_NAME" >/dev/null
+  fi
+}
+
+is_container_connected() {
+  container_name=$1
+  networks=$(docker inspect -f '{{range $k, $_ := .NetworkSettings.Networks}}{{printf "%s " $k}}{{end}}' "$container_name" 2>/dev/null)
+
+  case " $networks " in
+    *" $NETWORK_NAME "*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+connect_container_to_network() {
+  container_name=$1
+
+  if ! docker inspect "$container_name" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if is_container_connected "$container_name"; then
+    echo "ℹ️ $container_name is already connected to $NETWORK_NAME"
+    return 0
+  fi
+
+  if docker network connect "$NETWORK_NAME" "$container_name" >/dev/null 2>&1; then
+    echo "✅ Connected $container_name to $NETWORK_NAME"
+  else
+    echo "⚠️ Failed to connect $container_name to $NETWORK_NAME"
+  fi
+}
+
+repair_network_links() {
+  ensure_network_exists
+
+  for container_name in $NETWORK_CONTAINERS; do
+    connect_container_to_network "$container_name"
+  done
+}
+
+run_service() {
+  svc=$1
+  action=$2
+
+  if ! service_exists "$svc"; then
+    echo "❌ Unknown service: $svc"
+    return 1
+  fi
+
+  source "$SERVICES_DIR/$svc.sh"
+
+  if declare -F "$action" >/dev/null 2>&1; then
+    "$action"
+    return $?
+  fi
+
+  if [ -z "$NAME" ]; then
+    echo "❌ Service '$svc' is missing NAME in service script."
+    return 1
+  fi
+
+  case "$action" in
+    pause)
+      docker pause "$NAME"
+      ;;
+    unpause)
+      docker unpause "$NAME"
+      ;;
+    status)
+      docker ps -a --filter "name=^/$NAME$" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+      ;;
+    *)
+      echo "❌ Action '$action' not supported for service '$svc'"
+      return 1
+      ;;
+  esac
+}
+
+run_all() {
+  action=$1
+  has_errors=false
+
+  if [ "$action" = "start" ] || [ "$action" = "restart" ]; then
+    svc_list="$(get_services_in_start_order)"
+  else
+    svc_list="$(get_services)"
+  fi
+
+  for svc in $svc_list; do
+    if ! run_service "$svc" "$action"; then
+      has_errors=true
+    fi
+  done
+
+  if [ "$action" = "start" ] || [ "$action" = "restart" ]; then
+    repair_network_links
+  fi
+
+  if [ "$has_errors" = true ]; then
+    return 1
+  fi
+}
