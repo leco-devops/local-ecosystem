@@ -67,7 +67,7 @@
             </article>
             <article class="dash-panel dash-panel--hero">
               <header class="dash-panel__head">
-                <span class="dash-panel__title">Memory</span>
+                <span class="dash-panel__title">Memory (% · GB)</span>
                 <span class="dash-live">live</span>
               </header>
               <p class="dash-panel__meta" id="overviewRamMeta"></p>
@@ -214,8 +214,8 @@
             <div class="chart-wrap tall"><canvas id="metricsChartCpu"></canvas></div>
           </div>
           <div class="chart-card tall">
-            <strong>RAM (%)</strong>
-            <p class="chart-sub">Cyan: Docker Σ container usage ÷ kernel <code>MemTotal</code> (same total as <code>/proc</code> when readable). Magenta: <code>MemAvailable</code> ÷ <code>MemTotal</code> (approx. headroom %) — not “used RAM”, so it will not match the cyan line. Without <code>/proc</code>, second line is Docker ÷ Σ cgroup limits.</p>
+            <strong>RAM (% · GB)</strong>
+            <p class="chart-sub">Y-axis is percent; hover tooltips and the summary line also show GB (Docker Σ vs <code>MemTotal</code> or Σ limits; magenta line ≈ avail or used vs <code>MemTotal</code>). Cyan: Docker Σ ÷ kernel <code>MemTotal</code>. Magenta: <code>MemAvailable</code> ÷ <code>MemTotal</code> (headroom) — not the same quantity as cyan. Without <code>/proc</code>, second line is Docker ÷ Σ cgroup limits.</p>
             <div class="chart-wrap tall"><canvas id="metricsChartRam"></canvas></div>
           </div>
           <div class="chart-card tall">
@@ -249,6 +249,11 @@
               <button type="button" id="hostMetricsRefreshCharts" class="small-copy">Reload charts &amp; status</button>
             </div>
           </div>
+          <div id="hostMetricsReloadPreloader" class="host-metrics-reload-preloader is-hidden" aria-live="polite">
+            <span class="host-metrics-spinner" aria-hidden="true"></span>
+            <span>Refreshing charts and host file status…</span>
+          </div>
+          <div id="hostMetricsReloadLog" class="host-metrics-reload-log is-hidden" aria-label="Reload log"></div>
           <p class="muted small host-metrics-panel__lead">
             The dashboard container reads a file from your Mac (see <code>docs/SETUP.md</code> §8). LaunchAgent status below is from
             <code>scheduler_meta.json</code> on disk; live <code>launchctl</code> must be checked on the Mac.

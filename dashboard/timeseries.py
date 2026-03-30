@@ -103,6 +103,7 @@ def compute_docker_totals_aligned(client, docker_overview, agg=None):
         "memory_percent_of_limits": agg["memory_percent_limits"],
         "memory_usage": agg["memory_usage"],
         "memory_limit_sum": agg["memory_limit"],
+        "host_memory_total_bytes_effective": mem_total_bytes if mem_total_bytes > 0 else host_mem,
         "running_container_count": agg.get("running_container_count", 0),
         "host_cpus": host_cpus,
     }
@@ -229,6 +230,7 @@ def append_snapshot(client=None, docker_overview=None, precomputed_container_agg
             "memory_percent_of_host": mem_pct_host,
             "memory_percent_of_limits": agg["memory_percent_limits"],
             "memory_usage": agg["memory_usage"],
+            "memory_limit_sum": agg["memory_limit"],
             "net_rx_mbps": round((net_rx_bps * 8) / 1e6, 4),
             "net_tx_mbps": round((net_tx_bps * 8) / 1e6, 4),
             "net_total_mbps": docker_net_total_mbps,

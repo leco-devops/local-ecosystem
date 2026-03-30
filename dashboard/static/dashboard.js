@@ -16,10 +16,21 @@ const LS_OVERVIEW_CACHE_KEY = "local_ecosystem_dashboard_overview_v1";
 const LS_OVERVIEW_MAX_AGE_MS = 1000 * 60 * 60 * 48;
 const LS_METRICS_CACHE_KEY = "local_ecosystem_dashboard_metrics_v1";
 const LS_ACTIVE_TAB_KEY = "dashboard_active_tab";
+/** Bump when cache shape changes so stale / corrupted entries are dropped. */
+const CACHE_SCHEMA_VERSION = 2;
+
+function lsRemove(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch (_) {
+    /* ignore */
+  }
+}
 
 function saveOverviewCache(data, cloudflareData, metricsData) {
   try {
     const payload = {
+      schemaVersion: CACHE_SCHEMA_VERSION,
       savedAt: Date.now(),
       overview: data,
       cloudflare: cloudflareData,
@@ -38,23 +49,34 @@ function hydrateOverviewFromCache() {
     const raw = localStorage.getItem(LS_OVERVIEW_CACHE_KEY);
     if (!raw) return false;
     const payload = JSON.parse(raw);
+    if (payload.schemaVersion !== CACHE_SCHEMA_VERSION) {
+      lsRemove(LS_OVERVIEW_CACHE_KEY);
+      return false;
+    }
     if (!payload?.overview || Date.now() - (payload.savedAt || 0) > LS_OVERVIEW_MAX_AGE_MS) return false;
+    const m = payload.metrics;
+    const metricsSafe =
+      m && typeof m === "object" && Array.isArray(m.points)
+        ? m
+        : { points: [], generated_at: null, max_points: 0, notes: "" };
     lastOverviewData = payload.overview;
     lastCloudflareData = payload.cloudflare || {};
-    lastMetricsData = payload.metrics || { points: [] };
+    lastMetricsData = metricsSafe;
     lastReferencePayload = payload.overview.reference || {};
     setCompactHeaderSummary(payload.overview);
-    updateOverviewDashboard(payload.overview, payload.cloudflare || {}, payload.metrics || { points: [] });
+    updateOverviewDashboard(payload.overview, payload.cloudflare || {}, metricsSafe);
     renderInfrastructurePanel(payload.overview, payload.cloudflare || {}, { skipTrendCharts: true });
     return true;
   } catch (_) {
+    lsRemove(LS_OVERVIEW_CACHE_KEY);
     return false;
   }
 }
 
 function saveMetricsCache(metricsData) {
   try {
-    const payload = { savedAt: Date.now(), metrics: metricsData };
+    if (!metricsData || typeof metricsData !== "object" || !Array.isArray(metricsData.points)) return;
+    const payload = { schemaVersion: CACHE_SCHEMA_VERSION, savedAt: Date.now(), metrics: metricsData };
     const s = JSON.stringify(payload);
     if (s.length > 4_500_000) return;
     localStorage.setItem(LS_METRICS_CACHE_KEY, s);
@@ -68,11 +90,30 @@ function hydrateMetricsFromCache() {
     const raw = localStorage.getItem(LS_METRICS_CACHE_KEY);
     if (!raw) return null;
     const payload = JSON.parse(raw);
-    if (!payload?.metrics?.points || Date.now() - (payload.savedAt || 0) > LS_OVERVIEW_MAX_AGE_MS) return null;
-    return payload.metrics;
+    if (payload.schemaVersion !== CACHE_SCHEMA_VERSION) {
+      lsRemove(LS_METRICS_CACHE_KEY);
+      return null;
+    }
+    if (Date.now() - (payload.savedAt || 0) > LS_OVERVIEW_MAX_AGE_MS) return null;
+    const m = payload.metrics;
+    if (!m || typeof m !== "object" || !Array.isArray(m.points)) {
+      lsRemove(LS_METRICS_CACHE_KEY);
+      return null;
+    }
+    return m;
   } catch (_) {
+    lsRemove(LS_METRICS_CACHE_KEY);
     return null;
   }
+}
+
+/** Prefer dedicated metrics cache; fall back to metrics embedded in last overview fetch/hydrate. */
+function getSeededMetricsHistory() {
+  const fromKey = hydrateMetricsFromCache();
+  if (fromKey && fromKey.points.length > 0) return fromKey;
+  const fromOverview = lastMetricsData;
+  if (fromOverview && Array.isArray(fromOverview.points) && fromOverview.points.length > 0) return fromOverview;
+  return null;
 }
 const overviewCharts = { cpu: null, ram: null, url: null, cf: null, engine: null, svcBar: null };
 const OVERVIEW_METRICS_LIMIT = 45;
@@ -113,7 +154,43 @@ function metricsTooltipRam(ctx) {
   const y = ctx.parsed.y;
   const name = ctx.dataset.label || "";
   if (y == null || Number.isNaN(Number(y))) return `${name}: —`;
-  return `${name}: ${y}%`;
+  const pct = `${y}%`;
+  const chart = ctx.chart;
+  const pts = chart._dashboardRamPts || [];
+  const p = pts[ctx.dataIndex];
+  if (!p) return `${name}: ${pct}`;
+
+  const total = Number(p.system?.host_memory_total_bytes_effective);
+  const dockUse = p.docker?.memory_usage;
+  const lim = p.docker?.memory_limit_sum;
+
+  if (ctx.datasetIndex === 0) {
+    if (dockUse != null && Number.isFinite(total) && total > 0) {
+      return `${name}: ${pct} · ${formatBytes(dockUse)} / ${formatBytes(total)}`;
+    }
+    if (dockUse != null) return `${name}: ${pct} · ${formatBytes(dockUse)}`;
+    return `${name}: ${pct}`;
+  }
+
+  const hasAvail = pts.some((x) => x.system?.memory_percent_available != null);
+  if (hasAvail) {
+    if (Number.isFinite(total) && total > 0) {
+      const approx = Math.round((total * Number(y)) / 100);
+      return `${name}: ${pct} · ~${formatBytes(approx)} avail of ${formatBytes(total)}`;
+    }
+    return `${name}: ${pct}`;
+  }
+  if (pts.some((x) => x.system?.memory_percent != null)) {
+    if (Number.isFinite(total) && total > 0) {
+      const approx = Math.round((total * Number(y)) / 100);
+      return `${name}: ${pct} · ~${formatBytes(approx)} used of ${formatBytes(total)}`;
+    }
+    return `${name}: ${pct}`;
+  }
+  if (dockUse != null && lim != null && Number(lim) > 0) {
+    return `${name}: ${pct} · ${formatBytes(dockUse)} / ${formatBytes(lim)}`;
+  }
+  return `${name}: ${pct}`;
 }
 
 function metricsTooltipNet(ctx) {
@@ -288,6 +365,30 @@ function formatBytes(bytes) {
     idx += 1;
   }
   return `${size.toFixed(size >= 10 ? 1 : 2)} ${units[idx]}`;
+}
+
+/** Percent plus byte sizes (GB when large enough) for Docker Σ vs MemTotal or vs limits. */
+function formatRamPctWithBytes(pct, usedBytes, totalBytes) {
+  const p =
+    pct != null && pct !== "" && !Number.isNaN(Number(pct)) ? `${Number(pct).toFixed(1)}%` : "—";
+  const u = usedBytes != null ? Number(usedBytes) : NaN;
+  const t = totalBytes != null ? Number(totalBytes) : NaN;
+  if (Number.isFinite(u) && u >= 0 && Number.isFinite(t) && t > 0) {
+    return `${p} · ${formatBytes(u)} / ${formatBytes(t)}`;
+  }
+  if (Number.isFinite(u) && u >= 0) return `${p} · ${formatBytes(u)}`;
+  return p;
+}
+
+/** RAM % of MemTotal → approximate bytes (exact when series is MemAvailable or kernel used%). */
+function formatRamPctOfTotalPhrase(label, pct, totalBytes) {
+  const p =
+    pct != null && pct !== "" && !Number.isNaN(Number(pct)) ? `${Number(pct).toFixed(1)}%` : "—";
+  const t = totalBytes != null ? Number(totalBytes) : NaN;
+  const pv = Number(pct);
+  if (!Number.isFinite(t) || t <= 0 || !Number.isFinite(pv)) return `${label} ${p}`;
+  const approxBytes = Math.round((t * pv) / 100);
+  return `${label} ${p} · ~${formatBytes(approxBytes)} of ${formatBytes(t)}`;
 }
 
 function fmtPorts(ports) {
@@ -765,7 +866,16 @@ function renderOverviewKpi(data, cf, lastPt) {
   const dockCpu = dt.cpu_percent ?? lastPt?.docker?.cpu_percent;
   const dockRam = dt.memory_percent ?? lastPt?.docker?.memory_percent;
   const cpuShow = dockCpu != null ? `${Number(dockCpu).toFixed(1)}%` : "—";
-  const ramShow = dockRam != null ? `${Number(dockRam).toFixed(1)}%` : "—";
+  const ramTotalEff =
+    dt.host_memory_total_bytes_effective ||
+    lastPt?.system?.host_memory_total_bytes_effective ||
+    host.memory_total ||
+    null;
+  const ramUsage = dt.memory_usage ?? lastPt?.docker?.memory_usage;
+  const ramShow =
+    dockRam != null || ramUsage != null
+      ? formatRamPctWithBytes(dockRam, ramUsage, ramTotalEff && ramTotalEff > 0 ? ramTotalEff : null)
+      : "—";
 
   mount.innerHTML = `
     <div class="kpi-cell">
@@ -854,22 +964,37 @@ function updateOverviewDashboard(data, cf, metricsData) {
   }
   if (ramMeta) {
     const hostPct = last?.docker?.memory_percent_of_host ?? last?.docker?.memory_percent ?? dt.memory_percent;
-    let secondVal;
-    let secondLabel;
+    const totalEff =
+      last?.system?.host_memory_total_bytes_effective ||
+      dt.host_memory_total_bytes_effective ||
+      data.docker_overview?.host?.memory_total ||
+      0;
+    const dockUse = last?.docker?.memory_usage ?? dt.memory_usage;
+    const primary = formatRamPctWithBytes(hostPct, dockUse, totalEff > 0 ? totalEff : null);
+    let secondPart = "—";
     if (hasAvailRam) {
-      secondVal = last?.system?.memory_percent_available;
-      secondLabel = "Avail";
+      const v = last?.system?.memory_percent_available;
+      secondPart =
+        v != null && v !== ""
+          ? formatRamPctOfTotalPhrase("Avail", v, totalEff > 0 ? totalEff : null)
+          : "—";
     } else if (hasProcRamUsed) {
-      secondVal = last?.system?.memory_percent;
-      secondLabel = "Host used";
+      const v = last?.system?.memory_percent;
+      secondPart =
+        v != null && v !== ""
+          ? formatRamPctOfTotalPhrase("Host used", v, totalEff > 0 ? totalEff : null)
+          : "—";
     } else {
-      secondVal = last?.docker?.memory_percent_of_limits ?? dt.memory_percent_of_limits;
-      secondLabel = "Σ limits";
+      const v = last?.docker?.memory_percent_of_limits ?? dt.memory_percent_of_limits;
+      const limSum = last?.docker?.memory_limit_sum ?? dt.memory_limit_sum;
+      secondPart =
+        v != null && v !== ""
+          ? formatRamPctWithBytes(v, dockUse, limSum != null && limSum > 0 ? limSum : null)
+          : "—";
     }
-    const secondFmt = secondVal != null && secondVal !== "" ? `${secondVal}%` : "—";
     ramMeta.textContent = last
-      ? `Now · Docker Σ / MemTotal ${hostPct ?? "—"}% · ${secondLabel} ${secondFmt}`
-      : `Same as Deep metrics · Docker RAM ${hostPct ?? "—"}% vs MemTotal`;
+      ? `Now · Docker Σ / MemTotal ${primary} · ${secondPart}`
+      : `Same as Deep metrics · Docker RAM ${formatRamPctWithBytes(dt.memory_percent, dt.memory_usage, dt.host_memory_total_bytes_effective || data.docker_overview?.host?.memory_total || null)} vs MemTotal`;
   }
 
   if (!ensureOverviewCharts()) return;
@@ -899,6 +1024,7 @@ function updateOverviewDashboard(data, cf, metricsData) {
   if (overviewCharts.ram.options.scales?.y) {
     overviewCharts.ram.options.scales.y.max = computeRamYMax(pts);
   }
+  overviewCharts.ram._dashboardRamPts = pts;
   overviewCharts.ram.update();
 
   const ok = Number(data.healthy_urls || 0);
@@ -1477,12 +1603,26 @@ function renderSystemStatus(s) {
     <div class="card">
       <strong>Runtime Summary (Deep metrics alignment)</strong>
       <div class="row"><span>Docker CPU</span><span>${s.docker_totals_all_running?.cpu_percent ?? "—"}% <span class="muted small">(all running ÷ ${s.docker_totals_all_running?.host_cpus ?? "—"} vCPUs, raw Σ ${s.docker_totals_all_running?.cpu_sum_raw ?? "—"}%)</span></span></div>
-      <div class="row"><span>Docker RAM vs MemTotal</span><span>${s.docker_totals_all_running?.memory_percent ?? "—"}%</span></div>
-      <div class="row"><span>Docker RAM vs Σ limits</span><span>${s.docker_totals_all_running?.memory_percent_of_limits ?? "—"}%</span></div>
+      <div class="row"><span>Docker RAM vs MemTotal</span><span>${(() => {
+        const d = s.docker_totals_all_running || {};
+        const pc = d.memory_percent;
+        const du = d.memory_usage;
+        const mt = d.host_memory_total_bytes_effective;
+        if (pc == null && pc !== 0) return "—";
+        return formatRamPctWithBytes(pc, du, mt != null && mt > 0 ? mt : null);
+      })()}</span></div>
+      <div class="row"><span>Docker RAM vs Σ limits</span><span>${(() => {
+        const d = s.docker_totals_all_running || {};
+        const pc = d.memory_percent_of_limits;
+        const du = d.memory_usage;
+        const lm = d.memory_limit_sum;
+        if (pc == null && pc !== 0) return "—";
+        return formatRamPctWithBytes(pc, du, lm != null && lm > 0 ? lm : null);
+      })()}</span></div>
       <div class="row"><span>Running containers sampled</span><span>${s.docker_totals_all_running?.running_container_count ?? "—"}</span></div>
       <div class="row"><span>Error lines (5m)</span><span>${s.total_error_lines || 0}</span></div>
       <div class="row"><span>Error rate</span><span>${s.total_error_rate_per_min || 0}/min</span></div>
-      <p class="muted small" style="margin:0.5rem 0 0">Managed stack only (URL-probed services): CPU raw Σ ${s.aggregate_cpu_percent ?? "—"}% · RAM ${s.aggregate_memory_percent ?? "—"}% of Σ cgroup limits — differs from “all containers” above.</p>
+      <p class="muted small" style="margin:0.5rem 0 0">Managed stack only (URL-probed services): CPU raw Σ ${s.aggregate_cpu_percent ?? "—"}% · RAM ${formatRamPctWithBytes(s.aggregate_memory_percent, s.aggregate_memory_usage, s.aggregate_memory_limit != null && s.aggregate_memory_limit > 0 ? s.aggregate_memory_limit : null)} of Σ cgroup limits — differs from “all containers” above.</p>
     </div>
   `;
 }
@@ -1972,6 +2112,7 @@ function renderMetricsChartsFromPayload(data, sum, hint, cacheNote) {
   if (metricsCharts.ram.options.scales?.y) {
     metricsCharts.ram.options.scales.y.max = computeRamYMax(pts);
   }
+  metricsCharts.ram._dashboardRamPts = pts;
   metricsCharts.ram.update();
 
   metricsCharts.net.data.labels = labels;
@@ -2037,11 +2178,18 @@ function renderMetricsChartsFromPayload(data, sum, hint, cacheNote) {
   const rawCpu = last?.docker?.cpu_sum_raw != null ? ` (raw Σ ${last.docker.cpu_sum_raw}%)` : "";
   let ramTail = "";
   if (last) {
+    const total = last.system?.host_memory_total_bytes_effective;
+    const du = last.docker?.memory_usage;
+    const lim = last.docker?.memory_limit_sum;
     const rh = last.docker?.memory_percent_of_host ?? last.docker?.memory_percent;
-    ramTail = ` RAM Σ/host ${rh ?? "—"}%`;
-    if (last.system?.memory_percent_available != null) ramTail += ` · avail ${last.system.memory_percent_available}%`;
-    else if (last.system?.memory_percent != null) ramTail += ` · host-used ${last.system.memory_percent}%`;
-    ramTail += ` · limits ${last.docker?.memory_percent_of_limits ?? "—"}%`;
+    ramTail = ` RAM Σ/host ${formatRamPctWithBytes(rh, du, total != null && total > 0 ? total : null)}`;
+    if (last.system?.memory_percent_available != null) {
+      ramTail += ` · ${formatRamPctOfTotalPhrase("avail", last.system.memory_percent_available, total != null && total > 0 ? total : null)}`;
+    } else if (last.system?.memory_percent != null) {
+      ramTail += ` · ${formatRamPctOfTotalPhrase("host-used", last.system.memory_percent, total != null && total > 0 ? total : null)}`;
+    }
+    const lp = last.docker?.memory_percent_of_limits;
+    ramTail += ` · limits ${formatRamPctWithBytes(lp, du, lim != null && lim > 0 ? lim : null)}`;
   }
   let line =
     `Samples: ${pts.length} (max ${data.max_points || METRICS_MAX}) · ` +
@@ -2094,61 +2242,128 @@ function renderHostInjectedMetricsPanel(payload) {
     .join("");
 }
 
-async function fetchHostInjectedMetricsPanel() {
+async function fetchHostInjectedMetricsPanel(options = {}) {
+  const logLine = typeof options.logLine === "function" ? options.logLine : null;
   try {
+    logLine?.(`GET /api/host-metrics/injected`);
     const res = await fetch("/api/host-metrics/injected");
-    if (!res.ok) return;
+    logLine?.(`  → HTTP ${res.status} ${res.ok ? "OK" : res.statusText || ""}`.trim());
+    if (!res.ok) {
+      const body = document.getElementById("hostInjectedMetricsBody");
+      if (body) body.textContent = "Could not load host metrics status.";
+      logLine?.(`  (response body not shown)`);
+      return;
+    }
     const data = await res.json();
     renderHostInjectedMetricsPanel(data);
-  } catch (_) {
+    if (logLine) {
+      logLine(`  cpu_temp_c: ${data.cpu_temp_c ?? "—"} · source: ${data.cpu_temp_source ?? "—"}`);
+      const w = data.writer_status;
+      if (w && typeof w === "object") {
+        logLine(
+          `  writer_status: success=${w.success} · updated_at=${w.updated_at ?? "—"}${w.message ? ` · ${w.message}` : ""}`,
+        );
+      }
+      const sch = data.scheduler_meta;
+      if (sch && sch.label) logLine(`  scheduler: ${sch.label} · interval ${sch.interval_sec ?? "—"}s`);
+    }
+  } catch (e) {
+    logLine?.(`  → error: ${e.message || e}`);
     const body = document.getElementById("hostInjectedMetricsBody");
     if (body) body.textContent = "Could not load host metrics status.";
   }
 }
 
-async function loadMetricsCharts() {
-  const sum = document.getElementById("metricsSummary");
-  const hint = document.getElementById("metricsProcHint");
-  if (!ensureMetricsCharts()) {
-    sum.textContent = "Chart.js failed to load.";
-    return;
+async function loadMetricsCharts(opts = {}) {
+  const interactive = opts.interactiveReload === true;
+  const btn = document.getElementById("hostMetricsRefreshCharts");
+  const pre = document.getElementById("hostMetricsReloadPreloader");
+  const logMount = document.getElementById("hostMetricsReloadLog");
+
+  const logLine = (msg) => {
+    if (!interactive || !logMount) return;
+    logMount.classList.remove("is-hidden");
+    const line = document.createElement("div");
+    line.className = "host-metrics-reload-log__line";
+    line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    logMount.appendChild(line);
+    logMount.scrollTop = logMount.scrollHeight;
+  };
+
+  const setBusy = (on) => {
+    if (!interactive) return;
+    if (pre) pre.classList.toggle("is-hidden", !on);
+    if (btn) btn.disabled = !!on;
+  };
+
+  if (interactive) {
+    logMount.innerHTML = "";
+    logLine("Mac host (not run from container) — update the temp file with:");
+    logLine("  bash /project/ai-stack/scripts/macos-write-cpu-temp.sh");
+    logLine("  # optional kick: launchctl kickstart -k gui/$(id -u)/com.local-ecosystem.host-cpu-temp");
+    logLine("—");
+    logLine("Dashboard APIs (this browser → dashboard container):");
   }
-  const seeded = hydrateMetricsFromCache();
-  if (seeded?.points?.length) {
-    renderMetricsChartsFromPayload(
-      {
-        points: seeded.points,
-        max_points: seeded.max_points,
-        generated_at: seeded.generated_at,
-      },
-      sum,
-      hint,
-      "Cached (loading live) ·"
-    );
-  }
+
+  setBusy(true);
   try {
-    const res = await fetch(`/api/metrics/history?limit=${METRICS_MAX}`);
-    const data = await res.json();
-    renderMetricsChartsFromPayload(data, sum, hint, "");
-    saveMetricsCache(data);
-  } catch (e) {
-    const cached = hydrateMetricsFromCache();
-    if (cached && (cached.points || []).length) {
+    const sum = document.getElementById("metricsSummary");
+    const hint = document.getElementById("metricsProcHint");
+    if (!ensureMetricsCharts()) {
+      if (sum) sum.textContent = "Chart.js failed to load.";
+      logLine?.("ERROR: Chart.js failed to load.");
+      return;
+    }
+    const seeded = getSeededMetricsHistory();
+    if (seeded?.points?.length) {
+      logLine?.(`render: ${seeded.points.length} point(s) from local cache (seed)`);
       renderMetricsChartsFromPayload(
         {
-          points: cached.points,
-          max_points: cached.max_points,
-          generated_at: cached.generated_at,
+          points: seeded.points,
+          max_points: seeded.max_points,
+          generated_at: seeded.generated_at,
         },
         sum,
         hint,
-        `Cached · ${e.message || e} ·`
+        "Cached (loading live) ·"
       );
-    } else {
-      sum.textContent = `Metrics error: ${e.message || e}`;
     }
+    try {
+      const url = `/api/metrics/history?limit=${METRICS_MAX}`;
+      logLine?.(`GET ${url}`);
+      const res = await fetch(url);
+      logLine?.(`  → HTTP ${res.status} ${res.ok ? "OK" : res.statusText || ""}`.trim());
+      const data = await res.json();
+      if (!data || !Array.isArray(data.points)) throw new Error("Invalid metrics response");
+      logLine?.(`  points: ${data.points.length} · max_points: ${data.max_points ?? "—"} · generated_at: ${data.generated_at ?? "—"}`);
+      renderMetricsChartsFromPayload(data, sum, hint, "");
+      saveMetricsCache(data);
+    } catch (e) {
+      logLine?.(`  → error: ${e.message || e}`);
+      const cached = getSeededMetricsHistory();
+      if (cached && cached.points.length > 0) {
+        logLine?.(`fallback: rendering ${cached.points.length} cached point(s)`);
+        renderMetricsChartsFromPayload(
+          {
+            points: cached.points,
+            max_points: cached.max_points,
+            generated_at: cached.generated_at,
+          },
+          sum,
+          hint,
+          `Cached · ${e.message || e} ·`
+        );
+      } else if (sum) {
+        sum.textContent = `Metrics error: ${e.message || e}`;
+      }
+    }
+
+    await fetchHostInjectedMetricsPanel({ logLine });
+    logLine?.("—");
+    logLine?.("Done.");
+  } finally {
+    setBusy(false);
   }
-  fetchHostInjectedMetricsPanel();
 }
 
 function initHostMetricsPanelRefresh() {
@@ -2156,7 +2371,7 @@ function initHostMetricsPanelRefresh() {
   if (!btn || btn.dataset.wired === "1") return;
   btn.dataset.wired = "1";
   btn.addEventListener("click", () => {
-    loadMetricsCharts();
+    loadMetricsCharts({ interactiveReload: true });
   });
 }
 
@@ -2757,30 +2972,38 @@ function scheduleRefresh() {
 }
 
 async function loadOverview() {
-  const [overviewRes, cfRes, metricsRes] = await Promise.all([
-    fetch("/api/overview"),
-    fetch("/api/cloudflare-local"),
-    fetch(`/api/metrics/history?limit=${OVERVIEW_METRICS_LIMIT}`),
-  ]);
-  const data = await overviewRes.json();
-  const cloudflareData = await cfRes.json();
-  let metricsData = { points: [], generated_at: null };
   try {
-    if (metricsRes.ok) metricsData = await metricsRes.json();
-  } catch (_) {
-    /* keep empty */
+    const [overviewRes, cfRes, metricsRes] = await Promise.all([
+      fetch("/api/overview"),
+      fetch("/api/cloudflare-local"),
+      fetch(`/api/metrics/history?limit=${OVERVIEW_METRICS_LIMIT}`),
+    ]);
+    const data = await overviewRes.json();
+    const cloudflareData = await cfRes.json();
+    let metricsData = { points: [], generated_at: null };
+    try {
+      if (metricsRes.ok) {
+        const mj = await metricsRes.json();
+        if (mj && typeof mj === "object" && Array.isArray(mj.points)) metricsData = mj;
+      }
+    } catch (_) {
+      /* keep empty */
+    }
+
+    const ref = data.reference || {};
+    lastOverviewData = data;
+    lastCloudflareData = cloudflareData;
+    lastMetricsData = metricsData;
+    lastReferencePayload = ref;
+
+    setCompactHeaderSummary(data);
+    updateOverviewDashboard(data, cloudflareData, metricsData);
+    renderInfrastructurePanel(data, cloudflareData);
+    saveOverviewCache(data, cloudflareData, metricsData);
+    saveMetricsCache(metricsData);
+  } catch (e) {
+    console.warn("loadOverview failed", e);
   }
-
-  const ref = data.reference || {};
-  lastOverviewData = data;
-  lastCloudflareData = cloudflareData;
-  lastMetricsData = metricsData;
-  lastReferencePayload = ref;
-
-  setCompactHeaderSummary(data);
-  updateOverviewDashboard(data, cloudflareData, metricsData);
-  renderInfrastructurePanel(data, cloudflareData);
-  saveOverviewCache(data, cloudflareData, metricsData);
 }
 
 function initControlBulkBar() {
@@ -2814,12 +3037,6 @@ async function bootstrap() {
   initHostMetricsPanelRefresh();
   initControlBulkBar();
   hydrateOverviewFromCache();
-  try {
-    const savedTab = localStorage.getItem(LS_ACTIVE_TAB_KEY);
-    if (savedTab && document.getElementById(savedTab)) activateTab(savedTab);
-  } catch (_) {
-    /* ignore */
-  }
   initControlActionOverlay();
   initOllamaModelsPanel();
   await initLogsPanel();
@@ -2867,6 +3084,12 @@ async function bootstrap() {
   document.getElementById("referenceFilter")?.addEventListener("input", applyReferenceFilter);
 
   await loadOverview();
+  try {
+    const savedTab = localStorage.getItem(LS_ACTIVE_TAB_KEY);
+    if (savedTab && document.getElementById(savedTab)) activateTab(savedTab);
+  } catch (_) {
+    /* ignore */
+  }
   scheduleRefresh();
 }
 

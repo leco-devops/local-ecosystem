@@ -430,6 +430,61 @@ input[type="password"] {
   margin-bottom: 0;
 }
 
+.host-metrics-reload-preloader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  font-size: 13px;
+  color: var(--text-muted, #cbd5e1);
+}
+
+.host-metrics-spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(148, 163, 184, 0.35);
+  border-top-color: #38bdf8;
+  border-radius: 50%;
+  animation: host-metrics-spin 0.7s linear infinite;
+}
+
+@keyframes host-metrics-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.host-metrics-reload-log {
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #e2e8f0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.host-metrics-reload-log__line {
+  margin: 0;
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.host-metrics-reload-log__line:last-child {
+  border-bottom: none;
+}
+
 .host-metrics-panel__head {
   display: flex;
   flex-wrap: wrap;
