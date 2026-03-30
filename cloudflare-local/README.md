@@ -11,7 +11,7 @@ This stack emulates Cloudflare-like local services using only Docker:
 - Browser-like automation (local) → `browser-rendering-local` (Playwright or Chromium CDP)
 - Container autoscaling simulation → `autoscaler`
 
-Documentation: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/USER_MANUAL.md](docs/USER_MANUAL.md) · [docs/IMPLEMENTATION_GUIDE.md](docs/IMPLEMENTATION_GUIDE.md)
+Documentation: [DevOps guide (deploy, KV, R2, D1, Workers)](../docs/DEVOPS_GUIDE.md) · [Custom apps (Traefik, NGINX, Node, Workers)](../docs/DEPLOY_CUSTOM_APPS.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/USER_MANUAL.md](docs/USER_MANUAL.md) · [docs/IMPLEMENTATION_GUIDE.md](docs/IMPLEMENTATION_GUIDE.md)
 
 ## Start
 
