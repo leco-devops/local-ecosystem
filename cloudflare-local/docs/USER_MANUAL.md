@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Docker with Compose v2
-- Network `lh-network` (the main stack creates it)
+- Network `lh-network` — created automatically when you start any AI-stack service or Cloudflare-local; **`./ai-stack/ai-stack.sh repair-network`** also creates it, reconnects all known containers, and sets **`restart: unless-stopped`**-style policy on running containers (see `ai-stack/core.sh`).
 - Optional: Traefik routes in `traefik/dynamic.yml` (and mirror in `ai-stack/config/dynamic.yml` if you use that layout)
 
 ## Start and stop

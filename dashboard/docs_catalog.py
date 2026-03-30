@@ -137,10 +137,12 @@ def build_service_management_markdown() -> str:
             "- List file: `ai-stack/config/ollama-pinned-models.txt`",
             "- Pull pinned into a running Ollama: `./ai-stack/ai-stack.sh ollama-pull-models`",
             "",
-            "## Ops dashboard container",
+            "## Auto-start, network, repair",
             "",
-            "- **Start / rebuild:** `./ai-stack/services/dashboard.sh start` (or `deploy`)",
-            "- **Auto-restart:** container runs with Docker `--restart unless-stopped` so it starts again when the Docker daemon restarts (unless you explicitly stopped it). Ensure `lh-network` exists (e.g. start any stack service once).",
+            "- **AI-stack containers** (Traefik, WebUI, Ollama, Postgres, n8n, dashboard): each `services/*.sh start` creates `lh-network` if missing and uses `--restart unless-stopped`.",
+            "- **Cloudflare-local:** `docker-compose.yml` sets `restart: unless-stopped` on every service.",
+            "- **One-shot fix:** `./ai-stack/ai-stack.sh repair-network` — creates `lh-network`, `docker network connect`s every name in `core.sh` `NETWORK_CONTAINERS`, and `docker update --restart unless-stopped` on each running container.",
+            "- **Dashboard image:** `./ai-stack/services/dashboard.sh start` (or `deploy`) rebuilds and runs the ops dashboard.",
             "",
         ]
     )

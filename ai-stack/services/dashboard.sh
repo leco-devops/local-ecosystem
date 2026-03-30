@@ -28,6 +28,7 @@ start() {
 
   echo "🔨 Building dashboard image (always rebuild on start)…"
   docker build -t "$IMAGE" "$APP_DIR" || return 1
+  docker network inspect lh-network >/dev/null 2>&1 || docker network create lh-network >/dev/null
   docker rm -f "$NAME" 2>/dev/null
 
   # shellcheck disable=SC2086

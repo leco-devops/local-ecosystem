@@ -5,6 +5,7 @@ start() {
   echo "🚀 Starting n8n (HTTP + HTTPS compatible mode)..."
 
   # Force clean start (IMPORTANT for env changes)
+  docker network inspect lh-network >/dev/null 2>&1 || docker network create lh-network >/dev/null
   docker rm -f "$NAME" 2>/dev/null
 
   # Optional: reset volume if explicitly requested
@@ -15,6 +16,7 @@ start() {
 
   docker run -d \
     --name "$NAME" \
+    --restart unless-stopped \
     --network lh-network \
     -e DB_TYPE=postgresdb \
     -e DB_POSTGRESDB_HOST=n8n_postgres \

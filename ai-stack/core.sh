@@ -64,6 +64,10 @@ repair_network_links() {
 
   for container_name in $NETWORK_CONTAINERS; do
     connect_container_to_network "$container_name"
+    # Align with service scripts / compose: survive Docker daemon restart unless explicitly stopped.
+    if docker inspect "$container_name" >/dev/null 2>&1; then
+      docker update --restart unless-stopped "$container_name" >/dev/null 2>&1 || true
+    fi
   done
 }
 

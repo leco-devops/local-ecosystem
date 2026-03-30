@@ -2,9 +2,11 @@ NAME="n8n_postgres"
 VOLUME="n8n_postgres_data"
 
 start() {
+  docker network inspect lh-network >/dev/null 2>&1 || docker network create lh-network >/dev/null
   docker rm -f "$NAME" 2>/dev/null
   docker run -d \
     --name "$NAME" \
+    --restart unless-stopped \
     --network lh-network \
     -e POSTGRES_USER=postgres \
     -e POSTGRES_PASSWORD=password \

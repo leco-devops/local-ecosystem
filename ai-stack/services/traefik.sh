@@ -1,10 +1,12 @@
 NAME="traefik"
 
 start() {
+  docker network inspect lh-network >/dev/null 2>&1 || docker network create lh-network >/dev/null
   docker rm -f "$NAME" 2>/dev/null
 
   docker run -d \
     --name "$NAME" \
+    --restart unless-stopped \
     --network lh-network \
     -p 80:80 \
     -p 443:443 \
