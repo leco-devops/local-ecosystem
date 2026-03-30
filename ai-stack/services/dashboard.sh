@@ -2,6 +2,14 @@ if [ -z "${PROJECT_ROOT:-}" ]; then
   PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 fi
 
+SCHED_SCRIPT="$PROJECT_ROOT/ai-stack/scripts/macos-host-metrics-scheduler.sh"
+
+_darwin_host_metrics_sched() {
+  [ "$(uname -s)" = "Darwin" ] || return 0
+  [ -f "$SCHED_SCRIPT" ] || return 0
+  bash "$SCHED_SCRIPT" "$1"
+}
+
 NAME="service-dashboard"
 IMAGE="local/service-dashboard:latest"
 APP_DIR="$PROJECT_ROOT/dashboard"
@@ -18,6 +26,15 @@ fi
 HOST_SYS_MOUNT=""
 if [ "$(uname -s)" = "Linux" ] && [ -d /sys/class/thermal ]; then
   HOST_SYS_MOUNT="-v /sys:/host/sys:ro -e DASHBOARD_HOST_SYS=/host/sys"
+fi
+
+# macOS + Docker Desktop: Linux container cannot read Apple SMC. Mount a small host dir and read
+# cpu_temp_c.txt (float °C) updated by ai-stack/scripts/macos-write-cpu-temp.sh or your own job.
+HOST_MAC_TEMP_MOUNT=""
+if [ "$(uname -s)" = "Darwin" ]; then
+  HOST_METRICS_DIR="${HOME}/.local-eco-host-metrics"
+  mkdir -p "$HOST_METRICS_DIR"
+  HOST_MAC_TEMP_MOUNT="-v ${HOST_METRICS_DIR}:/host-mac-metrics:ro -e DASHBOARD_HOST_CPU_TEMP_FILE=/host-mac-metrics/cpu_temp_c.txt"
 fi
 
 start() {
@@ -41,7 +58,10 @@ start() {
     -v "$PROJECT_ROOT:/project:rw" \
     $HOST_PROC_MOUNT \
     $HOST_SYS_MOUNT \
-    "$IMAGE"
+    $HOST_MAC_TEMP_MOUNT \
+    "$IMAGE" || return 1
+
+  _darwin_host_metrics_sched install
 }
 
 # Alias: full image rebuild + container recreate (same as start).
@@ -49,9 +69,15 @@ deploy() {
   start
 }
 
-stop() { docker stop "$NAME"; }
+stop() {
+  _darwin_host_metrics_sched uninstall
+  docker stop "$NAME" 2>/dev/null || true
+}
 restart() { stop; start; }
-remove() { docker rm -f "$NAME"; }
+remove() {
+  _darwin_host_metrics_sched uninstall
+  docker rm -f "$NAME" 2>/dev/null || true
+}
 pause() { docker pause "$NAME"; }
 unpause() { docker unpause "$NAME"; }
 status() { docker ps -a --filter "name=^/$NAME$" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"; }

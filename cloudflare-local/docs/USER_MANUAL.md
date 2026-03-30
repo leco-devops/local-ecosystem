@@ -1,5 +1,7 @@
 # Cloudflare Local — User Manual
 
+Platform-wide install (DNS, TLS, Traefik, AI stack): **[../../docs/SETUP.md](../../docs/SETUP.md)**. Operations: **[../../docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md)**.
+
 ## Prerequisites
 
 - Docker with Compose v2

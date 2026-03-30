@@ -87,6 +87,14 @@ def api_metrics_history():
     return jsonify(get_history(limit))
 
 
+@app.get("/api/host-metrics/injected")
+def api_host_metrics_injected():
+    """macOS host temp file, writer_status.json, scheduler_meta.json — for Metrics tab UI."""
+    from host_metrics import host_injected_metrics_api_payload
+
+    return jsonify(host_injected_metrics_api_payload())
+
+
 @app.get("/api/control/targets")
 def api_control_targets():
     return jsonify(list_targets())

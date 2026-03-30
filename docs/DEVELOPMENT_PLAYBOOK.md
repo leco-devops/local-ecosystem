@@ -2,6 +2,8 @@
 
 This guide helps you **extend**, **debug**, and **ship** changes across the AI stack, Traefik, Cloudflare-local adapters, and the ops dashboard.
 
+**First-time setup:** [SETUP.md](SETUP.md) · **Deploy / stop / troubleshoot:** [DEPLOYMENT.md](DEPLOYMENT.md) · **Project hub:** [../README.md](../README.md)
+
 ## 1. Repository map (where things live)
 
 | Area | Path | Purpose |

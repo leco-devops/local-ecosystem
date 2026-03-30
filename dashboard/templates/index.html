@@ -210,17 +210,17 @@
         <div class="charts metrics-split-grid">
           <div class="chart-card tall">
             <strong>CPU (%)</strong>
-            <p class="chart-sub">Cyan: Docker ≈% of host vCPUs. Magenta: host CPU via <code>/proc</code>. <strong>Orange</strong> line + right axis: CPU temperature from <code>/sys</code> when mounted (see card below).</p>
+            <p class="chart-sub">Cyan: Docker ≈% of host vCPUs. Magenta: CPU from <code>/proc</code> (host mount on Linux, or the container’s <code>/proc</code> on Docker Desktop = Linux VM). <strong>Orange</strong> + right axis: temperature from <code>/sys</code>.</p>
             <div class="chart-wrap tall"><canvas id="metricsChartCpu"></canvas></div>
           </div>
           <div class="chart-card tall">
             <strong>RAM (%)</strong>
-            <p class="chart-sub">Blue: Docker Σ usage ÷ host <code>MemTotal</code>. Second: system RAM (<code>/proc</code>) or Docker ÷ Σ cgroup limits (different scale).</p>
+            <p class="chart-sub">Cyan: Docker Σ container usage ÷ kernel <code>MemTotal</code> (same total as <code>/proc</code> when readable). Magenta: <code>MemAvailable</code> ÷ <code>MemTotal</code> (approx. headroom %) — not “used RAM”, so it will not match the cyan line. Without <code>/proc</code>, second line is Docker ÷ Σ cgroup limits.</p>
             <div class="chart-wrap tall"><canvas id="metricsChartRam"></canvas></div>
           </div>
           <div class="chart-card tall">
             <strong>Network (Mb/s)</strong>
-            <p class="chart-sub">RX+TX totals</p>
+            <p class="chart-sub">Cyan: Docker aggregate RX+TX Mb/s. Magenta: host/VM from <code>/proc/net/dev</code> when readable.</p>
             <div class="chart-wrap tall"><canvas id="metricsChartNet"></canvas></div>
           </div>
           <div class="chart-card tall">
@@ -230,14 +230,31 @@
           </div>
           <div class="chart-card tall metrics-temp-card">
             <strong>Host CPU temperature</strong>
-            <p class="chart-sub">Highest value from <code>/sys/class/thermal/*/temp</code>. Requires mounting host <code>/sys</code> into the dashboard container (<code>DASHBOARD_HOST_SYS</code> in <code>ai-stack/services/dashboard.sh</code>). Docker Desktop usually has no host thermal data here.</p>
+            <p class="chart-sub">
+              <strong>Linux:</strong> max of <code>/sys/class/thermal/*/temp</code> (optional host mount <code>DASHBOARD_HOST_SYS</code> in <code>dashboard.sh</code>).
+              <strong>macOS + Docker Desktop:</strong> optional <code>brew install osx-cpu-temp</code>. Starting the dashboard from <code>ai-stack/services/dashboard.sh</code> installs a LaunchAgent that runs <code>ai-stack/scripts/macos-write-cpu-temp.sh</code> every 30s; stopping/removing the dashboard removes it. On some Apple Silicon setups <code>osx-cpu-temp</code> reports <code>0°C</code>; the writer then uses <code>sudo powermetrics</code> and maps thermal pressure to a proxy °C, plus load average so the chart moves under CPU load even when pressure stays Nominal. For unattended runs, passwordless <code>sudo</code> for <code>/usr/bin/powermetrics</code> may be needed. Deploy from the Mac so <code>~/.local-eco-host-metrics</code> mounts into the container.
+            </p>
             <div id="metricsTempPlaceholder" class="metrics-temp-placeholder">
-              No temperature samples yet — the orange series stays empty until <code>/sys</code> thermal zones are readable inside the container.
+              No temperature samples yet — on Mac run the host temp script; on Linux ensure <code>/sys</code> thermal zones exist or mount host <code>/sys</code>.
             </div>
             <div id="metricsTempChartWrap" class="chart-wrap tall is-hidden">
               <canvas id="metricsChartTemp" aria-label="Host CPU temperature"></canvas>
             </div>
           </div>
+        </div>
+        <div id="hostInjectedMetricsPanel" class="host-metrics-panel host-metrics-panel--after-charts" aria-live="polite">
+          <div class="host-metrics-panel__head">
+            <strong>Host CPU temperature (macOS file injection)</strong>
+            <div class="host-metrics-panel__actions">
+              <button type="button" id="hostMetricsRefreshCharts" class="small-copy">Reload charts &amp; status</button>
+            </div>
+          </div>
+          <p class="muted small host-metrics-panel__lead">
+            The dashboard container reads a file from your Mac (see <code>docs/SETUP.md</code> §8). LaunchAgent status below is from
+            <code>scheduler_meta.json</code> on disk; live <code>launchctl</code> must be checked on the Mac.
+          </p>
+          <div id="hostInjectedMetricsBody" class="host-metrics-panel__body muted small">Loading…</div>
+          <ul id="hostInjectedMetricsInsights" class="host-metrics-insights"></ul>
         </div>
       </section>
 

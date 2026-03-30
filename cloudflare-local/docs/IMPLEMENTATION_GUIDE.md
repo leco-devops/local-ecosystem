@@ -1,5 +1,7 @@
 # Cloudflare Local — Implementation guide
 
+**Environment setup:** [../../docs/SETUP.md](../../docs/SETUP.md) · **Deploy / ops:** [../../docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md).
+
 End-to-end wiring from **Docker** → **Traefik** → **browser** and how the **ops dashboard** observes the stack.
 
 ## 1. Network model

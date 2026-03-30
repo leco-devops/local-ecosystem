@@ -88,6 +88,49 @@ const THEME = {
 
 const LINE_STYLE = { borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 4 };
 
+/** Y-axis tick labels for 0–100% style charts */
+function ticksPercentStyle(color, fontSize = 11) {
+  return {
+    color,
+    font: { size: fontSize },
+    callback(raw) {
+      const v = typeof raw === "number" ? raw : Number(raw);
+      if (!Number.isFinite(v)) return String(raw);
+      return `${v}%`;
+    },
+  };
+}
+
+function metricsTooltipCpu(ctx) {
+  const y = ctx.parsed.y;
+  const name = ctx.dataset.label || "";
+  if (y == null || Number.isNaN(Number(y))) return `${name}: —`;
+  if (ctx.datasetIndex === 2) return `${name}: ${y}°C`;
+  return `${name}: ${y}%`;
+}
+
+function metricsTooltipRam(ctx) {
+  const y = ctx.parsed.y;
+  const name = ctx.dataset.label || "";
+  if (y == null || Number.isNaN(Number(y))) return `${name}: —`;
+  return `${name}: ${y}%`;
+}
+
+function metricsTooltipNet(ctx) {
+  const y = ctx.parsed.y;
+  const name = ctx.dataset.label || "";
+  if (y == null || Number.isNaN(Number(y))) return `${name}: —`;
+  return `${name}: ${y} Mb/s`;
+}
+
+function metricsTooltipIops(ctx) {
+  const y = ctx.parsed.y;
+  const name = ctx.dataset.label || "";
+  if (y == null || Number.isNaN(Number(y))) return `${name}: —`;
+  if (ctx.dataset.yAxisID === "y1") return `${name}: ${y} Mb/s`;
+  return `${name}: ${y}`;
+}
+
 function tempAxisBounds(sTemp) {
   const nums = sTemp.filter((x) => x != null && x !== "" && !Number.isNaN(Number(x))).map((x) => Number(x));
   if (!nums.length) return { min: 0, max: 90 };
@@ -138,6 +181,33 @@ function maxInSeriesList(series) {
   return m;
 }
 
+/**
+ * Chart Y max from one or more series: tight headroom so small spikes are visible (no fixed 0–6 band).
+ * @param {object} [opts]
+ * @param {number|null} [opts.cap] — e.g. 100 for %
+ * @param {number} [opts.emptyDefault] — when all series are empty/zero
+ * @param {number} [opts.headroom] — multiply max by this before rounding
+ * @param {number} [opts.minCeiling] — smallest axis max when there is data (avoids 0–0.01 flicker)
+ */
+function computeLinearYMax(seriesList, opts = {}) {
+  const { cap = null, emptyDefault = 1, headroom = 1.22, minCeiling = 0 } = opts;
+  const mx = maxInSeriesList(seriesList);
+  if (mx <= 0) return emptyDefault;
+  let hi = mx * headroom;
+  if (hi < 0.5) {
+    hi = Math.max(minCeiling || 0.05, Math.ceil(hi * 100) / 100);
+  } else if (hi < 3) {
+    hi = Math.ceil(hi * 20) / 20;
+  } else if (hi < 15) {
+    hi = Math.ceil(hi * 10) / 10;
+  } else {
+    hi = Math.ceil(hi);
+  }
+  if (minCeiling > 0 && hi < minCeiling) hi = minCeiling;
+  const out = hi;
+  return cap != null ? Math.min(cap, out) : out;
+}
+
 /** Primary RAM line: % of host MemTotal (Docker-reported), else legacy single field. */
 function dockerRamLineHost(pts) {
   return pts.map((p) => {
@@ -148,35 +218,33 @@ function dockerRamLineHost(pts) {
 }
 
 /**
- * Second RAM line: host /proc MemAvailable-based % when mounted; otherwise Docker usage / Σ cgroup limits
- * (different denominator from host % — explains “50% vs 4%” on Docker Desktop).
+ * Second RAM line: MemAvailable/MemTotal (% still considered available by kernel) when /proc works —
+ * visually distinct from Docker Σ/MemTotal. Fallback: host “used” %, then Docker vs cgroup limits.
  */
 function ramChartSecondLine(pts) {
-  const hasProc = pts.some((p) => p.system?.memory_percent != null);
-  if (hasProc) return pts.map((p) => p.system?.memory_percent ?? null);
+  const hasAvail = pts.some((p) => p.system?.memory_percent_available != null);
+  if (hasAvail) return pts.map((p) => p.system?.memory_percent_available ?? null);
+  const hasProcUsed = pts.some((p) => p.system?.memory_percent != null);
+  if (hasProcUsed) return pts.map((p) => p.system?.memory_percent ?? null);
   return pts.map((p) => p.docker?.memory_percent_of_limits ?? p.docker?.memory_percent ?? null);
 }
 
 function ramSecondLineLabel(pts) {
-  return pts.some((p) => p.system?.memory_percent != null)
-    ? "System RAM (% used)"
-    : "Docker / Σ cgroup limits %";
+  if (pts.some((p) => p.system?.memory_percent_available != null)) return "Approx. RAM available %";
+  if (pts.some((p) => p.system?.memory_percent != null)) return "System RAM used %";
+  return "Docker / Σ cgroup limits %";
 }
 
 function computeRamYMax(pts) {
   const a = dockerRamLineHost(pts);
   const b = ramChartSecondLine(pts);
-  const mx = maxInSeriesList([a, b]);
-  if (mx <= 0) return 100;
-  return Math.min(100, Math.max(10, Math.ceil(mx * 1.28)));
+  return computeLinearYMax([a, b], { cap: 100, emptyDefault: 100, minCeiling: 0.5 });
 }
 
 function computeCpuYMax(pts) {
   const dock = pts.map((p) => p.docker?.cpu_percent ?? null);
   const sys = pts.map((p) => p.system?.cpu_percent ?? null);
-  const mx = maxInSeriesList([dock, sys]);
-  if (mx <= 0) return 100;
-  return Math.min(100, Math.max(6, Math.ceil(mx * 1.4)));
+  return computeLinearYMax([dock, sys], { cap: 100, emptyDefault: 100, minCeiling: 0.5 });
 }
 
 function seriesHasNumber(arr) {
@@ -544,7 +612,7 @@ function ensureOverviewCharts() {
             beginAtZero: true,
             max: 100,
             grid: { color: THEME.grid },
-            ticks: { color: "#bae6fd", font: { size: 10 } },
+            ticks: ticksPercentStyle("#bae6fd", 10),
           },
           y1: {
             type: "linear",
@@ -554,10 +622,13 @@ function ensureOverviewCharts() {
             min: 0,
             max: 90,
             grid: { display: false },
-            ticks: { color: THEME.temp, font: { size: 10 }, callback: (v) => `${v}°` },
+            ticks: { color: THEME.temp, font: { size: 10 }, callback: (v) => `${v}°C` },
           },
         },
-        plugins: { legend: overviewLegend },
+        plugins: {
+          legend: overviewLegend,
+          tooltip: { callbacks: { label: metricsTooltipCpu } },
+        },
       },
     });
   }
@@ -568,7 +639,7 @@ function ensureOverviewCharts() {
         labels: [],
         datasets: [
           { label: "Docker / host RAM %", data: [], ...dockerLine },
-          { label: "System RAM (% used)", data: [], ...sysLine },
+          { label: "Approx. RAM available %", data: [], ...sysLine },
         ],
       },
       options: {
@@ -582,10 +653,13 @@ function ensureOverviewCharts() {
             beginAtZero: true,
             max: 100,
             grid: { color: THEME.grid },
-            ticks: { color: "#fbcfe8", font: { size: 10 } },
+            ticks: ticksPercentStyle("#fbcfe8", 10),
           },
         },
-        plugins: { legend: overviewLegend },
+        plugins: {
+          legend: overviewLegend,
+          tooltip: { callbacks: { label: metricsTooltipRam } },
+        },
       },
     });
   }
@@ -681,17 +755,17 @@ function renderOverviewKpi(data, cf, lastPt) {
   const mount = document.getElementById("overviewKpi");
   if (!mount) return;
   const s = data.system_status || {};
+  const dt = s.docker_totals_all_running || {};
   const ref = data.reference || {};
   const d = data.docker_overview?.counts || {};
   const host = data.docker_overview?.host || {};
   const svc = cf?.services || {};
   const cfUp = [svc.r2, svc.kv, svc.d1, svc.workers, svc.autoscale].filter((x) => x?.reachable).length;
-  const dockCpu = lastPt?.docker?.cpu_percent;
-  const dockRam = lastPt?.docker?.memory_percent;
-  const aggCpu = s.aggregate_cpu_percent;
-  const aggRam = s.aggregate_memory_percent;
-  const cpuShow = dockCpu != null ? `${Number(dockCpu).toFixed(1)}%` : aggCpu != null ? `${aggCpu}%` : "—";
-  const ramShow = dockRam != null ? `${Number(dockRam).toFixed(1)}%` : aggRam != null ? `${aggRam}%` : "—";
+  // Prefer live docker_totals from this overview response so KPIs match Infrastructure / Deep metrics.
+  const dockCpu = dt.cpu_percent ?? lastPt?.docker?.cpu_percent;
+  const dockRam = dt.memory_percent ?? lastPt?.docker?.memory_percent;
+  const cpuShow = dockCpu != null ? `${Number(dockCpu).toFixed(1)}%` : "—";
+  const ramShow = dockRam != null ? `${Number(dockRam).toFixed(1)}%` : "—";
 
   mount.innerHTML = `
     <div class="kpi-cell">
@@ -700,11 +774,11 @@ function renderOverviewKpi(data, cf, lastPt) {
     </div>
     <div class="kpi-cell">
       <div class="kpi-value">${cpuShow}</div>
-      <div class="kpi-label">Docker CPU Σ</div>
+      <div class="kpi-label">Docker CPU <span class="kpi-sublabel">all running ÷ vCPUs</span></div>
     </div>
     <div class="kpi-cell">
       <div class="kpi-value">${ramShow}</div>
-      <div class="kpi-label">Docker RAM %</div>
+      <div class="kpi-label">Docker RAM <span class="kpi-sublabel">Σ usage ÷ MemTotal</span></div>
     </div>
     <div class="kpi-cell">
       <div class="kpi-value">${data.healthy_urls ?? "—"}/${data.url_count ?? "—"}</div>
@@ -759,7 +833,8 @@ function updateOverviewDashboard(data, cf, metricsData) {
   const sCpu = sysVal("cpu_percent")(pts);
   const sTemp = sysVal("cpu_temp_c_max")(pts);
   const ramSecond = ramChartSecondLine(pts);
-  const hasProcRam = pts.some((p) => p.system?.memory_percent != null);
+  const hasAvailRam = pts.some((p) => p.system?.memory_percent_available != null);
+  const hasProcRamUsed = pts.some((p) => p.system?.memory_percent != null);
 
   renderOverviewKpi(data, cf, pts.length ? pts[pts.length - 1] : null);
   renderOverviewChips(data, cf);
@@ -768,19 +843,33 @@ function updateOverviewDashboard(data, cf, metricsData) {
   const ramMeta = document.getElementById("overviewRamMeta");
   const last = pts.length ? pts[pts.length - 1] : null;
   const s = data.system_status || {};
+  const dt = s.docker_totals_all_running || {};
   const tempStr = last?.system?.cpu_temp_c_max != null ? `${last.system.cpu_temp_c_max}°C` : "—";
   if (cpuMeta) {
+    const dcpu = last?.docker?.cpu_percent ?? dt.cpu_percent;
+    const draw = last?.docker?.cpu_sum_raw ?? dt.cpu_sum_raw;
     cpuMeta.textContent = last
-      ? `Now · Docker ${last.docker?.cpu_percent ?? "—"}% · System ${last.system?.cpu_percent ?? "—"}% · Temp ${tempStr}`
-      : `Aggregate · Docker ${s.aggregate_cpu_percent ?? "—"}% (open Metrics for history)`;
+      ? `Now · Docker ${dcpu ?? "—"}% (raw Σ ${draw ?? "—"}%) · System ${last.system?.cpu_percent ?? "—"}% · Temp ${tempStr}`
+      : `Same as Deep metrics · Docker ${dcpu ?? "—"}% (all containers ÷ vCPUs) · Temp ${tempStr}`;
   }
   if (ramMeta) {
-    const hostPct = last?.docker?.memory_percent_of_host ?? last?.docker?.memory_percent;
-    const secondVal = hasProcRam ? last?.system?.memory_percent : last?.docker?.memory_percent_of_limits;
+    const hostPct = last?.docker?.memory_percent_of_host ?? last?.docker?.memory_percent ?? dt.memory_percent;
+    let secondVal;
+    let secondLabel;
+    if (hasAvailRam) {
+      secondVal = last?.system?.memory_percent_available;
+      secondLabel = "Avail";
+    } else if (hasProcRamUsed) {
+      secondVal = last?.system?.memory_percent;
+      secondLabel = "Host used";
+    } else {
+      secondVal = last?.docker?.memory_percent_of_limits ?? dt.memory_percent_of_limits;
+      secondLabel = "Σ limits";
+    }
     const secondFmt = secondVal != null && secondVal !== "" ? `${secondVal}%` : "—";
     ramMeta.textContent = last
-      ? `Now · Docker/host ${hostPct ?? "—"}% · ${hasProcRam ? "System" : "Σ limits"} ${secondFmt}`
-      : `Aggregate · ${s.aggregate_memory_percent ?? "—"}% of limits (open Metrics for history)`;
+      ? `Now · Docker Σ / MemTotal ${hostPct ?? "—"}% · ${secondLabel} ${secondFmt}`
+      : `Same as Deep metrics · Docker RAM ${hostPct ?? "—"}% vs MemTotal`;
   }
 
   if (!ensureOverviewCharts()) return;
@@ -1386,13 +1475,14 @@ function renderSystemStatus(s) {
       ${alerts}
     </div>
     <div class="card">
-      <strong>Runtime Summary</strong>
-      <div class="row"><span>Total CPU</span><span>${s.aggregate_cpu_percent || 0}%</span></div>
-      <div class="row"><span>Total Memory</span><span>${formatBytes(s.aggregate_memory_usage || 0)}</span></div>
-      <div class="row"><span>Memory Cap</span><span>${formatBytes(s.aggregate_memory_limit || 0)}</span></div>
-      <div class="row"><span>Memory %</span><span>${s.aggregate_memory_percent || 0}%</span></div>
+      <strong>Runtime Summary (Deep metrics alignment)</strong>
+      <div class="row"><span>Docker CPU</span><span>${s.docker_totals_all_running?.cpu_percent ?? "—"}% <span class="muted small">(all running ÷ ${s.docker_totals_all_running?.host_cpus ?? "—"} vCPUs, raw Σ ${s.docker_totals_all_running?.cpu_sum_raw ?? "—"}%)</span></span></div>
+      <div class="row"><span>Docker RAM vs MemTotal</span><span>${s.docker_totals_all_running?.memory_percent ?? "—"}%</span></div>
+      <div class="row"><span>Docker RAM vs Σ limits</span><span>${s.docker_totals_all_running?.memory_percent_of_limits ?? "—"}%</span></div>
+      <div class="row"><span>Running containers sampled</span><span>${s.docker_totals_all_running?.running_container_count ?? "—"}</span></div>
       <div class="row"><span>Error lines (5m)</span><span>${s.total_error_lines || 0}</span></div>
       <div class="row"><span>Error rate</span><span>${s.total_error_rate_per_min || 0}/min</span></div>
+      <p class="muted small" style="margin:0.5rem 0 0">Managed stack only (URL-probed services): CPU raw Σ ${s.aggregate_cpu_percent ?? "—"}% · RAM ${s.aggregate_memory_percent ?? "—"}% of Σ cgroup limits — differs from “all containers” above.</p>
     </div>
   `;
 }
@@ -1492,7 +1582,24 @@ function ensureCharts() {
         { label: "Errors/min", data: [], borderColor: "#fb7185", backgroundColor: "rgba(251,113,133,0.22)", tension: 0.25, fill: true }
       ]
     },
-    options: { responsive: true, maintainAspectRatio: false, animation: false }
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label(ctx) {
+              const y = ctx.parsed.y;
+              const name = ctx.dataset.label || "";
+              if (y == null || Number.isNaN(Number(y))) return `${name}: —`;
+              if (ctx.datasetIndex <= 1) return `${name}: ${y}%`;
+              return `${name}: ${y}`;
+            },
+          },
+        },
+      },
+    },
   });
 
   charts.bar = new Chart(document.getElementById("barChart"), {
@@ -1508,8 +1615,22 @@ function ensureCharts() {
       responsive: true,
       maintainAspectRatio: false,
       animation: false,
-      scales: { y: { beginAtZero: true, max: 100 } }
-    }
+      scales: {
+        y: { beginAtZero: true, max: 100, ticks: ticksPercentStyle("#94a3b8", 11) },
+      },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label(ctx) {
+              const y = ctx.parsed.y;
+              const name = ctx.dataset.label || "";
+              if (y == null || Number.isNaN(Number(y))) return `${name}: —`;
+              return `${name}: ${y}%`;
+            },
+          },
+        },
+      },
+    },
   });
 
   charts.pie = new Chart(document.getElementById("pieChart"), {
@@ -1591,7 +1712,7 @@ function ensureMetricsCharts() {
       interaction: { mode: "index", intersect: false },
       scales: {
         x: { ticks: tickStyle, grid: { color: gridColor } },
-        y: { beginAtZero: true, max: 100, grid: { color: gridColor }, ticks: tickStyle },
+        y: { beginAtZero: true, max: 100, grid: { color: gridColor }, ticks: ticksPercentStyle("#e9d5ff", 11) },
         y1: {
           type: "linear",
           position: "right",
@@ -1600,10 +1721,13 @@ function ensureMetricsCharts() {
           min: 0,
           max: 90,
           grid: { display: false },
-          ticks: { color: THEME.temp, font: { size: 11 }, callback: (v) => `${v}°` },
+          ticks: { color: THEME.temp, font: { size: 11 }, callback: (v) => `${v}°C` },
         },
       },
-      plugins: { legend: legendBottom },
+      plugins: {
+        legend: legendBottom,
+        tooltip: { callbacks: { label: metricsTooltipCpu } },
+      },
     },
   });
   }
@@ -1615,7 +1739,7 @@ function ensureMetricsCharts() {
       labels: [],
       datasets: [
         { label: "Docker / host RAM %", data: [], ...dockerLine },
-        { label: "System RAM (% used)", data: [], ...sysLine },
+        { label: "Approx. RAM available %", data: [], ...sysLine },
       ],
     },
     options: {
@@ -1625,9 +1749,12 @@ function ensureMetricsCharts() {
       interaction: { mode: "index", intersect: false },
       scales: {
         x: { ticks: tickStyle, grid: { color: gridColor } },
-        y: { beginAtZero: true, max: 100, grid: { color: gridColor }, ticks: tickStyle },
+        y: { beginAtZero: true, max: 100, grid: { color: gridColor }, ticks: ticksPercentStyle("#e9d5ff", 11) },
       },
-      plugins: { legend: legendBottom },
+      plugins: {
+        legend: legendBottom,
+        tooltip: { callbacks: { label: metricsTooltipRam } },
+      },
     },
   });
   }
@@ -1649,9 +1776,23 @@ function ensureMetricsCharts() {
       interaction: { mode: "index", intersect: false },
       scales: {
         x: { ticks: tickStyle, grid: { color: gridColor } },
-        y: { beginAtZero: true, grid: { color: gridColor }, ticks: tickStyle },
+        y: {
+          beginAtZero: true,
+          grid: { color: gridColor },
+          ticks: {
+            ...tickStyle,
+            callback(raw) {
+              const v = typeof raw === "number" ? raw : Number(raw);
+              if (!Number.isFinite(v)) return String(raw);
+              return `${v} Mb/s`;
+            },
+          },
+        },
       },
-      plugins: { legend: legendBottom },
+      plugins: {
+        legend: legendBottom,
+        tooltip: { callbacks: { label: metricsTooltipNet } },
+      },
     },
   });
   }
@@ -1674,16 +1815,38 @@ function ensureMetricsCharts() {
       interaction: { mode: "index", intersect: false },
       scales: {
         x: { ticks: tickStyle, grid: { color: gridColor } },
-        y: { beginAtZero: true, grid: { color: gridColor }, ticks: tickStyle },
+        y: {
+          beginAtZero: true,
+          grid: { color: gridColor },
+          ticks: {
+            ...tickStyle,
+            callback(raw) {
+              const v = typeof raw === "number" ? raw : Number(raw);
+              if (!Number.isFinite(v)) return String(raw);
+              return `${v} /s`;
+            },
+          },
+        },
         y1: {
           type: "linear",
           position: "right",
           beginAtZero: true,
           grid: { display: false },
-          ticks: { color: "#fde047", font: { size: 11 } },
+          ticks: {
+            color: "#fde047",
+            font: { size: 11 },
+            callback(raw) {
+              const v = typeof raw === "number" ? raw : Number(raw);
+              if (!Number.isFinite(v)) return String(raw);
+              return `${v} Mb/s`;
+            },
+          },
         },
       },
-      plugins: { legend: legendBottom },
+      plugins: {
+        legend: legendBottom,
+        tooltip: { callbacks: { label: metricsTooltipIops } },
+      },
     },
   });
   }
@@ -1723,7 +1886,19 @@ function ensureMetricsCharts() {
             ticks: { color: THEME.temp, font: { size: 11 }, callback: (v) => `${v}°C` },
           },
         },
-        plugins: { legend: legendBottom },
+        plugins: {
+          legend: legendBottom,
+          tooltip: {
+            callbacks: {
+              label(ctx) {
+                const y = ctx.parsed.y;
+                const name = ctx.dataset.label || "";
+                if (y == null || Number.isNaN(Number(y))) return `${name}: —`;
+                return `${name}: ${y}°C`;
+              },
+            },
+          },
+        },
       },
     });
   }
@@ -1803,6 +1978,10 @@ function renderMetricsChartsFromPayload(data, sum, hint, cacheNote) {
   metricsCharts.net.data.datasets[0].data = d("net_total_mbps");
   metricsCharts.net.data.datasets[1].data = sNet;
   metricsCharts.net.data.datasets[1].hidden = !seriesHasNumber(sNet);
+  const dockNet = d("net_total_mbps");
+  if (metricsCharts.net.options.scales?.y) {
+    metricsCharts.net.options.scales.y.max = computeLinearYMax([dockNet, sNet], { emptyDefault: 0.25, minCeiling: 0.05 });
+  }
   metricsCharts.net.update();
 
   metricsCharts.iops.data.labels = labels;
@@ -1811,30 +1990,120 @@ function renderMetricsChartsFromPayload(data, sum, hint, cacheNote) {
   metricsCharts.iops.data.datasets[2].data = blkMb;
   metricsCharts.iops.data.datasets[1].hidden = !seriesHasNumber(sIops);
   metricsCharts.iops.data.datasets[2].hidden = !seriesHasPositive(blkMb);
+  if (metricsCharts.iops.options.scales?.y) {
+    metricsCharts.iops.options.scales.y.max = computeLinearYMax([d("iops_total_est"), sIops], {
+      emptyDefault: 0.5,
+      minCeiling: 0.05,
+    });
+  }
+  if (metricsCharts.iops.options.scales?.y1) {
+    metricsCharts.iops.options.scales.y1.max = computeLinearYMax([blkMb], { emptyDefault: 0.25, minCeiling: 0.02 });
+  }
   metricsCharts.iops.update();
 
   const last = pts[pts.length - 1];
   const procOk = last?.system?.host_proc_available;
+  const procSrc = last?.system?.proc_metrics_source;
   const hasTemp = pts.some((p) => p.system?.cpu_temp_c_max != null);
   if (hint) {
     const parts = [];
-    if (procOk) parts.push("/proc mounted — host CPU/RAM/net/IOPS lines live.");
-    else parts.push("No host /proc (typical on Docker Desktop) — second RAM line is Docker Σ vs host physical %.");
-    if (hasTemp) parts.push("Temperature from /sys thermal zones.");
-    else parts.push("Temperature needs Linux + /sys mount (see dashboard deploy script).");
+    if (procOk) {
+      if (procSrc === "host_mount") parts.push("Host /proc mount — system CPU/RAM/net/IOPS match the Docker host.");
+      else parts.push("Container /proc (e.g. Docker Desktop Linux VM) — system lines are that environment, not macOS.");
+      parts.push(
+        "RAM chart: cyan = Docker Σ memory ÷ kernel MemTotal; magenta = MemAvailable/MemTotal (headroom), not the same quantity.",
+      );
+    } else parts.push("No readable /proc — system CPU/net/IOPS unavailable; RAM second line uses Docker Σ vs cgroup limits.");
+    if (hasTemp) {
+      if (pts.some((p) => p.system?.cpu_temp_source === "host_file_thermal_proxy"))
+        parts.push(
+          "CPU chart value is a thermal-pressure + loadavg proxy from macOS (not die °C); see ai-stack/scripts/macos-write-cpu-temp.sh.",
+        );
+      else if (pts.some((p) => p.system?.cpu_temp_source === "host_file"))
+        parts.push("CPU temp from macOS host file (~/.local-eco-host-metrics/cpu_temp_c.txt).");
+      else parts.push("CPU temp from /sys thermal zones.");
+    } else {
+      parts.push(
+        "No CPU temp: macOS — start dashboard via ai-stack/services/dashboard.sh (installs host temp LaunchAgent) or run ai-stack/scripts/macos-write-cpu-temp.sh; Linux — mount host /sys (see dashboard.sh).",
+      );
+    }
     parts.push("IOPS often 0 without blkio; use right axis block Mb/s.");
+    parts.push(
+      "Overview KPI tiles use the same Docker CPU/RAM numbers as this tab (all running containers, CPU ÷ host vCPUs, cyan RAM ÷ MemTotal).",
+    );
     hint.textContent = parts.join(" ");
   }
   const tempBit = last?.system?.cpu_temp_c_max != null ? ` temp ${last.system.cpu_temp_c_max}°C` : "";
   const rawCpu = last?.docker?.cpu_sum_raw != null ? ` (raw Σ ${last.docker.cpu_sum_raw}%)` : "";
+  let ramTail = "";
+  if (last) {
+    const rh = last.docker?.memory_percent_of_host ?? last.docker?.memory_percent;
+    ramTail = ` RAM Σ/host ${rh ?? "—"}%`;
+    if (last.system?.memory_percent_available != null) ramTail += ` · avail ${last.system.memory_percent_available}%`;
+    else if (last.system?.memory_percent != null) ramTail += ` · host-used ${last.system.memory_percent}%`;
+    ramTail += ` · limits ${last.docker?.memory_percent_of_limits ?? "—"}%`;
+  }
   let line =
     `Samples: ${pts.length} (max ${data.max_points || METRICS_MAX}) · ` +
     `Updated ${data.generated_at ? new Date(data.generated_at).toLocaleString() : ""}` +
     (last
-      ? ` · Docker: CPU ${last.docker?.cpu_percent}%${rawCpu} RAM/host ${last.docker?.memory_percent_of_host ?? last.docker?.memory_percent}% limits ${last.docker?.memory_percent_of_limits ?? "—"}% net ${last.docker?.net_total_mbps} Mb/s IOPS~ ${last.docker?.iops_total_est} block ${last.docker?.blk_total_mbps ?? "—"} Mb/s${tempBit}`
+      ? ` · Docker: CPU ${last.docker?.cpu_percent}%${rawCpu}${ramTail} net ${last.docker?.net_total_mbps} Mb/s IOPS~ ${last.docker?.iops_total_est} block ${last.docker?.blk_total_mbps ?? "—"} Mb/s${tempBit}`
       : "");
   if (cacheNote) line = `${cacheNote} ${line}`;
   sum.textContent = line;
+}
+
+function renderHostInjectedMetricsPanel(payload) {
+  const panel = document.getElementById("hostInjectedMetricsPanel");
+  const body = document.getElementById("hostInjectedMetricsBody");
+  const ul = document.getElementById("hostInjectedMetricsInsights");
+  if (!panel || !body || !ul) return;
+
+  if (!payload || !payload.configured) {
+    body.innerHTML =
+      "<p><strong>Host temp file not configured.</strong> This panel appears when <code>DASHBOARD_HOST_CPU_TEMP_FILE</code> is set (macOS dashboard deploy).</p>";
+    ul.innerHTML = "";
+    return;
+  }
+
+  const w = payload.writer_status || {};
+  const sch = payload.scheduler_meta || {};
+  const fm = payload.file_metadata || {};
+  const ok = w.success !== false;
+  const writerLine = w.updated_at
+    ? `${ok ? "OK" : "Failed"} · last writer run <time datetime="${escapeHtml(w.updated_at)}">${escapeHtml(w.updated_at)}</time>${w.message ? ` — ${escapeHtml(w.message)}` : ""}`
+    : "No <code>writer_status.json</code> yet — run the host script once or wait for LaunchAgent.";
+
+  body.innerHTML = `
+    <div class="host-metrics-grid">
+      <div><strong>Temp file</strong><br /><code>${escapeHtml(payload.path || "")}</code><br />exists: ${payload.file_exists ? "yes" : "no"}</div>
+      <div><strong>Current read</strong><br />${payload.cpu_temp_c != null ? `${payload.cpu_temp_c}°C` : "—"} <span class="muted">(${escapeHtml(payload.cpu_temp_source || "—")})</span></div>
+      <div><strong>File payload</strong><br />source ${escapeHtml(fm.file_source || "—")}${fm.thermal_pressure ? ` · pressure <strong>${escapeHtml(fm.thermal_pressure)}</strong>` : ""}${fm.proxy_model ? ` · model <code>${escapeHtml(fm.proxy_model)}</code>` : ""}${fm.proxy_baseline_c != null && fm.proxy_baseline_c !== "" ? ` · baseline ${escapeHtml(String(fm.proxy_baseline_c))}°C` : ""}${fm.proxy_load_add_c != null && fm.proxy_load_add_c !== "" ? ` + load <strong>${escapeHtml(String(fm.proxy_load_add_c))}°C</strong> (ratio ${escapeHtml(String(fm.proxy_load_ratio ?? "—"))})` : ""}</div>
+      <div><strong>Host writer</strong><br />${writerLine}</div>
+      <div><strong>Scheduler (on-disk)</strong><br />${
+        sch.label
+          ? `${escapeHtml(sch.label)} · every ${escapeHtml(String(sch.interval_sec))}s · installed ${escapeHtml(sch.installed_at || "—")}<br /><span class="muted">Verify on Mac: <code>launchctl print gui/$(id -u)/${escapeHtml(sch.label)}</code></span>`
+          : "<span class='muted'>No scheduler_meta.json — run <code>dashboard.sh deploy</code> on macOS or install <code>macos-host-metrics-scheduler.sh</code>.</span>"
+      }</div>
+    </div>
+    <p class="muted small" style="margin-top:0.75rem"><strong>Manual host run (Mac terminal):</strong> <code>bash /path/to/repo/ai-stack/scripts/macos-write-cpu-temp.sh</code> — the container cannot execute macOS <code>powermetrics</code> for you.</p>
+  `;
+
+  ul.innerHTML = (payload.insights || [])
+    .map((t) => `<li>${escapeHtml(t)}</li>`)
+    .join("");
+}
+
+async function fetchHostInjectedMetricsPanel() {
+  try {
+    const res = await fetch("/api/host-metrics/injected");
+    if (!res.ok) return;
+    const data = await res.json();
+    renderHostInjectedMetricsPanel(data);
+  } catch (_) {
+    const body = document.getElementById("hostInjectedMetricsBody");
+    if (body) body.textContent = "Could not load host metrics status.";
+  }
 }
 
 async function loadMetricsCharts() {
@@ -1879,6 +2148,16 @@ async function loadMetricsCharts() {
       sum.textContent = `Metrics error: ${e.message || e}`;
     }
   }
+  fetchHostInjectedMetricsPanel();
+}
+
+function initHostMetricsPanelRefresh() {
+  const btn = document.getElementById("hostMetricsRefreshCharts");
+  if (!btn || btn.dataset.wired === "1") return;
+  btn.dataset.wired = "1";
+  btn.addEventListener("click", () => {
+    loadMetricsCharts();
+  });
 }
 
 function controlToken() {
@@ -2278,9 +2557,10 @@ function updateCharts(data) {
   const services = data.services || [];
 
   const stamp = new Date(data.generated_at).toLocaleTimeString();
+  const dt = s.docker_totals_all_running || {};
   trendHistory.labels.push(stamp);
-  trendHistory.cpu.push(Number(s.aggregate_cpu_percent || 0));
-  trendHistory.memory.push(Number(s.aggregate_memory_percent || 0));
+  trendHistory.cpu.push(Number(dt.cpu_percent ?? s.aggregate_cpu_percent ?? 0));
+  trendHistory.memory.push(Number(dt.memory_percent ?? s.aggregate_memory_percent ?? 0));
   trendHistory.errors.push(Number(s.total_error_rate_per_min || 0));
   if (trendHistory.labels.length > MAX_POINTS) {
     trendHistory.labels.shift();
@@ -2531,6 +2811,7 @@ function initControlBulkBar() {
 async function bootstrap() {
   initAppModal();
   initTabs();
+  initHostMetricsPanelRefresh();
   initControlBulkBar();
   hydrateOverviewFromCache();
   try {

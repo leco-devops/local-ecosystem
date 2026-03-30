@@ -1,5 +1,7 @@
 # Cloudflare Local — Architecture
 
+**Full local platform setup** (DNS, TLS, AI stack): [../../docs/SETUP.md](../../docs/SETUP.md).
+
 This stack approximates **R2**, **KV**, **D1**, **Workers**, and an **autoscaler** on Docker so applications can be developed against URLs and behaviors similar to Cloudflare’s edge platform, without calling Cloudflare APIs.
 
 ## Topology

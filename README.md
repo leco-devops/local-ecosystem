@@ -1,579 +1,148 @@
-# 🚀 Local Ecosystem — AI Stack Platform (Full Detailed Guide)
+# Local Ecosystem — AI stack and local platform
+
+A **Docker-based local platform** that mimics a small cloud edge: Traefik on `*.lh`, TLS, Ollama, Open WebUI, n8n, PostgreSQL, an ops **dashboard**, and optional **Cloudflare-local** adapters (R2/KV/D1/Workers-style APIs).
+
+| Layer | Role |
+|--------|------|
+| **DNS** (`*.lh`) | Resolve local hostnames to `127.0.0.1` (e.g. dnsmasq) |
+| **Traefik** | HTTP/HTTPS entrypoints **80 / 443**, dashboard API **8080** |
+| **mkcert** | Trusted dev certificates in `certs/` |
+| **Containers** | Attached to Docker network **`lh-network`** |
+
+You access services by name (**`https://n8n.lh`**, **`https://ai.lh`**, …) instead of memorizing ports.
 
 ---
 
-# 📌 Overview
+## Documentation
 
-This project is a **local, production-like infrastructure platform** built using:
-
-* **Traefik** → Reverse proxy + routing
-* **mkcert** → Trusted local HTTPS certificates
-* **Ollama** → Local LLM runtime
-* **Open WebUI** → AI interface
-* **n8n** → Automation engine
-* **PostgreSQL** → Database
-
-It provides:
-
-```text
-*.lh / *.lm → Local domain routing
-HTTP + HTTPS → Fully supported
-Docker-based → Isolated & reproducible
-```
-
----
-# 🧠 What You’re Building (IMPORTANT)
-
-👉 A **Local Domain Ecosystem (Mini Cloud Platform)**
-
-Instead of:
-
-```text
-localhost:5678
-localhost:3000
-localhost:11434
-```
-
-You will use:
-
-```text
-n8n.lh        → localhost:5678
-ai.lh         → localhost:8080
-ollama.lh     → localhost:11434
-traefik.lh    → localhost:8080 (dashboard)
-```
+| Guide | Description |
+|--------|-------------|
+| **[docs/SETUP.md](docs/SETUP.md)** | **Complete first-time setup** — DNS, Docker, TLS, stack start, macOS host CPU metrics, optional Cloudflare-local |
+| **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** | **Deployment and operations** — start/stop, updates, bulk vs Control API behavior, troubleshooting |
+| **[docs/DEVELOPMENT_PLAYBOOK.md](docs/DEVELOPMENT_PLAYBOOK.md)** | Extending services, dashboard APIs, Traefik routes |
+| **[cloudflare-local/README.md](cloudflare-local/README.md)** | CF-local stack entry + links to architecture and user manual |
 
 ---
 
-## 🧠 Key Insight
+## Quick start (after prerequisites)
 
-```text
-You are not running apps.
-You are running a LOCAL CLOUD PLATFORM.
-```
-
----
-
-# 🏗️ Architecture (Simple & Clean)
-
-```text
-Browser
-   ↓
-*.lh / *.lm (Local DNS via dnsmasq)
-   ↓
-Traefik (Reverse Proxy :80 / :443)
-   ↓
-Docker Network (lh-network)
-   ↓
-Containers (n8n, webui, ollama, postgres)
-```
-
----
-
-# 📁 Directory Structure
-
-Base Path:
+Prerequisites: **Docker**, **dnsmasq** (or equivalent) for **`*.lh`**, **mkcert** and certs for `*.lh`. Full steps are in **[docs/SETUP.md](docs/SETUP.md)**.
 
 ```bash
-~/Working/GitHub/local-ecosystem
+export REPO="$HOME/path/to/local-ecosystem"
+cd "$REPO"
+
+# Interactive menu
+./ai-stack/ai-stack.sh menu
+
+# Or start everything in dependency order
+./ai-stack/ai-stack.sh start
 ```
+
+**Default start order** (`ai-stack/core.sh`): `traefik` → `postgres` → `ollama` → `webui` → `n8n` → `dashboard` → `cloudflare-local`.
+
+Repair routing and network attachments anytime:
+
+```bash
+./ai-stack/ai-stack.sh repair-network
+```
+
+---
+
+## Common URLs
+
+| URL | Service |
+|-----|---------|
+| http://localhost.lh | Ops dashboard (via Traefik) |
+| http://localhost:8090 | Ops dashboard (direct host port; override with `DASHBOARD_HOST_PORT`) |
+| https://traefik.lh | Traefik routing (TLS) |
+| https://ai.lh | Open WebUI |
+| https://n8n.lh | n8n |
+| https://ollama.lh | Ollama |
+| http://r2.lh , http://kv.lh , http://d1.lh , http://workers.lh | Cloudflare-local (when started) |
+| http://minio-console.lh , http://autoscale.lh | CF-local related UIs |
+
+The dashboard provides **overview**, **metrics** (with optional host CPU temperature on macOS), **logs**, **docs**, **Control** (stack actions), and **Ollama** model management. Containers started via `ai-stack` use **`--restart unless-stopped`** where applicable so they come back after a Docker daemon restart unless you stopped them explicitly.
+
+---
+
+## CLI reference (repository root)
+
+```bash
+./ai-stack/ai-stack.sh menu
+./ai-stack/ai-stack.sh start [service]
+./ai-stack/ai-stack.sh stop [service]
+./ai-stack/ai-stack.sh restart [service]
+./ai-stack/ai-stack.sh pause [service]
+./ai-stack/ai-stack.sh unpause [service]
+./ai-stack/ai-stack.sh status [service]
+./ai-stack/ai-stack.sh logs [service]
+./ai-stack/ai-stack.sh remove [service]
+./ai-stack/ai-stack.sh reset [service]    # destructive — confirm prompts
+./ai-stack/ai-stack.sh repair-network
+./ai-stack/ai-stack.sh ollama-pull-models
+```
+
+Per-service scripts (same actions as each `*.sh` defines):
+
+```bash
+./ai-stack/services/dashboard.sh deploy
+./ai-stack/services/cloudflare-local.sh start
+```
+
+---
+
+## Repository layout (high level)
 
 ```
 local-ecosystem/
-│
 ├── ai-stack/
-│   ├── services/
-│   │   ├── ollama.sh
-│   │   ├── webui.sh
-│   │   ├── n8n.sh
-│   │   └── postgres.sh
-│   │
-│   ├── config/
-│   │   └── dynamic.yml
-│   │
-│   ├── core.sh
-│   ├── ai-stack.sh
-│   └── README.md
-│
+│   ├── ai-stack.sh          # CLI entry
+│   ├── core.sh              # start order, network repair, bulk_ecosystem
+│   ├── services/*.sh        # traefik, postgres, ollama, webui, n8n, dashboard, cloudflare-local
+│   ├── scripts/             # macOS host CPU temp writer + LaunchAgent installer
+│   └── config/              # e.g. ollama-pinned-models.txt, dynamic.yml copy
+├── dashboard/               # Flask ops app (image local/service-dashboard)
 ├── traefik/
-│   └── dynamic.yml
-│
-├── certs/
-│   ├── wildcard.lh.pem
-│   └── wildcard.lh-key.pem
-│
-├── bootstrap-ai-stack.sh
-└── fix-and-run.sh
+│   └── dynamic.yml          # *.lh routers (keep in sync with ai-stack/config if you use both)
+├── cloudflare-local/        # docker-compose + adapters
+├── certs/                   # mkcert *.lh PEMs
+└── docs/                    # SETUP.md, DEPLOYMENT.md, DEVELOPMENT_PLAYBOOK.md
 ```
 
 ---
 
-# 🌐 Step 1 — Local Domain Mapping (*.lh / *.lm)
+## macOS: host CPU temperature and LaunchAgent
+
+The dashboard container cannot read Apple SMC. On **macOS**, **`dashboard.sh`** mounts **`~/.local-eco-host-metrics`** and sets **`DASHBOARD_HOST_CPU_TEMP_FILE`**.
+
+When you **deploy/start** the dashboard via **`ai-stack/services/dashboard.sh`**, a **LaunchAgent** is installed to run **`ai-stack/scripts/macos-write-cpu-temp.sh`** every **30s**. **Stop/remove** via the same script **uninstalls** that agent. Optional **`brew install osx-cpu-temp`**; Apple Silicon often needs **`sudo powermetrics`** (see script and **[docs/SETUP.md](docs/SETUP.md)** §8).
 
 ---
 
-## 🔹 Install dnsmasq
+## Ollama pinned models
 
-```bash
-brew install dnsmasq
-```
-
----
-
-## 🔹 Configure dnsmasq
-
-```bash
-echo "address=/.lh/127.0.0.1" >> $(brew --prefix)/etc/dnsmasq.conf
-```
-
-Optional:
-
-```bash
-echo "address=/.lm/127.0.0.1" >> $(brew --prefix)/etc/dnsmasq.conf
-```
-
----
-
-## 🔹 Start dnsmasq
-
-```bash
-sudo brew services start dnsmasq
-```
-
----
-
-## 🔹 Create resolver
-
-```bash
-sudo mkdir -p /etc/resolver
-```
-
----
-
-## 🔹 Add resolver for `.lh`
-
-```bash
-echo "nameserver 127.0.0.1" | sudo tee /etc/resolver/lh
-```
-
----
-
-## 🔹 Add resolver for `.lm` (optional)
-
-```bash
-echo "nameserver 127.0.0.1" | sudo tee /etc/resolver/lm
-```
-
----
-
-## 🔹 Test
-
-```bash
-ping ai.lh
-```
-
-Expected:
-
-```text
-127.0.0.1
-```
-
----
-
-# 🐳 Step 2 — Docker Setup
-
----
-
-## Install Docker Desktop
-
-Use:
-
-Docker Desktop
-
----
-
-## Verify Docker
-
-```bash
-docker ps
-```
-
----
-
-## Create Network
-
-```bash
-docker network create lh-network
-```
-
----
-
-# 🔐 Step 3 — HTTPS Setup (mkcert)
-
----
-
-## Install mkcert
-
-```bash
-brew install mkcert
-```
-
----
-
-## Install CA
-
-```bash
-mkcert -install
-```
-
----
-
-## Fix Java Issue (if occurs)
-
-```bash
-unset JAVA_HOME
-```
-
----
-
-## Generate Certificate
-
-```bash
-cd ~/Working/GitHub/local-ecosystem/certs
-mkcert "*.lh"
-```
-
----
-
-## Verify
-
-```bash
-ls
-```
-
-Expected:
-
-```text
-wildcard.lh.pem
-wildcard.lh-key.pem
-```
-
----
-
-# 🔑 Step 4 — Trust Certificate (CRITICAL)
-
----
-
-## Open Keychain Access
-
-Search:
-
-```text
-Keychain Access
-```
-
----
-
-## Import Root CA
-
-```bash
-mkcert -CAROOT
-```
-
-Import:
-
-```text
-rootCA.pem
-```
-
----
-
-## Set Trust
-
-* Open certificate
-* Expand Trust
-* Set:
-
-```text
-Always Trust
-```
-
----
-
-## ❗ IMPORTANT
-
-```text
-System Keychain ✅
-iCloud Keychain ❌
-```
-
----
-
-# 🔀 Step 5 — Traefik Setup
-
----
-
-## Start Traefik
-
-```bash
-docker run -d \
-  --name traefik \
-  --network lh-network \
-  -p 80:80 \
-  -p 443:443 \
-  -p 8080:8080 \
-  -v ~/Working/GitHub/local-ecosystem/traefik:/etc/traefik \
-  -v ~/Working/GitHub/local-ecosystem/certs:/certs \
-  traefik:v3.0 \
-  --api.insecure=true \
-  --providers.file.filename=/etc/traefik/dynamic.yml \
-  --entrypoints.web.address=:80 \
-  --entrypoints.websecure.address=:443
-```
-
----
-
-# 🔀 Step 6 — Routing Explained
-
-Each service has:
-
-```text
-HTTP router  → port 80
-HTTPS router → port 443
-```
-
-Example:
-
-```yaml
-n8n-http:
-n8n-https:
-```
-
----
-
-# ⚙️ Step 7 — Services
-
----
-
-## Ollama
-
-```bash
-docker run -d \
-  --name ollama \
-  --network lh-network \
-  -v ollama:/root/.ollama \
-  ollama/ollama
-```
-
-**Pinned models (AI stack):** edit `ai-stack/config/ollama-pinned-models.txt` (one model name per line). When the `ollama` service starts via `ai-stack/services/ollama.sh`, it pulls those models in the background. To pull again into a running container:
+Edit **`ai-stack/config/ollama-pinned-models.txt`** (one model per line). On Ollama service start, pulls run in the background. To refresh a running container:
 
 ```bash
 ./ai-stack/ai-stack.sh ollama-pull-models
 ```
 
-The ops dashboard at **http://localhost.lh** → **Infrastructure** shows **Ollama models** (pinned vs installed, pull/delete/unload). Model actions use the same optional control token as the **Control** tab (`DASHBOARD_CONTROL_TOKEN`, or `X-Control-Token` / saved browser token). The dashboard also caches recent overview and metrics in **localStorage** so a reload can show the last good snapshot while APIs catch up.
+---
+
+## Troubleshooting (short)
+
+| Issue | Action |
+|-------|--------|
+| `*.lh` does not resolve | dnsmasq + `/etc/resolver/lh` — see [docs/SETUP.md](docs/SETUP.md) §4 |
+| Bad Gateway | `./ai-stack/ai-stack.sh repair-network` |
+| TLS warnings | mkcert CA + files in `certs/` |
+| n8n cookies / HTTPS | Env in `ai-stack/services/n8n.sh` (`N8N_TRUST_PROXY`, `N8N_SECURE_COOKIE`) |
+
+More: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** §12.
 
 ---
 
-## Open WebUI
+## License / contributing
 
-```bash
-docker run -d \
-  --name open-webui \
-  --network lh-network \
-  -e OLLAMA_BASE_URL=http://ollama:11434 \
-  -v open-webui:/app/backend/data \
-  ghcr.io/open-webui/open-webui:main
-```
-
----
-
-## PostgreSQL
-
-```bash
-docker run -d \
-  --name n8n_postgres \
-  --network lh-network \
-  -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=password \
-  -e POSTGRES_DB=n8n \
-  -v n8n_postgres_data:/var/lib/postgresql/data \
-  postgres:15
-```
-
----
-
-## n8n (CRITICAL CONFIG)
-
-```bash
-docker run -d \
-  --name n8n \
-  --network lh-network \
-  -e DB_TYPE=postgresdb \
-  -e DB_POSTGRESDB_HOST=n8n_postgres \
-  -e DB_POSTGRESDB_DATABASE=n8n \
-  -e DB_POSTGRESDB_USER=postgres \
-  -e DB_POSTGRESDB_PASSWORD=password \
-  -e N8N_HOST=n8n.lh \
-  -e N8N_PROTOCOL=http \
-  -e N8N_SECURE_COOKIE=false \
-  -e N8N_TRUST_PROXY=true \
-  -v n8n_data:/home/node/.n8n \
-  docker.n8n.io/n8nio/n8n
-```
-
----
-
-# ⚠️ Step 8 — HTTP vs HTTPS (IMPORTANT)
-
----
-
-## Problem
-
-```text
-secure cookie + insecure URL
-```
-
----
-
-## Root Cause
-
-```text
-Traefik sends HTTPS headers
-n8n expects secure cookies
-```
-
----
-
-## Fix
-
-```bash
-N8N_SECURE_COOKIE=false
-```
-
----
-
-## Final Behavior
-
-| URL            | Status |
-| -------------- | ------ |
-| http://n8n.lh  | ✅      |
-| https://n8n.lh | ✅      |
-
----
-
-# 🌍 Access URLs
-
-```text
-https://traefik.lh
-https://ai.lh
-https://n8n.lh
-https://ollama.lh
-http://localhost.lh
-http://r2.lh
-http://kv.lh
-http://d1.lh
-http://workers.lh
-http://autoscale.lh
-http://minio-console.lh
-```
-
-**Ops dashboard (`localhost.lh`):** overview, infrastructure (including Cloudflare Local + Ollama models), metrics history charts, logs, embedded docs, and **Control** for stack actions. In **Docs → Operations → Service management commands**, the UI lists host CLI for each Control target (scripts and compose). **Auto-start with Docker:** Traefik, Open WebUI, Ollama, PostgreSQL, n8n, the ops dashboard, and every Cloudflare-local compose service use **`--restart unless-stopped`** (or Compose `restart: unless-stopped`). Each AI-stack `start()` ensures **`lh-network`** exists before `docker run`. Run **`./ai-stack/ai-stack.sh repair-network`** to create the network if needed, attach every known container to `lh-network`, and apply **`docker update --restart unless-stopped`** on existing containers (see `NETWORK_CONTAINERS` in `ai-stack/core.sh`). After a control action completes, cards refresh automatically; no separate “refresh cards” step. Active tab and cached overview/metrics are restored from the browser when you reopen the page (within ~48 hours).
-
----
-
-# 🧪 Step 9 — Test
-
-Open all URLs in browser.
-
----
-
-# 🧹 CLI Usage
-
-```bash
-./ai-stack.sh menu
-./ai-stack.sh start
-./ai-stack.sh stop
-./ai-stack.sh restart
-./ai-stack.sh pause [service]
-./ai-stack.sh unpause [service]
-./ai-stack.sh status [service]
-./ai-stack.sh remove [service]
-./ai-stack.sh logs n8n
-./ai-stack.sh repair-network
-./ai-stack.sh reset
-./ai-stack.sh start cloudflare-local
-./ai-stack.sh logs cloudflare-local
-```
-
----
-
-# 🔥 Challenges Faced
-
----
-
-## Docker Socket (macOS)
-
-* `/var/run/docker.sock` issue
-* Fixed via file provider
-
----
-
-## mkcert Java Error
-
-```bash
-unset JAVA_HOME
-```
-
----
-
-## Certificate Trust
-
-* iCloud ❌
-* System ✅
-
----
-
-## n8n Cookie Issue
-
-* Fixed via env config
-
----
-
-## Traefik Routing
-
-* Fixed via proper dynamic.yml
-
----
-
-## Bad Gateway (network mismatch)
-
-* Fixed by ensuring `traefik`, `open-webui`, `ollama`, `n8n_postgres`, and `n8n` are attached to `lh-network`
-* Use:
-
-```bash
-./ai-stack.sh repair-network
-```
-
----
-
-# 🎯 Final Outcome
-
-```text
-✔ Domain-based routing
-✔ Trusted HTTPS
-✔ Reverse proxy
-✔ Modular services
-✔ Production-like local setup
-```
-
----
-
-# 💬 Final Thought
-
-```text
-This is not a dev setup.
-This is a LOCAL CLOUD PLATFORM.
-```
-
----
+Follow **[docs/DEVELOPMENT_PLAYBOOK.md](docs/DEVELOPMENT_PLAYBOOK.md)** when changing services, Traefik, or the dashboard. Control actions can be destructive; use **`DASHBOARD_CONTROL_TOKEN`** in production-like environments.

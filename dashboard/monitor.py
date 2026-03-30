@@ -575,10 +575,15 @@ def build_system_status(services, docker_overview):
         "unhealthy_urls": unhealthy_urls,
         "total_error_lines": total_error_lines,
         "total_error_rate_per_min": round(total_error_rate_per_min, 2),
+        # Sum of per-container Docker stats for SERVICE_MAP entries only (not all running containers).
         "aggregate_cpu_percent": round(aggregate_cpu_percent, 2),
         "aggregate_memory_usage": aggregate_memory_usage,
         "aggregate_memory_limit": aggregate_memory_limit,
         "aggregate_memory_percent": round(aggregate_memory_percent, 2),
+        "aggregate_note": (
+            "managed_services_only: CPU is the raw sum of per-container % (can exceed 100% on multi-core); "
+            "RAM is Σ usage / Σ limits for probed stack services only — not the same as Deep metrics."
+        ),
         "alerts": alerts,
     }
 
@@ -663,9 +668,13 @@ def collect_overview():
     system_status = build_system_status(services, docker_overview)
 
     try:
-        from timeseries import append_snapshot
+        from timeseries import aggregate_running_container_stats, append_snapshot, compute_docker_totals_aligned
 
-        append_snapshot(client, docker_overview)
+        agg = aggregate_running_container_stats(client) if client is not None else None
+        aligned = compute_docker_totals_aligned(client, docker_overview, agg) if agg is not None else None
+        if aligned:
+            system_status["docker_totals_all_running"] = aligned
+        append_snapshot(client, docker_overview, precomputed_container_agg=agg)
     except Exception:
         pass
 

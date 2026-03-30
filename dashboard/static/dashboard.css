@@ -407,6 +407,65 @@ input[type="password"] {
   color: #fef08a;
 }
 
+.kpi-sublabel {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-muted);
+  text-transform: none;
+  letter-spacing: 0;
+  margin-top: 2px;
+}
+
+.host-metrics-panel {
+  margin: 0 0 20px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.host-metrics-panel--after-charts {
+  margin-top: 22px;
+  margin-bottom: 0;
+}
+
+.host-metrics-panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.host-metrics-panel__lead {
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+
+.host-metrics-panel__body {
+  line-height: 1.55;
+}
+
+.host-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px 18px;
+}
+
+.host-metrics-insights {
+  margin: 12px 0 0;
+  padding-left: 1.25rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.host-metrics-insights li {
+  margin-bottom: 6px;
+}
+
 .chart-sub {
   font-size: 13px;
   color: var(--text-muted);
