@@ -106,17 +106,6 @@ def list_targets():
             },
         }
     ]
-    for t in CF_TARGETS:
-        out.append(
-            {
-                "id": t["id"],
-                "label": t["label"],
-                "group": "cloudflare-local",
-                "container": t["container"],
-                "actions": sorted(ALLOWED_ACTIONS),
-                "runtime": _container_runtime(dc, t.get("container")),
-            }
-        )
     for t in AI_TARGETS:
         entry = {
             "id": t["id"],
@@ -129,6 +118,17 @@ def list_targets():
         if t.get("container") == "service-dashboard" and t["script"] == "dashboard":
             entry["actions"] = sorted(a for a in ALLOWED_ACTIONS if a not in {"remove", "reset"})
         out.append(entry)
+    for t in CF_TARGETS:
+        out.append(
+            {
+                "id": t["id"],
+                "label": t["label"],
+                "group": "cloudflare-local",
+                "container": t["container"],
+                "actions": sorted(ALLOWED_ACTIONS),
+                "runtime": _container_runtime(dc, t.get("container")),
+            }
+        )
     out.append(
         {
             "id": "stack-cf-all",

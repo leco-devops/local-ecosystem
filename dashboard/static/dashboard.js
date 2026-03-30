@@ -208,12 +208,50 @@ function metricsTooltipIops(ctx) {
   return `${name}: ${y}`;
 }
 
+/**
+ * Y-axis bounds for temperature (°C). Flat or narrow samples use a minimum span so small
+ * fluctuations are visible; wider ranges get modest padding only (avoids 45–65°C for ~53°C data).
+ */
 function tempAxisBounds(sTemp) {
   const nums = sTemp.filter((x) => x != null && x !== "" && !Number.isNaN(Number(x))).map((x) => Number(x));
   if (!nums.length) return { min: 0, max: 90 };
+
   const lo = Math.min(...nums);
   const hi = Math.max(...nums);
-  return { min: Math.max(0, lo - 8), max: Math.min(115, hi + 12) };
+  const span = hi - lo;
+  const ABS_MAX = 115;
+  /** Minimum axis height (°C) when data is constant or nearly constant */
+  const MIN_VISIBLE_SPAN = 5;
+
+  if (span <= 0.0001) {
+    const half = MIN_VISIBLE_SPAN / 2;
+    return {
+      min: Math.max(0, lo - half),
+      max: Math.min(ABS_MAX, lo + half),
+    };
+  }
+
+  if (span < MIN_VISIBLE_SPAN) {
+    const extra = (MIN_VISIBLE_SPAN - span) / 2;
+    let vmin = lo - extra;
+    let vmax = hi + extra;
+    if (vmin < 0) {
+      vmax -= vmin;
+      vmin = 0;
+    }
+    if (vmax > ABS_MAX) {
+      vmin -= vmax - ABS_MAX;
+      vmax = ABS_MAX;
+      vmin = Math.max(0, vmin);
+    }
+    return { min: vmin, max: vmax };
+  }
+
+  const pad = Math.max(0.35, span * 0.12);
+  return {
+    min: Math.max(0, lo - pad),
+    max: Math.min(ABS_MAX, hi + pad),
+  };
 }
 
 function serviceBrandUi() {
@@ -719,7 +757,7 @@ function ensureOverviewCharts() {
             type: "linear",
             position: "right",
             display: true,
-            beginAtZero: true,
+            beginAtZero: false,
             min: 0,
             max: 90,
             grid: { display: false },
@@ -1857,7 +1895,7 @@ function ensureMetricsCharts() {
           type: "linear",
           position: "right",
           display: true,
-          beginAtZero: true,
+          beginAtZero: false,
           min: 0,
           max: 90,
           grid: { display: false },
@@ -2019,7 +2057,7 @@ function ensureMetricsCharts() {
         scales: {
           x: { ticks: tickStyle, grid: { color: gridColor } },
           y: {
-            beginAtZero: true,
+            beginAtZero: false,
             min: 0,
             max: 90,
             grid: { color: gridColor },
@@ -2379,58 +2417,83 @@ function controlToken() {
   return localStorage.getItem("dashboard_control_token") || "";
 }
 
-async function loadControlTargets() {
-  const row = document.getElementById("controlTokenRow");
-  const grid = document.getElementById("controlTargets");
-  const SB = serviceBrandUi();
-  try {
-    const res = await fetch("/api/control/targets");
-    const data = await res.json();
-    if (row) row.style.display = data.token_required ? "flex" : "none";
-    const input = document.getElementById("controlTokenInput");
-    if (input && !input.value && controlToken()) input.value = controlToken();
+const CONTROL_GROUP_ORDER = ["ecosystem", "ai-stack", "cloudflare-local"];
 
-    const targets = data.targets || [];
-    if (!grid) return;
+const CONTROL_GROUP_META = {
+  ecosystem: {
+    title: "Bulk & orchestration",
+    lead: "Same full-stack actions as the toolbar above, exposed as a control target for the API.",
+    sectionClass: "",
+  },
+  "ai-stack": {
+    title: "AI stack & Traefik",
+    lead: "Edge proxy, apps, Ollama, n8n, Postgres, and this dashboard.",
+    sectionClass: "",
+  },
+  "cloudflare-local": {
+    title: "Cloudflare local",
+    lead: "MinIO, Valkey, adapters, Workers runtime, demo, autoscaler, and whole compose stack.",
+    sectionClass: " control-target-group--cf",
+  },
+};
 
-    grid.innerHTML = targets
-      .map((t) => {
-        const brand = SB.getBrandForControlTarget(t);
-        const { safe, danger } = SB.partitionControlActions(t.actions);
-        const rt = t.runtime || {};
-        const rtLabel = escapeHtml(rt.label || "—");
-        const rtClass =
-          rt.running === true
-            ? "control-runtime--up"
-            : rt.running === false
-              ? "control-runtime--down"
-              : rt.kind === "stack"
-                ? "control-runtime--stack"
-                : "control-runtime--na";
-        const primaryBtns = safe
-          .map((a) => {
-            const cls = SB.actionButtonClasses(a);
-            return controlActionButtonHtml(a, cls, t.id, t.label || t.id, rt);
-          })
-          .join("");
-        const dangerBtns = danger
-          .map((a) => {
-            const cls = SB.actionButtonClasses(a);
-            return controlActionButtonHtml(a, cls, t.id, t.label || t.id, rt);
-          })
-          .join("");
-        const wrapClass =
-          danger.length === 0
-            ? "control-card__actions-wrap control-card__actions-wrap--safe-only"
-            : "control-card__actions-wrap";
-        const aside =
-          danger.length === 0
-            ? ""
-            : `<aside class="control-actions control-actions--danger" aria-label="Destructive actions">
+function partitionControlTargets(targets) {
+  const map = new Map();
+  for (const t of targets) {
+    const g = t.group || "other";
+    if (!map.has(g)) map.set(g, []);
+    map.get(g).push(t);
+  }
+  const out = [];
+  for (const g of CONTROL_GROUP_ORDER) {
+    if (map.has(g)) {
+      out.push({ group: g, items: map.get(g) });
+      map.delete(g);
+    }
+  }
+  for (const [g, items] of map) {
+    out.push({ group: g, items });
+  }
+  return out;
+}
+
+function controlTargetCardHtml(SB, t) {
+  const brand = SB.getBrandForControlTarget(t);
+  const { safe, danger } = SB.partitionControlActions(t.actions);
+  const rt = t.runtime || {};
+  const rtLabel = escapeHtml(rt.label || "—");
+  const rtClass =
+    rt.running === true
+      ? "control-runtime--up"
+      : rt.running === false
+        ? "control-runtime--down"
+        : rt.kind === "stack"
+          ? "control-runtime--stack"
+          : "control-runtime--na";
+  const primaryBtns = safe
+    .map((a) => {
+      const cls = SB.actionButtonClasses(a);
+      return controlActionButtonHtml(a, cls, t.id, t.label || t.id, rt);
+    })
+    .join("");
+  const dangerBtns = danger
+    .map((a) => {
+      const cls = SB.actionButtonClasses(a);
+      return controlActionButtonHtml(a, cls, t.id, t.label || t.id, rt);
+    })
+    .join("");
+  const wrapClass =
+    danger.length === 0
+      ? "control-card__actions-wrap control-card__actions-wrap--safe-only"
+      : "control-card__actions-wrap";
+  const aside =
+    danger.length === 0
+      ? ""
+      : `<aside class="control-actions control-actions--danger" aria-label="Destructive actions">
             <div class="control-actions__label">Destructive</div>
             ${dangerBtns}
           </aside>`;
-        return `
+  return `
           <div class="control-card" data-brand="${escapeHtml(brand)}">
             <div class="control-card__head">
               <div class="control-card__iconcol">
@@ -2448,6 +2511,39 @@ async function loadControlTargets() {
               ${aside}
             </div>
           </div>`;
+}
+
+async function loadControlTargets() {
+  const row = document.getElementById("controlTokenRow");
+  const grid = document.getElementById("controlTargets");
+  const SB = serviceBrandUi();
+  try {
+    const res = await fetch("/api/control/targets");
+    const data = await res.json();
+    if (row) row.style.display = data.token_required ? "flex" : "none";
+    const input = document.getElementById("controlTokenInput");
+    if (input && !input.value && controlToken()) input.value = controlToken();
+
+    const targets = data.targets || [];
+    if (!grid) return;
+
+    grid.innerHTML = partitionControlTargets(targets)
+      .map(({ group, items }) => {
+        const meta = CONTROL_GROUP_META[group] || {
+          title: String(group).replace(/-/g, " "),
+          lead: "",
+          sectionClass: "",
+        };
+        const sid = `ctl-grp-${String(group).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+        const cards = items.map((t) => controlTargetCardHtml(SB, t)).join("");
+        const lead = meta.lead
+          ? `<p class="control-target-group__lead">${escapeHtml(meta.lead)}</p>`
+          : "";
+        return `<section class="control-target-group${meta.sectionClass}" aria-labelledby="${escapeAttr(sid)}">
+      <h3 class="control-target-group__title" id="${escapeAttr(sid)}">${escapeHtml(meta.title)}</h3>
+      ${lead}
+      <div class="control-grid">${cards}</div>
+    </section>`;
       })
       .join("");
 

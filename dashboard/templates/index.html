@@ -109,26 +109,38 @@
       </section>
 
       <section id="infrastructureTab" class="tab-content">
-        <h2>Infrastructure</h2>
-        <p class="muted small">Docker engine, Cloudflare local stack, per-service cards, utilization charts, and full container list.</p>
+        <h2 class="tab-heading">Infrastructure</h2>
+        <p class="tab-lead muted small">
+          <strong>Host &amp; Docker</strong> first, then <strong>Cloudflare local</strong>, then <strong>managed stack / Ollama</strong>, and finally the full container list.
+        </p>
 
-        <section>
-          <h3>System status</h3>
-          <div id="systemStatus" class="grid-mini"></div>
-        </section>
+        <div class="infra-group">
+          <h3 class="infra-group__title">Host &amp; Docker engine</h3>
+          <p class="infra-group__lead muted small">Operational health and host capacity from the Docker API.</p>
+          <div class="infra-group__block">
+            <h4 class="infra-subhead">System status</h4>
+            <div id="systemStatus" class="grid-mini"></div>
+          </div>
+          <div class="infra-group__block">
+            <h4 class="infra-subhead">Docker host &amp; capacity</h4>
+            <div id="dockerOverview" class="grid-mini"></div>
+          </div>
+        </div>
 
-        <section>
-          <h3>Docker host &amp; capacity</h3>
-          <div id="dockerOverview" class="grid-mini"></div>
-        </section>
+        <div class="infra-group infra-group--cf">
+          <h3 class="infra-group__title">Cloudflare local</h3>
+          <p class="infra-group__lead muted small">R2, KV, D1, Workers, autoscaler — same adapters as the Overview CF chart.</p>
+          <div class="infra-group__block">
+            <h4 class="infra-subhead">Reachability &amp; resources</h4>
+            <div id="cloudflareLocal" class="grid-mini"></div>
+          </div>
+        </div>
 
-        <section>
-          <h3>Cloudflare local</h3>
-          <div id="cloudflareLocal" class="grid-mini"></div>
-        </section>
-
-        <section>
-          <h3>Ollama models</h3>
+        <div class="infra-group">
+          <h3 class="infra-group__title">Managed stack &amp; Ollama</h3>
+          <p class="infra-group__lead muted small">URL-probed services, utilization trends, and model lifecycle.</p>
+          <div class="infra-group__block">
+          <h4 class="infra-subhead">Ollama models</h4>
           <p class="muted small" id="ollamaModelsSummary">Loading…</p>
           <p class="muted small" id="ollamaModelsInsights"> </p>
           <p class="muted small">
@@ -154,46 +166,51 @@
             <button type="button" id="ollamaClearPinnedBtn" class="ollama-act ollama-act--destructive" title="Clears only the pinned file">Clear pinned</button>
           </div>
           <div id="ollamaModelsPanel" class="ollama-models-panel muted">Loading…</div>
-        </section>
+          </div>
 
-        <section>
-          <h3>Utilization (managed services)</h3>
-          <div class="charts">
-            <div class="chart-card">
-              <strong>Runtime trends</strong>
-              <div class="chart-wrap"><canvas id="lineChart"></canvas></div>
-            </div>
-            <div class="chart-card">
-              <strong>Per-service CPU / memory</strong>
-              <div class="chart-wrap"><canvas id="barChart"></canvas></div>
-            </div>
-            <div class="chart-card">
-              <strong>Managed container states</strong>
-              <div class="chart-wrap"><canvas id="pieChart"></canvas></div>
+          <div class="infra-group__block">
+            <h4 class="infra-subhead">Utilization (managed services)</h4>
+            <div class="charts">
+              <div class="chart-card">
+                <strong>Runtime trends</strong>
+                <div class="chart-wrap"><canvas id="lineChart"></canvas></div>
+              </div>
+              <div class="chart-card">
+                <strong>Per-service CPU / memory</strong>
+                <div class="chart-wrap"><canvas id="barChart"></canvas></div>
+              </div>
+              <div class="chart-card">
+                <strong>Managed container states</strong>
+                <div class="chart-wrap"><canvas id="pieChart"></canvas></div>
+              </div>
             </div>
           </div>
-        </section>
 
-        <section>
-          <h3>Managed services</h3>
-          <div id="services" class="grid service-grid"></div>
-        </section>
+          <div class="infra-group__block">
+            <h4 class="infra-subhead">Managed services</h4>
+            <div id="services" class="grid service-grid"></div>
+          </div>
+        </div>
 
-        <section>
-          <h3>All Docker containers</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Image</th>
-                <th>Status</th>
-                <th>Restart</th>
-                <th>Ports</th>
-              </tr>
-            </thead>
-            <tbody id="containers"></tbody>
-          </table>
-        </section>
+        <div class="infra-group infra-group--inventory">
+          <h3 class="infra-group__title">Docker inventory</h3>
+          <p class="infra-group__lead muted small">Every container Docker knows about (not only the managed service map).</p>
+          <div class="infra-group__block">
+            <h4 class="infra-subhead">All containers</h4>
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Image</th>
+                  <th>Status</th>
+                  <th>Restart</th>
+                  <th>Ports</th>
+                </tr>
+              </thead>
+              <tbody id="containers"></tbody>
+            </table>
+          </div>
+        </div>
       </section>
 
       <section id="referenceTab" class="tab-content">
@@ -265,7 +282,9 @@
 
       <section id="controlTab" class="tab-content">
         <h2 class="tab-heading">Control</h2>
-        <p class="tab-lead muted small">Each card is a stack or service — click an action. Destructive ops may wipe volumes; read the JSON response.</p>
+        <p class="tab-lead muted small">
+          Cards are grouped: <strong>bulk</strong>, then <strong>AI stack</strong>, then <strong>Cloudflare local</strong>. Each card is a stack or service — click an action. Destructive ops may wipe volumes; read the JSON response.
+        </p>
 
         <div class="control-token-row" id="controlTokenRow" style="display: none">
           <label for="controlTokenInput">Token</label>
@@ -286,7 +305,7 @@
           </div>
         </div>
 
-        <div id="controlTargets" class="control-grid"></div>
+        <div id="controlTargets" class="control-targets-root"></div>
 
         <details class="control-response-details">
           <summary>Full API response</summary>

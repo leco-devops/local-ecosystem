@@ -152,16 +152,60 @@ h3 {
   padding-top: 20px;
 }
 
-#infrastructureTab > section {
-  margin-top: 32px;
-  padding-top: 20px;
-  border-top: 1px solid rgba(99, 102, 241, 0.2);
+#infrastructureTab > .infra-group {
+  margin-top: 28px;
+  padding: 22px 20px 24px;
+  border: 1px solid rgba(99, 102, 241, 0.22);
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.35);
 }
 
-#infrastructureTab > section:first-of-type {
-  margin-top: 16px;
-  padding-top: 0;
-  border-top: 0;
+#infrastructureTab > .infra-group:first-of-type {
+  margin-top: 12px;
+}
+
+.infra-group__title {
+  margin: 0 0 6px;
+  font-size: 1.15rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: #e0e7ff;
+}
+
+.infra-group__lead {
+  margin: 0 0 18px;
+  max-width: 52rem;
+  line-height: 1.45;
+}
+
+.infra-group__block {
+  margin-top: 22px;
+}
+
+.infra-group__block:first-of-type {
+  margin-top: 0;
+}
+
+.infra-subhead {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #c7d2fe;
+}
+
+.infra-group--cf {
+  border-color: rgba(251, 191, 36, 0.28);
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.4) 0%, rgba(120, 53, 15, 0.12) 100%);
+}
+
+.infra-group--cf .infra-group__title {
+  color: #fde68a;
+}
+
+.infra-group--inventory {
+  border-style: dashed;
+  border-color: rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.25);
 }
 
 select,
@@ -654,11 +698,48 @@ button.ctrl-bulk--deploy {
   border-color: #c4b5fd;
 }
 
+.control-targets-root {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  margin-top: 8px;
+}
+
+.control-target-group {
+  padding: 18px 18px 20px;
+  border: 1px solid rgba(99, 102, 241, 0.22);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.32);
+}
+
+.control-target-group--cf {
+  border-color: rgba(251, 191, 36, 0.3);
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.38) 0%, rgba(120, 53, 15, 0.1) 100%);
+}
+
+.control-target-group__title {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+  font-weight: 650;
+  color: #e0e7ff;
+}
+
+.control-target-group--cf .control-target-group__title {
+  color: #fde68a;
+}
+
+.control-target-group__lead {
+  margin: 0 0 14px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted, #94a3b8);
+}
+
 .control-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 18px;
-  margin-top: 18px;
+  margin-top: 0;
 }
 
 .control-response-details {
