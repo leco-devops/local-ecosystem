@@ -38,7 +38,9 @@ The dashboard runs in Docker. Rebuild the image:
 # or: docker build -t local/service-dashboard:latest dashboard && docker rm -f service-dashboard && …
 ```
 
-The container should mount **`$PROJECT_ROOT:/project`** so Control actions and in-dashboard docs can read the repo.
+The container should mount **`$PROJECT_ROOT:/project`** so Control actions and in-dashboard docs can read the repo. The run script uses **`--restart unless-stopped`** so the dashboard comes back when the Docker daemon restarts (unless the container was explicitly stopped).
+
+The **Docs** tab includes a generated module **Service management commands** (`service-management`) built from `control_targets.py` (per-service CLI aligned with Control).
 
 ## 4. Adding a new `*.lh` service
 
@@ -68,7 +70,7 @@ The container should mount **`$PROJECT_ROOT:/project`** so Control actions and i
 | `/api/cloudflare-local` | GET | CF adapter health + counts |
 | `/api/metrics/history` | GET | Time series (also appends a sample) |
 | `/api/control/targets` | GET | Controllable units |
-| `/api/control` | POST | `{ "target_id", "action", "token"? }` |
+| `/api/control` | POST | `{ "target_id", "action", "token"? }` — includes `stack-ecosystem-all` (`start` \| `stop` \| `restart` \| `deploy`) which runs `bulk_ecosystem` in `ai-stack/core.sh` |
 | `/api/reference` | GET | Full URL catalog + probe results |
 | `/api/docs/catalog` | GET | Documentation modules |
 | `/api/docs/content` | GET | `?id=<module>` Markdown body |

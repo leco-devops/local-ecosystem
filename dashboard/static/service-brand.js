@@ -20,6 +20,7 @@
     "ai-dashboard": "dashboard",
     "ai-cloudflare-local": "cf-compose",
     "stack-cf-all": "cf-stack",
+    "stack-ecosystem-all": "ecosystem",
   };
 
   const CONTAINER_BRAND = {
@@ -71,6 +72,7 @@
     "autoscale-demo": "🎯",
     "cf-compose": "🧩",
     "cf-stack": "🌐",
+    ecosystem: "🎛️",
     default: "📌",
   };
 
@@ -126,6 +128,9 @@
     ),
     "cf-stack": svg(
       "M12 2l10 5-10 5L2 7l10-5zm0 8.5l6.5-3.25L12 4 5.5 7.25 12 10.5zm-8 4l8 4 8-4v6l-8 4-8-4v-6z",
+    ),
+    ecosystem: svg(
+      "M6 4h4v4H6V4zm8 0h4v4h-4V4zM6 10h4v4H6v-4zm8 0h4v4h-4v-4zM6 16h4v4H6v-4zm8 0h4v4h-4v-4z",
     ),
   };
 

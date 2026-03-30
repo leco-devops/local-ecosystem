@@ -129,3 +129,41 @@ run_all() {
     return 1
   fi
 }
+
+# Bulk ops for the dashboard Control API: stopping this dashboard mid-request would kill the HTTP
+# connection, so we skip the "dashboard" service on stop phases. Start always runs full START_ORDER.
+_bulk_stop_all_except_dashboard() {
+  local svc
+  local -a ordered
+  while IFS= read -r svc; do
+    [ -n "$svc" ] && ordered+=("$svc")
+  done < <(get_services_in_start_order)
+  local i
+  for ((i = ${#ordered[@]} - 1; i >= 0; i--)); do
+    svc="${ordered[i]}"
+    [ "$svc" = "dashboard" ] && continue
+    run_service "$svc" stop || true
+  done
+}
+
+# start | stop | restart | deploy  (restart and deploy both: stop-all-except-dashboard, then start-all)
+bulk_ecosystem() {
+  action=$1
+  ensure_network_exists
+  case "$action" in
+    start)
+      run_all start
+      ;;
+    stop)
+      _bulk_stop_all_except_dashboard
+      ;;
+    restart|deploy)
+      _bulk_stop_all_except_dashboard
+      run_all start
+      ;;
+    *)
+      echo "❌ bulk_ecosystem: unknown action: $action"
+      return 1
+      ;;
+  esac
+}

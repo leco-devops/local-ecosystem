@@ -478,7 +478,7 @@ http://autoscale.lh
 http://minio-console.lh
 ```
 
-**Ops dashboard (`localhost.lh`):** overview, infrastructure (including Cloudflare Local + Ollama models), metrics history charts, logs, embedded docs, and **Control** for stack actions. After a control action completes, cards refresh automatically; no separate “refresh cards” step. Active tab and cached overview/metrics are restored from the browser when you reopen the page (within ~48 hours).
+**Ops dashboard (`localhost.lh`):** overview, infrastructure (including Cloudflare Local + Ollama models), metrics history charts, logs, embedded docs, and **Control** for stack actions. In **Docs → Operations → Service management commands**, the UI lists host CLI for each Control target (scripts and compose). The dashboard container is created with **`--restart unless-stopped`** so it starts again when Docker restarts (unless you stopped it manually). After a control action completes, cards refresh automatically; no separate “refresh cards” step. Active tab and cached overview/metrics are restored from the browser when you reopen the page (within ~48 hours).
 
 ---
 

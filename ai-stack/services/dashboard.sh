@@ -33,6 +33,7 @@ start() {
   # shellcheck disable=SC2086
   docker run -d \
     --name "$NAME" \
+    --restart unless-stopped \
     --network lh-network \
     -p "$HOST_PORT:$CONTAINER_PORT" \
     -v /var/run/docker.sock:/var/run/docker.sock \

@@ -1,4 +1,5 @@
 import os
+import shlex
 import subprocess
 import time
 from datetime import datetime, timezone
@@ -6,8 +7,9 @@ from datetime import datetime, timezone
 import docker
 import requests
 
+from control_targets import AI_TARGETS, CF_TARGETS, COMPOSE_REL
+
 PROJECT_ROOT = os.getenv("DASHBOARD_PROJECT_ROOT", "/project")
-COMPOSE_REL = "cloudflare-local/docker-compose.yml"
 COMPOSE_FILE = os.path.join(PROJECT_ROOT, COMPOSE_REL)
 SERVICES_DIR = os.path.join(PROJECT_ROOT, "ai-stack", "services")
 CONTROL_TOKEN = os.getenv("DASHBOARD_CONTROL_TOKEN", "").strip()
@@ -19,29 +21,6 @@ os.makedirs(BACKUP_DIR, mode=0o755, exist_ok=True)
 ALLOWED_ACTIONS = frozenset(
     {"start", "stop", "restart", "remove", "pause", "unpause", "deploy", "recreate", "reset", "backup"}
 )
-
-# Cloudflare-local: compose service name == container_name in this repo
-CF_TARGETS = [
-    {"id": "cf-minio", "label": "MinIO", "compose_service": "minio", "container": "minio"},
-    {"id": "cf-valkey", "label": "Valkey", "compose_service": "valkey", "container": "valkey"},
-    {"id": "cf-r2-adapter", "label": "R2 adapter", "compose_service": "r2-adapter", "container": "r2-adapter"},
-    {"id": "cf-kv-adapter", "label": "KV adapter", "compose_service": "kv-adapter", "container": "kv-adapter"},
-    {"id": "cf-d1-adapter", "label": "D1 adapter", "compose_service": "d1-adapter", "container": "d1-adapter"},
-    {"id": "cf-workers-runtime", "label": "Workers (Miniflare)", "compose_service": "workers-runtime", "container": "workers-runtime"},
-    {"id": "cf-autoscale-demo", "label": "Autoscale demo", "compose_service": "autoscale-demo", "container": "autoscale-demo"},
-    {"id": "cf-autoscaler", "label": "Autoscaler", "compose_service": "autoscaler", "container": "autoscaler"},
-]
-
-# AI stack: script basename (without .sh) and container name
-AI_TARGETS = [
-    {"id": "ai-traefik", "label": "Traefik", "script": "traefik", "container": "traefik"},
-    {"id": "ai-open-webui", "label": "Open WebUI", "script": "webui", "container": "open-webui"},
-    {"id": "ai-ollama", "label": "Ollama", "script": "ollama", "container": "ollama"},
-    {"id": "ai-n8n", "label": "n8n", "script": "n8n", "container": "n8n"},
-    {"id": "ai-postgres", "label": "PostgreSQL (n8n)", "script": "postgres", "container": "n8n_postgres", "reset_volume": "n8n_postgres_data"},
-    {"id": "ai-dashboard", "label": "Ops dashboard", "script": "dashboard", "container": "service-dashboard"},
-    {"id": "ai-cloudflare-local", "label": "Cloudflare local (compose)", "script": "cloudflare-local", "container": None},
-]
 
 _BY_ID = {t["id"]: t for t in CF_TARGETS + AI_TARGETS}
 
@@ -101,7 +80,21 @@ def check_control_token(request, data=None) -> bool:
 
 def list_targets():
     dc = _docker_client()
-    out = []
+    out = [
+        {
+            "id": "stack-ecosystem-all",
+            "label": "All AI-stack services (bulk)",
+            "group": "ecosystem",
+            "container": None,
+            "actions": ["start", "stop", "restart", "deploy"],
+            "runtime": {
+                "kind": "stack",
+                "status": "bulk",
+                "label": "One-click start/stop/redeploy via ai-stack/core.sh (stop skips this dashboard)",
+                "running": None,
+            },
+        }
+    ]
     for t in CF_TARGETS:
         out.append(
             {
@@ -228,6 +221,9 @@ def run_action(target_id: str, action: str):
     if target_id == "stack-cf-all":
         return _stack_cf_all(action)
 
+    if target_id == "stack-ecosystem-all":
+        return _stack_ecosystem_all(action)
+
     meta = _BY_ID.get(target_id)
     if not meta:
         return {"ok": False, "error": "unknown target"}
@@ -236,6 +232,17 @@ def run_action(target_id: str, action: str):
         return _cf_service_action(meta, action)
 
     return _ai_service_action(meta, action)
+
+
+def _stack_ecosystem_all(action: str):
+    if action not in {"start", "stop", "restart", "deploy"}:
+        return {"ok": False, "error": f"action {action} not supported for ecosystem bulk"}
+    core_sh = os.path.join(PROJECT_ROOT, "ai-stack", "core.sh")
+    if not os.path.isfile(core_sh):
+        return {"ok": False, "error": f"missing {core_sh}"}
+    src = f"source {shlex.quote(core_sh)} && bulk_ecosystem {shlex.quote(action)}"
+    code, log = _run(["/bin/bash", "-c", src], cwd=PROJECT_ROOT, timeout=3600)
+    return {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
 
 
 def _stack_cf_all(action: str):

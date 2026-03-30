@@ -469,6 +469,77 @@ input[type="password"] {
   border-radius: 10px;
 }
 
+.control-bulk-bar {
+  margin: 16px 0 8px;
+  padding: 18px 20px;
+  border-radius: 14px;
+  border: 1px solid rgba(129, 140, 248, 0.45);
+  background: linear-gradient(165deg, rgba(30, 27, 75, 0.95), rgba(15, 12, 32, 0.98));
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+}
+
+.control-bulk-bar__head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.control-bulk-bar__head strong {
+  font-size: 17px;
+  color: #c4b5fd;
+  letter-spacing: 0.02em;
+}
+
+.control-bulk-bar__head .small {
+  max-width: 72ch;
+  line-height: 1.45;
+}
+
+.control-bulk-bar__btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+button.ctrl-bulk {
+  flex: 1 1 140px;
+  min-height: 48px;
+  padding: 12px 18px;
+  font-size: 15px;
+  font-weight: 700;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  color: #fff;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.1s ease;
+}
+
+button.ctrl-bulk:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+button.ctrl-bulk--start {
+  background: #059669;
+  border-color: #34d399;
+}
+
+button.ctrl-bulk--stop {
+  background: #b91c1c;
+  border-color: #f87171;
+}
+
+button.ctrl-bulk--restart {
+  background: #1d4ed8;
+  border-color: #60a5fa;
+}
+
+button.ctrl-bulk--deploy {
+  background: #7c3aed;
+  border-color: #c4b5fd;
+}
+
 .control-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));

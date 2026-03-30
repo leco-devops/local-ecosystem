@@ -1979,8 +1979,29 @@ async function loadOverview() {
   saveOverviewCache(data, cloudflareData, metricsData);
 }
 
+function initControlBulkBar() {
+  const bar = document.getElementById("controlBulkBar");
+  if (!bar || bar.dataset.wired === "1") return;
+  bar.dataset.wired = "1";
+  const ECOSYSTEM_TARGET = "stack-ecosystem-all";
+  bar.querySelectorAll("[data-bulk-action]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const action = btn.getAttribute("data-bulk-action");
+      const lbl = btn.getAttribute("data-bulk-label") || action;
+      if (!action) return;
+      const destructive = action === "stop" || action === "restart" || action === "deploy";
+      if (destructive) {
+        const msg = `${lbl}: runs scripts under ai-stack/services (may take several minutes). Stop/restart skips this dashboard so the UI can show the result. Continue?`;
+        if (!confirm(msg)) return;
+      }
+      runControlAction(ECOSYSTEM_TARGET, action, lbl);
+    });
+  });
+}
+
 async function bootstrap() {
   initTabs();
+  initControlBulkBar();
   hydrateOverviewFromCache();
   try {
     const savedTab = localStorage.getItem(LS_ACTIVE_TAB_KEY);

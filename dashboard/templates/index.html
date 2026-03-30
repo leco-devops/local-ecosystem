@@ -233,6 +233,19 @@
           <button type="button" id="controlTokenSave">Save</button>
         </div>
 
+        <div class="control-bulk-bar" id="controlBulkBar" aria-label="Bulk ecosystem actions">
+          <div class="control-bulk-bar__head">
+            <strong>All AI-stack services</strong>
+            <span class="muted small">Uses <code>ai-stack/core.sh</code> start order. Stop / restart / redeploy skip this dashboard container so the request can complete; start or restart brings every service (including dashboard) back.</span>
+          </div>
+          <div class="control-bulk-bar__btns">
+            <button type="button" class="ctrl-bulk ctrl-bulk--start" data-bulk-action="start" data-bulk-label="Start all">Start all</button>
+            <button type="button" class="ctrl-bulk ctrl-bulk--stop" data-bulk-action="stop" data-bulk-label="Stop all">Stop all</button>
+            <button type="button" class="ctrl-bulk ctrl-bulk--restart" data-bulk-action="restart" data-bulk-label="Restart all">Restart all</button>
+            <button type="button" class="ctrl-bulk ctrl-bulk--deploy" data-bulk-action="deploy" data-bulk-label="Redeploy all">Redeploy all</button>
+          </div>
+        </div>
+
         <div id="controlTargets" class="control-grid"></div>
 
         <details class="control-response-details">
@@ -264,7 +277,7 @@
         <h2>Documentation</h2>
         <p class="muted small">
           Markdown served from your repo at <code>DASHBOARD_PROJECT_ROOT</code> (usually <code>/project</code>). Modules marked unavailable need the host mount in
-          <code>ai-stack/services/dashboard.sh</code>.
+          <code>ai-stack/services/dashboard.sh</code>. Under <strong>Operations</strong>, <em>Service management commands</em> lists copy-paste CLI for each Control target (AI-stack scripts, compose, bulk).
         </p>
         <div class="doc-layout">
           <nav class="doc-sidebar" id="docSidebar"></nav>

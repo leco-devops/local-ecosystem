@@ -27,6 +27,7 @@ COPY reference_data.py .
 COPY docs_catalog.py .
 COPY host_metrics.py .
 COPY timeseries.py .
+COPY control_targets.py .
 COPY control.py .
 COPY ollama_models.py .
 COPY templates ./templates
