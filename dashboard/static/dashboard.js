@@ -187,10 +187,27 @@ function seriesHasPositive(arr) {
   return arr.some((x) => x != null && Number(x) > 0);
 }
 
-function badge(ok, txt) {
-  if (ok === true) return `<span class="pill ok">${txt}</span>`;
-  if (ok === false) return `<span class="pill bad">${txt}</span>`;
-  return `<span class="pill warn">${txt}</span>`;
+function badge(ok, txt, title) {
+  const t = title ? ` title="${escapeHtml(title)}"` : "";
+  if (ok === true) return `<span class="pill ok"${t}>${txt}</span>`;
+  if (ok === false) return `<span class="pill bad"${t}>${txt}</span>`;
+  return `<span class="pill warn"${t}>${txt}</span>`;
+}
+
+/** URL probe pill; * = OK via Docker network fallback when Traefik edge failed. */
+function urlProbePill(c) {
+  if (!c || c.ok !== true) {
+    return badge(c?.ok, c?.status_code != null ? String(c.status_code) : "ERR", c?.error);
+  }
+  if (c.probe_via === "internal") {
+    const edge = c.edge_status_code != null ? String(c.edge_status_code) : c.edge_error || "?";
+    return badge(
+      true,
+      "OK*",
+      `Service answered on the Docker network; Traefik edge probe was not OK (${edge}). Browser may still work via *.lh.`,
+    );
+  }
+  return badge(true, "OK");
 }
 
 function formatBytes(bytes) {
@@ -1684,6 +1701,54 @@ const CONTROL_ACTION_PHASES = [
 let lastControlActionResultText = "";
 let controlActionOverlayAbort = null;
 let controlActionOverlayWired = false;
+let controlActionToastTimer = null;
+
+/** Works on http:// hosts where navigator.clipboard is blocked (insecure context). */
+async function copyTextToClipboard(text) {
+  if (typeof text !== "string" || !text.length) return false;
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (_) {
+      /* fall through to execCommand */
+    }
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    ta.style.top = "0";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch (_) {
+    return false;
+  }
+}
+
+function showControlToast(message, kind) {
+  const el = document.getElementById("controlActionToast");
+  if (!el) return;
+  if (controlActionToastTimer) {
+    clearTimeout(controlActionToastTimer);
+    controlActionToastTimer = null;
+  }
+  el.textContent = message;
+  el.classList.remove("is-hidden", "control-action-toast--ok", "control-action-toast--bad");
+  if (kind === "ok") el.classList.add("control-action-toast--ok");
+  else if (kind === "bad") el.classList.add("control-action-toast--bad");
+  controlActionToastTimer = setTimeout(() => {
+    el.classList.add("is-hidden");
+    el.textContent = "";
+    controlActionToastTimer = null;
+  }, 2800);
+}
 
 function initControlActionOverlay() {
   if (controlActionOverlayWired) return;
@@ -1698,16 +1763,20 @@ function initControlActionOverlay() {
   });
   copy?.addEventListener("click", async () => {
     const t = lastControlActionResultText || "";
-    if (!t || !navigator.clipboard?.writeText) return;
-    try {
-      await navigator.clipboard.writeText(t);
-      const prev = copy.textContent;
+    const prevLabel = copy.textContent;
+    if (!t) {
+      showControlToast("Nothing to copy yet.", "bad");
+      return;
+    }
+    const ok = await copyTextToClipboard(t);
+    if (ok) {
+      showControlToast("Copied to clipboard.", "ok");
       copy.textContent = "Copied";
       setTimeout(() => {
-        copy.textContent = prev;
-      }, 1400);
-    } catch (_) {
-      /* ignore */
+        copy.textContent = prevLabel;
+      }, 1600);
+    } else {
+      showControlToast("Copy failed — open “Full API response” below and copy manually.", "bad");
     }
   });
   dismiss.addEventListener("click", () => {
@@ -1750,6 +1819,16 @@ async function runControlAction(targetId, action, cardLabel) {
   };
 
   if (overlay) overlay.hidden = false;
+  if (controlActionToastTimer) {
+    clearTimeout(controlActionToastTimer);
+    controlActionToastTimer = null;
+  }
+  const toastEl = document.getElementById("controlActionToast");
+  if (toastEl) {
+    toastEl.classList.add("is-hidden");
+    toastEl.textContent = "";
+    toastEl.classList.remove("control-action-toast--ok", "control-action-toast--bad");
+  }
   if (titleEl) titleEl.textContent = `${action} · ${label}`;
   if (summaryEl) {
     summaryEl.classList.add("is-hidden");
@@ -1757,8 +1836,9 @@ async function runControlAction(targetId, action, cardLabel) {
     summaryEl.classList.remove("control-action-summary--ok", "control-action-summary--bad");
   }
   if (snippetEl) {
-    snippetEl.classList.add("is-hidden");
-    snippetEl.textContent = "";
+    snippetEl.classList.remove("is-hidden");
+    snippetEl.classList.add("control-action-snippet--live");
+    snippetEl.textContent = "Waiting for output…\n";
   }
   if (spinnerEl) spinnerEl.classList.remove("is-hidden");
   if (runningBar) runningBar.classList.remove("is-hidden");
@@ -1771,45 +1851,117 @@ async function runControlAction(targetId, action, cardLabel) {
   elapsedTimer = setInterval(bumpLive, 500);
   if (out) out.textContent = "Running…";
 
+  const logChunks = [];
+  let sawStreamByte = false;
+
+  const appendStreamLog = (t) => {
+    if (t === undefined || t === null) return;
+    logChunks.push(typeof t === "string" ? t : String(t));
+    if (snippetEl) {
+      snippetEl.textContent = logChunks.join("");
+      snippetEl.scrollTop = snippetEl.scrollHeight;
+    }
+    if (!sawStreamByte && spinnerEl) {
+      sawStreamByte = true;
+      spinnerEl.classList.add("is-hidden");
+    }
+  };
+
   try {
-    const res = await fetch("/api/control", {
+    const res = await fetch("/api/control/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Control-Token": controlToken() },
       body: JSON.stringify({ target_id: targetId, action, token: controlToken() }),
       signal: ac.signal,
     });
-    let data;
-    try {
-      data = await res.json();
-    } catch (_) {
-      data = { ok: false, error: `HTTP ${res.status} — invalid JSON` };
-    }
-    const text = JSON.stringify(data, null, 2);
-    lastControlActionResultText = text;
-    if (out) out.textContent = text;
-    const details = document.querySelector(".control-response-details");
-    if (details && (!res.ok || data?.ok === false)) {
-      details.open = true;
-    }
 
-    const ok = res.ok && data && data.ok === true;
-    const logBit = typeof data.log === "string" ? data.log : data.error ? String(data.error) : "";
-    const snippet = logBit ? (logBit.length > 2400 ? `${logBit.slice(0, 2400)}…` : logBit) : "";
+    if (!res.ok || !res.body?.getReader) {
+      let data;
+      try {
+        data = await res.json();
+      } catch (_) {
+        const raw = await res.text().catch(() => "");
+        data = { ok: false, error: `HTTP ${res.status}${raw ? ` — ${raw.slice(0, 400)}` : ""}` };
+      }
+      const text = JSON.stringify(data, null, 2);
+      lastControlActionResultText = text;
+      if (out) out.textContent = text;
+      const details = document.querySelector(".control-response-details");
+      if (details && (!res.ok || data?.ok === false)) details.open = true;
+      const ok = res.ok && data && data.ok === true;
+      if (titleEl) titleEl.textContent = ok ? `Done · ${action}` : `Finished · ${action}`;
+      if (liveEl) {
+        const sec = Math.max(0, Math.round((Date.now() - t0) / 1000));
+        liveEl.textContent = ok ? `Succeeded in ${sec}s` : `Completed in ${sec}s (check details)`;
+      }
+      if (summaryEl) {
+        summaryEl.classList.remove("is-hidden");
+        summaryEl.classList.toggle("control-action-summary--ok", ok);
+        summaryEl.classList.toggle("control-action-summary--bad", !ok);
+        summaryEl.textContent = ok ? "Action succeeded." : data.error || "Action reported failure.";
+      }
+      const logBit = typeof data.log === "string" ? data.log : data.error ? String(data.error) : "";
+      if (snippetEl && logBit) snippetEl.textContent = logBit;
+    } else {
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let lineBuf = "";
+      let finalResult = null;
 
-    if (titleEl) titleEl.textContent = ok ? `Done · ${action}` : `Finished · ${action}`;
-    if (liveEl) {
-      const sec = Math.max(0, Math.round((Date.now() - t0) / 1000));
-      liveEl.textContent = ok ? `Succeeded in ${sec}s` : `Completed in ${sec}s (check details)`;
-    }
-    if (summaryEl) {
-      summaryEl.classList.remove("is-hidden");
-      summaryEl.classList.toggle("control-action-summary--ok", ok);
-      summaryEl.classList.toggle("control-action-summary--bad", !ok);
-      summaryEl.textContent = ok ? "Action succeeded." : data.error || "Action reported failure.";
-    }
-    if (snippetEl && snippet) {
-      snippetEl.classList.remove("is-hidden");
-      snippetEl.textContent = snippet;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        lineBuf += dec.decode(value, { stream: true });
+        const parts = lineBuf.split("\n");
+        lineBuf = parts.pop() ?? "";
+        for (const line of parts) {
+          if (!line.trim()) continue;
+          let ev;
+          try {
+            ev = JSON.parse(line);
+          } catch (_) {
+            appendStreamLog(`${line}\n`);
+            continue;
+          }
+          if (ev.type === "log" && ev.text != null) appendStreamLog(ev.text);
+          if (ev.type === "done") finalResult = ev.result || null;
+        }
+      }
+      if (lineBuf.trim()) {
+        try {
+          const ev = JSON.parse(lineBuf);
+          if (ev.type === "log" && ev.text != null) appendStreamLog(ev.text);
+          if (ev.type === "done") finalResult = ev.result || finalResult;
+        } catch (_) {
+          /* ignore trailing garbage */
+        }
+      }
+
+      const data = finalResult || { ok: false, error: "no result from stream" };
+      const fullLog = logChunks.join("");
+      const payload = { ...data };
+      if (fullLog) payload.log_stream = fullLog;
+      const text = JSON.stringify(payload, null, 2);
+      lastControlActionResultText = text;
+      if (out) out.textContent = text;
+      const details = document.querySelector(".control-response-details");
+      if (details && data?.ok === false) details.open = true;
+
+      const ok = data && data.ok === true;
+      if (titleEl) titleEl.textContent = ok ? `Done · ${action}` : `Finished · ${action}`;
+      if (liveEl) {
+        const sec = Math.max(0, Math.round((Date.now() - t0) / 1000));
+        const lines = fullLog ? fullLog.split("\n").length : 0;
+        liveEl.textContent = ok
+          ? `Succeeded in ${sec}s · ${lines} line(s) of output`
+          : `Completed in ${sec}s (check log below)`;
+      }
+      if (summaryEl) {
+        summaryEl.classList.remove("is-hidden");
+        summaryEl.classList.toggle("control-action-summary--ok", ok);
+        summaryEl.classList.toggle("control-action-summary--bad", !ok);
+        summaryEl.textContent = ok ? "Action succeeded." : data.error || "Action reported failure.";
+      }
     }
   } catch (e) {
     const aborted = e && (e.name === "AbortError" || e.code === 20);
@@ -1891,7 +2043,7 @@ function renderServices(data) {
     const brand = SB.getBrandForManagedService(s);
     const running = s.container_info.status === "running";
     const checks = s.url_checks.length
-      ? s.url_checks.map((c) => `<div class="row"><a href="${c.url}" target="_blank">${c.url}</a>${badge(c.ok, c.ok ? "OK" : (c.status_code || "ERR"))}</div>`).join("")
+      ? s.url_checks.map((c) => `<div class="row"><a href="${c.url}" target="_blank">${c.url}</a>${urlProbePill(c)}</div>`).join("")
       : "<div class='muted'>No HTTP endpoint</div>";
 
     const credsBlock =

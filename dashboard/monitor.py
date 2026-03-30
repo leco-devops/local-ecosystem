@@ -126,9 +126,28 @@ SERVICE_MAP = [
     },
 ]
 
+# When Traefik edge probes fail (502, redirect chains to *.lh from inside the dashboard, etc.),
+# verify the app container on lh-network directly.
+INTERNAL_PROBE_BY_CONTAINER = {
+    "n8n": "http://n8n:5678/",
+    "open-webui": "http://open-webui:8080/",
+    "ollama": "http://ollama:11434/",
+    "traefik": "http://traefik:8080/api/version",
+    "service-dashboard": "http://service-dashboard:8090/",
+}
+
 ERROR_REGEX = re.compile(r"\b(error|exception|fatal|panic|failed|traceback)\b", re.IGNORECASE)
 WARN_REGEX = re.compile(r"\b(warn|warning|deprecated|timeout)\b", re.IGNORECASE)
 INFO_REGEX = re.compile(r"\b(info|started|ready|listening|connected|ok)\b", re.IGNORECASE)
+
+# Traefik emits these when the process or entrypoints shut down (e.g. docker restart); not service faults.
+_TRAEFIK_SHUTDOWN_NOISE = re.compile(r"use of closed network connection", re.IGNORECASE)
+
+
+def _is_traefik_log_noise(container_name: str, line: str) -> bool:
+    if not container_name or container_name.strip("/") != "traefik":
+        return False
+    return bool(_TRAEFIK_SHUTDOWN_NOISE.search(line))
 LOG_WINDOW_SECONDS = 300
 LOG_TAIL_LINES = 300
 CLOUDFLARE_ENDPOINTS = {
@@ -155,12 +174,22 @@ def get_docker_client():
 
 
 def get_container(client, container_name):
-    if client is None:
+    if client is None or not container_name:
         return None
+    cn = container_name.lstrip("/")
     try:
-        return client.containers.get(container_name)
+        return client.containers.get(cn)
+    except docker.errors.NotFound:
+        pass
     except Exception:
         return None
+    try:
+        for c in client.containers.list(all=True):
+            if (c.name or "").lstrip("/") == cn:
+                return c
+    except Exception:
+        pass
+    return None
 
 
 def get_container_info(container):
@@ -206,13 +235,14 @@ def get_probe_target(url):
 
 
 def check_url(url):
+    """Probe public URL. Do not follow redirects to https://*.lh — that host often breaks inside the dashboard container."""
     probe_url, headers = get_probe_target(url)
     try:
         response = requests.get(
             probe_url,
             timeout=5,
             verify=False,
-            allow_redirects=True,
+            allow_redirects=False,
             headers=headers,
         )
         return {
@@ -231,6 +261,58 @@ def check_url(url):
             "error": str(exc),
             "latency_ms": None,
         }
+
+
+def _probe_backend_internal(container_name: str) -> tuple[bool, int | None, float | None]:
+    internal = INTERNAL_PROBE_BY_CONTAINER.get(container_name)
+    if not internal:
+        return False, None, None
+    try:
+        t0 = time.perf_counter()
+        r = requests.get(internal, timeout=4, verify=False, allow_redirects=False)
+        ms = round((time.perf_counter() - t0) * 1000, 2)
+        ok = r.status_code < 500
+        return ok, r.status_code, ms
+    except Exception:
+        return False, None, None
+
+
+def check_urls_for_service(urls: list[str], container_name: str) -> list[dict]:
+    """Run edge probes; if all fail with gateway/connection issues, accept internal Docker-network probe as OK."""
+    checks = [check_url(u) for u in urls]
+    internal_url = INTERNAL_PROBE_BY_CONTAINER.get(container_name)
+    if not internal_url or not checks:
+        return checks
+
+    def needs_recovery(ch: dict) -> bool:
+        if ch.get("ok"):
+            return False
+        sc = ch.get("status_code")
+        if sc is None:
+            return True
+        return sc >= 502
+
+    if not any(needs_recovery(c) for c in checks):
+        return checks
+
+    be_ok, be_sc, be_ms = _probe_backend_internal(container_name)
+    if not be_ok:
+        return checks
+
+    for c in checks:
+        if c.get("ok"):
+            continue
+        if not needs_recovery(c):
+            continue
+        edge_sc = c.get("status_code")
+        c["ok"] = True
+        c["status_code"] = be_sc
+        c["latency_ms"] = be_ms
+        c["probe_via"] = "internal"
+        c["edge_status_code"] = edge_sc
+        if c.get("error"):
+            c["edge_error"] = c.pop("error", None)
+    return checks
 
 
 def get_container_sizes(client, container):
@@ -322,7 +404,7 @@ def get_container_metrics(client, container_or_name):
     }
 
 
-def get_log_metrics(container):
+def get_log_metrics(container, container_name: str | None = None):
     if container is None:
         return {
             "window_seconds": LOG_WINDOW_SECONDS,
@@ -331,6 +413,8 @@ def get_log_metrics(container):
             "error_rate_per_min": 0.0,
             "last_errors": [],
         }
+
+    cname = (container_name or getattr(container, "name", None) or "").strip().lstrip("/")
 
     start_since = int(time.time()) - LOG_WINDOW_SECONDS
     try:
@@ -344,7 +428,11 @@ def get_log_metrics(container):
     except Exception:
         lines = []
 
-    error_lines = [line for line in lines if ERROR_REGEX.search(line)]
+    error_lines = [
+        line
+        for line in lines
+        if ERROR_REGEX.search(line) and not _is_traefik_log_noise(cname, line)
+    ]
     return {
         "window_seconds": LOG_WINDOW_SECONDS,
         "total_lines": len(lines),
@@ -538,7 +626,7 @@ def collect_overview():
     for item in SERVICE_MAP:
         container = get_container(client, item["container"])
         container_info = get_container_info(container)
-        checks = [check_url(url) for url in item["urls"]]
+        checks = check_urls_for_service(item["urls"], item["container"])
         all_urls.extend(checks)
         services.append(
             {
@@ -549,7 +637,7 @@ def collect_overview():
                 "management_links": item.get("management_links") or [],
                 "container_info": container_info,
                 "metrics": get_container_metrics(client, container),
-                "logs": get_log_metrics(container),
+                "logs": get_log_metrics(container, item["container"]),
                 "url_checks": checks,
             }
         )
@@ -649,6 +737,8 @@ def collect_service_logs(service_container, search="", level="all", tail=500, si
     for line in lines:
         parsed = parse_log_line(line)
         log_level = infer_log_level(parsed["message"])
+        if _is_traefik_log_noise(service_container, line):
+            log_level = "other"
         level_counts[log_level] = level_counts.get(log_level, 0) + 1
 
         if selected_level != "all" and log_level != selected_level:

@@ -1,5 +1,11 @@
 NAME="n8n"
 VOLUME="n8n_data"
+IMAGE="${N8N_IMAGE:-local/n8n-with-python:latest}"
+
+if [ -z "${PROJECT_ROOT:-}" ]; then
+  PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+fi
+N8N_DOCKER_DIR="$PROJECT_ROOT/ai-stack/docker/n8n-local"
 
 start() {
   echo "🚀 Starting n8n (HTTP + HTTPS compatible mode)..."
@@ -12,6 +18,20 @@ start() {
   if [ "$RESET" = "true" ]; then
     echo "⚠️ Resetting n8n data volume..."
     docker volume rm "$VOLUME" 2>/dev/null
+  fi
+
+  if [ ! -f "$N8N_DOCKER_DIR/Dockerfile" ]; then
+    echo "❌ Missing $N8N_DOCKER_DIR/Dockerfile"
+    return 1
+  fi
+  echo "🔨 Building n8n image (python3 for task runner)…"
+  if docker buildx version >/dev/null 2>&1; then
+    echo "→ docker buildx build --load -t \"$IMAGE\" -f \"$N8N_DOCKER_DIR/Dockerfile\" \"$N8N_DOCKER_DIR\""
+    docker buildx build --load -t "$IMAGE" -f "$N8N_DOCKER_DIR/Dockerfile" "$N8N_DOCKER_DIR" || return 1
+  else
+    # Minimal Docker CLIs (e.g. dashboard container static binary) have no buildx; BuildKit then errors.
+    echo "→ DOCKER_BUILDKIT=0 docker build …  (legacy builder — no buildx in this environment)"
+    DOCKER_BUILDKIT=0 docker build -t "$IMAGE" -f "$N8N_DOCKER_DIR/Dockerfile" "$N8N_DOCKER_DIR" || return 1
   fi
 
   docker run -d \
@@ -33,7 +53,7 @@ start() {
     -e GENERIC_TIMEZONE="Asia/Kolkata" \
     -e TZ="Asia/Kolkata" \
     -v "$VOLUME:/home/node/.n8n" \
-    docker.n8n.io/n8nio/n8n
+    "$IMAGE"
 
   echo "✅ n8n started"
 }

@@ -1,8 +1,9 @@
+import json
 import os
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request, stream_with_context
 
-from control import check_control_token, list_targets, run_action
+from control import check_control_token, list_targets, run_action, run_action_streaming
 from ollama_models import build_models_payload, handle_models_action
 from docs_catalog import get_doc_catalog, get_doc_content
 from monitor import (
@@ -113,6 +114,40 @@ def api_control():
     if not target_id or not action:
         return jsonify({"ok": False, "error": "target_id and action are required"}), 400
     return jsonify(run_action(target_id, action))
+
+
+@app.post("/api/control/stream")
+def api_control_stream():
+    """NDJSON stream: `{type:log,text}` lines then final `{type:done,result:{...}}`."""
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    target_id = (data.get("target_id") or "").strip()
+    action = (data.get("action") or "").strip()
+    if not target_id or not action:
+        return jsonify({"ok": False, "error": "target_id and action are required"}), 400
+
+    @stream_with_context
+    def ndjson():
+        try:
+            for ev in run_action_streaming(target_id, action):
+                yield json.dumps(ev, ensure_ascii=False) + "\n"
+        except GeneratorExit:
+            raise
+        except Exception as exc:
+            yield json.dumps(
+                {"type": "done", "result": {"ok": False, "error": str(exc)}},
+                ensure_ascii=False,
+            ) + "\n"
+
+    return Response(
+        ndjson(),
+        mimetype="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-store",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/")

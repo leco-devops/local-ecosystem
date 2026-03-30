@@ -98,6 +98,7 @@ def build_service_management_markdown() -> str:
             "### Control API (same actions from automation)",
             "",
             "- `POST /api/control` with JSON `{ \"target_id\": \"stack-ecosystem-all\", \"action\": \"start\"|\"stop\"|\"restart\"|\"deploy\", \"token\": \"…\" }` (token if `DASHBOARD_CONTROL_TOKEN` is set).",
+            "- `POST /api/control/stream` — same JSON body; response is NDJSON (`{type:log,text}` lines, then `{type:done,result:{...}}`). The Control UI uses this for live command output.",
             "",
             "## Cloudflare local (`docker compose`)",
             "",

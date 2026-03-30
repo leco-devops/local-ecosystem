@@ -172,7 +172,8 @@ http:
         servers:
           - url: "http://workers-runtime:8787"
 
+# Paths are inside the Traefik container (see ai-stack/services/traefik.sh: -v .../certs:/certs)
 tls:
   certificates:
-    - certFile: "/Users/rmaurya/Working/GitHub/local-ecosystem/certs/wildcard.lh.pem"
-      keyFile: "/Users/rmaurya/Working/GitHub/local-ecosystem/certs/wildcard.lh-key.pem"
+    - certFile: "/certs/wildcard.lh.pem"
+      keyFile: "/certs/wildcard.lh-key.pem"

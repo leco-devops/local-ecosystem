@@ -2,7 +2,9 @@ import os
 import shlex
 import subprocess
 import time
+from collections.abc import Iterator
 from datetime import datetime, timezone
+from typing import Any
 
 import docker
 import requests
@@ -22,7 +24,16 @@ ALLOWED_ACTIONS = frozenset(
     {"start", "stop", "restart", "remove", "pause", "unpause", "deploy", "recreate", "reset", "backup"}
 )
 
+# Subset passed as a shell function name after `source` (must be identifier-safe).
+_AI_SCRIPT_FN_ACTIONS = frozenset(
+    {"start", "stop", "restart", "remove", "pause", "unpause", "reset"}
+)
+
 _BY_ID = {t["id"]: t for t in CF_TARGETS + AI_TARGETS}
+
+
+def _format_invoked_cmd(cmd: list) -> str:
+    return " ".join(shlex.quote(str(x)) for x in cmd)
 
 
 def _container_runtime(dc, container_name: str | None) -> dict:
@@ -152,6 +163,65 @@ def _run(cmd, cwd=None, timeout=300):
         return 1, str(exc)
 
 
+def _yield_run(cmd, cwd=None, timeout=600) -> Iterator[dict[str, Any]]:
+    """Stream merged stdout/stderr as log events; return (exit_code, full_text) via StopIteration."""
+    parts: list[str] = []
+    header = f"$ {_format_invoked_cmd(cmd)}\n"
+    if cwd:
+        header += f"# cwd: {cwd}\n"
+    header += "\n"
+    parts.append(header)
+    yield {"type": "log", "text": header}
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            cwd=cwd,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            bufsize=0,
+        )
+    except Exception as exc:
+        msg = f"{exc}\n"
+        parts.append(msg)
+        yield {"type": "log", "text": msg}
+        return 1, "".join(parts)
+
+    if proc.stdout is None:
+        return 1, "".join(parts)
+
+    try:
+        while True:
+            chunk = proc.stdout.read(8192)
+            if not chunk:
+                break
+            text = chunk.decode("utf-8", errors="replace")
+            parts.append(text)
+            yield {"type": "log", "text": text}
+        try:
+            code = proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            try:
+                proc.wait(timeout=10)
+            except Exception:
+                pass
+            tail = "\n[timeout]\n"
+            parts.append(tail)
+            yield {"type": "log", "text": tail}
+            code = 124
+    except Exception as exc:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+        msg = f"\n[error reading output: {exc}]\n"
+        parts.append(msg)
+        yield {"type": "log", "text": msg}
+        code = 1
+    return code, "".join(parts)
+
+
 def _compose(args, timeout=600):
     if not os.path.isfile(COMPOSE_FILE):
         return 1, f"compose file missing: {COMPOSE_FILE}"
@@ -162,7 +232,14 @@ def _ai_script(script, action, timeout=600):
     path = os.path.join(SERVICES_DIR, f"{script}.sh")
     if not os.path.isfile(path):
         return 1, f"script missing: {path}"
-    return _run(["/bin/bash", path, action], cwd=PROJECT_ROOT, timeout=timeout)
+    if action not in _AI_SCRIPT_FN_ACTIONS:
+        return 1, f"action not invokable as service function: {action}"
+    # Service scripts define bash functions; ai-stack/core.sh uses `source` + call.
+    # A bare `bash script.sh stop` only defines functions and exits 0 without running them.
+    root_q = shlex.quote(PROJECT_ROOT)
+    path_q = shlex.quote(path)
+    src = f"export PROJECT_ROOT={root_q} && source {path_q} && {action}"
+    return _run(["/bin/bash", "-c", src], cwd=PROJECT_ROOT, timeout=timeout)
 
 
 def _docker_client():
@@ -394,3 +471,284 @@ def _ai_service_action(meta: dict, action: str):
         return {"ok": code == 0, "exit_code": code, "log": log[-8000:]}
 
     return {"ok": False, "error": f"unsupported action {action}"}
+
+
+# --- Streaming control (NDJSON / live log) ---------------------------------
+
+
+def _stream_compose(args: list, timeout: int = 600) -> Iterator[dict[str, Any] | Any]:
+    if not os.path.isfile(COMPOSE_FILE):
+        yield {"type": "log", "text": f"compose file missing: {COMPOSE_FILE}\n"}
+        return (1, "")
+    code, log = yield from _yield_run(
+        ["docker", "compose", "-f", COMPOSE_FILE, *args],
+        cwd=os.path.dirname(COMPOSE_FILE),
+        timeout=timeout,
+    )
+    return (code, log)
+
+
+def _stream_ai_script(script: str, action: str, timeout: int = 600) -> Iterator[dict[str, Any] | Any]:
+    path = os.path.join(SERVICES_DIR, f"{script}.sh")
+    if not os.path.isfile(path):
+        yield {"type": "log", "text": f"script missing: {path}\n"}
+        return (1, "")
+    if action not in _AI_SCRIPT_FN_ACTIONS:
+        yield {"type": "log", "text": f"action not invokable as service function: {action}\n"}
+        return (1, "")
+    root_q = shlex.quote(PROJECT_ROOT)
+    path_q = shlex.quote(path)
+    src = f"export PROJECT_ROOT={root_q} && source {path_q} && {action}"
+    code, log = yield from _yield_run(["/bin/bash", "-c", src], cwd=PROJECT_ROOT, timeout=timeout)
+    return (code, log)
+
+
+def _emit_done(ok: bool, **extra) -> dict[str, Any]:
+    body: dict[str, Any] = {"ok": ok, **extra}
+    return {"type": "done", "result": body}
+
+
+def run_action_streaming(target_id: str, action: str) -> Iterator[dict[str, Any]]:
+    if action not in ALLOWED_ACTIONS:
+        yield _emit_done(False, error=f"unsupported action: {action}")
+        return
+
+    if target_id == "stack-cf-all":
+        yield from _stream_stack_cf_all_stream(action)
+        return
+    if target_id == "stack-ecosystem-all":
+        yield from _stream_stack_ecosystem_all_stream(action)
+        return
+
+    meta = _BY_ID.get(target_id)
+    if not meta:
+        yield _emit_done(False, error="unknown target")
+        return
+
+    if "compose_service" in meta:
+        yield from _stream_cf_service_action_stream(meta, action)
+        return
+
+    yield from _stream_ai_service_action_stream(meta, action)
+
+
+def _stream_stack_ecosystem_all_stream(action: str) -> Iterator[dict[str, Any]]:
+    if action not in {"start", "stop", "restart", "deploy"}:
+        yield _emit_done(False, error=f"action {action} not supported for ecosystem bulk")
+        return
+    core_sh = os.path.join(PROJECT_ROOT, "ai-stack", "core.sh")
+    if not os.path.isfile(core_sh):
+        yield _emit_done(False, error=f"missing {core_sh}")
+        return
+    src = f"source {shlex.quote(core_sh)} && bulk_ecosystem {shlex.quote(action)}"
+    code, log = yield from _yield_run(["/bin/bash", "-c", src], cwd=PROJECT_ROOT, timeout=3600)
+    yield _emit_done(code == 0, exit_code=code, log=log[-12000:])
+
+
+def _stream_stack_cf_all_stream(action: str) -> Iterator[dict[str, Any]]:
+    if action == "deploy":
+        code, log = yield from _stream_compose(["up", "-d", "--build"])
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "stop":
+        code, log = yield from _stream_compose(["stop"])
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "restart":
+        code, log = yield from _stream_compose(["restart"])
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "remove":
+        code, log = yield from _stream_compose(["down", "--remove-orphans"])
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "reset":
+        code, log = yield from _stream_compose(["down", "-v", "--remove-orphans"])
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "backup":
+        yield {"type": "log", "text": "Backing up D1 databases…\n"}
+        ok, res = _backup_d1_all()
+        yield _emit_done(ok, detail=res)
+        return
+    yield _emit_done(False, error=f"action {action} not supported for full stack")
+
+
+def _stream_cf_service_action_stream(meta: dict, action: str) -> Iterator[dict[str, Any]]:
+    svc = meta["compose_service"]
+    cname = meta["container"]
+
+    if action == "deploy":
+        code, log = yield from _stream_compose(["up", "-d", "--build", svc])
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "recreate":
+        code, log = yield from _stream_compose(["up", "-d", "--force-recreate", "--no-deps", svc])
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "reset":
+        yield {"type": "log", "text": f"=== compose stop {svc} ===\n"}
+        code1, log1 = yield from _stream_compose(["stop", svc])
+        yield {"type": "log", "text": f"=== compose rm {svc} ===\n"}
+        code2, log2 = yield from _stream_compose(["rm", "-sf", svc])
+        yield {"type": "log", "text": f"=== compose up {svc} ===\n"}
+        code3, log3 = yield from _stream_compose(["up", "-d", svc])
+        log = f"{log1}\n{log2}\n{log3}"
+        yield _emit_done(code1 == 0 and code2 == 0 and code3 == 0, exit_code=code3, log=log[-8000:])
+        return
+    if action == "remove":
+        code, log = yield from _stream_compose(["rm", "-sf", svc])
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "backup":
+        if svc == "d1-adapter":
+            yield {"type": "log", "text": "Backing up D1 databases…\n"}
+            ok, res = _backup_d1_all()
+            yield _emit_done(ok, detail=res)
+            return
+        yield _emit_done(False, error="backup only defined for d1-adapter or full stack")
+        return
+
+    if action == "start":
+        code, log = yield from _stream_compose(["start", svc])
+        if code != 0:
+            yield {"type": "log", "text": f"=== compose up -d {svc} (start failed) ===\n"}
+            code, log = yield from _stream_compose(["up", "-d", svc])
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+
+    dc = _docker_client()
+    if dc is None:
+        yield _emit_done(False, error="docker unavailable")
+        return
+    try:
+        c = dc.containers.get(cname)
+    except Exception:
+        yield _emit_done(False, error=f"container {cname} not found")
+        return
+
+    try:
+        yield {"type": "log", "text": f"Docker {action} {cname} …\n"}
+        if action == "stop":
+            c.stop(timeout=30)
+        elif action == "restart":
+            c.restart(timeout=30)
+        elif action == "pause":
+            c.pause()
+        elif action == "unpause":
+            c.unpause()
+        else:
+            yield _emit_done(False, error=f"unsupported action {action}")
+            return
+        yield {"type": "log", "text": "Done.\n"}
+        yield _emit_done(True, container=cname, action=action)
+    except Exception as exc:
+        yield _emit_done(False, error=str(exc))
+
+
+def _stream_ai_service_action_stream(meta: dict, action: str) -> Iterator[dict[str, Any]]:
+    script = meta["script"]
+    cname = meta.get("container")
+
+    if script == "cloudflare-local":
+        yield from _stream_cloudflare_local(meta, action)
+        return
+
+    if action == "deploy":
+        code, log = yield from _stream_ai_script(script, "start")
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "recreate":
+        yield {"type": "log", "text": "=== remove ===\n"}
+        code1, log1 = yield from _stream_ai_script(script, "remove")
+        yield {"type": "log", "text": "=== start ===\n"}
+        code2, log2 = yield from _stream_ai_script(script, "start")
+        yield _emit_done(code1 == 0 and code2 == 0, exit_code=code2, log=(log1 + log2)[-8000:])
+        return
+    if action == "reset":
+        if meta.get("reset_volume"):
+            dc = _docker_client()
+            if dc is None:
+                yield _emit_done(False, error="docker unavailable")
+                return
+            vol = meta["reset_volume"]
+            try:
+                if cname:
+                    yield {"type": "log", "text": f"Removing container {cname} (if present)…\n"}
+                    try:
+                        dc.containers.get(cname).remove(force=True)
+                    except Exception:
+                        pass
+                yield {"type": "log", "text": f"Removing volume {vol} (if present)…\n"}
+                try:
+                    dc.volumes.get(vol).remove(force=True)
+                except Exception:
+                    pass
+            except Exception as exc:
+                yield _emit_done(False, error=str(exc))
+                return
+            code, log = yield from _stream_ai_script(script, "start")
+            yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+            return
+        code, log = yield from _stream_ai_script(script, "reset")
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "backup":
+        if cname == "n8n_postgres":
+            yield {"type": "log", "text": "Running pg_dump on n8n_postgres…\n"}
+            ok, res = _backup_postgres()
+            if ok:
+                yield {"type": "log", "text": f"Wrote {res}\n"}
+            else:
+                yield {"type": "log", "text": f"{res}\n"}
+            yield _emit_done(ok, detail=res if ok else None, error=None if ok else str(res))
+            return
+        yield _emit_done(False, error="no backup defined for this service")
+        return
+
+    if action in {"start", "stop", "restart", "remove", "pause", "unpause"}:
+        code, log = yield from _stream_ai_script(script, action)
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+
+    yield _emit_done(False, error=f"unsupported action {action}")
+
+
+def _stream_cloudflare_local(_meta: dict, action: str) -> Iterator[dict[str, Any]]:
+    if action == "deploy":
+        code, log = yield from _stream_ai_script("cloudflare-local", "start")
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "stop":
+        code, log = yield from _stream_ai_script("cloudflare-local", "stop")
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "restart":
+        code, log = yield from _stream_ai_script("cloudflare-local", "restart")
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "remove":
+        code, log = yield from _stream_ai_script("cloudflare-local", "remove")
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "reset":
+        code, log = yield from _stream_ai_script("cloudflare-local", "reset")
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "backup":
+        yield {"type": "log", "text": "Backing up D1 databases…\n"}
+        ok, res = _backup_d1_all()
+        yield _emit_done(ok, detail=res)
+        return
+    if action in {"start", "pause", "unpause"}:
+        code, log = yield from _stream_ai_script("cloudflare-local", action)
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "recreate":
+        yield {"type": "log", "text": "=== remove ===\n"}
+        code1, log1 = yield from _stream_ai_script("cloudflare-local", "remove")
+        yield {"type": "log", "text": "=== start ===\n"}
+        code2, log2 = yield from _stream_ai_script("cloudflare-local", "start")
+        yield _emit_done(code1 == 0 and code2 == 0, log=(log1 + log2)[-8000:])
+        return
+    yield _emit_done(False, error=f"unsupported action {action} for cloudflare-local script")
