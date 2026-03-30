@@ -776,6 +776,72 @@ button.ctrl-bulk--deploy {
   display: none !important;
 }
 
+/* In-app confirm / alert (replaces window.confirm / alert) */
+.app-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(8, 6, 22, 0.82);
+  backdrop-filter: blur(6px);
+}
+
+.app-modal-overlay[hidden] {
+  display: none !important;
+}
+
+.app-modal-dialog {
+  width: 100%;
+  max-width: min(440px, 100%);
+  border-radius: 16px;
+  border: 1px solid rgba(129, 140, 248, 0.5);
+  background-color: #1a1f36;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
+}
+
+.app-modal-inner {
+  padding: 26px 26px 22px;
+}
+
+.app-modal-title {
+  margin: 0 0 14px;
+  font-size: 18px;
+  color: var(--link);
+  text-align: center;
+}
+
+.app-modal-message {
+  margin: 0 0 22px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #e2e8f0;
+  text-align: center;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.app-modal-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+}
+
+.ctrl-overlay-btn--danger {
+  border-color: #fb7185;
+  color: #ffe4e6;
+  background: rgba(127, 29, 29, 0.42);
+}
+
+.ctrl-overlay-btn--danger:hover {
+  filter: brightness(1.1);
+  border-color: #fda4af;
+  background: rgba(190, 18, 60, 0.52);
+}
+
 .control-action-overlay {
   position: fixed;
   inset: 0;

@@ -339,6 +339,19 @@
       </section>
     </div>
 
+    <div id="appModalOverlay" class="app-modal-overlay" hidden>
+      <div class="app-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="appModalTitle">
+        <div class="app-modal-inner">
+          <h3 id="appModalTitle" class="app-modal-title">Confirm</h3>
+          <p id="appModalMessage" class="app-modal-message"></p>
+          <div class="app-modal-bar">
+            <button type="button" id="appModalCancel" class="ctrl-overlay-btn ctrl-overlay-btn--caution">Cancel</button>
+            <button type="button" id="appModalPrimary" class="ctrl-overlay-btn ctrl-overlay-btn--ops">Continue</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script src="/static/service-brand.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>

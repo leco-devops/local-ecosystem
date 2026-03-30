@@ -883,6 +883,89 @@ async function loadOllamaModelsPanel() {
   }
 }
 
+let _appModalResolve = null;
+
+function initAppModal() {
+  const overlay = document.getElementById("appModalOverlay");
+  if (!overlay || overlay.dataset.wired === "1") return;
+  overlay.dataset.wired = "1";
+  const cancel = document.getElementById("appModalCancel");
+  const primary = document.getElementById("appModalPrimary");
+
+  const finish = (value) => {
+    const fn = _appModalResolve;
+    _appModalResolve = null;
+    overlay.hidden = true;
+    if (typeof fn === "function") fn(value);
+  };
+
+  cancel.addEventListener("click", () => finish(false));
+  primary.addEventListener("click", () => {
+    const mode = overlay.dataset.mode || "confirm";
+    finish(mode === "alert" ? undefined : true);
+  });
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay && overlay.dataset.mode === "confirm") finish(false);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (overlay.hidden) return;
+    if (e.key !== "Escape") return;
+    e.preventDefault();
+    if (overlay.dataset.mode === "alert") finish(undefined);
+    else finish(false);
+  });
+}
+
+function _appModalSetPrimaryVariant(btn, variant) {
+  btn.classList.remove("ctrl-overlay-btn--primary", "ctrl-overlay-btn--ops", "ctrl-overlay-btn--danger");
+  if (variant === "danger") btn.classList.add("ctrl-overlay-btn--danger");
+  else if (variant === "primary") btn.classList.add("ctrl-overlay-btn--primary");
+  else btn.classList.add("ctrl-overlay-btn--ops");
+}
+
+function showAppAlert(message, title = "Notice") {
+  initAppModal();
+  const overlay = document.getElementById("appModalOverlay");
+  const cancel = document.getElementById("appModalCancel");
+  const primary = document.getElementById("appModalPrimary");
+  document.getElementById("appModalTitle").textContent = title;
+  document.getElementById("appModalMessage").textContent = message;
+  overlay.dataset.mode = "alert";
+  cancel.classList.add("is-hidden");
+  primary.textContent = "OK";
+  _appModalSetPrimaryVariant(primary, "primary");
+  return new Promise((resolve) => {
+    _appModalResolve = () => resolve();
+    overlay.hidden = false;
+    primary.focus();
+  });
+}
+
+function showAppConfirm({
+  title = "Confirm",
+  message = "",
+  confirmText = "Continue",
+  cancelText = "Cancel",
+  danger = false,
+} = {}) {
+  initAppModal();
+  const overlay = document.getElementById("appModalOverlay");
+  const cancel = document.getElementById("appModalCancel");
+  const primary = document.getElementById("appModalPrimary");
+  document.getElementById("appModalTitle").textContent = title;
+  document.getElementById("appModalMessage").textContent = message;
+  overlay.dataset.mode = "confirm";
+  cancel.classList.remove("is-hidden");
+  cancel.textContent = cancelText;
+  primary.textContent = confirmText;
+  _appModalSetPrimaryVariant(primary, danger ? "danger" : "ops");
+  return new Promise((resolve) => {
+    _appModalResolve = resolve;
+    overlay.hidden = false;
+    primary.focus();
+  });
+}
+
 async function runOllamaModelAction(action, model) {
   try {
     const res = await fetch("/api/ollama/models/action", {
@@ -892,30 +975,43 @@ async function runOllamaModelAction(action, model) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      alert(data.error ? JSON.stringify(data.error) : `HTTP ${res.status}`);
+      await showAppAlert(data.error ? JSON.stringify(data.error) : `HTTP ${res.status}`, "Ollama action failed");
       return;
     }
     if (data.note) {
-      alert(data.note);
+      await showAppAlert(data.note, "Ollama");
     }
     loadOllamaModelsPanel();
   } catch (e) {
-    alert(String(e.message || e));
+    await showAppAlert(String(e.message || e), "Error");
   }
 }
 
 function initOllamaModelsPanel() {
-  document.getElementById("ollamaPullAllBtn")?.addEventListener("click", () => {
-    if (!confirm("Start background pull for all pinned models? This can take a long time.")) return;
+  document.getElementById("ollamaPullAllBtn")?.addEventListener("click", async () => {
+    const ok = await showAppConfirm({
+      title: "Pull all pinned models",
+      message: "Start background pull for all pinned models? This can take a long time.",
+      confirmText: "Start pull",
+    });
+    if (!ok) return;
     runOllamaModelAction("pull_all", "");
   });
   document.getElementById("ollamaModelsRefreshBtn")?.addEventListener("click", () => loadOllamaModelsPanel());
-  document.getElementById("ollamaModelsPanel")?.addEventListener("click", (e) => {
+  document.getElementById("ollamaModelsPanel")?.addEventListener("click", async (e) => {
     const btn = e.target.closest("[data-ollama-act]");
     if (!btn) return;
     const act = btn.getAttribute("data-ollama-act");
     const model = btn.getAttribute("data-ollama-model") || "";
-    if (act === "delete" && !confirm(`Remove model "${model}" from disk? This cannot be undone.`)) return;
+    if (act === "delete") {
+      const ok = await showAppConfirm({
+        title: "Remove model",
+        message: `Remove "${model}" from disk? This cannot be undone.`,
+        confirmText: "Remove",
+        danger: true,
+      });
+      if (!ok) return;
+    }
     runOllamaModelAction(act, model);
   });
 }
@@ -1985,14 +2081,19 @@ function initControlBulkBar() {
   bar.dataset.wired = "1";
   const ECOSYSTEM_TARGET = "stack-ecosystem-all";
   bar.querySelectorAll("[data-bulk-action]").forEach((btn) => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", async () => {
       const action = btn.getAttribute("data-bulk-action");
       const lbl = btn.getAttribute("data-bulk-label") || action;
       if (!action) return;
       const destructive = action === "stop" || action === "restart" || action === "deploy";
       if (destructive) {
-        const msg = `${lbl}: runs scripts under ai-stack/services (may take several minutes). Stop/restart skips this dashboard so the UI can show the result. Continue?`;
-        if (!confirm(msg)) return;
+        const ok = await showAppConfirm({
+          title: lbl,
+          message:
+            "Runs scripts under ai-stack/services (may take several minutes). Stop, restart, and redeploy skip this dashboard container so the UI can show the result.",
+          confirmText: "Continue",
+        });
+        if (!ok) return;
       }
       runControlAction(ECOSYSTEM_TARGET, action, lbl);
     });
@@ -2000,6 +2101,7 @@ function initControlBulkBar() {
 }
 
 async function bootstrap() {
+  initAppModal();
   initTabs();
   initControlBulkBar();
   hydrateOverviewFromCache();
