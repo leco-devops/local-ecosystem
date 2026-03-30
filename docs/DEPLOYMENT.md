@@ -69,7 +69,11 @@ This runs **`stop`** on **every** service under **`ai-stack/services/*.sh`** (or
 
 ### 4.3 Dashboard Control API vs CLI
 
-The **`bulk_ecosystem`** helper in **`core.sh`** (used when the dashboard **Control** tab runs **`stack-ecosystem-all`** with **`stop` / `remove` / `reset` / `pause`**) walks services in **reverse start order** but **skips `dashboard`** so the container handling the HTTP request is not stopped mid-flight. Starting or restarting the full stack from Control still starts every service, including the dashboard.
+The **`bulk_ecosystem`** helper in **`core.sh`** (dashboard **Control** → **`stack-ecosystem-all`**) walks services in **reverse `START_ORDER`** for teardown-style actions but **always skips `dashboard`** so the HTTP request can finish. It also skips **`traefik`** and **`postgres`** by default so the reverse proxy and shared DB stay available. That applies to bulk **`stop`**, **`pause`**, **`remove`**, **`reset`**, and to the teardown half of **`restart`**, **`deploy`**, and **`recreate`**.
+
+Set **`ECOSYSTEM_BULK_PLATFORM_SKIP`** to a space-separated list of service names to change the default (`traefik postgres`). If **`ECOSYSTEM_BULK_PLATFORM_SKIP`** is unset, **`ECOSYSTEM_BULK_PAUSE_SKIP`** is still read for backward compatibility. After **`restart`**, **`deploy`**, or **`recreate`**, the start phase runs in forward order but **does not re-run `start`** on a platform service that is **still running** (many service scripts recreate the container on every `start`).
+
+**`bulk_ecosystem start`** and **`unpause`** still run across **every** service in order (full start / unpause).
 
 To stop only the dashboard from the shell:
 
@@ -77,14 +81,34 @@ To stop only the dashboard from the shell:
 ./ai-stack/ai-stack.sh stop dashboard
 ```
 
-### 4.4 Pause / unpause
+### 4.4 Core infra — shell when you need Traefik, Postgres, or dashboard
+
+Bulk Control actions intentionally avoid tearing down **Traefik** (routing), **Postgres** (`n8n_postgres`), and the **dashboard** container. Use the CLI from the **repository root** when you need to operate on those directly:
+
+| Goal | Command |
+|------|---------|
+| Traefik — status | `./ai-stack/ai-stack.sh status traefik` |
+| Traefik — restart | `./ai-stack/ai-stack.sh restart traefik` |
+| Traefik — stop / start | `./ai-stack/ai-stack.sh stop traefik` · `./ai-stack/ai-stack.sh start traefik` |
+| Traefik — direct script | `./ai-stack/services/traefik.sh restart` |
+| Postgres — status | `./ai-stack/ai-stack.sh status postgres` |
+| Postgres — restart | `./ai-stack/ai-stack.sh restart postgres` |
+| Postgres — stop / start | `./ai-stack/ai-stack.sh stop postgres` · `./ai-stack/ai-stack.sh start postgres` |
+| Postgres — reset (drops data volume) | `./ai-stack/ai-stack.sh reset postgres` |
+| Dashboard — rebuild image + recreate | `./ai-stack/ai-stack.sh deploy dashboard` or `./ai-stack/services/dashboard.sh deploy` |
+| Dashboard — restart (same rebuild path as deploy) | `./ai-stack/ai-stack.sh restart dashboard` |
+| Dashboard — stop | `./ai-stack/ai-stack.sh stop dashboard` |
+
+**Full stack without bulk safeguards** (stops **every** service, including dashboard and Traefik): `./ai-stack/ai-stack.sh stop` with no service name (see § 4.2).
+
+### 4.5 Pause / unpause
 
 ```bash
 ./ai-stack/ai-stack.sh pause
 ./ai-stack/ai-stack.sh unpause
 ```
 
-**CLI** `pause` / `unpause` with **no service name** walks **all** `services/*.sh` (like **`stop`**), **including the dashboard**. The dashboard **Control** bulk **`pause`** path uses **`bulk_ecosystem`** and **skips the dashboard** (same idea as bulk **stop**).
+**CLI** `pause` / `unpause` with **no service name** walks **all** `services/*.sh` (like **`stop`**), **including the dashboard**. The dashboard **Control** bulk **`pause`** path uses **`bulk_ecosystem`** (same skips as § 4.3). Bulk **`unpause`** still runs on **every** service in start order so anything paused individually is resumed.
 
 ---
 
@@ -101,12 +125,14 @@ To stop only the dashboard from the shell:
 | Action | Behavior |
 |--------|----------|
 | `start` | Start all in `START_ORDER` + repair network |
-| `stop` | Stop all in reverse `START_ORDER`, **skipping dashboard** |
-| `restart` / `deploy` | Same stop phase (skip dashboard), then start all |
-| `remove` / `reset` | Tear down in reverse order, **skipping dashboard** |
-| `recreate` | Remove phase (skip dashboard), then start all |
+| `stop` | Stop in reverse order; **skips dashboard** + default platform (`traefik`, `postgres`; see `ECOSYSTEM_BULK_PLATFORM_SKIP`) |
+| `pause` | Same skips as `stop` |
+| `unpause` | Unpause every service in `START_ORDER` |
+| `restart` / `deploy` | Teardown phase (same skips as `stop`), then start forward; **skips `start`** for a default platform service if it is **still running** |
+| `remove` / `reset` | Same reverse skips as `stop` |
+| `recreate` | Remove phase (same skips), then same conditional start as `restart` |
 
-CLI **`./ai-stack/ai-stack.sh stop`** does **not** use `bulk_ecosystem`; it stops **every** service, including the dashboard.
+CLI **`./ai-stack/ai-stack.sh stop`** (no service) does **not** use `bulk_ecosystem`; it stops **every** service. Per-service and core-infra commands are in **section 4.4**.
 
 ---
 

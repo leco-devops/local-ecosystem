@@ -142,7 +142,7 @@ def build_service_management_markdown() -> str:
             "- `./ai-stack/ai-stack.sh stop`",
             "- `./ai-stack/ai-stack.sh restart`",
             "",
-            "Dashboard **Control → All AI-stack services** uses `bulk_ecosystem` in `core.sh` plus a Python-only **backup** aggregate. Stop / pause / remove / reset / recreate skip **this dashboard** so the Control API can finish; **unpause** runs on every service including the dashboard.",
+            "Dashboard **Control → All AI-stack services** uses `bulk_ecosystem` in `core.sh` plus a Python-only **backup** aggregate. Bulk **stop**, **restart**, **deploy**, **pause**, **remove**, **reset**, and **recreate** skip **dashboard** plus **traefik** and **postgres** by default (`ECOSYSTEM_BULK_PLATFORM_SKIP`; legacy `ECOSYSTEM_BULK_PAUSE_SKIP` if unset). **unpause** and **start** still touch every service. Full teardown of edge/DB/dashboard is via per-service CLI — see **DEPLOYMENT.md** (core infra).",
             "",
             "### Control API (same actions from automation)",
             "",

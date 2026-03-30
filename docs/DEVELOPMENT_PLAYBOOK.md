@@ -72,7 +72,7 @@ The **Docs** tab includes a generated module **Service management commands** (`s
 | `/api/cloudflare-local` | GET | CF adapter health + counts |
 | `/api/metrics/history` | GET | Time series (also appends a sample) |
 | `/api/control/targets` | GET | Controllable units |
-| `/api/control` | POST | `{ "target_id", "action", "token"? }` — includes `stack-ecosystem-all` (`start` \| `stop` \| `restart` \| `deploy`) which runs `bulk_ecosystem` in `ai-stack/core.sh` |
+| `/api/control` | POST | `{ "target_id", "action", "token"? }` — includes `stack-ecosystem-all` (`bulk_ecosystem` in `ai-stack/core.sh`; bulk teardown skips dashboard + default platform `traefik`/`postgres`; see **DEPLOYMENT.md**) |
 | `/api/reference` | GET | Full URL catalog + probe results |
 | `/api/docs/catalog` | GET | Documentation modules |
 | `/api/docs/content` | GET | `?id=<module>` Markdown body |

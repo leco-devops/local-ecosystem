@@ -317,10 +317,12 @@
         <div class="control-bulk-bar" id="controlBulkBar" aria-label="Bulk ecosystem actions">
           <div class="control-bulk-bar__head">
             <strong>All AI-stack services</strong>
-            <span class="muted small">Uses <code>ai-stack/core.sh</code> start order. Stop / restart / redeploy skip this dashboard container so the request can complete; start or restart brings every service (including dashboard) back.</span>
+            <span class="muted small">Uses <code>bulk_ecosystem</code> in <code>ai-stack/core.sh</code>. Bulk <strong>stop</strong>, <strong>restart</strong>, <strong>redeploy</strong>, <strong>pause</strong>, <strong>remove</strong>, <strong>reset</strong>, and <strong>recreate</strong> skip this dashboard and, by default, <strong>Traefik</strong> and <strong>Postgres</strong> so routing and the shared DB stay up. Override skips with <code>ECOSYSTEM_BULK_PLATFORM_SKIP</code> (space-separated names). To stop or redeploy Traefik, Postgres, or the dashboard itself, use the shell — see <strong>DEPLOYMENT.md</strong> (section <em>Core infra — shell</em>).</span>
           </div>
           <div class="control-bulk-bar__btns">
             <button type="button" class="ctrl-bulk ctrl-bulk--start" data-bulk-action="start" data-bulk-label="Start all">Start all</button>
+            <button type="button" class="ctrl-bulk ctrl-bulk--pause" data-bulk-action="pause" data-bulk-label="Pause all">Pause all</button>
+            <button type="button" class="ctrl-bulk ctrl-bulk--unpause" data-bulk-action="unpause" data-bulk-label="Unpause all">Unpause all</button>
             <button type="button" class="ctrl-bulk ctrl-bulk--stop" data-bulk-action="stop" data-bulk-label="Stop all">Stop all</button>
             <button type="button" class="ctrl-bulk ctrl-bulk--restart" data-bulk-action="restart" data-bulk-label="Restart all">Restart all</button>
             <button type="button" class="ctrl-bulk ctrl-bulk--deploy" data-bulk-action="deploy" data-bulk-label="Redeploy all">Redeploy all</button>

@@ -134,13 +134,33 @@ run_all() {
   fi
 }
 
-# Bulk ops for the dashboard Control API: stopping this dashboard mid-request would kill the HTTP
-# connection, so we skip the "dashboard" service on stop-like phases. Start always runs full START_ORDER.
+# Bulk ops for the dashboard Control API (`bulk_ecosystem`):
+# - Always skip `dashboard` on stop / pause / remove / reset so the HTTP request can finish.
+# - Skip ECOSYSTEM_BULK_PLATFORM_SKIP (default: traefik postgres) on those same phases so routing
+#   and the shared DB stay up. Legacy: ECOSYSTEM_BULK_PAUSE_SKIP is honored if PLATFORM_SKIP is unset.
+# - After restart|deploy|recreate, the start phase skips `start` for platform services that are
+#   still running (their service scripts often recreate the container on every start).
 
-# Reverse start order, skip dashboard (stop / pause / remove / reset per service).
-_bulk_foreach_reverse_skip_dashboard() {
+_bulk_platform_skip_csv() {
+  printf '%s' "${ECOSYSTEM_BULK_PLATFORM_SKIP:-${ECOSYSTEM_BULK_PAUSE_SKIP:-traefik postgres}}"
+}
+
+_service_is_running() {
+  local svc=$1
+  local NAME
+  service_exists "$svc" || return 1
+  # shellcheck source=/dev/null
+  source "$SERVICES_DIR/$svc.sh"
+  [ -n "${NAME:-}" ] || return 1
+  [ "$(docker inspect -f '{{.State.Running}}' "$NAME" 2>/dev/null)" = "true" ]
+}
+
+# Reverse start order: skip dashboard + platform list.
+_bulk_foreach_reverse_reserve_core() {
   local op=$1
   local svc
+  local skip_platform
+  skip_platform=" $(_bulk_platform_skip_csv) "
   local -a ordered
   while IFS= read -r svc; do
     [ -n "$svc" ] && ordered+=("$svc")
@@ -149,13 +169,40 @@ _bulk_foreach_reverse_skip_dashboard() {
   for ((i = ${#ordered[@]} - 1; i >= 0; i--)); do
     svc="${ordered[i]}"
     [ "$svc" = "dashboard" ] && continue
+    case "$skip_platform" in *" $svc "*) continue ;; esac
     echo "▶ ecosystem bulk $op: $svc"
     run_service "$svc" "$op" || true
   done
 }
 
-_bulk_stop_all_except_dashboard() {
-  _bulk_foreach_reverse_skip_dashboard stop
+_bulk_stop_preserving_core() {
+  _bulk_foreach_reverse_reserve_core stop
+}
+
+# Forward start: start each service; leave platform services alone if already running (see header).
+_bulk_start_all_after_bulk_teardown() {
+  local svc
+  local has_errors=false
+  local skip_platform
+  skip_platform=" $(_bulk_platform_skip_csv) "
+  while IFS= read -r svc; do
+    [ -z "$svc" ] && continue
+    case "$skip_platform" in *" $svc "*)
+      if _service_is_running "$svc"; then
+        echo "ℹ️ ecosystem bulk start: skip $svc (core infra still running)"
+        continue
+      fi
+      ;;
+    esac
+    echo "▶ ecosystem bulk start: $svc"
+    if ! run_service "$svc" start; then
+      has_errors=true
+    fi
+  done < <(get_services_in_start_order)
+  repair_network_links
+  if [ "$has_errors" = true ]; then
+    return 1
+  fi
 }
 
 # Forward start order, every service including dashboard (unpause after bulk pause).
@@ -170,8 +217,8 @@ _bulk_foreach_forward_all() {
 }
 
 # start | stop | restart | deploy | pause | unpause | remove | reset | recreate
-# (restart/deploy: stop-all-except-dashboard, then start-all)
-# (recreate: remove-all-except-dashboard, then start-all)
+# (restart/deploy: teardown preserving core, then start-all with running-core skip)
+# (recreate: remove preserving core, then same start phase)
 bulk_ecosystem() {
   action=$1
   ensure_network_exists
@@ -180,27 +227,27 @@ bulk_ecosystem() {
       run_all start
       ;;
     stop)
-      _bulk_stop_all_except_dashboard
+      _bulk_stop_preserving_core
       ;;
     restart|deploy)
-      _bulk_stop_all_except_dashboard
-      run_all start
+      _bulk_stop_preserving_core
+      _bulk_start_all_after_bulk_teardown
       ;;
     pause)
-      _bulk_foreach_reverse_skip_dashboard pause
+      _bulk_foreach_reverse_reserve_core pause
       ;;
     unpause)
       _bulk_foreach_forward_all unpause
       ;;
     remove)
-      _bulk_foreach_reverse_skip_dashboard remove
+      _bulk_foreach_reverse_reserve_core remove
       ;;
     reset)
-      _bulk_foreach_reverse_skip_dashboard reset
+      _bulk_foreach_reverse_reserve_core reset
       ;;
     recreate)
-      _bulk_foreach_reverse_skip_dashboard remove
-      run_all start
+      _bulk_foreach_reverse_reserve_core remove
+      _bulk_start_all_after_bulk_teardown
       ;;
     *)
       echo "❌ bulk_ecosystem: unknown action: $action"

@@ -706,6 +706,16 @@ button.ctrl-bulk--deploy {
   border-color: #c4b5fd;
 }
 
+button.ctrl-bulk--pause {
+  background: #b45309;
+  border-color: #fbbf24;
+}
+
+button.ctrl-bulk--unpause {
+  background: #0f766e;
+  border-color: #5eead4;
+}
+
 .control-targets-root {
   display: flex;
   flex-direction: column;
