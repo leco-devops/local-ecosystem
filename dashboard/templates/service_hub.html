@@ -1,0 +1,118 @@
+{# New tab for other *.lh / external http(s); same tab for this dashboard (localhost.lh) and relative paths. #}
+{% macro hub_link_blank_attr(url) -%}
+  {%- if url.startswith('http://localhost.lh') or url.startswith('https://localhost.lh') or url.startswith('/') -%}
+  {%- elif url.startswith('http://') or url.startswith('https://') -%}
+ target="_blank" rel="noopener noreferrer"
+  {%- endif -%}
+{%- endmacro %}
+{% macro lh_gui_row(label, url) -%}
+  {% if url.startswith('http://') and '.lh' in url %}
+    {% set https_u = 'https://' + url[7:] %}
+    <li>
+      <strong>{{ label }}</strong> — <a href="{{ url }}"{{ hub_link_blank_attr(url) }}>HTTP</a> ·
+      <a href="{{ https_u }}"{{ hub_link_blank_attr(https_u) }}>HTTPS</a>
+      <code class="muted small">{{ url }}</code>
+    </li>
+  {% elif url.startswith('https://') and '.lh' in url %}
+    {% set http_u = 'http://' + url[8:] %}
+    <li>
+      <strong>{{ label }}</strong> — <a href="{{ http_u }}"{{ hub_link_blank_attr(http_u) }}>HTTP</a> ·
+      <a href="{{ url }}"{{ hub_link_blank_attr(url) }}>HTTPS</a>
+    </li>
+  {% else %}
+    <li><a href="{{ url }}"{{ hub_link_blank_attr(url) }}>{{ label }}</a></li>
+  {% endif %}
+{%- endmacro %}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ hub.service }} — Service hub</title>
+    <link rel="stylesheet" href="/static/dashboard.css" />
+    <link rel="stylesheet" href="/static/service_hub.css" />
+  </head>
+  <body class="hub-body">
+    <div class="hub-wrap">
+      <header class="hub-header">
+        <a class="hub-back" href="/hub">← All hubs</a>
+        <a class="hub-back hub-back--secondary" href="/">Dashboard</a>
+        <h1>{{ hub.service }}</h1>
+        <p class="muted">{{ hub.notes }}</p>
+        <p class="hub-meta muted small">Container <code>{{ hub.container }}</code> · {{ hub.generated_at }}</p>
+      </header>
+
+      <section class="hub-section hub-section--status">
+        <h2>Status</h2>
+        <div class="hub-grid">
+          <div><span class="hub-k">State</span> <strong>{{ hub.container_info.get('status', '—') }}</strong> ({{ hub.container_info.get('state', '—') }})</div>
+          <div><span class="hub-k">Health</span> {{ hub.container_info.get('health', '—') }}</div>
+          <div><span class="hub-k">Restarts</span> {{ hub.container_info.get('restart_count', 0) }}</div>
+          <div><span class="hub-k">Networks</span> <code>{{ (hub.container_info.get('networks') or []) | join(', ') or '—' }}</code></div>
+        </div>
+        <div class="hub-grid hub-grid--metrics">
+          <div><span class="hub-k">CPU</span> {{ (hub.metrics.cpu_percent or 0)|round(1) }}%</div>
+          <div>
+            <span class="hub-k">Memory</span>
+            {{ hub.metrics.memory_usage or 0 }} / {{ hub.metrics.memory_limit or 0 }} bytes ({{ (hub.metrics.memory_percent or 0)|round(1) }}%)
+          </div>
+        </div>
+      </section>
+
+      {% if hub.public_urls %}
+      <section class="hub-section">
+        <h2>Public URLs</h2>
+        <ul class="hub-links">
+          {% for u in hub.public_urls %}
+            <li><a href="{{ u.url }}"{{ hub_link_blank_attr(u.url) }}>{{ u.label }}</a> — <code>{{ u.url }}</code></li>
+          {% endfor %}
+        </ul>
+      </section>
+      {% endif %}
+
+      {% if hub.credentials %}
+      <section class="hub-section">
+        <h2>Credentials</h2>
+        <ul class="hub-list">{% for c in hub.credentials %}<li>{{ c }}</li>{% endfor %}</ul>
+      </section>
+      {% endif %}
+
+      {% if hub.connection_strings %}
+      <section class="hub-section">
+        <h2>Connection strings</h2>
+        <ul class="hub-list hub-list--mono">{% for c in hub.connection_strings %}<li><code>{{ c }}</code></li>{% endfor %}</ul>
+      </section>
+      {% endif %}
+
+      {% if hub.database_guis %}
+      <section class="hub-section">
+        <h2>Database &amp; storage GUIs</h2>
+        <ul class="hub-links">
+          {% for g in hub.database_guis %}{{ lh_gui_row(g.label, g.url) }}{% endfor %}
+        </ul>
+      </section>
+      {% endif %}
+
+      {% if hub.management_links %}
+      <section class="hub-section">
+        <h2>Management &amp; APIs</h2>
+        <ul class="hub-links">
+          {% for g in hub.management_links %}{{ lh_gui_row(g.label, g.url) }}{% endfor %}
+        </ul>
+      </section>
+      {% endif %}
+
+      {% if hub.insights %}
+      <section class="hub-section">
+        <h2>Insights &amp; analytics</h2>
+        <ul class="hub-list">{% for i in hub.insights %}<li>{{ i }}</li>{% endfor %}</ul>
+      </section>
+      {% endif %}
+
+      <section class="hub-section">
+        <h2>Logs (window)</h2>
+        <p class="muted small">Errors in last window: {{ (hub.logs or {}).get('error_lines', 0) }} ({{ (hub.logs or {}).get('error_rate_per_min', 0) }}/min)</p>
+      </section>
+    </div>
+  </body>
+</html>

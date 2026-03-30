@@ -17,7 +17,39 @@ const LS_OVERVIEW_MAX_AGE_MS = 1000 * 60 * 60 * 48;
 const LS_METRICS_CACHE_KEY = "local_ecosystem_dashboard_metrics_v1";
 const LS_ACTIVE_TAB_KEY = "dashboard_active_tab";
 /** Bump when cache shape changes so stale / corrupted entries are dropped. */
-const CACHE_SCHEMA_VERSION = 2;
+const CACHE_SCHEMA_VERSION = 4;
+
+/** Small Cloudflare mark for local CF adapter cards (not an official trademark asset). */
+const CLOUDFLARE_MARK_SVG = `<svg class="cf-local-card__mark" viewBox="0 0 40 28" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" width="32" height="22"><path fill="#F48120" d="M28 8c2 0 3.5 1.3 4 3.2h6.2c-.4-5-4.7-8.8-10-8.8-4.2 0-7.7 2.4-9.3 5.9-1.2-.7-2.6-1.1-4-1.1-4.4 0-8 3.6-8 8s3.6 8 8 8h10v-6H13.3c-.8 0-1.3-.9-.9-1.6l.6-1.2c.3-.6 1-.9 1.6-.9H35c.3-1 .5-2 .5-3.1C35.5 11.4 32.2 8 28 8z"/><path fill="#FAAD3F" d="M30 19h-7v6h7c4.4 0 8-3.6 8-8 0-2.6-1.3-5-3.4-6.5l-1.2 2.2c1.1.9 1.8 2.2 1.8 3.8 0 2.8-2.2 5-5 5z"/></svg>`;
+
+function wrapCfLocalCard(innerHtml) {
+  return `<div class="cf-local-card">${CLOUDFLARE_MARK_SVG}<div class="cf-local-card__inner">${innerHtml}</div></div>`;
+}
+
+/** Render HTTP + HTTPS links for *.lh hosts (Traefik serves both). */
+function cfDualUrlRow(label, httpUrl) {
+  if (!httpUrl) return "";
+  if (!httpUrl.startsWith("http://") || !httpUrl.includes(".lh")) {
+    const one = escapeAttr(httpUrl);
+    return `<div class="row"><span>${escapeHtml(label)}</span><a href="${one}"${externalNavigationAttrs(httpUrl)}>${escapeHtml(httpUrl)}</a></div>`;
+  }
+  const httpsUrl = httpUrl.replace(/^http:\/\//, "https://");
+  const hA = escapeAttr(httpUrl);
+  const sA = escapeAttr(httpsUrl);
+  const hT = externalNavigationAttrs(httpUrl);
+  const sT = externalNavigationAttrs(httpsUrl);
+  return `<div class="row cf-dual-url-row"><span>${escapeHtml(label)}</span><span class="cf-dual-urls"><a href="${hA}"${hT}>HTTP</a><span class="cf-dual-sep">·</span><a href="${sA}"${sT}>HTTPS</a><span class="cf-dual-full muted small"><code>${escapeHtml(httpUrl)}</code></span></span></div>`;
+}
+
+/** Single management/GUI link row: HTTP·HTTPS for *.lh when Traefik serves both. */
+function hubGuiLinkRow(link) {
+  const u = (link && link.url) || "";
+  const lab = (link && link.label) || "Link";
+  if (!u) return "";
+  const httpBase =
+    u.startsWith("https://") && u.includes(".lh") ? u.replace(/^https:\/\//, "http://") : u;
+  return cfDualUrlRow(lab, httpBase);
+}
 
 function lsRemove(key) {
   try {
@@ -447,6 +479,44 @@ function escapeAttr(s) {
   return String(s || "").replaceAll("&", "&amp;").replaceAll('"', "&quot;");
 }
 
+function isDashboardLocalHostname(hostname) {
+  const h = String(hostname || "").toLowerCase();
+  return h === "localhost.lh" || h === "localhost" || h === "127.0.0.1" || h === "::1";
+}
+
+/**
+ * Use on dashboard-generated <a href>: new tab for other *.lh services and external sites;
+ * same tab for this app (localhost.lh, or direct http://localhost:port).
+ */
+function externalNavigationAttrs(href) {
+  if (!href || href.startsWith("#")) return "";
+  try {
+    const u = new URL(href, window.location.href);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return "";
+    if (isDashboardLocalHostname(u.hostname)) return "";
+    return ' target="_blank" rel="noopener noreferrer"';
+  } catch {
+    return "";
+  }
+}
+
+/** Markdown doc links: open in a new tab when leaving the dashboard origin. */
+function docLinkShouldOpenNewTab(href) {
+  return externalNavigationAttrs(href).length > 0;
+}
+
+function decorateDocsProseLinks(rootEl) {
+  if (!rootEl) return;
+  rootEl.querySelectorAll("a[href]").forEach((a) => {
+    const href = a.getAttribute("href");
+    if (!href) return;
+    if (docLinkShouldOpenNewTab(href)) {
+      a.setAttribute("target", "_blank");
+      a.setAttribute("rel", "noopener noreferrer");
+    }
+  });
+}
+
 let lastReferencePayload = null;
 
 function filterReferencePayload(ref, filterText) {
@@ -480,14 +550,15 @@ function buildEncyclopediaHtml(ref) {
                   const st = ok ? "ok" : chk.ok === false ? "bad" : "warn";
                   const code = chk.status_code != null ? ` ${chk.status_code}` : "";
                   const err = chk.error ? ` title="${escapeHtml(chk.error)}"` : "";
-                  return `<span class="url-check"><a href="${escapeHtml(chk.url)}" target="_blank" rel="noopener"${err}>${escapeHtml(
-                    chk.url,
-                  )}</a> <span class="pill ${st}">${ok ? "OK" : "ERR"}${code}</span></span>`;
+                  const ua = escapeAttr(chk.url);
+                  const xt = externalNavigationAttrs(chk.url);
+                  return `<span class="url-check"><a href="${ua}"${xt}${err}>${escapeHtml(chk.url)}</a> <span class="pill ${st}">${ok ? "OK" : "ERR"}${code}</span></span>`;
                 })
-              : (it.urls || []).map(
-                  (u) =>
-                    `<span class="url-check"><a href="${escapeHtml(u)}" target="_blank" rel="noopener">${escapeHtml(u)}</a></span>`,
-                );
+              : (it.urls || []).map((u) => {
+                  const ua = escapeAttr(u);
+                  const xt = externalNavigationAttrs(u);
+                  return `<span class="url-check"><a href="${ua}"${xt}>${escapeHtml(u)}</a></span>`;
+                });
           const copyBtns = (it.urls || [])
             .map(
               (u) =>
@@ -610,6 +681,7 @@ async function loadDocContent(id) {
       html = DOMPurify.sanitize(html);
     }
     content.innerHTML = html;
+    decorateDocsProseLinks(content);
     content.classList.add("prose");
     const syn = data.synthetic ? " (preview — mount /project for full file)" : "";
     toolbar.innerHTML = `
@@ -822,12 +894,12 @@ function ensureOverviewCharts() {
     overviewCharts.cf = new Chart(cfEl, {
       type: "bar",
       data: {
-        labels: ["R2", "KV", "D1", "Wrk", "Au"],
+        labels: ["R2", "KV", "D1", "Wrk", "Br", "Au"],
         datasets: [
           {
             label: "Reachable",
-            data: [0, 0, 0, 0, 0],
-            backgroundColor: ["#a78bfa", "#a78bfa", "#a78bfa", "#a78bfa", "#a78bfa"],
+            data: [0, 0, 0, 0, 0, 0],
+            backgroundColor: ["#a78bfa", "#a78bfa", "#a78bfa", "#a78bfa", "#a78bfa", "#a78bfa"],
             borderRadius: 4,
             minBarLength: 8,
           },
@@ -899,7 +971,7 @@ function renderOverviewKpi(data, cf, lastPt) {
   const d = data.docker_overview?.counts || {};
   const host = data.docker_overview?.host || {};
   const svc = cf?.services || {};
-  const cfUp = [svc.r2, svc.kv, svc.d1, svc.workers, svc.autoscale].filter((x) => x?.reachable).length;
+  const cfUp = [svc.r2, svc.kv, svc.d1, svc.workers, svc.browser, svc.autoscale].filter((x) => x?.reachable).length;
   // Prefer live docker_totals from this overview response so KPIs match Infrastructure / Deep metrics.
   const dockCpu = dt.cpu_percent ?? lastPt?.docker?.cpu_percent;
   const dockRam = dt.memory_percent ?? lastPt?.docker?.memory_percent;
@@ -933,7 +1005,7 @@ function renderOverviewKpi(data, cf, lastPt) {
       <div class="kpi-label">URL probes</div>
     </div>
     <div class="kpi-cell">
-      <div class="kpi-value">${cfUp}/5</div>
+      <div class="kpi-value">${cfUp}/6</div>
       <div class="kpi-label">CF local</div>
     </div>
     <div class="kpi-cell">
@@ -952,7 +1024,7 @@ function renderOverviewChips(data, cf) {
   const s = data.system_status || {};
   const alerts = (s.alerts || []).length;
   const svc = cf?.services || {};
-  const cfUp = [svc.r2, svc.kv, svc.d1, svc.workers, svc.autoscale].filter((x) => x?.reachable).length;
+  const cfUp = [svc.r2, svc.kv, svc.d1, svc.workers, svc.browser, svc.autoscale].filter((x) => x?.reachable).length;
   const parts = [
     `<span class="chip">Reference — all <code>*.lh</code> links</span>`,
     `<span class="chip">Infrastructure — engine &amp; tables</span>`,
@@ -962,8 +1034,8 @@ function renderOverviewChips(data, cf) {
   if (alerts > 0) {
     parts.unshift(`<span class="chip chip--warn">${alerts} alert(s) — see Infrastructure</span>`);
   }
-  if (cfUp < 5) {
-    parts.unshift(`<span class="chip chip--bad">CF local ${cfUp}/5</span>`);
+  if (cfUp < 6) {
+    parts.unshift(`<span class="chip chip--bad">CF local ${cfUp}/6</span>`);
   }
   el.innerHTML = parts.join("");
 }
@@ -1077,10 +1149,11 @@ function updateOverviewDashboard(data, cf, metricsData) {
     { k: "kv", l: "KV" },
     { k: "d1", l: "D1" },
     { k: "workers", l: "Wrk" },
+    { k: "browser", l: "Br" },
     { k: "autoscale", l: "Au" },
   ];
   const upVals = keys.map(({ k }) => (cfSvc[k]?.reachable ? 100 : 0));
-  const cfPaletteUp = ["#22d3ee", "#a78bfa", "#34d399", "#fbbf24", "#f472b6"];
+  const cfPaletteUp = ["#22d3ee", "#a78bfa", "#34d399", "#fbbf24", "#fb923c", "#f472b6"];
   const colors = keys.map(({ k }, i) =>
     cfSvc[k]?.reachable ? cfPaletteUp[i % cfPaletteUp.length] : "#fb7185",
   );
@@ -1712,37 +1785,40 @@ function renderCloudflareLocal(cf) {
   const badgeColor = (ok) => (ok ? "ok" : "bad");
 
   document.getElementById("cloudflareLocal").innerHTML = `
-    <div class="card">
+    ${wrapCfLocalCard(`
       <strong>Service Reachability</strong>
       <div class="row"><span>R2</span><span class="pill ${badgeColor(!!svc.r2?.reachable)}">${badgeText(!!svc.r2?.reachable)}</span></div>
       <div class="row"><span>KV</span><span class="pill ${badgeColor(!!svc.kv?.reachable)}">${badgeText(!!svc.kv?.reachable)}</span></div>
       <div class="row"><span>D1</span><span class="pill ${badgeColor(!!svc.d1?.reachable)}">${badgeText(!!svc.d1?.reachable)}</span></div>
       <div class="row"><span>Workers</span><span class="pill ${badgeColor(!!svc.workers?.reachable)}">${badgeText(!!svc.workers?.reachable)}</span></div>
+      <div class="row"><span>Browser</span><span class="pill ${badgeColor(!!svc.browser?.reachable)}">${badgeText(!!svc.browser?.reachable)}</span></div>
       <div class="row"><span>Autoscaler</span><span class="pill ${badgeColor(!!svc.autoscale?.reachable)}">${badgeText(!!svc.autoscale?.reachable)}</span></div>
-    </div>
-    <div class="card">
+    `)}
+    ${wrapCfLocalCard(`
       <strong>Resource Counts</strong>
       <div class="row"><span>R2 buckets</span><span>${cnt.buckets || 0}</span></div>
       <div class="row"><span>KV namespaces</span><span>${cnt.namespaces || 0}</span></div>
       <div class="row"><span>D1 databases</span><span>${cnt.databases || 0}</span></div>
       <div class="row"><span>Autoscale replicas</span><span>${cnt.autoscale_replicas || 0}</span></div>
-    </div>
-    <div class="card">
+    `)}
+    ${wrapCfLocalCard(`
       <strong>Autoscaler Policy</strong>
       <div class="row"><span>Min replicas</span><span>${svc.autoscale?.status?.min_replicas ?? "-"}</span></div>
       <div class="row"><span>Max replicas</span><span>${svc.autoscale?.status?.max_replicas ?? "-"}</span></div>
       <div class="row"><span>Avg CPU</span><span>${svc.autoscale?.status?.avg_cpu_percent ?? 0}%</span></div>
       <div class="row"><span>Last events</span><span>${(svc.autoscale?.status?.events || []).length}</span></div>
-    </div>
-    <div class="card">
+    `)}
+    ${wrapCfLocalCard(`
       <strong>Quick links</strong>
-      <div class="row"><span>R2</span><a href="http://r2.lh" target="_blank" rel="noopener">http://r2.lh</a></div>
-      <div class="row"><span>KV</span><a href="http://kv.lh" target="_blank" rel="noopener">http://kv.lh</a></div>
-      <div class="row"><span>D1</span><a href="http://d1.lh" target="_blank" rel="noopener">http://d1.lh</a></div>
-      <div class="row"><span>Workers</span><a href="http://workers.lh" target="_blank" rel="noopener">http://workers.lh</a></div>
-      <div class="row"><span>Autoscaler</span><a href="http://autoscale.lh" target="_blank" rel="noopener">http://autoscale.lh</a></div>
-      <div class="row"><span>MinIO UI</span><a href="http://minio-console.lh" target="_blank" rel="noopener">http://minio-console.lh</a></div>
-    </div>
+      ${cfDualUrlRow("R2", "http://r2.lh")}
+      ${cfDualUrlRow("KV", "http://kv.lh")}
+      ${cfDualUrlRow("D1", "http://d1.lh")}
+      ${cfDualUrlRow("Workers", "http://workers.lh")}
+      ${cfDualUrlRow("Browser", "http://browser.lh")}
+      ${cfDualUrlRow("Autoscaler", "http://autoscale.lh")}
+      ${cfDualUrlRow("MinIO UI", "http://minio-console.lh")}
+      <div class="row muted small" style="margin-top:6px"><a href="/hub">Service hubs</a> · credentials &amp; DB GUIs</div>
+    `)}
   `;
 }
 
@@ -2417,7 +2493,7 @@ function controlToken() {
   return localStorage.getItem("dashboard_control_token") || "";
 }
 
-const CONTROL_GROUP_ORDER = ["ecosystem", "ai-stack", "cloudflare-local"];
+const CONTROL_GROUP_ORDER = ["ecosystem", "ai-stack", "infra", "cloudflare-local"];
 
 const CONTROL_GROUP_META = {
   ecosystem: {
@@ -2434,6 +2510,11 @@ const CONTROL_GROUP_META = {
     title: "Cloudflare local",
     lead: "MinIO, Valkey, adapters, Workers runtime, demo, autoscaler, and whole compose stack.",
     sectionClass: " control-target-group--cf",
+  },
+  infra: {
+    title: "Infra add-ons",
+    lead: "MySQL, Redis, Mailpit, Adminer, Redis Commander, Telegram gateway, and cache lab — from infra/docker-compose.yml.",
+    sectionClass: "",
   },
 };
 
@@ -2910,7 +2991,10 @@ function renderServices(data) {
     const brand = SB.getBrandForManagedService(s);
     const running = s.container_info.status === "running";
     const checks = s.url_checks.length
-      ? s.url_checks.map((c) => `<div class="row"><a href="${c.url}" target="_blank">${c.url}</a>${urlProbePill(c)}</div>`).join("")
+      ? s.url_checks.map((c) => {
+          const u = c.url || "";
+          return `<div class="row"><a href="${escapeAttr(u)}"${externalNavigationAttrs(u)}>${escapeHtml(u)}</a>${urlProbePill(c)}</div>`;
+        }).join("")
       : "<div class='muted'>No HTTP endpoint</div>";
 
     const credsBlock =
@@ -2920,16 +3004,41 @@ function renderServices(data) {
             <ul class="svc-creds">${(s.credentials || []).map((c) => `<li>${escapeHtml(c)}</li>`).join("")}</ul>
           </div>`
         : "";
+    const hubBlock =
+      s.hub_path
+        ? `<div class="svc-card__extras">
+            <div class="svc-card__extras-title">Service hub</div>
+            <div class="row svc-mgmt-row"><a href="${escapeHtml(s.hub_path)}">Open hub (credentials · TCP · GUIs)</a></div>
+          </div>`
+        : "";
+    const connBlock =
+      (s.connection_strings || []).length > 0
+        ? `<div class="svc-card__extras">
+            <div class="svc-card__extras-title">Connection strings</div>
+            <ul class="svc-creds svc-creds--mono">${(s.connection_strings || [])
+              .map((c) => `<li><code>${escapeHtml(c)}</code></li>`)
+              .join("")}</ul>
+          </div>`
+        : "";
+    const dbGuiBlock =
+      (s.database_guis || []).length > 0
+        ? `<div class="svc-card__extras">
+            <div class="svc-card__extras-title">Database / storage GUI</div>
+            ${(s.database_guis || []).map((l) => `<div class="row svc-mgmt-row">${hubGuiLinkRow(l)}</div>`).join("")}
+          </div>`
+        : "";
+    const insightsBlock =
+      (s.insights || []).length > 0
+        ? `<div class="svc-card__extras">
+            <div class="svc-card__extras-title">Insights &amp; analytics</div>
+            <ul class="svc-creds">${(s.insights || []).map((c) => `<li>${escapeHtml(c)}</li>`).join("")}</ul>
+          </div>`
+        : "";
     const mgmtBlock =
       (s.management_links || []).length > 0
         ? `<div class="svc-card__extras">
             <div class="svc-card__extras-title">Management &amp; explorer</div>
-            ${(s.management_links || [])
-              .map(
-                (l) =>
-                  `<div class="row svc-mgmt-row"><a href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${escapeHtml(l.label)}</a></div>`,
-              )
-              .join("")}
+            ${(s.management_links || []).map((l) => `<div class="row svc-mgmt-row">${hubGuiLinkRow(l)}</div>`).join("")}
           </div>`
         : "";
 
@@ -2951,6 +3060,10 @@ function renderServices(data) {
           </div>
         </div>
         ${credsBlock}
+        ${hubBlock}
+        ${connBlock}
+        ${dbGuiBlock}
+        ${insightsBlock}
         ${mgmtBlock}
         <div class="row"><span>Container</span><code>${s.container}</code></div>
         <div class="row"><span>Networks</span><code>${(s.container_info.networks || []).join(", ") || "-"}</code></div>
@@ -3102,29 +3215,56 @@ async function loadOverview() {
   }
 }
 
-function initControlBulkBar() {
-  const bar = document.getElementById("controlBulkBar");
+function initControlInfraBulkBar() {
+  const bar = document.getElementById("controlInfraBulkBar");
   if (!bar || bar.dataset.wired === "1") return;
   bar.dataset.wired = "1";
-  const ECOSYSTEM_TARGET = "stack-ecosystem-all";
-  bar.querySelectorAll("[data-bulk-action]").forEach((btn) => {
+  const INFRA_STACK = "stack-infra-all";
+  bar.querySelectorAll("[data-infra-bulk-action]").forEach((btn) => {
     btn.addEventListener("click", async () => {
-      const action = btn.getAttribute("data-bulk-action");
-      const lbl = btn.getAttribute("data-bulk-label") || action;
+      const action = btn.getAttribute("data-infra-bulk-action");
+      const lbl = btn.getAttribute("data-infra-bulk-label") || action;
       if (!action) return;
       const destructive = action === "stop" || action === "restart" || action === "deploy";
       if (destructive) {
         const ok = await showAppConfirm({
           title: lbl,
           message:
-            "Runs scripts under ai-stack/services (may take several minutes). Stop, restart, and redeploy skip this dashboard container so the UI can show the result.",
+            "Runs docker compose for infra/docker-compose.yml (MySQL, Redis, Mailpit, Adminer, cache lab, …). Can take a minute; stop/restart affect all infra services.",
           confirmText: "Continue",
         });
         if (!ok) return;
       }
-      runControlAction(ECOSYSTEM_TARGET, action, lbl);
+      runControlAction(INFRA_STACK, action, lbl);
     });
   });
+}
+
+function initControlBulkBar() {
+  const bar = document.getElementById("controlBulkBar");
+  if (bar && bar.dataset.wired !== "1") {
+    bar.dataset.wired = "1";
+    const ECOSYSTEM_TARGET = "stack-ecosystem-all";
+    bar.querySelectorAll("[data-bulk-action]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const action = btn.getAttribute("data-bulk-action");
+        const lbl = btn.getAttribute("data-bulk-label") || action;
+        if (!action) return;
+        const destructive = action === "stop" || action === "restart" || action === "deploy";
+        if (destructive) {
+          const ok = await showAppConfirm({
+            title: lbl,
+            message:
+              "Runs scripts under ai-stack/services (may take several minutes). Stop, restart, and redeploy skip this dashboard container so the UI can show the result.",
+            confirmText: "Continue",
+          });
+          if (!ok) return;
+        }
+        runControlAction(ECOSYSTEM_TARGET, action, lbl);
+      });
+    });
+  }
+  initControlInfraBulkBar();
 }
 
 async function bootstrap() {

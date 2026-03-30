@@ -23,6 +23,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py .
 COPY monitor.py .
+COPY service_hub.py .
 COPY reference_data.py .
 COPY docs_catalog.py .
 COPY host_metrics.py .

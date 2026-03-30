@@ -134,17 +134,18 @@ Or non-interactive full start (respects dependency order in `ai-stack/core.sh`):
 ./ai-stack/ai-stack.sh start
 ```
 
-**Default start order:** `traefik` → `postgres` → `ollama` → `webui` → `n8n` → `dashboard` → `cloudflare-local`.
+**Default start order:** `traefik` → `postgres` → `ollama` → `webui` → `n8n` → `dashboard` → `cloudflare-local` → `infra`.
 
 | Script (`ai-stack/services/`) | Container / stack | Notes |
 |------------------------------|-------------------|--------|
-| `traefik.sh` | `traefik` | Reads `traefik/dynamic.yml` |
+| `traefik.sh` | `traefik` | Static: `traefik/traefik-static.yaml` (entrypoints, API); routes: `traefik/dynamic.yml` |
 | `postgres.sh` | `n8n_postgres` | n8n database |
 | `ollama.sh` | `ollama` | Pulls models from `ai-stack/config/ollama-pinned-models.txt` on start |
 | `webui.sh` | `open-webui` | Points at Ollama |
 | `n8n.sh` | `n8n` | Postgres-backed |
 | `dashboard.sh` | `service-dashboard` | Builds image `local/service-dashboard:latest` |
-| `cloudflare-local.sh` | Compose project | `cloudflare-local/docker-compose.yml` |
+| `cloudflare-local.sh` | Compose project | `cloudflare-local/docker-compose.yml` (includes browser-rendering-local) |
+| `infra.sh` | Compose project | `infra/docker-compose.yml` — MySQL, Redis, Mailpit, Adminer, Redis Commander, Telegram, Varnish+Nginx |
 
 After any start or restart of multiple services, the tooling runs **network repair** so known containers attach to **`lh-network`** (see `NETWORK_CONTAINERS` in `ai-stack/core.sh`).
 
@@ -244,29 +245,51 @@ Seed and smoke tests:
 
 Details: **[cloudflare-local/README.md](../cloudflare-local/README.md)** and **[cloudflare-local/docs/USER_MANUAL.md](../cloudflare-local/docs/USER_MANUAL.md)**.
 
+Browser rendering (local): **[cloudflare-local/adapters/browser-rendering-local/README.md](../cloudflare-local/adapters/browser-rendering-local/README.md)** · **[cloudflare-local/docs/BROWSER_RENDERING_LOCAL.md](../cloudflare-local/docs/BROWSER_RENDERING_LOCAL.md)**.
+
 ---
 
-## 12. Verification checklist
+## 12. Infra add-ons (optional)
+
+MySQL, Redis (separate from Valkey used by KV), Mailpit (SMTP + UI), Telegram webhook gateway, and a **Varnish → Nginx** cache demo (`cache.lh`):
+
+```bash
+cd "$REPO"
+bash ai-stack/services/infra.sh start
+```
+
+Traefik routes (after `infra` and `cloudflare-local` are up): **http://mail.lh** , **http://telegram.lh** , **http://cache.lh** , **http://browser.lh** , **http://adminer.lh** , **http://redis-ui.lh** , **http://s3.lh** (MinIO S3 API; HTTPS on the same hosts via **websecure**). Service hubs: **http://localhost.lh/hub**.
+
+- **MySQL:** Docker DNS `mysql:3306`; from the Mac/Linux host use **`mysql.lh:3306`** (compose publishes **3306**).
+- **Redis (infra):** Docker DNS `redis:6379`; host **`redis.lh:6379`** (published **6379**).
+- **PostgreSQL (n8n):** after `postgres.sh start`, host **`postgres.lh:5432`** (container publishes **5432**).
+- **Valkey (KV):** Docker DNS `valkey:6379`; host **`valkey.lh:6380`** (compose publishes **6380→6379**).
+- **Mailpit SMTP:** `mailpit:1025` on Docker; host **`127.0.0.1:1025`** (published **1025**). Web UI: **http://mail.lh**.
+- **Telegram:** set `TELEGRAM_BOT_TOKEN` in `infra/docker-compose.yml` or an override file; webhooks need HTTPS in production.
+
+---
+
+## 13. Verification checklist
 
 | Check | Command or URL |
 |--------|----------------|
 | DNS | `ping -c 1 n8n.lh` |
 | Traefik API | http://localhost:8080 (insecure API; dev only) |
 | Dashboard | http://localhost.lh or http://localhost:8090 |
-| HTTPS routes | https://n8n.lh , https://ai.lh , etc. |
+| HTTPS routes | https://n8n.lh , https://ai.lh , https://browser.lh , https://mail.lh , etc. |
 | Network | `./ai-stack/ai-stack.sh repair-network` then `docker network inspect lh-network` |
 | Host temp file (macOS) | `cat ~/.local-eco-host-metrics/cpu_temp_c.txt` |
 | Container sees temp | `docker exec service-dashboard cat /host-mac-metrics/cpu_temp_c.txt` |
 
 ---
 
-## 13. n8n and HTTPS behind Traefik
+## 14. n8n and HTTPS behind Traefik
 
 n8n is configured for **proxy trust** and **`N8N_SECURE_COOKIE=false`** in the service script so both **http** and **https** front-door URLs work. If you change hostnames or TLS termination, review **`ai-stack/services/n8n.sh`** and Traefik labels/routes.
 
 ---
 
-## 14. Related documentation
+## 15. Related documentation
 
 | Document | Purpose |
 |----------|---------|
@@ -278,6 +301,6 @@ n8n is configured for **proxy trust** and **`N8N_SECURE_COOKIE=false`** in the s
 
 ---
 
-## 15. Files removed from older README drafts
+## 16. Files removed from older README drafts
 
 The repository may not include **`bootstrap-ai-stack.sh`** or **`fix-and-run.sh`**. Use **`./ai-stack/ai-stack.sh`** and per-service scripts under **`ai-stack/services/`** instead.

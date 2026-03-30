@@ -1,0 +1,9 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"/><title>Cache lab</title></head>
+<body style="font-family:system-ui;max-width:40rem;margin:2rem">
+<h1>Varnish → Nginx cache lab</h1>
+<p>Traefik routes <code>cache.lh</code> to Varnish, which caches this static origin (<code>cache-nginx</code>).</p>
+<p>Hit refresh — responses are cacheable for 60s (see <code>infra/varnish/default.vcl</code>).</p>
+</body>
+</html>

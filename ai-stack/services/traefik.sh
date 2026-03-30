@@ -1,3 +1,7 @@
+if [ -z "${PROJECT_ROOT:-}" ]; then
+  PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+fi
+
 NAME="traefik"
 
 start() {
@@ -13,11 +17,8 @@ start() {
     -p 8080:8080 \
     -v "$PROJECT_ROOT/traefik:/etc/traefik" \
     -v "$PROJECT_ROOT/certs:/certs" \
-    traefik:v3.0 \
-    --api.insecure=true \
-    --providers.file.filename=/etc/traefik/dynamic.yml \
-    --entrypoints.web.address=:80 \
-    --entrypoints.websecure.address=:443
+    traefik:v3.3 \
+    --configFile=/etc/traefik/traefik-static.yaml
 }
 
 stop() { docker stop "$NAME"; }
@@ -28,3 +29,22 @@ unpause() { docker unpause "$NAME"; }
 status() { docker ps -a --filter "name=^/$NAME$" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"; }
 logs() { docker logs -f "$NAME"; }
 reset() { remove; }
+
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+  act="${1:-}"
+  case "$act" in
+    start) start ;;
+    stop) stop ;;
+    restart) restart ;;
+    remove) remove ;;
+    pause) pause ;;
+    unpause) unpause ;;
+    status) status ;;
+    logs) logs ;;
+    reset) reset ;;
+    *)
+      echo "Usage: $0 {start|stop|restart|remove|pause|unpause|status|logs|reset}"
+      exit 1
+      ;;
+  esac
+fi

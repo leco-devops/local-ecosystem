@@ -10,6 +10,7 @@
     "cf-kv-adapter": "kv",
     "cf-d1-adapter": "d1",
     "cf-workers-runtime": "workers",
+    "cf-browser-rendering-local": "browser",
     "cf-autoscale-demo": "autoscale-demo",
     "cf-autoscaler": "autoscaler",
     "ai-traefik": "traefik",
@@ -19,8 +20,18 @@
     "ai-postgres": "postgres",
     "ai-dashboard": "dashboard",
     "ai-cloudflare-local": "cf-compose",
+    "ai-infra": "cf-compose",
     "stack-cf-all": "cf-stack",
     "stack-ecosystem-all": "ecosystem",
+    "stack-infra-all": "infra",
+    "infra-mysql": "infra",
+    "infra-redis": "infra",
+    "infra-mailpit": "infra",
+    "infra-telegram-gateway": "infra",
+    "infra-cache-nginx": "infra",
+    "infra-cache-varnish": "infra",
+    "infra-adminer": "infra",
+    "infra-redis-commander": "infra",
   };
 
   const CONTAINER_BRAND = {
@@ -37,7 +48,16 @@
     minio: "minio",
     valkey: "valkey",
     "workers-runtime": "workers",
+    "browser-rendering-local": "browser",
     "autoscale-demo": "autoscale-demo",
+    mysql: "infra",
+    redis: "infra",
+    mailpit: "infra",
+    "telegram-gateway": "infra",
+    "cache-nginx": "infra",
+    "cache-varnish": "infra",
+    adminer: "infra",
+    "redis-commander": "infra",
   };
 
   const SERVICE_NAME_BRAND = {
@@ -53,6 +73,7 @@
     Autoscaler: "autoscaler",
     "MinIO Console": "minio",
     "Workers (Miniflare)": "workers",
+    "Browser rendering (local)": "browser",
   };
 
   const EMOJI = {
@@ -69,10 +90,12 @@
     minio: "💧",
     valkey: "🧱",
     workers: "☁️",
+    browser: "🖼️",
     "autoscale-demo": "🎯",
     "cf-compose": "🧩",
     "cf-stack": "🌐",
     ecosystem: "🎛️",
+    infra: "🏗️",
     default: "📌",
   };
 
@@ -120,6 +143,9 @@
     workers: svg(
       "M12 2a5 5 0 0 1 5 5v2h-2V7a3 3 0 0 0-6 0v8a3 3 0 0 0 6 0v-1h2v1a5 5 0 0 1-10 0V7a5 5 0 0 1 5-5zm-1 14h2v6h-2v-6z",
     ),
+    browser: svg(
+      "M4 5h16v10H4V5zm2 2v6h12V7H6zm2 14h8v2H8v-2z",
+    ),
     "autoscale-demo": svg(
       "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm8-2v4h-2V8h-2V6h4zm-2 12h2v4h-4v-2h2v-2zM4 6h2v2H4v4H2V6h2zm0 12h2v2h4v2H4v-4z",
     ),
@@ -131,6 +157,9 @@
     ),
     ecosystem: svg(
       "M6 4h4v4H6V4zm8 0h4v4h-4V4zM6 10h4v4H6v-4zm8 0h4v4h-4v-4zM6 16h4v4H6v-4zm8 0h4v4h-4v-4z",
+    ),
+    infra: svg(
+      "M4 6h6v5H4V6zm10 0h6v5h-6V6zM4 13h6v7H4v-7zm10 3h6v4h-6v-4zM4 4h16v1H4V4zm0 12h6v1H4v-1zm10 3h6v1h-6v-1z",
     ),
   };
 

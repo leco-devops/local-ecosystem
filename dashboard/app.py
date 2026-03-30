@@ -1,7 +1,7 @@
 import json
 import os
 
-from flask import Flask, Response, jsonify, render_template, request, stream_with_context
+from flask import Flask, Response, abort, jsonify, render_template, request, stream_with_context
 
 from control import check_control_token, list_targets, run_action, run_action_streaming
 from ollama_models import build_models_payload, handle_inspect, handle_models_action, list_manifest_backups
@@ -13,6 +13,7 @@ from monitor import (
     collect_service_logs,
     list_managed_services,
 )
+from service_hub import get_hub_detail, list_hub_slugs
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
@@ -175,6 +176,19 @@ def api_control_stream():
 @app.get("/")
 def home():
     return render_template("index.html")
+
+
+@app.get("/hub")
+def hub_index():
+    return render_template("hub_index.html", hubs=list_hub_slugs())
+
+
+@app.get("/hub/<slug>")
+def hub_detail(slug: str):
+    hub = get_hub_detail(slug)
+    if not hub:
+        abort(404)
+    return render_template("service_hub.html", hub=hub)
 
 
 if __name__ == "__main__":

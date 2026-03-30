@@ -1,0 +1,101 @@
+# Infra add-ons: MySQL, Redis, Mailpit, Telegram gateway, Varnish + Nginx cache lab.
+# Start: bash ai-stack/services/infra.sh start
+# Network must exist: docker network create lh-network
+
+services:
+  mysql:
+    restart: unless-stopped
+    image: mysql:8.4
+    container_name: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-localdev}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-localdev}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    networks:
+      - lh-network
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+
+  redis:
+    restart: unless-stopped
+    image: redis:7-alpine
+    container_name: redis
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - lh-network
+
+  mailpit:
+    restart: unless-stopped
+    image: axllent/mailpit:latest
+    container_name: mailpit
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+    ports:
+      - "1025:1025"
+    networks:
+      - lh-network
+
+  telegram-gateway:
+    restart: unless-stopped
+    build:
+      context: ./telegram-gateway
+    container_name: telegram-gateway
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+    networks:
+      - lh-network
+
+  cache-nginx:
+    restart: unless-stopped
+    build:
+      context: ./cache-nginx
+    container_name: cache-nginx
+    networks:
+      - lh-network
+
+  cache-varnish:
+    restart: unless-stopped
+    image: varnish:7.4-alpine
+    container_name: cache-varnish
+    volumes:
+      - ./varnish/default.vcl:/etc/varnish/default.vcl:ro
+    command: ["varnishd", "-F", "-f", "/etc/varnish/default.vcl", "-s", "malloc,256m"]
+    depends_on:
+      - cache-nginx
+    networks:
+      - lh-network
+    healthcheck:
+      test: ["CMD-SHELL", "varnishstat -1 >/dev/null 2>&1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  adminer:
+    restart: unless-stopped
+    image: adminer:latest
+    container_name: adminer
+    networks:
+      - lh-network
+
+  redis-commander:
+    restart: unless-stopped
+    image: rediscommander/redis-commander:latest
+    container_name: redis-commander
+    environment:
+      REDIS_HOSTS: local:redis:6379
+    networks:
+      - lh-network
+
+networks:
+  lh-network:
+    external: true
+
+volumes:
+  mysql_data:
+  redis_data:

@@ -636,6 +636,14 @@ input[type="password"] {
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
 }
 
+.control-bulk-bar--infra {
+  border-color: rgba(52, 211, 153, 0.4);
+}
+
+.control-bulk-bar--infra .control-bulk-bar__head strong {
+  color: #6ee7b7;
+}
+
 .control-bulk-bar__head {
   display: flex;
   flex-direction: column;
@@ -2222,6 +2230,13 @@ button.doc-link.muted {
   --svc-border: rgba(251, 146, 60, 0.55);
 }
 
+.control-card[data-brand="browser"],
+.service-grid > .card[data-brand="browser"] {
+  --svc-accent: #a78bfa;
+  --svc-accent-soft: rgba(167, 139, 250, 0.14);
+  --svc-border: rgba(167, 139, 250, 0.55);
+}
+
 .control-card[data-brand="autoscale-demo"],
 .service-grid > .card[data-brand="autoscale-demo"] {
   --svc-accent: #14b8a6;
@@ -2241,6 +2256,82 @@ button.doc-link.muted {
   --svc-accent: #06b6d4;
   --svc-accent-soft: rgba(6, 182, 212, 0.14);
   --svc-border: rgba(6, 182, 212, 0.55);
+}
+
+/* Cloudflare local cards (Infrastructure) + Overview CF panel mark */
+.cf-local-card {
+  position: relative;
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(56, 189, 248, 0.38);
+  border-radius: 12px;
+  padding: 12px 12px 14px;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+.cf-local-card__mark {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.cf-local-card__inner {
+  padding-right: 38px;
+}
+
+.cf-local-card .row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+  margin: 4px 0;
+  font-size: 13px;
+}
+
+.dash-panel--cf .dash-panel__head--cf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dash-panel__cf-logo svg {
+  display: block;
+  opacity: 0.92;
+}
+
+.cf-dual-url-row .cf-dual-urls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.cf-dual-url-row .cf-dual-urls a {
+  color: #38bdf8;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.cf-dual-sep {
+  opacity: 0.45;
+  font-size: 12px;
+}
+
+.cf-dual-full {
+  flex-basis: 100%;
+  margin-top: 2px;
+  text-align: right;
+}
+
+.svc-creds--mono code {
+  font-size: 0.78rem;
+  word-break: break-all;
 }
 
 @media (max-width: 540px) {

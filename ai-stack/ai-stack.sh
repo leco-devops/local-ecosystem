@@ -12,6 +12,8 @@ print_usage() {
   echo "./ai-stack.sh start [service]"
   echo "./ai-stack.sh stop [service]"
   echo "./ai-stack.sh restart [service]"
+  echo "./ai-stack.sh deploy              # full stack: bulk_ecosystem (stop all except dashboard, then start all)"
+  echo "./ai-stack.sh deploy [service]    # service deploy() if defined, else restart"
   echo "./ai-stack.sh pause [service]"
   echo "./ai-stack.sh unpause [service]"
   echo "./ai-stack.sh status [service]"
@@ -197,6 +199,23 @@ interactive_menu() {
 case "$ACTION" in
   ""|menu)
     interactive_menu
+    ;;
+  deploy)
+    if [ -z "$SERVICE" ]; then
+      bulk_ecosystem deploy
+    elif [ ! -f "$BASE_DIR/ai-stack/services/$SERVICE.sh" ]; then
+      echo "❌ Unknown service: $SERVICE"
+      exit 1
+    else
+      # shellcheck source=/dev/null
+      source "$BASE_DIR/ai-stack/services/$SERVICE.sh"
+      if declare -F deploy >/dev/null 2>&1; then
+        deploy
+      else
+        run_action restart "$SERVICE"
+      fi
+      repair_network_links
+    fi
     ;;
   start|stop|restart|pause|unpause|logs|remove|status)
     run_action "$ACTION" "$SERVICE"

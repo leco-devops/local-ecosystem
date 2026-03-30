@@ -8,6 +8,7 @@ This stack emulates Cloudflare-like local services using only Docker:
 - KV-like API → Valkey + `kv-adapter`
 - D1-like API → SQLite + `d1-adapter`
 - Workers-like runtime → Miniflare 2 + `workers-runtime`
+- Browser-like automation (local) → `browser-rendering-local` (Playwright or Chromium CDP)
 - Container autoscaling simulation → `autoscaler`
 
 Documentation: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/USER_MANUAL.md](docs/USER_MANUAL.md) · [docs/IMPLEMENTATION_GUIDE.md](docs/IMPLEMENTATION_GUIDE.md)
@@ -31,6 +32,7 @@ Documentation: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/USER_MANUAL
 - `http://kv.lh`
 - `http://d1.lh`
 - `http://workers.lh`
+- `http://browser.lh`
 - `http://autoscale.lh`
 - `http://minio-console.lh`
 

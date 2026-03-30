@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Service hubs — Local Ecosystem</title>
+    <link rel="stylesheet" href="/static/dashboard.css" />
+    <link rel="stylesheet" href="/static/service_hub.css" />
+  </head>
+  <body class="hub-body">
+    <div class="hub-wrap">
+      <header class="hub-header">
+        <a class="hub-back" href="/">← Ops Dashboard</a>
+        <h1>Service hubs</h1>
+        <p class="muted">Credentials, connection strings, GUIs, and live container status for each managed service.</p>
+      </header>
+      <ul class="hub-index-list">
+        {% for h in hubs %}
+          <li>
+            <a href="/hub/{{ h.slug }}">{{ h.service }}</a>
+            <code>{{ h.container }}</code>
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </body>
+</html>

@@ -1,7 +1,7 @@
 import re
 import time
 from datetime import datetime, timezone
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 import docker
 import requests
@@ -13,25 +13,25 @@ SERVICE_MAP = [
     {
         "service": "Traefik",
         "container": "traefik",
-        "urls": ["http://traefik.lh", "https://traefik.lh"],
+        "urls": ["http://traefik.lh"],
         "notes": "Reverse proxy and dashboard",
     },
     {
         "service": "Open WebUI",
         "container": "open-webui",
-        "urls": ["http://ai.lh", "https://ai.lh"],
+        "urls": ["http://ai.lh"],
         "notes": "AI chat user interface",
     },
     {
         "service": "n8n",
         "container": "n8n",
-        "urls": ["http://n8n.lh", "https://n8n.lh"],
+        "urls": ["http://n8n.lh"],
         "notes": "Workflow automation",
     },
     {
         "service": "Ollama",
         "container": "ollama",
-        "urls": ["http://ollama.lh", "https://ollama.lh"],
+        "urls": ["http://ollama.lh"],
         "notes": "LLM runtime",
     },
     {
@@ -39,25 +39,62 @@ SERVICE_MAP = [
         "container": "service-dashboard",
         "urls": ["http://localhost.lh"],
         "notes": "Ops monitoring dashboard",
+        "hub_slug": "dashboard",
+        "insights": [
+            "Service hubs live under /hub/<name> for credentials, TCP hints, and database GUIs.",
+        ],
+        "management_links": [
+            {"label": "Hub · dashboard", "url": "http://localhost.lh/hub/dashboard"},
+        ],
     },
     {
         "service": "PostgreSQL",
         "container": "n8n_postgres",
-        "urls": [],
-        "notes": "n8n database",
+        "urls": ["http://localhost.lh/hub/postgres"],
+        "notes": "n8n database · postgres.lh:5432 on host (Docker service n8n_postgres)",
+        "hub_slug": "postgres",
+        "credentials": [
+            "User postgres · password password · database n8n (from ai-stack/services/postgres.sh defaults).",
+        ],
+        "connection_strings": [
+            "postgresql://postgres:password@postgres.lh:5432/n8n",
+            "psql -h postgres.lh -p 5432 -U postgres -d n8n",
+        ],
+        "insights": [
+            "Host: postgres.lh:5432 (published to loopback; same DNS as other *.lh). In Adminer use server mysql / n8n_postgres (Docker service names from the Adminer container).",
+        ],
+        "database_guis": [
+            {"label": "Adminer (SQL UI · pick PostgreSQL)", "url": "http://adminer.lh"},
+        ],
+        "management_links": [
+            {"label": "Service hub", "url": "http://localhost.lh/hub/postgres"},
+        ],
     },
     {
         "service": "R2 (Cloudflare local)",
         "container": "r2-adapter",
         "urls": ["http://r2.lh"],
         "notes": "S3-compatible API (MinIO backend)",
+        "hub_slug": "r2",
         "credentials": [
             "S3/MinIO (dev): access key minioadmin · secret minioadmin",
+        ],
+        "connection_strings": [
+            "S3-style API (adapter): http://r2.lh and https://r2.lh",
+            "Direct MinIO S3 API: http://s3.lh and https://s3.lh (same keys as MinIO console)",
+        ],
+        "insights": [
+            "Bucket and object counts appear in Cloudflare local panel when reachable.",
+        ],
+        "database_guis": [
+            {"label": "Adapter panel (buckets / API)", "url": "http://r2.lh/panel"},
+            {"label": "MinIO object browser", "url": "http://minio-console.lh"},
         ],
         "management_links": [
             {"label": "Management & bucket explorer", "url": "http://r2.lh/panel"},
             {"label": "Health JSON", "url": "http://r2.lh/health"},
             {"label": "MinIO console (same credentials)", "url": "http://minio-console.lh"},
+            {"label": "Service hub", "url": "http://localhost.lh/hub/r2"},
         ],
     },
     {
@@ -65,12 +102,25 @@ SERVICE_MAP = [
         "container": "kv-adapter",
         "urls": ["http://kv.lh"],
         "notes": "KV-style API on Valkey",
+        "hub_slug": "kv",
         "credentials": [
-            "Default Valkey: no password (redis://valkey:6379 inside compose).",
+            "Default Valkey: no password. Published as valkey.lh:6380 → container :6379 (infra Redis uses redis.lh:6379).",
+        ],
+        "connection_strings": [
+            "redis://valkey.lh:6380/0",
+            "redis://redis.lh:6379 (separate infra Redis)",
+        ],
+        "insights": [
+            "KV adapter namespaces map to Valkey key prefixes; see adapter /panel.",
+        ],
+        "database_guis": [
+            {"label": "KV adapter panel", "url": "http://kv.lh/panel"},
+            {"label": "Redis Commander (infra Redis)", "url": "http://redis-ui.lh"},
         ],
         "management_links": [
             {"label": "Management & namespace explorer", "url": "http://kv.lh/panel"},
             {"label": "Health JSON", "url": "http://kv.lh/health"},
+            {"label": "Service hub", "url": "http://localhost.lh/hub/kv"},
         ],
     },
     {
@@ -78,12 +128,24 @@ SERVICE_MAP = [
         "container": "d1-adapter",
         "urls": ["http://d1.lh"],
         "notes": "SQLite D1-style API",
+        "hub_slug": "d1",
         "credentials": [
             "No API auth — SQLite files under adapter volume (local dev only).",
+        ],
+        "connection_strings": [
+            "HTTP API: http://d1.lh and https://d1.lh — SQLite files live in the d1-adapter volume (not on .lh TCP).",
+        ],
+        "insights": [
+            "Use /panel for SQL explorer; backups via adapter API when configured.",
+        ],
+        "database_guis": [
+            {"label": "D1 adapter SQL panel", "url": "http://d1.lh/panel"},
+            {"label": "Adminer (MySQL/Postgres — not SQLite files)", "url": "http://adminer.lh"},
         ],
         "management_links": [
             {"label": "Management & SQL explorer", "url": "http://d1.lh/panel"},
             {"label": "Health JSON", "url": "http://d1.lh/health"},
+            {"label": "Service hub", "url": "http://localhost.lh/hub/d1"},
         ],
     },
     {
@@ -91,12 +153,17 @@ SERVICE_MAP = [
         "container": "autoscaler",
         "urls": ["http://autoscale.lh"],
         "notes": "Docker replica scaler demo API",
+        "hub_slug": "autoscale",
         "credentials": [
             "No API auth in local stack.",
+        ],
+        "insights": [
+            "Policy and replica counts mirror Overview / Infrastructure CF charts.",
         ],
         "management_links": [
             {"label": "Management panel (live status)", "url": "http://autoscale.lh/panel"},
             {"label": "Status JSON", "url": "http://autoscale.lh/status"},
+            {"label": "Service hub", "url": "http://localhost.lh/hub/autoscale"},
         ],
     },
     {
@@ -104,11 +171,16 @@ SERVICE_MAP = [
         "container": "minio",
         "urls": ["http://minio-console.lh"],
         "notes": "Object store web UI",
+        "hub_slug": "minio",
         "credentials": [
             "Console login: minioadmin / minioadmin (dev defaults from compose).",
         ],
+        "connection_strings": [
+            "Console: http://minio-console.lh · S3 API: http://s3.lh / https://s3.lh",
+        ],
         "management_links": [
             {"label": "Open console", "url": "http://minio-console.lh"},
+            {"label": "Service hub", "url": "http://localhost.lh/hub/minio"},
         ],
     },
     {
@@ -116,12 +188,141 @@ SERVICE_MAP = [
         "container": "workers-runtime",
         "urls": ["http://workers.lh"],
         "notes": "Local Cloudflare Workers runtime (Miniflare)",
+        "hub_slug": "workers",
         "credentials": [
             "No auth — fetch handler only. Root URL returns JSON.",
         ],
         "management_links": [
             {"label": "Info & troubleshooting", "url": "http://workers.lh/panel"},
             {"label": "Health JSON", "url": "http://workers.lh/health"},
+            {"label": "Service hub", "url": "http://localhost.lh/hub/workers"},
+        ],
+    },
+    {
+        "service": "Browser rendering (local)",
+        "container": "browser-rendering-local",
+        "urls": ["http://browser.lh"],
+        "notes": "Headless Chromium via Playwright or system CDP — not Cloudflare edge",
+        "hub_slug": "browser",
+        "credentials": [
+            "Set BROWSER_BACKEND=playwright or chromium in compose.",
+        ],
+        "management_links": [
+            {"label": "Panel", "url": "http://browser.lh/panel"},
+            {"label": "Health JSON", "url": "http://browser.lh/health"},
+            {"label": "Service hub", "url": "http://localhost.lh/hub/browser"},
+        ],
+    },
+    {
+        "service": "MySQL (infra)",
+        "container": "mysql",
+        "urls": ["http://localhost.lh/hub/mysql"],
+        "notes": "MySQL · host access mysql.lh:3306 (published); in Docker use service name mysql",
+        "hub_slug": "mysql",
+        "credentials": [
+            "Root password: localdev (default MYSQL_ROOT_PASSWORD in infra/docker-compose.yml unless overridden).",
+            "Database localdev created by default.",
+        ],
+        "connection_strings": [
+            "mysql://root:localdev@mysql.lh:3306/localdev",
+            "mysql -h mysql.lh -P 3306 -u root -plocaldev",
+        ],
+        "insights": [
+            "Adminer (adminer.lh): System MySQL, Server **mysql** (Docker DNS). CLI from Mac/Windows: **mysql.lh:3306** with *.lh → loopback.",
+        ],
+        "database_guis": [
+            {"label": "Adminer", "url": "http://adminer.lh"},
+        ],
+        "management_links": [
+            {"label": "Service hub", "url": "http://localhost.lh/hub/mysql"},
+        ],
+    },
+    {
+        "service": "Redis (infra)",
+        "container": "redis",
+        "urls": ["http://localhost.lh/hub/redis"],
+        "notes": "Infra Redis · redis.lh:6379 on host; KV stack uses valkey.lh:6380 separately",
+        "hub_slug": "redis",
+        "credentials": [
+            "No password by default (infra redis).",
+        ],
+        "connection_strings": [
+            "redis://redis.lh:6379",
+            "redis-cli -h redis.lh -p 6379",
+        ],
+        "insights": [
+            "KV adapter uses Valkey at valkey.lh:6380. This Redis is for app cache/queues.",
+        ],
+        "database_guis": [
+            {"label": "Redis Commander", "url": "http://redis-ui.lh"},
+        ],
+        "management_links": [
+            {"label": "Service hub", "url": "http://localhost.lh/hub/redis"},
+        ],
+    },
+    {
+        "service": "Mailpit",
+        "container": "mailpit",
+        "urls": ["http://mail.lh"],
+        "notes": "SMTP catch-all (container :1025) + web UI",
+        "hub_slug": "mailpit",
+        "connection_strings": [
+            "SMTP: mailpit.lh:1025 (from host) · inside Docker: mailpit:1025",
+        ],
+        "management_links": [
+            {"label": "Web UI", "url": "http://mail.lh"},
+            {"label": "Service hub", "url": "http://localhost.lh/hub/mailpit"},
+        ],
+    },
+    {
+        "service": "Telegram gateway",
+        "container": "telegram-gateway",
+        "urls": ["http://telegram.lh"],
+        "notes": "Bot webhook + sendMessage helper — set TELEGRAM_BOT_TOKEN",
+        "hub_slug": "telegram",
+        "management_links": [
+            {"label": "Panel", "url": "http://telegram.lh/panel"},
+            {"label": "Health", "url": "http://telegram.lh/health"},
+            {"label": "Service hub", "url": "http://localhost.lh/hub/telegram"},
+        ],
+    },
+    {
+        "service": "Varnish cache lab",
+        "container": "cache-varnish",
+        "urls": ["http://cache.lh"],
+        "notes": "Traefik → Varnish → Nginx static origin",
+        "hub_slug": "cache-lab",
+        "insights": [
+            "VCL TTL and backend are under infra/varnish/default.vcl.",
+        ],
+        "management_links": [
+            {"label": "Cached page", "url": "http://cache.lh"},
+            {"label": "Service hub", "url": "http://localhost.lh/hub/cache-lab"},
+        ],
+    },
+    {
+        "service": "Adminer (SQL GUI)",
+        "container": "adminer",
+        "urls": ["http://adminer.lh"],
+        "notes": "Web UI for MySQL & PostgreSQL on lh-network",
+        "hub_slug": "adminer",
+        "credentials": [
+            "System → MySQL or PostgreSQL. Server host: **mysql** or **n8n_postgres** (Docker names from Adminer). Credentials: see MySQL / PostgreSQL hubs.",
+        ],
+        "management_links": [
+            {"label": "Open Adminer", "url": "http://adminer.lh"},
+            {"label": "Service hub", "url": "http://localhost.lh/hub/adminer"},
+        ],
+    },
+    {
+        "service": "Redis Commander",
+        "container": "redis-commander",
+        "urls": ["http://redis-ui.lh"],
+        "notes": "Web UI for infra Redis (not Valkey/KV)",
+        "hub_slug": "redis-ui",
+        "management_links": [
+            {"label": "Open Redis Commander", "url": "http://redis-ui.lh"},
+            {"label": "Service hub", "url": "http://localhost.lh/hub/redis-ui"},
         ],
     },
 ]
@@ -134,6 +335,15 @@ INTERNAL_PROBE_BY_CONTAINER = {
     "ollama": "http://ollama:11434/",
     "traefik": "http://traefik:8080/api/version",
     "service-dashboard": "http://service-dashboard:8090/",
+    "browser-rendering-local": "http://browser-rendering-local:8085/health",
+    "mailpit": "http://mailpit:8025/",
+    "telegram-gateway": "http://telegram-gateway:8091/health",
+    "cache-varnish": "http://cache-varnish:80/",
+    "mysql": "http://service-dashboard:8090/hub/mysql",
+    "n8n_postgres": "http://service-dashboard:8090/hub/postgres",
+    "redis": "http://service-dashboard:8090/hub/redis",
+    "adminer": "http://adminer:8080/",
+    "redis-commander": "http://redis-commander:8081/",
 }
 
 ERROR_REGEX = re.compile(r"\b(error|exception|fatal|panic|failed|traceback)\b", re.IGNORECASE)
@@ -142,12 +352,18 @@ INFO_REGEX = re.compile(r"\b(info|started|ready|listening|connected|ok)\b", re.I
 
 # Traefik emits these when the process or entrypoints shut down (e.g. docker restart); not service faults.
 _TRAEFIK_SHUTDOWN_NOISE = re.compile(r"use of closed network connection", re.IGNORECASE)
+# Idle or slow TCP to :80/:443 (host probes, preconnect) — not a misconfigured route.
+_TRAEFIK_PEEK_NOISE = re.compile(
+    r"Error while Peeking first byte|peeking first byte", re.IGNORECASE
+)
 
 
 def _is_traefik_log_noise(container_name: str, line: str) -> bool:
     if not container_name or container_name.strip("/") != "traefik":
         return False
-    return bool(_TRAEFIK_SHUTDOWN_NOISE.search(line))
+    if _TRAEFIK_SHUTDOWN_NOISE.search(line):
+        return True
+    return bool(_TRAEFIK_PEEK_NOISE.search(line))
 LOG_WINDOW_SECONDS = 300
 LOG_TAIL_LINES = 300
 CLOUDFLARE_ENDPOINTS = {
@@ -156,6 +372,7 @@ CLOUDFLARE_ENDPOINTS = {
     "d1": "http://d1-adapter:8083",
     "autoscale": "http://autoscaler:8084",
     "workers": "http://workers-runtime:8787",
+    "browser": "http://browser-rendering-local:8085",
 }
 
 
@@ -232,6 +449,77 @@ def get_probe_target(url):
         return probe_url, headers
 
     return url, {}
+
+
+def expand_lh_urls(urls: list[str] | None) -> list[str]:
+    """Build unique http+https pairs for *.lh URLs (Traefik serves both). Sorted: host, path, http before https."""
+    if not urls:
+        return []
+    pool: set[str] = set()
+    for raw in urls:
+        u = (raw or "").strip()
+        if not u:
+            continue
+        pool.add(u)
+        try:
+            p = urlparse(u)
+        except Exception:
+            continue
+        host = (p.hostname or "").lower()
+        if not host.endswith(".lh"):
+            continue
+        path = p.path or "/"
+        netloc = p.netloc
+        if u.startswith("http://"):
+            pool.add(urlunparse(("https", netloc, path, p.params, p.query, p.fragment)))
+        elif u.startswith("https://"):
+            pool.add(urlunparse(("http", netloc, path, p.params, p.query, p.fragment)))
+
+    def sort_key(x: str) -> tuple:
+        p = urlparse(x)
+        sch = 0 if p.scheme == "http" else 1
+        return ((p.hostname or "").lower(), p.path or "/", sch)
+
+    return sorted(pool, key=sort_key)
+
+
+def normalize_lh_probe_urls(urls: list[str] | None) -> list[str]:
+    """At most one http and one https per (host, path) — avoids triple probes if SERVICE_MAP listed both schemes."""
+    expanded = expand_lh_urls(urls)
+    order: list[tuple[str, str]] = []
+    buckets: dict[tuple[str, str], dict[str, str | None]] = {}
+    for u in expanded:
+        try:
+            p = urlparse(u)
+        except Exception:
+            continue
+        host = (p.hostname or "").lower()
+        path = p.path or "/"
+        if host.endswith(".lh"):
+            key = (host, path)
+            if key not in buckets:
+                order.append(key)
+                buckets[key] = {"http": None, "https": None}
+            if u.startswith("http://"):
+                buckets[key]["http"] = u
+            elif u.startswith("https://"):
+                buckets[key]["https"] = u
+        else:
+            key = ("*", u)
+            if key not in buckets:
+                order.append(key)
+                buckets[key] = {"only": u}
+    out: list[str] = []
+    for key in order:
+        b = buckets[key]
+        if "only" in b:
+            out.append(b["only"])
+        else:
+            if b.get("http"):
+                out.append(b["http"])
+            if b.get("https"):
+                out.append(b["https"])
+    return out
 
 
 def check_url(url):
@@ -595,8 +883,9 @@ def collect_reference_status():
     for cat in REFERENCE_CATEGORIES:
         items_out = []
         for item in cat["items"]:
-            url_checks = [check_url(url) for url in item.get("urls", [])]
-            items_out.append({**item, "url_checks": url_checks})
+            expanded = normalize_lh_probe_urls(list(item.get("urls", [])))
+            url_checks = [check_url(url) for url in expanded]
+            items_out.append({**item, "urls": expanded, "url_checks": url_checks})
         categories.append(
             {
                 "id": cat["id"],
@@ -631,15 +920,22 @@ def collect_overview():
     for item in SERVICE_MAP:
         container = get_container(client, item["container"])
         container_info = get_container_info(container)
-        checks = check_urls_for_service(item["urls"], item["container"])
+        expanded_urls = normalize_lh_probe_urls(list(item.get("urls") or []))
+        checks = check_urls_for_service(expanded_urls, item["container"])
         all_urls.extend(checks)
+        slug = item.get("hub_slug")
         services.append(
             {
                 "service": item["service"],
                 "container": item["container"],
                 "notes": item["notes"],
                 "credentials": item.get("credentials") or [],
+                "connection_strings": item.get("connection_strings") or [],
+                "insights": item.get("insights") or [],
+                "database_guis": item.get("database_guis") or [],
                 "management_links": item.get("management_links") or [],
+                "hub_slug": slug,
+                "hub_path": f"/hub/{slug}" if slug else None,
                 "container_info": container_info,
                 "metrics": get_container_metrics(client, container),
                 "logs": get_log_metrics(container, item["container"]),
@@ -789,6 +1085,7 @@ def collect_cloudflare_local_status():
     d1_ok, d1_health = _fetch_json(f"{CLOUDFLARE_ENDPOINTS['d1']}/health")
     as_ok, as_status = _fetch_json(f"{CLOUDFLARE_ENDPOINTS['autoscale']}/status")
     w_ok, w_health = _fetch_json(f"{CLOUDFLARE_ENDPOINTS['workers']}/health")
+    br_ok, br_health = _fetch_json(f"{CLOUDFLARE_ENDPOINTS['browser']}/health")
 
     buckets_ok, buckets_data = _fetch_json(f"{CLOUDFLARE_ENDPOINTS['r2']}/buckets")
     namespaces_ok, ns_data = _fetch_json(f"{CLOUDFLARE_ENDPOINTS['kv']}/namespaces")
@@ -802,6 +1099,7 @@ def collect_cloudflare_local_status():
             "d1": {"reachable": d1_ok, "health": d1_health},
             "autoscale": {"reachable": as_ok, "status": as_status},
             "workers": {"reachable": w_ok, "health": w_health},
+            "browser": {"reachable": br_ok, "health": br_health},
         },
         "counts": {
             "buckets": len(buckets_data.get("buckets", [])) if buckets_ok else 0,

@@ -1,0 +1,27 @@
+# Static Traefik configuration (entrypoints, API, file provider).
+# Dynamic routes stay in dynamic.yml. Longer read timeouts reduce spurious
+# "Error while Peeking first byte" when clients open :80/:443 then send slowly (host probes, preconnect).
+global:
+  checkNewVersion: false
+
+api:
+  insecure: true
+
+providers:
+  file:
+    filename: /etc/traefik/dynamic.yml
+    watch: true
+
+entryPoints:
+  web:
+    address: ":80"
+    transport:
+      respondingTimeouts:
+        readTimeout: 120s
+        idleTimeout: 180s
+  websecure:
+    address: ":443"
+    transport:
+      respondingTimeouts:
+        readTimeout: 120s
+        idleTimeout: 180s

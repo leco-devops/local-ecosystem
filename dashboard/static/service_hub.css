@@ -1,0 +1,127 @@
+/* Service hub pages (/hub, /hub/<slug>) */
+.hub-body {
+  margin: 0;
+  min-height: 100vh;
+  background: #0b1220;
+  color: #e8edf7;
+  font-family: system-ui, sans-serif;
+  line-height: 1.55;
+}
+
+.hub-wrap {
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 3rem;
+}
+
+.hub-header {
+  margin-bottom: 1.75rem;
+  border-bottom: 1px solid #2d3a52;
+  padding-bottom: 1rem;
+}
+
+.hub-header h1 {
+  margin: 0.5rem 0 0.25rem;
+  font-size: 1.65rem;
+}
+
+.hub-back {
+  color: #fb923c;
+  text-decoration: none;
+  font-size: 0.9rem;
+  margin-right: 1rem;
+}
+
+.hub-back:hover {
+  text-decoration: underline;
+}
+
+.hub-back--secondary {
+  color: #94a3b8;
+}
+
+.hub-meta code {
+  background: #151d2e;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+}
+
+.hub-section {
+  margin-bottom: 1.75rem;
+}
+
+.hub-section h2 {
+  font-size: 1.05rem;
+  margin: 0 0 0.65rem;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.hub-grid {
+  display: grid;
+  gap: 0.5rem 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  background: #151d2e;
+  border: 1px solid #2d3a52;
+  border-radius: 10px;
+  padding: 1rem;
+}
+
+.hub-grid--metrics {
+  margin-top: 0.75rem;
+}
+
+.hub-k {
+  color: #94a3b8;
+  font-size: 0.85rem;
+  margin-right: 0.35rem;
+}
+
+.hub-links,
+.hub-list {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.hub-links a {
+  color: #38bdf8;
+}
+
+.hub-list--mono li {
+  margin: 0.35rem 0;
+}
+
+.hub-list--mono code {
+  font-size: 0.85rem;
+  word-break: break-all;
+}
+
+.hub-index-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.hub-index-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 1rem;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid #1e293b;
+}
+
+.hub-index-list a {
+  color: #fb923c;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.hub-index-list a:hover {
+  text-decoration: underline;
+}
+
+.hub-index-list code {
+  font-size: 0.8rem;
+  color: #94a3b8;
+}

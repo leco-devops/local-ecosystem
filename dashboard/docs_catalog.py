@@ -41,6 +41,20 @@ DOC_MODULES = [
         "blurb": "Traefik, compose, adapters, dashboard wiring.",
     },
     {
+        "id": "cf-browser-local",
+        "title": "Browser rendering — local Docker",
+        "category": "Cloudflare Local",
+        "rel_path": "cloudflare-local/docs/BROWSER_RENDERING_LOCAL.md",
+        "blurb": "Playwright vs Chromium CDP, URLs, optional CF REST bridge.",
+    },
+    {
+        "id": "cf-browser-production",
+        "title": "Browser rendering — Cloudflare production",
+        "category": "Cloudflare Local",
+        "rel_path": "cloudflare-local/docs/BROWSER_RENDERING_PRODUCTION.md",
+        "blurb": "REST API and Workers bindings; not runnable in local Miniflare.",
+    },
+    {
         "id": "dev-playbook",
         "title": "Development playbook",
         "category": "Extending the platform",
@@ -62,7 +76,7 @@ _BY_ID = {m["id"]: m for m in DOC_MODULES}
 
 def build_service_management_markdown() -> str:
     """CLI reference aligned with dashboard Control targets."""
-    from control_targets import AI_TARGETS, CF_TARGETS, COMPOSE_REL
+    from control_targets import AI_TARGETS, CF_TARGETS, COMPOSE_REL, INFRA_COMPOSE_REL, INFRA_TARGETS
 
     lines = [
         "# Service management commands",
@@ -121,6 +135,36 @@ def build_service_management_markdown() -> str:
 
     lines.extend(
         [
+            "## Infra add-ons (`infra/docker-compose.yml`)",
+            "",
+            "Per-service targets match the **Control** tab **Infra add-ons** group (MySQL, Redis, Mailpit, Adminer, …).",
+            "",
+            f"Compose file (from repo root): `{INFRA_COMPOSE_REL}`",
+            "",
+        ]
+    )
+    for t in INFRA_TARGETS:
+        svc = t["compose_service"]
+        label = t["label"]
+        lines.append(f"### {label}")
+        lines.append("")
+        lines.append(f"- **Compose service:** `{svc}`")
+        lines.append(f"- **Up (build):** `docker compose -f {INFRA_COMPOSE_REL} up -d --build {svc}`")
+        lines.append(f"- **Stop:** `docker compose -f {INFRA_COMPOSE_REL} stop {svc}`")
+        lines.append(f"- **Restart:** `docker compose -f {INFRA_COMPOSE_REL} restart {svc}`")
+        lines.append(f"- **Logs:** `docker compose -f {INFRA_COMPOSE_REL} logs -f {svc}`")
+        lines.append("")
+
+    lines.extend(
+        [
+            "### Entire infra stack",
+            "",
+            f"- **Up (build):** `docker compose -f {INFRA_COMPOSE_REL} up -d --build`",
+            f"- **Stop:** `docker compose -f {INFRA_COMPOSE_REL} stop`",
+            f"- **Down:** `docker compose -f {INFRA_COMPOSE_REL} down --remove-orphans`",
+            "",
+            "- **Script:** `./ai-stack/services/infra.sh start|stop|restart|remove|reset|logs|status`",
+            "",
             "### Entire Cloudflare-local stack",
             "",
             f"- **Up (build):** `docker compose -f {COMPOSE_REL} up -d --build`",
@@ -129,9 +173,10 @@ def build_service_management_markdown() -> str:
             "",
             "- **Script:** `./ai-stack/services/cloudflare-local.sh start|stop|restart|remove|reset|logs|status`",
             "",
-            "### Whole stack (Control target `stack-cf-all`)",
+            "### Whole stack (Control targets `stack-cf-all` · `stack-infra-all`)",
             "",
-            "- Same as above; or `POST /api/control` with `target_id` `stack-cf-all` and `action` `deploy` / `stop` / `restart` / …",
+            "- **Cloudflare local:** `POST /api/control` with `target_id` `stack-cf-all` and `action` `deploy` / `stop` / `restart` / …",
+            "- **Infra compose:** `POST /api/control` with `target_id` `stack-infra-all` and the same actions (backup is not implemented for infra).",
             "",
             "## Ollama pinned models",
             "",

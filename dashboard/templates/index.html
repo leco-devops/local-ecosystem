@@ -84,8 +84,16 @@
                 <canvas id="overviewChartUrl"></canvas>
               </div>
             </article>
-            <article class="dash-panel dash-panel--compact">
-              <header class="dash-panel__head"><span class="dash-panel__title">Cloudflare local</span></header>
+            <article class="dash-panel dash-panel--compact dash-panel--cf">
+              <header class="dash-panel__head dash-panel__head--cf">
+                <span class="dash-panel__title">Cloudflare local</span>
+                <span class="dash-panel__cf-logo" title="Cloudflare-style local adapters" aria-hidden="true">
+                  <svg viewBox="0 0 40 28" xmlns="http://www.w3.org/2000/svg" width="34" height="24">
+                    <path fill="#F48120" d="M28 8c2 0 3.5 1.3 4 3.2h6.2c-.4-5-4.7-8.8-10-8.8-4.2 0-7.7 2.4-9.3 5.9-1.2-.7-2.6-1.1-4-1.1-4.4 0-8 3.6-8 8s3.6 8 8 8h10v-6H13.3c-.8 0-1.3-.9-.9-1.6l.6-1.2c.3-.6 1-.9 1.6-.9H35c.3-1 .5-2 .5-3.1C35.5 11.4 32.2 8 28 8z" />
+                    <path fill="#FAAD3F" d="M30 19h-7v6h7c4.4 0 8-3.6 8-8 0-2.6-1.3-5-3.4-6.5l-1.2 2.2c1.1.9 1.8 2.2 1.8 3.8 0 2.8-2.2 5-5 5z" />
+                  </svg>
+                </span>
+              </header>
               <div class="dash-panel__chart dash-panel__chart--short">
                 <canvas id="overviewChartCf"></canvas>
               </div>
@@ -129,7 +137,10 @@
 
         <div class="infra-group infra-group--cf">
           <h3 class="infra-group__title">Cloudflare local</h3>
-          <p class="infra-group__lead muted small">R2, KV, D1, Workers, autoscaler — same adapters as the Overview CF chart.</p>
+          <p class="infra-group__lead muted small">
+            R2, KV, D1, Workers, autoscaler — same adapters as the Overview CF chart. Quick links use HTTP and HTTPS. Full credentials &amp; DB tools:
+            <a href="/hub">/hub</a>.
+          </p>
           <div class="infra-group__block">
             <h4 class="infra-subhead">Reachability &amp; resources</h4>
             <div id="cloudflareLocal" class="grid-mini"></div>
@@ -283,7 +294,7 @@
       <section id="controlTab" class="tab-content">
         <h2 class="tab-heading">Control</h2>
         <p class="tab-lead muted small">
-          Cards are grouped: <strong>bulk</strong>, then <strong>AI stack</strong>, then <strong>Cloudflare local</strong>. Each card is a stack or service — click an action. Destructive ops may wipe volumes; read the JSON response.
+          Cards are grouped: <strong>AI-stack bulk</strong>, <strong>AI services</strong>, <strong>Infra add-ons</strong> (MySQL, Adminer, Redis Commander, cache lab, …), then <strong>Cloudflare local</strong>. Each card is a stack or service — click an action. Destructive ops may wipe volumes; read the JSON response.
         </p>
 
         <div class="control-token-row" id="controlTokenRow" style="display: none">
@@ -302,6 +313,18 @@
             <button type="button" class="ctrl-bulk ctrl-bulk--stop" data-bulk-action="stop" data-bulk-label="Stop all">Stop all</button>
             <button type="button" class="ctrl-bulk ctrl-bulk--restart" data-bulk-action="restart" data-bulk-label="Restart all">Restart all</button>
             <button type="button" class="ctrl-bulk ctrl-bulk--deploy" data-bulk-action="deploy" data-bulk-label="Redeploy all">Redeploy all</button>
+          </div>
+        </div>
+
+        <div class="control-bulk-bar control-bulk-bar--infra" id="controlInfraBulkBar" aria-label="Infra compose bulk actions">
+          <div class="control-bulk-bar__head">
+            <strong>Infra add-ons (compose)</strong>
+            <span class="muted small"><code>infra/docker-compose.yml</code> — MySQL, Redis, Mailpit, Adminer, Redis Commander, Telegram gateway, cache lab. Same control token. Remove/reset can delete volumes.</span>
+          </div>
+          <div class="control-bulk-bar__btns">
+            <button type="button" class="ctrl-bulk ctrl-bulk--start" data-infra-bulk-action="deploy" data-infra-bulk-label="Deploy infra stack">Deploy / up</button>
+            <button type="button" class="ctrl-bulk ctrl-bulk--stop" data-infra-bulk-action="stop" data-infra-bulk-label="Stop infra stack">Stop</button>
+            <button type="button" class="ctrl-bulk ctrl-bulk--restart" data-infra-bulk-action="restart" data-infra-bulk-label="Restart infra stack">Restart</button>
           </div>
         </div>
 

@@ -19,6 +19,8 @@ services:
     command: valkey-server --appendonly yes
     volumes:
       - valkey_data:/data
+    ports:
+      - "6380:6379"
     networks:
       - lh-network
 
@@ -81,6 +83,19 @@ services:
     build:
       context: ./adapters/workers-runtime
     container_name: workers-runtime
+    networks:
+      - lh-network
+
+  browser-rendering-local:
+    restart: unless-stopped
+    build:
+      context: ./adapters/browser-rendering-local
+    container_name: browser-rendering-local
+    environment:
+      BROWSER_BACKEND: ${BROWSER_BACKEND:-playwright}
+      CHROMIUM_PATH: ${CHROMIUM_PATH:-/usr/bin/chromium}
+      BROWSER_TIMEOUT_MS: ${BROWSER_TIMEOUT_MS:-45000}
+      BROWSER_MAX_CONCURRENT: ${BROWSER_MAX_CONCURRENT:-2}
     networks:
       - lh-network
 
