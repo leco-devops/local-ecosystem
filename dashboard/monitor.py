@@ -974,6 +974,22 @@ def collect_overview():
     except Exception:
         pass
 
+    ollama_llm = None
+    try:
+        from ollama_models import build_models_payload
+
+        om = build_models_payload()
+        ollama_llm = {
+            "ollama_reachable": om.get("ollama_reachable"),
+            "ollama_base": om.get("ollama_base"),
+            "server_version": om.get("server_version"),
+            "installed_count": om.get("installed_count"),
+            "running_count": om.get("running_count"),
+            "rows": om.get("rows") or [],
+        }
+    except Exception as exc:
+        ollama_llm = {"ollama_reachable": False, "error": str(exc)[:200], "rows": []}
+
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "service_count": len(services),
@@ -984,6 +1000,7 @@ def collect_overview():
         "docker_overview": docker_overview,
         "system_status": system_status,
         "reference": collect_reference_status(),
+        "ollama_llm": ollama_llm,
     }
 
 

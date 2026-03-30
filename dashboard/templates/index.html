@@ -119,68 +119,39 @@
       <section id="infrastructureTab" class="tab-content">
         <h2 class="tab-heading">Infrastructure</h2>
         <p class="tab-lead muted small">
-          <strong>Host &amp; Docker</strong> first, then <strong>Cloudflare local</strong>, then <strong>managed stack / Ollama</strong>, and finally the full container list.
+          <strong>1 · Health</strong> (host &amp; Docker) → <strong>2 · Services</strong> (probed stack &amp; hubs) → <strong>3 · Trends</strong> →
+          <strong>4 · Cloudflare local</strong> → <strong>5 · Ollama</strong> → <strong>6 · Full inventory</strong>.
         </p>
 
         <div class="infra-group">
-          <h3 class="infra-group__title">Host &amp; Docker engine</h3>
-          <p class="infra-group__lead muted small">Operational health and host capacity from the Docker API.</p>
+          <h3 class="infra-group__title">1 · Platform health</h3>
+          <p class="infra-group__lead muted small">Cluster-level signals from the Docker API and the dashboard's own health model.</p>
           <div class="infra-group__block">
             <h4 class="infra-subhead">System status</h4>
             <div id="systemStatus" class="grid-mini"></div>
           </div>
           <div class="infra-group__block">
-            <h4 class="infra-subhead">Docker host &amp; capacity</h4>
+            <h4 class="infra-subhead">Docker engine &amp; disk</h4>
             <div id="dockerOverview" class="grid-mini"></div>
           </div>
         </div>
 
-        <div class="infra-group infra-group--cf">
-          <h3 class="infra-group__title">Cloudflare local</h3>
+        <div class="infra-group">
+          <h3 class="infra-group__title">2 · Managed services</h3>
           <p class="infra-group__lead muted small">
-            R2, KV, D1, Workers, autoscaler — same adapters as the Overview CF chart. Quick links use HTTP and HTTPS. Full credentials &amp; DB tools:
-            <a href="/hub">/hub</a>.
+            Per-service URLs, probes, metrics, and links to <a href="/hub">service hubs</a> (credentials, DB GUIs, connection strings).
           </p>
           <div class="infra-group__block">
-            <h4 class="infra-subhead">Reachability &amp; resources</h4>
-            <div id="cloudflareLocal" class="grid-mini"></div>
+            <h4 class="infra-subhead">Service cards</h4>
+            <div id="services" class="grid service-grid"></div>
           </div>
         </div>
 
         <div class="infra-group">
-          <h3 class="infra-group__title">Managed stack &amp; Ollama</h3>
-          <p class="infra-group__lead muted small">URL-probed services, utilization trends, and model lifecycle.</p>
+          <h3 class="infra-group__title">3 · Utilization &amp; trends</h3>
+          <p class="infra-group__lead muted small">Historical lines and current CPU/memory for the managed service map (same set as the cards above).</p>
           <div class="infra-group__block">
-          <h4 class="infra-subhead">Ollama models</h4>
-          <p class="muted small" id="ollamaModelsSummary">Loading…</p>
-          <p class="muted small" id="ollamaModelsInsights"> </p>
-          <p class="muted small">
-            Pinned list: <code>ai-stack/config/ollama-pinned-models.txt</code> (on the <code>/project</code> mount). All models from <code>GET /api/tags</code> are listed below. Actions need the same <strong>control token</strong> as Control (header <code>X-Control-Token</code> or field in Operations settings).
-          </p>
-          <div class="ollama-models-toolbar">
-            <button type="button" id="ollamaPullAllBtn" class="ollama-act ollama-act--ops">Pull all pinned</button>
-            <button type="button" id="ollamaModelsRefreshBtn" class="ollama-act ollama-act--safe">Refresh</button>
-            <button type="button" id="ollamaBackupBtn" class="ollama-act ollama-act--safe" title="Save manifest JSON under .local-eco-backups">Backup manifest</button>
-            <button type="button" id="ollamaUnloadAllBtn" class="ollama-act ollama-act--caution" title="keep_alive=0 for each running model">Unload all (RAM)</button>
-            <label class="ollama-pull-field">
-              <span class="muted">Pull by name</span>
-              <input type="text" id="ollamaPullNameInput" placeholder="e.g. llama3.2:latest" autocomplete="off" />
-              <button type="button" id="ollamaPullNameBtn" class="ollama-act ollama-act--ops">Pull</button>
-            </label>
-          </div>
-          <div class="ollama-backups-bar">
-            <select id="ollamaBackupSelect" class="ollama-backup-select" aria-label="Backup file">
-              <option value="">Select backup manifest…</option>
-            </select>
-            <button type="button" id="ollamaRefreshBackupsBtn" class="ollama-act ollama-act--safe">List backups</button>
-            <button type="button" id="ollamaRestoreBackupBtn" class="ollama-act ollama-act--ops">Restore pinned list</button>
-            <button type="button" id="ollamaClearPinnedBtn" class="ollama-act ollama-act--destructive" title="Clears only the pinned file">Clear pinned</button>
-          </div>
-          <div id="ollamaModelsPanel" class="ollama-models-panel muted">Loading…</div>
-          </div>
-
-          <div class="infra-group__block">
-            <h4 class="infra-subhead">Utilization (managed services)</h4>
+            <h4 class="infra-subhead">Charts</h4>
             <div class="charts">
               <div class="chart-card">
                 <strong>Runtime trends</strong>
@@ -196,16 +167,56 @@
               </div>
             </div>
           </div>
+        </div>
 
+        <div class="infra-group infra-group--cf">
+          <h3 class="infra-group__title">4 · Cloudflare local</h3>
+          <p class="infra-group__lead muted small">
+            R2, KV, D1, Workers, browser rendering, autoscaler — mirrors the Overview CF panel. Quick links are HTTP/HTTPS. Deeper detail:
+            <a href="/hub">service hubs</a>.
+          </p>
           <div class="infra-group__block">
-            <h4 class="infra-subhead">Managed services</h4>
-            <div id="services" class="grid service-grid"></div>
+            <h4 class="infra-subhead">Reachability &amp; resources</h4>
+            <div id="cloudflareLocal" class="grid-mini"></div>
+          </div>
+        </div>
+
+        <div class="infra-group">
+          <h3 class="infra-group__title">5 · Ollama</h3>
+          <p class="infra-group__lead muted small">Model inventory, RAM, pinned list, and pull/backup actions (same <strong>control token</strong> as Control).</p>
+          <div class="infra-group__block">
+            <h4 class="infra-subhead">Models &amp; lifecycle</h4>
+            <p class="muted small" id="ollamaModelsSummary">Loading…</p>
+            <p class="muted small" id="ollamaModelsInsights"> </p>
+            <p class="muted small">
+              Pinned file: <code>ai-stack/config/ollama-pinned-models.txt</code> on the <code>/project</code> mount. Listed from <code>GET /api/tags</code>.
+            </p>
+            <div class="ollama-models-toolbar">
+              <button type="button" id="ollamaPullAllBtn" class="ollama-act ollama-act--ops">Pull all pinned</button>
+              <button type="button" id="ollamaModelsRefreshBtn" class="ollama-act ollama-act--safe">Refresh</button>
+              <button type="button" id="ollamaBackupBtn" class="ollama-act ollama-act--safe" title="Save manifest JSON under .local-eco-backups">Backup manifest</button>
+              <button type="button" id="ollamaUnloadAllBtn" class="ollama-act ollama-act--caution" title="keep_alive=0 for each running model">Unload all (RAM)</button>
+              <label class="ollama-pull-field">
+                <span class="muted">Pull by name</span>
+                <input type="text" id="ollamaPullNameInput" placeholder="e.g. llama3.2:latest" autocomplete="off" />
+                <button type="button" id="ollamaPullNameBtn" class="ollama-act ollama-act--ops">Pull</button>
+              </label>
+            </div>
+            <div class="ollama-backups-bar">
+              <select id="ollamaBackupSelect" class="ollama-backup-select" aria-label="Backup file">
+                <option value="">Select backup manifest…</option>
+              </select>
+              <button type="button" id="ollamaRefreshBackupsBtn" class="ollama-act ollama-act--safe">List backups</button>
+              <button type="button" id="ollamaRestoreBackupBtn" class="ollama-act ollama-act--ops">Restore pinned list</button>
+              <button type="button" id="ollamaClearPinnedBtn" class="ollama-act ollama-act--destructive" title="Clears only the pinned file">Clear pinned</button>
+            </div>
+            <div id="ollamaModelsPanel" class="ollama-models-panel muted">Loading…</div>
           </div>
         </div>
 
         <div class="infra-group infra-group--inventory">
-          <h3 class="infra-group__title">Docker inventory</h3>
-          <p class="infra-group__lead muted small">Every container Docker knows about (not only the managed service map).</p>
+          <h3 class="infra-group__title">6 · Docker inventory</h3>
+          <p class="infra-group__lead muted small">Every container on this Docker host (broader than the managed service map above).</p>
           <div class="infra-group__block">
             <h4 class="infra-subhead">All containers</h4>
             <table>
@@ -341,6 +352,10 @@
               <div id="controlActionSpinner" class="control-action-spinner" aria-hidden="true"></div>
               <h3 id="controlActionTitle" class="control-action-title">Running…</h3>
               <p id="controlActionLive" class="control-action-live">Starting…</p>
+              <p class="muted small control-action-hint">
+                Live output streams as Docker/bash prints lines. If this box stays empty for minutes behind <code>*.lh</code>, open the dashboard on
+                <strong>port 8090</strong> (direct to the container) or check <code>docker logs service-dashboard</code>.
+              </p>
               <p id="controlActionSummary" class="control-action-summary is-hidden"></p>
               <pre id="controlActionSnippet" class="control-action-snippet is-hidden"></pre>
               <div id="controlActionRunningBar" class="control-action-bar">

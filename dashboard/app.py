@@ -165,10 +165,12 @@ def api_control_stream():
 
     return Response(
         ndjson(),
-        mimetype="application/x-ndjson",
+        # text/plain often streams through proxies more reliably than application/* NDJSON.
+        mimetype="text/plain; charset=utf-8",
         headers={
-            "Cache-Control": "no-store",
+            "Cache-Control": "no-store, no-transform",
             "X-Accel-Buffering": "no",
+            "X-Content-Type-Options": "nosniff",
         },
     )
 

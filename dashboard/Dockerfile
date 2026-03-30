@@ -7,7 +7,7 @@ ENV PYTHONUNBUFFERED=1
 ENV DASHBOARD_PORT=8090
 ENV DASHBOARD_PROJECT_ROOT=/project
 
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates coreutils curl \
   && ARCH=$(dpkg --print-architecture) \
   && case "$ARCH" in amd64) DC=x86_64;; arm64) DC=aarch64;; *) DC=$ARCH;; esac \
   && curl -fsSL "https://download.docker.com/linux/static/stable/${DC}/docker-27.4.1.tgz" | tar xz -C /tmp \

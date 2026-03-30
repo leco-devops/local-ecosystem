@@ -1136,6 +1136,15 @@ button.ctrl-bulk--deploy {
   min-height: 2.6em;
 }
 
+.control-action-hint {
+  margin: -4px 0 12px;
+  max-width: 42ch;
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
+  line-height: 1.35;
+}
+
 .control-action-summary {
   margin: 0 0 10px;
   font-size: 15px;
@@ -1318,6 +1327,63 @@ ul.svc-creds {
 .svc-mgmt-row a {
   color: var(--link);
   font-weight: 500;
+}
+
+.svc-card__extras--llm {
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.svc-llm-meta,
+.svc-llm-counts {
+  margin: 0 0 8px;
+}
+
+.svc-llm-table-wrap {
+  overflow-x: auto;
+  margin-top: 4px;
+  border-radius: 8px;
+  border: 1px solid rgba(51, 65, 85, 0.6);
+}
+
+.svc-llm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.svc-llm-table th,
+.svc-llm-table td {
+  padding: 6px 10px;
+  text-align: left;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+  vertical-align: top;
+}
+
+.svc-llm-table th {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  background: rgba(15, 23, 42, 0.9);
+}
+
+.svc-llm-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.svc-llm-pill {
+  font-size: 11px;
+  padding: 2px 8px;
+}
+
+.svc-llm-pill--disk {
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+}
+
+.svc-llm-pill--idle {
+  background: rgba(100, 116, 139, 0.25);
+  color: #cbd5e1;
 }
 
 .ollama-models-toolbar {

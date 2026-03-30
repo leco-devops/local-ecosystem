@@ -1,5 +1,6 @@
 import os
 import shlex
+import shutil
 import subprocess
 import time
 from collections.abc import Iterator
@@ -191,8 +192,28 @@ def _run(cmd, cwd=None, timeout=300):
         return 1, str(exc)
 
 
+def _line_buffered_cmd(cmd: list) -> list:
+    """Force line-buffered stdio for piped subprocesses (live Control UI logs).
+
+    Without this, bash/docker often use full block buffering when stdout is a pipe,
+    so the dashboard shows no text until the command finishes or the buffer fills.
+    """
+    if not cmd:
+        return cmd
+    stdbuf = shutil.which("stdbuf")
+    if not stdbuf:
+        return cmd
+    # docker compose / docker: Go CLI + child processes benefit from line-buffered pipes
+    if cmd[0] == "docker":
+        return [stdbuf, "-oL", "-eL"] + cmd
+    if len(cmd) >= 2 and cmd[0] == "/bin/bash" and cmd[1] == "-c":
+        return [stdbuf, "-oL", "-eL"] + cmd
+    return cmd
+
+
 def _yield_run(cmd, cwd=None, timeout=600) -> Iterator[dict[str, Any]]:
     """Stream merged stdout/stderr as log events; return (exit_code, full_text) via StopIteration."""
+    cmd = _line_buffered_cmd(list(cmd))
     parts: list[str] = []
     header = f"$ {_format_invoked_cmd(cmd)}\n"
     if cwd:
@@ -220,7 +241,8 @@ def _yield_run(cmd, cwd=None, timeout=600) -> Iterator[dict[str, Any]]:
 
     try:
         while True:
-            chunk = proc.stdout.read(8192)
+            # Smaller reads: with line-buffered children, lines arrive promptly; avoids waiting for 8KiB.
+            chunk = proc.stdout.read(1024)
             if not chunk:
                 break
             text = chunk.decode("utf-8", errors="replace")
@@ -733,6 +755,13 @@ def _stream_stack_ecosystem_all_stream(action: str) -> Iterator[dict[str, Any]]:
     if not os.path.isfile(core_sh):
         yield _emit_done(False, error=f"missing {core_sh}")
         return
+    yield {
+        "type": "log",
+        "text": (
+            f"Running bulk_ecosystem {action} (stop phase skips dashboard container). "
+            "First log lines should appear as each Docker call runs; full run can take several minutes.\n\n"
+        ),
+    }
     src = f"source {shlex.quote(core_sh)} && bulk_ecosystem {shlex.quote(action)}"
     code, log = yield from _yield_run(["/bin/bash", "-c", src], cwd=PROJECT_ROOT, timeout=3600)
     yield _emit_done(code == 0, exit_code=code, log=log[-12000:])

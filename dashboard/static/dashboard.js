@@ -17,7 +17,7 @@ const LS_OVERVIEW_MAX_AGE_MS = 1000 * 60 * 60 * 48;
 const LS_METRICS_CACHE_KEY = "local_ecosystem_dashboard_metrics_v1";
 const LS_ACTIVE_TAB_KEY = "dashboard_active_tab";
 /** Bump when cache shape changes so stale / corrupted entries are dropped. */
-const CACHE_SCHEMA_VERSION = 4;
+const CACHE_SCHEMA_VERSION = 5;
 
 /** Small Cloudflare mark for local CF adapter cards (not an official trademark asset). */
 const CLOUDFLARE_MARK_SVG = `<svg class="cf-local-card__mark" viewBox="0 0 40 28" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" width="32" height="22"><path fill="#F48120" d="M28 8c2 0 3.5 1.3 4 3.2h6.2c-.4-5-4.7-8.8-10-8.8-4.2 0-7.7 2.4-9.3 5.9-1.2-.7-2.6-1.1-4-1.1-4.4 0-8 3.6-8 8s3.6 8 8 8h10v-6H13.3c-.8 0-1.3-.9-.9-1.6l.6-1.2c.3-.6 1-.9 1.6-.9H35c.3-1 .5-2 .5-3.1C35.5 11.4 32.2 8 28 8z"/><path fill="#FAAD3F" d="M30 19h-7v6h7c4.4 0 8-3.6 8-8 0-2.6-1.3-5-3.4-6.5l-1.2 2.2c1.1.9 1.8 2.2 1.8 3.8 0 2.8-2.2 5-5 5z"/></svg>`;
@@ -2985,8 +2985,82 @@ function updateCharts(data) {
   charts.pie.update();
 }
 
+/** Ollama service card: table of installed / running models from overview `ollama_llm`. */
+function formatOllamaLlmBlock(ollama, s) {
+  if (!s || s.container !== "ollama") return "";
+  if (!ollama) {
+    return `<div class="svc-card__extras svc-card__extras--llm"><div class="svc-card__extras-title">LLM modules (Ollama)</div><p class="muted small">Model list not available.</p></div>`;
+  }
+  if (ollama.error) {
+    return `<div class="svc-card__extras svc-card__extras--llm"><div class="svc-card__extras-title">LLM modules (Ollama)</div><p class="muted small">${escapeHtml(ollama.error)}</p></div>`;
+  }
+  const ver = ollama.server_version;
+  const verStr =
+    ver && typeof ver === "object" ? [ver.version, ver.ollama_version].filter(Boolean).join(" · ") : "";
+  const meta =
+    verStr || ollama.ollama_base
+      ? `<p class="muted small svc-llm-meta">${verStr ? `Server ${escapeHtml(verStr)}` : ""}${
+          verStr && ollama.ollama_base ? " · " : ""
+        }<code>${escapeHtml(String(ollama.ollama_base || ""))}</code></p>`
+      : "";
+  if (!ollama.ollama_reachable) {
+    return `<div class="svc-card__extras svc-card__extras--llm"><div class="svc-card__extras-title">LLM modules (Ollama)</div>${meta}<p class="muted small">API unreachable — start the <code>ollama</code> container.</p></div>`;
+  }
+  const rows = Array.isArray(ollama.rows) ? ollama.rows : [];
+  if (rows.length === 0) {
+    return `<div class="svc-card__extras svc-card__extras--llm"><div class="svc-card__extras-title">LLM modules (Ollama)</div>${meta}<p class="muted small">No models on disk. Pull from the <strong>Ollama</strong> section below or run <code>ollama pull &lt;model&gt;</code>.</p></div>`;
+  }
+  const sorted = [...rows].sort((a, b) => {
+    if (!!a.running !== !!b.running) return a.running ? -1 : 1;
+    if (!!a.installed !== !!b.installed) return a.installed ? -1 : 1;
+    return String(a.name || "").localeCompare(String(b.name || ""));
+  });
+  const sum = `<p class="muted small svc-llm-counts">${Number(ollama.running_count || 0)} loaded in RAM · ${Number(ollama.installed_count || 0)} on disk</p>`;
+  const thead = `<thead><tr><th>Model</th><th>State</th><th>Disk</th><th>VRAM</th><th>Params · quant</th></tr></thead>`;
+  const tbody = sorted
+    .map((r) => {
+      const name = escapeHtml(r.name || "—");
+      let stateLabel = "—";
+      let stateClass = "pill svc-llm-pill--idle";
+      if (r.running) {
+        stateLabel = "Running";
+        stateClass = "pill ok svc-llm-pill";
+      } else if (r.installed) {
+        stateLabel = "On disk";
+        stateClass = "pill svc-llm-pill--disk";
+      } else if (r.pinned) {
+        stateLabel = "Pinned only";
+        stateClass = "pill warn svc-llm-pill";
+      }
+      const pinNote = r.pinned ? ` <span class="muted">(pinned)</span>` : "";
+      const disk = r.size != null ? formatBytes(r.size) : "—";
+      let vramCell = "—";
+      if (r.running) {
+        const v = r.size_vram != null ? formatBytes(r.size_vram) : "0 B";
+        const exp = r.expires_at ? ` · ${escapeHtml(formatOllamaExpires(r.expires_at))}` : "";
+        vramCell = `${escapeHtml(v)}${exp}`;
+      }
+      const pq = [r.parameter_size, r.quantization_level].filter(Boolean).join(" · ") || "—";
+      return `<tr>
+        <td><code>${name}</code>${pinNote}</td>
+        <td><span class="${stateClass}">${stateLabel}</span></td>
+        <td class="muted">${escapeHtml(disk)}</td>
+        <td class="muted">${vramCell}</td>
+        <td class="muted small">${escapeHtml(pq)}</td>
+      </tr>`;
+    })
+    .join("");
+  return `<div class="svc-card__extras svc-card__extras--llm">
+    <div class="svc-card__extras-title">LLM modules (Ollama)</div>
+    ${meta}
+    ${sum}
+    <div class="svc-llm-table-wrap"><table class="svc-llm-table">${thead}<tbody>${tbody}</tbody></table></div>
+  </div>`;
+}
+
 function renderServices(data) {
   const SB = serviceBrandUi();
+  const ollamaLlm = data.ollama_llm || null;
   document.getElementById("services").innerHTML = data.services.map((s) => {
     const brand = SB.getBrandForManagedService(s);
     const running = s.container_info.status === "running";
@@ -3065,6 +3139,7 @@ function renderServices(data) {
         ${dbGuiBlock}
         ${insightsBlock}
         ${mgmtBlock}
+        ${formatOllamaLlmBlock(ollamaLlm, s)}
         <div class="row"><span>Container</span><code>${s.container}</code></div>
         <div class="row"><span>Networks</span><code>${(s.container_info.networks || []).join(", ") || "-"}</code></div>
         <div class="row"><span>CPU</span><span>${m.cpu_percent || 0}%</span></div>
