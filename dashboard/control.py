@@ -97,11 +97,11 @@ def list_targets():
             "label": "All AI-stack services (bulk)",
             "group": "ecosystem",
             "container": None,
-            "actions": ["start", "stop", "restart", "deploy"],
+            "actions": sorted(ALLOWED_ACTIONS),
             "runtime": {
                 "kind": "stack",
                 "status": "bulk",
-                "label": "One-click start/stop/redeploy via ai-stack/core.sh (stop skips this dashboard)",
+                "label": "Full action set via ai-stack/core.sh (stop/pause/remove/reset/recreate skip this dashboard so the API can finish)",
                 "running": None,
             },
         }
@@ -311,8 +311,29 @@ def run_action(target_id: str, action: str):
     return _ai_service_action(meta, action)
 
 
+def _bulk_ecosystem_backup() -> dict:
+    """Postgres dump + D1 backups + cloudflare-local backup script (best-effort aggregate)."""
+    parts: list[str] = []
+    ok_pg, res_pg = _backup_postgres()
+    parts.append(f"postgres: {'OK ' + str(res_pg) if ok_pg else 'FAIL ' + str(res_pg)}")
+    ok_d1, res_d1 = _backup_d1_all()
+    parts.append(f"d1: {res_d1}")
+    code, log = _ai_script("cloudflare-local", "backup")
+    parts.append((log or "")[-8000:])
+    ok = ok_pg and ok_d1 and code == 0
+    return {"ok": ok, "exit_code": 0 if ok else 1, "log": "\n".join(parts)[-12000:]}
+
+
+_ECOSYSTEM_BULK_BASH_ACTIONS = frozenset(
+    {"start", "stop", "restart", "deploy", "pause", "unpause", "remove", "reset", "recreate"}
+)
+
+
 def _stack_ecosystem_all(action: str):
-    if action not in {"start", "stop", "restart", "deploy"}:
+    if action == "backup":
+        body = _bulk_ecosystem_backup()
+        return body
+    if action not in _ECOSYSTEM_BULK_BASH_ACTIONS:
         return {"ok": False, "error": f"action {action} not supported for ecosystem bulk"}
     core_sh = os.path.join(PROJECT_ROOT, "ai-stack", "core.sh")
     if not os.path.isfile(core_sh):
@@ -533,7 +554,18 @@ def run_action_streaming(target_id: str, action: str) -> Iterator[dict[str, Any]
 
 
 def _stream_stack_ecosystem_all_stream(action: str) -> Iterator[dict[str, Any]]:
-    if action not in {"start", "stop", "restart", "deploy"}:
+    if action == "backup":
+        yield {"type": "log", "text": "Ecosystem bulk backup (Postgres + D1 + cloudflare-local)…\n\n"}
+        ok_pg, res_pg = _backup_postgres()
+        yield {"type": "log", "text": f"Postgres: {res_pg}\n"}
+        ok_d1, res_d1 = _backup_d1_all()
+        yield {"type": "log", "text": f"D1: {res_d1}\n\n"}
+        yield {"type": "log", "text": "cloudflare-local backup:\n"}
+        code, log = yield from _stream_ai_script("cloudflare-local", "backup", timeout=600)
+        ok = ok_pg and ok_d1 and code == 0
+        yield _emit_done(ok, exit_code=0 if ok else 1, log=(log or "")[-8000:])
+        return
+    if action not in _ECOSYSTEM_BULK_BASH_ACTIONS:
         yield _emit_done(False, error=f"action {action} not supported for ecosystem bulk")
         return
     core_sh = os.path.join(PROJECT_ROOT, "ai-stack", "core.sh")

@@ -130,10 +130,28 @@
         <section>
           <h3>Ollama models</h3>
           <p class="muted small" id="ollamaModelsSummary">Loading…</p>
-          <p class="muted small">Pinned list: <code>ai-stack/config/ollama-pinned-models.txt</code> (auto-pulled when the <code>ollama</code> service starts). Model actions use the same <strong>control token</strong> as the Control tab (if <code>DASHBOARD_CONTROL_TOKEN</code> is set).</p>
+          <p class="muted small" id="ollamaModelsInsights"> </p>
+          <p class="muted small">
+            Pinned list: <code>ai-stack/config/ollama-pinned-models.txt</code> (on the <code>/project</code> mount). All models from <code>GET /api/tags</code> are listed below. Actions need the same <strong>control token</strong> as Control (header <code>X-Control-Token</code> or field in Operations settings).
+          </p>
           <div class="ollama-models-toolbar">
             <button type="button" id="ollamaPullAllBtn" class="ollama-act ollama-act--ops">Pull all pinned</button>
-            <button type="button" id="ollamaModelsRefreshBtn" class="ollama-act ollama-act--safe">Refresh status</button>
+            <button type="button" id="ollamaModelsRefreshBtn" class="ollama-act ollama-act--safe">Refresh</button>
+            <button type="button" id="ollamaBackupBtn" class="ollama-act ollama-act--safe" title="Save manifest JSON under .local-eco-backups">Backup manifest</button>
+            <button type="button" id="ollamaUnloadAllBtn" class="ollama-act ollama-act--caution" title="keep_alive=0 for each running model">Unload all (RAM)</button>
+            <label class="ollama-pull-field">
+              <span class="muted">Pull by name</span>
+              <input type="text" id="ollamaPullNameInput" placeholder="e.g. llama3.2:latest" autocomplete="off" />
+              <button type="button" id="ollamaPullNameBtn" class="ollama-act ollama-act--ops">Pull</button>
+            </label>
+          </div>
+          <div class="ollama-backups-bar">
+            <select id="ollamaBackupSelect" class="ollama-backup-select" aria-label="Backup file">
+              <option value="">Select backup manifest…</option>
+            </select>
+            <button type="button" id="ollamaRefreshBackupsBtn" class="ollama-act ollama-act--safe">List backups</button>
+            <button type="button" id="ollamaRestoreBackupBtn" class="ollama-act ollama-act--ops">Restore pinned list</button>
+            <button type="button" id="ollamaClearPinnedBtn" class="ollama-act ollama-act--destructive" title="Clears only the pinned file">Clear pinned</button>
           </div>
           <div id="ollamaModelsPanel" class="ollama-models-panel muted">Loading…</div>
         </section>
@@ -344,7 +362,7 @@
       <div class="app-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="appModalTitle">
         <div class="app-modal-inner">
           <h3 id="appModalTitle" class="app-modal-title">Confirm</h3>
-          <p id="appModalMessage" class="app-modal-message"></p>
+          <div id="appModalMessage" class="app-modal-message"></div>
           <div class="app-modal-bar">
             <button type="button" id="appModalCancel" class="ctrl-overlay-btn ctrl-overlay-btn--caution">Cancel</button>
             <button type="button" id="appModalPrimary" class="ctrl-overlay-btn ctrl-overlay-btn--ops">Continue</button>

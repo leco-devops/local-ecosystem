@@ -4,7 +4,7 @@ import os
 from flask import Flask, Response, jsonify, render_template, request, stream_with_context
 
 from control import check_control_token, list_targets, run_action, run_action_streaming
-from ollama_models import build_models_payload, handle_models_action
+from ollama_models import build_models_payload, handle_inspect, handle_models_action, list_manifest_backups
 from docs_catalog import get_doc_catalog, get_doc_content
 from monitor import (
     collect_cloudflare_local_status,
@@ -102,6 +102,20 @@ def api_ollama_models_action():
     data = request.get_json(silent=True) or {}
     body, status = handle_models_action(request, data)
     return jsonify(body), status
+
+
+@app.get("/api/ollama/model/inspect")
+def api_ollama_model_inspect():
+    """Full /api/show payload for one model (modelfile, params, template). Requires control token header if set."""
+    body, status = handle_inspect(request)
+    return jsonify(body), status
+
+
+@app.get("/api/ollama/backups")
+def api_ollama_backups_list():
+    if not check_control_token(request, None):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    return jsonify(list_manifest_backups())
 
 
 @app.post("/api/control")

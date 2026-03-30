@@ -236,6 +236,10 @@ function escapeHtml(s) {
     .replaceAll('"', "&quot;");
 }
 
+function escapeAttr(s) {
+  return String(s || "").replaceAll("&", "&amp;").replaceAll('"', "&quot;");
+}
+
 let lastReferencePayload = null;
 
 function filterReferencePayload(ref, filterText) {
@@ -438,8 +442,13 @@ function renderDevelopCards() {
         <li><code>GET /api/docs/catalog</code> — doc modules</li>
         <li><code>GET /api/docs/content?id=…</code> — Markdown body</li>
         <li><code>POST /api/control</code> — lifecycle (needs Docker + <code>/project</code>)</li>
-        <li><code>GET /api/ollama/models</code> — pinned + installed + in-memory status</li>
-        <li><code>POST /api/ollama/models/action</code> — pull / pull_all / delete / unload (control token)</li>
+        <li><code>GET /api/ollama/models</code> — all tagged models, pinned file, /api/ps + version summary</li>
+        <li><code>GET /api/ollama/model/inspect?model=…</code> — full <code>/api/show</code> (control token header)</li>
+        <li><code>GET /api/ollama/backups</code> — list manifest JSON files</li>
+        <li>
+          <code>POST /api/ollama/models/action</code> — pull, pull_all, warm, unload, unload_all, delete, pin, unpin, set_pinned, clear_pinned,
+          backup_manifest, list_backups, restore_backup (body <code>filename</code>)
+        </li>
       </ul>
     </div>
     <div class="card dev-card">
@@ -852,50 +861,225 @@ function renderInfrastructurePanel(data, cf, opts = {}) {
   renderServices(data);
   renderContainers(data);
   loadOllamaModelsPanel();
+  loadOllamaBackupSelect();
+}
+
+function ollamaApiHeaders(jsonBody = false) {
+  const h = { "X-Control-Token": controlToken() };
+  if (jsonBody) h["Content-Type"] = "application/json";
+  return h;
+}
+
+function formatOllamaExpires(iso) {
+  if (!iso) return "—";
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return String(iso).slice(0, 19);
+  const min = Math.round((t - Date.now()) / 60000);
+  if (min < 0) return "due unload";
+  if (min < 90) return `${min}m`;
+  return `${Math.round(min / 60)}h`;
+}
+
+function showOllamaInspectModal(title, obj) {
+  initAppModal();
+  const overlay = document.getElementById("appModalOverlay");
+  const cancel = document.getElementById("appModalCancel");
+  const primary = document.getElementById("appModalPrimary");
+  const msg = document.getElementById("appModalMessage");
+  document.getElementById("appModalTitle").textContent = title;
+  msg.textContent = "";
+  const pre = document.createElement("pre");
+  pre.className = "ollama-inspect-pre";
+  pre.textContent = JSON.stringify(obj, null, 2);
+  msg.appendChild(pre);
+  overlay.dataset.mode = "alert";
+  overlay.classList.add("app-modal-overlay--inspect");
+  cancel.classList.add("is-hidden");
+  primary.textContent = "Close";
+  _appModalSetPrimaryVariant(primary, "primary");
+  return new Promise((resolve) => {
+    _appModalResolve = () => resolve();
+    overlay.hidden = false;
+    primary.focus();
+  });
+}
+
+async function loadOllamaBackupSelect() {
+  const sel = document.getElementById("ollamaBackupSelect");
+  if (!sel) return;
+  try {
+    const res = await fetch("/api/ollama/backups", { headers: ollamaApiHeaders(false) });
+    const data = await res.json().catch(() => ({}));
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">Select backup manifest…</option>';
+    if (data.ok && Array.isArray(data.backups)) {
+      for (const b of data.backups) {
+        const fn = b.filename || "";
+        if (!fn) continue;
+        const opt = document.createElement("option");
+        opt.value = fn;
+        opt.textContent = `${fn}${b.size != null ? ` (${formatBytes(b.size)})` : ""}`;
+        sel.appendChild(opt);
+      }
+    }
+    if ([...sel.options].some((o) => o.value === cur)) sel.value = cur;
+  } catch (_) {
+    /* ignore */
+  }
+}
+
+function ollamaActionWrap(act, label, apiModel, canonical, variant, { disabled, activeDot, title } = {}) {
+  const dis = disabled ? " disabled" : "";
+  const tit = title ? ` title="${escapeAttr(title)}"` : "";
+  const dot = activeDot ? '<span class="action-state-dot" aria-hidden="true"></span>' : "";
+  return `<span class="ollama-act-wrap"><button type="button" class="ollama-act ollama-act--${variant}" data-ollama-act="${escapeAttr(
+    act,
+  )}" data-ollama-model="${escapeAttr(apiModel)}" data-ollama-canonical="${escapeAttr(canonical || "")}"${dis}${tit}>${escapeHtml(label)}</button>${dot}</span>`;
+}
+
+function controlRuntimeActionState(action, rt) {
+  const a = (action || "").toLowerCase();
+  if (rt.running === null || rt.kind === "stack") return { disabled: false, activeDot: false };
+  const st = (rt.status || "").toLowerCase();
+  const running = rt.running === true;
+  const paused = st === "paused";
+  const up = running || paused;
+
+  if (a === "start") return { disabled: up, activeDot: up, title: up ? "Already running" : "" };
+  if (a === "unpause")
+    return {
+      disabled: !paused,
+      activeDot: running && !paused,
+      title: !paused ? "Not paused" : "",
+    };
+  if (a === "pause") return { disabled: !running || paused, activeDot: paused, title: paused ? "Already paused" : "" };
+  if (a === "stop") return { disabled: !up, activeDot: !up, title: !up ? "Already stopped" : "" };
+  return { disabled: false, activeDot: false, title: "" };
+}
+
+function controlActionButtonHtml(action, buttonClass, targetId, cardLabel, rt) {
+  const { disabled, activeDot, title } = controlRuntimeActionState(action, rt);
+  const dis = disabled ? " disabled" : "";
+  const tit = title ? ` title="${escapeAttr(title)}"` : "";
+  const dot = activeDot ? '<span class="action-state-dot" aria-hidden="true"></span>' : "";
+  return `<span class="ctrl-act-wrap"><button type="button" class="${buttonClass}" data-target="${escapeAttr(
+    targetId,
+  )}" data-action="${escapeAttr(action)}" data-label="${escapeAttr(cardLabel)}"${dis}${tit}>${escapeHtml(action)}</button>${dot}</span>`;
 }
 
 async function loadOllamaModelsPanel() {
   const panel = document.getElementById("ollamaModelsPanel");
   const sum = document.getElementById("ollamaModelsSummary");
+  const ins = document.getElementById("ollamaModelsInsights");
   if (!panel) return;
   try {
     const res = await fetch("/api/ollama/models");
     const data = await res.json();
     const reach = data.ollama_reachable;
+    const ver = data.server_version || {};
+    const verStr = [ver.version, ver.ollama_version].filter(Boolean).join(" · ") || "—";
+    const pinnedList = data.pinned || [];
+    const runningN = data.running_count ?? 0;
+
+    const pullAllBtn = document.getElementById("ollamaPullAllBtn");
+    if (pullAllBtn) {
+      pullAllBtn.disabled = !reach || pinnedList.length === 0;
+      pullAllBtn.title = !reach ? "Ollama unreachable" : pinnedList.length === 0 ? "No pinned models" : "";
+    }
+    const unloadAllBtn = document.getElementById("ollamaUnloadAllBtn");
+    if (unloadAllBtn) {
+      unloadAllBtn.disabled = !reach || runningN === 0;
+      unloadAllBtn.title = !reach ? "Ollama unreachable" : runningN === 0 ? "No models in RAM" : "";
+    }
+
     if (sum) {
       sum.textContent = reach
-        ? `Ollama API reachable (${data.ollama_base || "—"}) · ${data.rows?.length ?? 0} model row(s) · pinned: ${(data.pinned || []).length}`
-        : `Ollama API not reachable — is the ollama container running on lh-network? (${data.ollama_base || "http://ollama:11434"})`;
+        ? `API ${data.ollama_base || "—"} · ${data.installed_count ?? 0} on disk · ${runningN} in RAM · ${pinnedList.length} pinned`
+        : `Ollama unreachable from dashboard (check <code>ollama</code> on lh-network): ${data.ollama_base || "http://ollama:11434"}`;
+    }
+    if (ins) {
+      ins.textContent = reach
+        ? `Server: ${verStr} · manifest: ${data.pinned_file || "—"}`
+        : "Start the Ollama container, then refresh.";
     }
     const rows = data.rows || [];
     if (!rows.length) {
-      panel.innerHTML = `<p class="muted">No models listed. Add names to <code>ai-stack/config/ollama-pinned-models.txt</code> or pull models from the CLI.</p>`;
+      panel.innerHTML = reach
+        ? `<p class="muted">No models installed yet. Use <strong>Pull by name</strong> above or <code>ollama pull &lt;model&gt;</code> on the host. Pinned names without a local blob still appear here once added to the pinned file.</p>`
+        : `<p class="muted">Cannot list models until Ollama is reachable.</p>`;
       return;
     }
-    const thead = `<thead><tr><th>Model</th><th>Pinned</th><th>On disk</th><th>In memory</th><th>Size</th><th>Actions</th></tr></thead>`;
+    const thead = `<thead><tr><th>Model</th><th>Pinned</th><th>Disk</th><th>RAM</th><th>Size</th><th>Params / quant</th><th>VRAM</th><th>Keep-alive</th><th>Actions</th></tr></thead>`;
     const tbody = rows
       .map((r) => {
         const name = escapeHtml(r.name);
+        const apiModel = r.api_model || r.name;
+        const canonical = r.canonical || "";
+        const p = !!r.pinned;
+        const i = !!r.installed;
+        const run = !!r.running;
+        const pq = [r.parameter_size, r.quantization_level].filter(Boolean).join(" · ") || "—";
+        const vram = r.size_vram != null ? formatBytes(r.size_vram) : run ? "0 B" : "—";
+        const exp = run ? formatOllamaExpires(r.expires_at) : "—";
         const acts = [
-          `<button type="button" class="ollama-act ollama-act--safe" data-ollama-act="on" data-ollama-model="${name}" title="Pull / ensure on disk">On</button>`,
-          `<button type="button" class="ollama-act ollama-act--safe" data-ollama-act="pull" data-ollama-model="${name}">Pull</button>`,
-          `<button type="button" class="ollama-act ollama-act--ops" data-ollama-act="reinstall" data-ollama-model="${name}" title="Re-download">Reinstall</button>`,
-          `<button type="button" class="ollama-act ollama-act--caution" data-ollama-act="unload" data-ollama-model="${name}" title="Unload from VRAM">Off</button>`,
-          `<button type="button" class="ollama-act ollama-act--destructive" data-ollama-act="delete" data-ollama-model="${name}">Remove</button>`,
+          ollamaActionWrap("pin", "Pin", apiModel, canonical, "safe", {
+            disabled: p,
+            activeDot: p,
+            title: p ? "Already pinned" : "",
+          }),
+          ollamaActionWrap("unpin", "Unpin", apiModel, canonical, "caution", {
+            disabled: !p,
+            activeDot: !p,
+            title: !p ? "Not pinned" : "",
+          }),
+          ollamaActionWrap("warm", "Load", apiModel, canonical, "safe", {
+            disabled: run || !i,
+            activeDot: run,
+            title: run ? "Already in RAM" : !i ? "Not on disk — pull first" : "Load into RAM",
+          }),
+          ollamaActionWrap("unload", "Off", apiModel, canonical, "caution", {
+            disabled: !run,
+            activeDot: !run,
+            title: !run ? "Not loaded in RAM" : "Unload from RAM",
+          }),
+          ollamaActionWrap("pull", "Pull", apiModel, canonical, "safe", {
+            disabled: i,
+            activeDot: i,
+            title: i ? "Already on disk" : "",
+          }),
+          ollamaActionWrap("reinstall", "Reinstall", apiModel, canonical, "ops", {
+            disabled: !i,
+            activeDot: !i,
+            title: !i ? "Not on disk" : "Re-pull from registry",
+          }),
+          ollamaActionWrap("delete", "Remove", apiModel, canonical, "destructive", {
+            disabled: !i,
+            activeDot: !i,
+            title: !i ? "Nothing on disk to remove" : "",
+          }),
+          ollamaActionWrap("inspect", "Insights", apiModel, canonical, "safe", {
+            disabled: !i,
+            activeDot: !i,
+            title: !i ? "Not on disk" : "",
+          }),
         ].join(" ");
         return `<tr>
           <td><code>${name}</code></td>
-          <td>${r.pinned ? "✓" : "—"}</td>
-          <td>${r.installed ? "✓" : "—"}</td>
-          <td>${r.running ? "✓" : "—"}</td>
+          <td>${p ? "✓" : "—"}</td>
+          <td>${i ? "✓" : "—"}</td>
+          <td>${run ? "✓" : "—"}</td>
           <td>${r.size != null ? formatBytes(r.size) : "—"}</td>
+          <td class="ollama-models-meta">${escapeHtml(pq)}</td>
+          <td>${escapeHtml(vram)}</td>
+          <td>${escapeHtml(exp)}</td>
           <td class="ollama-models-actions">${acts}</td>
         </tr>`;
       })
       .join("");
-    panel.innerHTML = `<table class="ollama-models-table">${thead}<tbody>${tbody}</tbody></table>`;
+    panel.innerHTML = `<div class="ollama-models-scroll"><table class="ollama-models-table">${thead}<tbody>${tbody}</tbody></table></div>`;
   } catch (e) {
     if (sum) sum.textContent = `Error: ${e.message || e}`;
+    if (ins) ins.textContent = "";
     panel.innerHTML = `<p class="muted">Failed to load Ollama models.</p>`;
   }
 }
@@ -912,6 +1096,7 @@ function initAppModal() {
   const finish = (value) => {
     const fn = _appModalResolve;
     _appModalResolve = null;
+    overlay.classList.remove("app-modal-overlay--inspect");
     overlay.hidden = true;
     if (typeof fn === "function") fn(value);
   };
@@ -983,22 +1168,28 @@ function showAppConfirm({
   });
 }
 
-async function runOllamaModelAction(action, model) {
+async function runOllamaModelAction(action, model, extra = {}) {
   try {
     const res = await fetch("/api/ollama/models/action", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Control-Token": controlToken() },
-      body: JSON.stringify({ action, model: model || "", token: controlToken() }),
+      headers: ollamaApiHeaders(true),
+      body: JSON.stringify({ action, model: model || "", token: controlToken(), ...extra }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       await showAppAlert(data.error ? JSON.stringify(data.error) : `HTTP ${res.status}`, "Ollama action failed");
       return;
     }
-    if (data.note) {
-      await showAppAlert(data.note, "Ollama");
+    if (data.note || data.path || data.restored_from) {
+      await showAppAlert(
+        [data.note, data.path ? `File: ${data.path}` : "", data.restored_from ? `Restored: ${data.restored_from}` : ""]
+          .filter(Boolean)
+          .join("\n"),
+        "Ollama",
+      );
     }
     loadOllamaModelsPanel();
+    loadOllamaBackupSelect();
   } catch (e) {
     await showAppAlert(String(e.message || e), "Error");
   }
@@ -1014,12 +1205,85 @@ function initOllamaModelsPanel() {
     if (!ok) return;
     runOllamaModelAction("pull_all", "");
   });
-  document.getElementById("ollamaModelsRefreshBtn")?.addEventListener("click", () => loadOllamaModelsPanel());
+  document.getElementById("ollamaModelsRefreshBtn")?.addEventListener("click", () => {
+    loadOllamaModelsPanel();
+    loadOllamaBackupSelect();
+  });
+  document.getElementById("ollamaBackupBtn")?.addEventListener("click", async () => {
+    const ok = await showAppConfirm({
+      title: "Backup Ollama manifest",
+      message: "Write JSON to .local-eco-backups (models, running, pinned list snapshot)?",
+      confirmText: "Save backup",
+    });
+    if (!ok) return;
+    runOllamaModelAction("backup_manifest", "");
+  });
+  document.getElementById("ollamaUnloadAllBtn")?.addEventListener("click", async () => {
+    const ok = await showAppConfirm({
+      title: "Unload all models from RAM",
+      message: "Request unload (keep_alive=0) for every model currently in memory?",
+      confirmText: "Unload all",
+      danger: true,
+    });
+    if (!ok) return;
+    runOllamaModelAction("unload_all", "");
+  });
+  document.getElementById("ollamaPullNameBtn")?.addEventListener("click", async () => {
+    const inp = document.getElementById("ollamaPullNameInput");
+    const name = (inp?.value || "").trim();
+    if (!name) {
+      await showAppAlert("Enter a model name (e.g. llama3.2:latest).", "Pull");
+      return;
+    }
+    runOllamaModelAction("pull", name);
+  });
+  document.getElementById("ollamaRefreshBackupsBtn")?.addEventListener("click", () => loadOllamaBackupSelect());
+  document.getElementById("ollamaRestoreBackupBtn")?.addEventListener("click", async () => {
+    const sel = document.getElementById("ollamaBackupSelect");
+    const fn = (sel?.value || "").trim();
+    if (!fn) {
+      await showAppAlert("Choose a backup file first (List backups).", "Restore");
+      return;
+    }
+    const ok = await showAppConfirm({
+      title: "Restore pinned list",
+      message: `Overwrite ai-stack/config/ollama-pinned-models.txt with pinned names from ${fn}? Models on disk are not deleted.`,
+      confirmText: "Restore pinned",
+      danger: true,
+    });
+    if (!ok) return;
+    runOllamaModelAction("restore_backup", "", { filename: fn });
+  });
+  document.getElementById("ollamaClearPinnedBtn")?.addEventListener("click", async () => {
+    const ok = await showAppConfirm({
+      title: "Clear pinned file",
+      message: "Remove all model names from the pinned file? (Does not delete Ollama blobs.)",
+      confirmText: "Clear pinned",
+      danger: true,
+    });
+    if (!ok) return;
+    runOllamaModelAction("clear_pinned", "");
+  });
   document.getElementById("ollamaModelsPanel")?.addEventListener("click", async (e) => {
     const btn = e.target.closest("[data-ollama-act]");
     if (!btn) return;
     const act = btn.getAttribute("data-ollama-act");
     const model = btn.getAttribute("data-ollama-model") || "";
+    if (act === "inspect") {
+      try {
+        const q = new URLSearchParams({ model });
+        const res = await fetch(`/api/ollama/model/inspect?${q}`, { headers: ollamaApiHeaders(false) });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          await showAppAlert(data.error ? JSON.stringify(data.error) : `HTTP ${res.status}`, "Inspect failed");
+          return;
+        }
+        await showOllamaInspectModal(`Insights · ${model}`, data.show || data);
+      } catch (err) {
+        await showAppAlert(String(err.message || err), "Error");
+      }
+      return;
+    }
     if (act === "delete") {
       const ok = await showAppConfirm({
         title: "Remove model",
@@ -1029,7 +1293,20 @@ function initOllamaModelsPanel() {
       });
       if (!ok) return;
     }
-    runOllamaModelAction(act, model);
+    if (act === "warm") {
+      const ok = await showAppConfirm({
+        title: "Load model into RAM",
+        message: `Run a minimal generation for "${model}" with keep_alive until you unload? First load can take a while.`,
+        confirmText: "Load",
+      });
+      if (!ok) return;
+    }
+    const extra = {};
+    if (act === "unpin") {
+      const c = (btn.getAttribute("data-ollama-canonical") || "").trim();
+      if (c) extra.canonical = c;
+    }
+    runOllamaModelAction(act, model, extra);
   });
 }
 
@@ -1636,17 +1913,16 @@ async function loadControlTargets() {
               : rt.kind === "stack"
                 ? "control-runtime--stack"
                 : "control-runtime--na";
-        const cardLabel = escapeHtml(t.label || t.id);
         const primaryBtns = safe
           .map((a) => {
             const cls = SB.actionButtonClasses(a);
-            return `<button type="button" class="${cls}" data-target="${escapeHtml(t.id)}" data-action="${escapeHtml(a)}" data-label="${cardLabel}">${escapeHtml(a)}</button>`;
+            return controlActionButtonHtml(a, cls, t.id, t.label || t.id, rt);
           })
           .join("");
         const dangerBtns = danger
           .map((a) => {
             const cls = SB.actionButtonClasses(a);
-            return `<button type="button" class="${cls}" data-target="${escapeHtml(t.id)}" data-action="${escapeHtml(a)}" data-label="${cardLabel}">${escapeHtml(a)}</button>`;
+            return controlActionButtonHtml(a, cls, t.id, t.label || t.id, rt);
           })
           .join("");
         const wrapClass =

@@ -135,8 +135,11 @@ run_all() {
 }
 
 # Bulk ops for the dashboard Control API: stopping this dashboard mid-request would kill the HTTP
-# connection, so we skip the "dashboard" service on stop phases. Start always runs full START_ORDER.
-_bulk_stop_all_except_dashboard() {
+# connection, so we skip the "dashboard" service on stop-like phases. Start always runs full START_ORDER.
+
+# Reverse start order, skip dashboard (stop / pause / remove / reset per service).
+_bulk_foreach_reverse_skip_dashboard() {
+  local op=$1
   local svc
   local -a ordered
   while IFS= read -r svc; do
@@ -146,11 +149,29 @@ _bulk_stop_all_except_dashboard() {
   for ((i = ${#ordered[@]} - 1; i >= 0; i--)); do
     svc="${ordered[i]}"
     [ "$svc" = "dashboard" ] && continue
-    run_service "$svc" stop || true
+    echo "▶ ecosystem bulk $op: $svc"
+    run_service "$svc" "$op" || true
   done
 }
 
-# start | stop | restart | deploy  (restart and deploy both: stop-all-except-dashboard, then start-all)
+_bulk_stop_all_except_dashboard() {
+  _bulk_foreach_reverse_skip_dashboard stop
+}
+
+# Forward start order, every service including dashboard (unpause after bulk pause).
+_bulk_foreach_forward_all() {
+  local op=$1
+  local svc
+  while IFS= read -r svc; do
+    [ -z "$svc" ] && continue
+    echo "▶ ecosystem bulk $op: $svc"
+    run_service "$svc" "$op" || true
+  done < <(get_services_in_start_order)
+}
+
+# start | stop | restart | deploy | pause | unpause | remove | reset | recreate
+# (restart/deploy: stop-all-except-dashboard, then start-all)
+# (recreate: remove-all-except-dashboard, then start-all)
 bulk_ecosystem() {
   action=$1
   ensure_network_exists
@@ -163,6 +184,22 @@ bulk_ecosystem() {
       ;;
     restart|deploy)
       _bulk_stop_all_except_dashboard
+      run_all start
+      ;;
+    pause)
+      _bulk_foreach_reverse_skip_dashboard pause
+      ;;
+    unpause)
+      _bulk_foreach_forward_all unpause
+      ;;
+    remove)
+      _bulk_foreach_reverse_skip_dashboard remove
+      ;;
+    reset)
+      _bulk_foreach_reverse_skip_dashboard reset
+      ;;
+    recreate)
+      _bulk_foreach_reverse_skip_dashboard remove
       run_all start
       ;;
     *)
