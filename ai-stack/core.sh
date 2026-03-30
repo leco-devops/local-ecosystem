@@ -2,8 +2,8 @@ CORE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$CORE_DIR/.." && pwd)"
 SERVICES_DIR="$CORE_DIR/services"
 NETWORK_NAME="${NETWORK_NAME:-lh-network}"
-NETWORK_CONTAINERS="traefik open-webui ollama n8n_postgres n8n service-dashboard"
-START_ORDER="traefik postgres ollama webui n8n dashboard"
+NETWORK_CONTAINERS="traefik open-webui ollama n8n_postgres n8n service-dashboard minio valkey r2-adapter kv-adapter d1-adapter workers-runtime autoscaler autoscale-demo"
+START_ORDER="traefik postgres ollama webui n8n dashboard cloudflare-local"
 
 get_services() {
   for file in $SERVICES_DIR/*.sh; do

@@ -9,13 +9,25 @@
   <body>
     <div class="wrap">
       <header class="page-header">
-        <div>
-          <h1>Local Ecosystem Ops Dashboard</h1>
-          <div id="summary" class="muted">Loading operational telemetry...</div>
+        <div class="header-main">
+          <h1>Ops Dashboard</h1>
+          <div id="summary" class="header-status">Loading…</div>
+          <details class="header-more">
+            <summary>Deploy &amp; system metrics</summary>
+            <p class="small muted">
+              Rebuild:
+              <code>./ai-stack/ai-stack.sh restart dashboard</code>
+              ·
+              <code>bash ./ai-stack/services/dashboard.sh deploy</code>
+            </p>
+            <p class="small muted">
+              Linux: mount <code>/proc</code> for host CPU/RAM/net/IOPS. Temperature uses <code>/sys/class/thermal</code> (host via <code>DASHBOARD_HOST_SYS</code>, or the container’s own <code>/sys</code> when zones exist). Docker Desktop: thermal may still be empty; see the Metrics “Host CPU temperature” card for status.
+            </p>
+          </details>
         </div>
         <div class="toolbar">
-          <label for="refreshRate">Auto refresh:</label>
-          <select id="refreshRate">
+          <label class="sr-only" for="refreshRate">Auto refresh</label>
+          <select id="refreshRate" title="Auto refresh interval">
             <option value="5000">5s</option>
             <option value="10000" selected>10s</option>
             <option value="30000">30s</option>
@@ -29,45 +41,128 @@
 
       <div class="tabs">
         <button class="tab-btn active" data-tab="overviewTab">Overview</button>
+        <button class="tab-btn" data-tab="referenceTab">Reference</button>
+        <button class="tab-btn" data-tab="infrastructureTab">Infrastructure</button>
+        <button class="tab-btn" data-tab="metricsTab">Metrics</button>
+        <button class="tab-btn" data-tab="controlTab">Control</button>
+        <button class="tab-btn" data-tab="docsTab">Docs</button>
+        <button class="tab-btn" data-tab="developTab">Develop</button>
         <button class="tab-btn" data-tab="logsTab">Logs</button>
       </div>
 
       <section id="overviewTab" class="tab-content active">
+        <div class="overview-layout">
+          <div class="overview-kpi" id="overviewKpi"></div>
+
+          <div class="overview-primary-charts">
+            <article class="dash-panel dash-panel--hero">
+              <header class="dash-panel__head">
+                <span class="dash-panel__title">CPU</span>
+                <span class="dash-live">live</span>
+              </header>
+              <p class="dash-panel__meta" id="overviewCpuMeta"></p>
+              <div class="dash-panel__chart dash-panel__chart--tall">
+                <canvas id="overviewChartCpu" aria-label="CPU chart"></canvas>
+              </div>
+            </article>
+            <article class="dash-panel dash-panel--hero">
+              <header class="dash-panel__head">
+                <span class="dash-panel__title">Memory</span>
+                <span class="dash-live">live</span>
+              </header>
+              <p class="dash-panel__meta" id="overviewRamMeta"></p>
+              <div class="dash-panel__chart dash-panel__chart--tall">
+                <canvas id="overviewChartRam" aria-label="Memory chart"></canvas>
+              </div>
+            </article>
+          </div>
+
+          <div class="overview-secondary-charts">
+            <article class="dash-panel dash-panel--compact">
+              <header class="dash-panel__head"><span class="dash-panel__title">URL probes</span></header>
+              <div class="dash-panel__chart dash-panel__chart--short">
+                <canvas id="overviewChartUrl"></canvas>
+              </div>
+            </article>
+            <article class="dash-panel dash-panel--compact">
+              <header class="dash-panel__head"><span class="dash-panel__title">Cloudflare local</span></header>
+              <div class="dash-panel__chart dash-panel__chart--short">
+                <canvas id="overviewChartCf"></canvas>
+              </div>
+            </article>
+            <article class="dash-panel dash-panel--compact">
+              <header class="dash-panel__head"><span class="dash-panel__title">Engine containers</span></header>
+              <div class="dash-panel__chart dash-panel__chart--short">
+                <canvas id="overviewChartEngine"></canvas>
+              </div>
+            </article>
+            <article class="dash-panel dash-panel--compact dash-panel--wide">
+              <header class="dash-panel__head"><span class="dash-panel__title">CPU by service (now)</span></header>
+              <div class="dash-panel__chart dash-panel__chart--short">
+                <canvas id="overviewChartServicesBar"></canvas>
+              </div>
+            </article>
+          </div>
+
+          <div class="overview-chips" id="overviewChips"></div>
+        </div>
+      </section>
+
+      <section id="infrastructureTab" class="tab-content">
+        <h2>Infrastructure</h2>
+        <p class="muted small">Docker engine, Cloudflare local stack, per-service cards, utilization charts, and full container list.</p>
+
         <section>
-          <h2>System Status</h2>
+          <h3>System status</h3>
           <div id="systemStatus" class="grid-mini"></div>
         </section>
 
         <section>
-          <h2>Docker Host & Capacity</h2>
+          <h3>Docker host &amp; capacity</h3>
           <div id="dockerOverview" class="grid-mini"></div>
         </section>
 
         <section>
-          <h2>Live Graphs</h2>
+          <h3>Cloudflare local</h3>
+          <div id="cloudflareLocal" class="grid-mini"></div>
+        </section>
+
+        <section>
+          <h3>Ollama models</h3>
+          <p class="muted small" id="ollamaModelsSummary">Loading…</p>
+          <p class="muted small">Pinned list: <code>ai-stack/config/ollama-pinned-models.txt</code> (auto-pulled when the <code>ollama</code> service starts). Model actions use the same <strong>control token</strong> as the Control tab (if <code>DASHBOARD_CONTROL_TOKEN</code> is set).</p>
+          <div class="ollama-models-toolbar">
+            <button type="button" id="ollamaPullAllBtn" class="ollama-act ollama-act--ops">Pull all pinned</button>
+            <button type="button" id="ollamaModelsRefreshBtn" class="ollama-act ollama-act--safe">Refresh status</button>
+          </div>
+          <div id="ollamaModelsPanel" class="ollama-models-panel muted">Loading…</div>
+        </section>
+
+        <section>
+          <h3>Utilization (managed services)</h3>
           <div class="charts">
             <div class="chart-card">
-              <strong>Runtime Trends (Line)</strong>
+              <strong>Runtime trends</strong>
               <div class="chart-wrap"><canvas id="lineChart"></canvas></div>
             </div>
             <div class="chart-card">
-              <strong>Service Utilization (Bar)</strong>
+              <strong>Per-service CPU / memory</strong>
               <div class="chart-wrap"><canvas id="barChart"></canvas></div>
             </div>
             <div class="chart-card">
-              <strong>Service State Distribution (Pie)</strong>
+              <strong>Managed container states</strong>
               <div class="chart-wrap"><canvas id="pieChart"></canvas></div>
             </div>
           </div>
         </section>
 
         <section>
-          <h2>Managed Services</h2>
-          <div id="services" class="grid"></div>
+          <h3>Managed services</h3>
+          <div id="services" class="grid service-grid"></div>
         </section>
 
         <section>
-          <h2>All Docker Containers</h2>
+          <h3>All Docker containers</h3>
           <table>
             <thead>
               <tr>
@@ -81,6 +176,111 @@
             <tbody id="containers"></tbody>
           </table>
         </section>
+      </section>
+
+      <section id="referenceTab" class="tab-content">
+        <h2>URL reference</h2>
+        <p class="muted small">Filter by label or URL. Health badges reflect live probes via Traefik.</p>
+        <input type="search" id="referenceFilter" class="ref-filter" placeholder="Filter (e.g. d1, workers, traefik)…" />
+        <div id="urlEncyclopediaRef" class="url-encyclopedia">Open this tab to load…</div>
+      </section>
+
+      <section id="metricsTab" class="tab-content">
+        <h2 class="tab-heading">Deep metrics</h2>
+        <p class="tab-lead muted small" id="metricsSummary">Loading…</p>
+        <p class="tab-lead muted small" id="metricsProcHint"></p>
+        <div class="charts metrics-split-grid">
+          <div class="chart-card tall">
+            <strong>CPU (%)</strong>
+            <p class="chart-sub">Cyan: Docker ≈% of host vCPUs. Magenta: host CPU via <code>/proc</code>. <strong>Orange</strong> line + right axis: CPU temperature from <code>/sys</code> when mounted (see card below).</p>
+            <div class="chart-wrap tall"><canvas id="metricsChartCpu"></canvas></div>
+          </div>
+          <div class="chart-card tall">
+            <strong>RAM (%)</strong>
+            <p class="chart-sub">Blue: Docker Σ usage ÷ host <code>MemTotal</code>. Second: system RAM (<code>/proc</code>) or Docker ÷ Σ cgroup limits (different scale).</p>
+            <div class="chart-wrap tall"><canvas id="metricsChartRam"></canvas></div>
+          </div>
+          <div class="chart-card tall">
+            <strong>Network (Mb/s)</strong>
+            <p class="chart-sub">RX+TX totals</p>
+            <div class="chart-wrap tall"><canvas id="metricsChartNet"></canvas></div>
+          </div>
+          <div class="chart-card tall">
+            <strong>IOPS &amp; block I/O</strong>
+            <p class="chart-sub">Left: IOPS (often 0 on Docker Desktop). Right: Docker block throughput Mb/s</p>
+            <div class="chart-wrap tall"><canvas id="metricsChartIops"></canvas></div>
+          </div>
+          <div class="chart-card tall metrics-temp-card">
+            <strong>Host CPU temperature</strong>
+            <p class="chart-sub">Highest value from <code>/sys/class/thermal/*/temp</code>. Requires mounting host <code>/sys</code> into the dashboard container (<code>DASHBOARD_HOST_SYS</code> in <code>ai-stack/services/dashboard.sh</code>). Docker Desktop usually has no host thermal data here.</p>
+            <div id="metricsTempPlaceholder" class="metrics-temp-placeholder">
+              No temperature samples yet — the orange series stays empty until <code>/sys</code> thermal zones are readable inside the container.
+            </div>
+            <div id="metricsTempChartWrap" class="chart-wrap tall is-hidden">
+              <canvas id="metricsChartTemp" aria-label="Host CPU temperature"></canvas>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="controlTab" class="tab-content">
+        <h2 class="tab-heading">Control</h2>
+        <p class="tab-lead muted small">Each card is a stack or service — click an action. Destructive ops may wipe volumes; read the JSON response.</p>
+
+        <div class="control-token-row" id="controlTokenRow" style="display: none">
+          <label for="controlTokenInput">Token</label>
+          <input id="controlTokenInput" type="password" autocomplete="off" placeholder="DASHBOARD_CONTROL_TOKEN" />
+          <button type="button" id="controlTokenSave">Save</button>
+        </div>
+
+        <div id="controlTargets" class="control-grid"></div>
+
+        <details class="control-response-details">
+          <summary>Full API response</summary>
+          <pre id="controlResult" class="control-result"></pre>
+        </details>
+
+        <div id="controlActionOverlay" class="control-action-overlay" hidden>
+          <div class="control-action-dialog" role="dialog" aria-modal="true" aria-labelledby="controlActionTitle">
+            <div class="control-action-dialog__inner">
+              <div id="controlActionSpinner" class="control-action-spinner" aria-hidden="true"></div>
+              <h3 id="controlActionTitle" class="control-action-title">Running…</h3>
+              <p id="controlActionLive" class="control-action-live">Starting…</p>
+              <p id="controlActionSummary" class="control-action-summary is-hidden"></p>
+              <pre id="controlActionSnippet" class="control-action-snippet is-hidden"></pre>
+              <div id="controlActionRunningBar" class="control-action-bar">
+                <button type="button" id="controlActionCancel" class="ctrl-overlay-btn ctrl-overlay-btn--caution">Cancel request</button>
+              </div>
+              <div id="controlActionDoneBar" class="control-action-done is-hidden">
+                <button type="button" id="controlActionCopy" class="ctrl-overlay-btn ctrl-overlay-btn--safe">Copy result</button>
+                <button type="button" id="controlActionDismiss" class="ctrl-overlay-btn ctrl-overlay-btn--primary">Close</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="docsTab" class="tab-content">
+        <h2>Documentation</h2>
+        <p class="muted small">
+          Markdown served from your repo at <code>DASHBOARD_PROJECT_ROOT</code> (usually <code>/project</code>). Modules marked unavailable need the host mount in
+          <code>ai-stack/services/dashboard.sh</code>.
+        </p>
+        <div class="doc-layout">
+          <nav class="doc-sidebar" id="docSidebar"></nav>
+          <article class="doc-article">
+            <div id="docToolbar" class="doc-toolbar"></div>
+            <div id="docContent" class="doc-content prose">Select a document from the left.</div>
+          </article>
+        </div>
+      </section>
+
+      <section id="developTab" class="tab-content">
+        <h2>Develop &amp; extend</h2>
+        <p class="muted small">
+          Operational shortcuts for changing this platform. Full detail is in <strong>Docs → Development playbook</strong>.
+        </p>
+        <div id="developCards" class="dev-grid"></div>
       </section>
 
       <section id="logsTab" class="tab-content">
@@ -126,7 +326,10 @@
       </section>
     </div>
 
+    <script src="/static/service-brand.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
     <script src="/static/dashboard.js"></script>
   </body>
 </html>

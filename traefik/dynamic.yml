@@ -1,4 +1,10 @@
 http:
+  serversTransports:
+    local-relaxed-timeout:
+      forwardingTimeouts:
+        dialTimeout: 45s
+        responseHeaderTimeout: 90s
+
   routers:
 
     # ========================
@@ -74,6 +80,45 @@ http:
       entryPoints:
         - web
 
+    # ========================
+    # CLOUDFLARE LOCAL
+    # ========================
+    r2-http:
+      rule: "Host(`r2.lh`)"
+      service: r2-service
+      entryPoints:
+        - web
+
+    kv-http:
+      rule: "Host(`kv.lh`)"
+      service: kv-service
+      entryPoints:
+        - web
+
+    d1-http:
+      rule: "Host(`d1.lh`)"
+      service: d1-service
+      entryPoints:
+        - web
+
+    autoscale-http:
+      rule: "Host(`autoscale.lh`)"
+      service: autoscale-service
+      entryPoints:
+        - web
+
+    minio-console-http:
+      rule: "Host(`minio-console.lh`)"
+      service: minio-console-service
+      entryPoints:
+        - web
+
+    workers-http:
+      rule: "Host(`workers.lh`)"
+      service: workers-service
+      entryPoints:
+        - web
+
   services:
 
     ai-service:
@@ -95,6 +140,37 @@ http:
       loadBalancer:
         servers:
           - url: "http://service-dashboard:8090"
+
+    r2-service:
+      loadBalancer:
+        servers:
+          - url: "http://r2-adapter:8081"
+
+    kv-service:
+      loadBalancer:
+        servers:
+          - url: "http://kv-adapter:8082"
+
+    d1-service:
+      loadBalancer:
+        servers:
+          - url: "http://d1-adapter:8083"
+
+    autoscale-service:
+      loadBalancer:
+        servers:
+          - url: "http://autoscaler:8084"
+
+    minio-console-service:
+      loadBalancer:
+        servers:
+          - url: "http://minio:9001"
+
+    workers-service:
+      loadBalancer:
+        serversTransport: local-relaxed-timeout
+        servers:
+          - url: "http://workers-runtime:8787"
 
 tls:
   certificates:

@@ -1,0 +1,7 @@
+{
+  "name": "workers-runtime",
+  "private": true,
+  "dependencies": {
+    "miniflare": "^2.14.4"
+  }
+}

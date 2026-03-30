@@ -19,6 +19,7 @@ print_usage() {
   echo "./ai-stack.sh remove [service]"
   echo "./ai-stack.sh reset [service]"
   echo "./ai-stack.sh repair-network"
+  echo "./ai-stack.sh ollama-pull-models   # pull pinned models into running ollama"
 }
 
 pause_prompt() {
@@ -202,6 +203,10 @@ case "$ACTION" in
     ;;
   repair-network)
     repair_network_links
+    ;;
+  ollama-pull-models)
+    source "$BASE_DIR/ai-stack/services/ollama.sh"
+    pull_pinned_models
     ;;
   reset)
     if [ -z "$SERVICE" ]; then

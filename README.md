@@ -365,6 +365,14 @@ docker run -d \
   ollama/ollama
 ```
 
+**Pinned models (AI stack):** edit `ai-stack/config/ollama-pinned-models.txt` (one model name per line). When the `ollama` service starts via `ai-stack/services/ollama.sh`, it pulls those models in the background. To pull again into a running container:
+
+```bash
+./ai-stack/ai-stack.sh ollama-pull-models
+```
+
+The ops dashboard at **http://localhost.lh** → **Infrastructure** shows **Ollama models** (pinned vs installed, pull/delete/unload). Model actions use the same optional control token as the **Control** tab (`DASHBOARD_CONTROL_TOKEN`, or `X-Control-Token` / saved browser token). The dashboard also caches recent overview and metrics in **localStorage** so a reload can show the last good snapshot while APIs catch up.
+
 ---
 
 ## Open WebUI
@@ -462,7 +470,15 @@ https://ai.lh
 https://n8n.lh
 https://ollama.lh
 http://localhost.lh
+http://r2.lh
+http://kv.lh
+http://d1.lh
+http://workers.lh
+http://autoscale.lh
+http://minio-console.lh
 ```
+
+**Ops dashboard (`localhost.lh`):** overview, infrastructure (including Cloudflare Local + Ollama models), metrics history charts, logs, embedded docs, and **Control** for stack actions. After a control action completes, cards refresh automatically; no separate “refresh cards” step. Active tab and cached overview/metrics are restored from the browser when you reopen the page (within ~48 hours).
 
 ---
 
@@ -486,6 +502,8 @@ Open all URLs in browser.
 ./ai-stack.sh logs n8n
 ./ai-stack.sh repair-network
 ./ai-stack.sh reset
+./ai-stack.sh start cloudflare-local
+./ai-stack.sh logs cloudflare-local
 ```
 
 ---

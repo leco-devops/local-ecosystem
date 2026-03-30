@@ -1,0 +1,7 @@
+# Models pulled automatically after `ollama` container starts (ollama.sh).
+# One model name per line; lines starting with # are ignored.
+deepseek-coder
+qwen2.5-coder
+llama3
+deepseek-r1
+deepseek-llm

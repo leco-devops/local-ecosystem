@@ -1,0 +1,107 @@
+services:
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    networks:
+      - lh-network
+
+  valkey:
+    image: valkey/valkey:8
+    container_name: valkey
+    command: valkey-server --appendonly yes
+    volumes:
+      - valkey_data:/data
+    networks:
+      - lh-network
+
+  r2-adapter:
+    build:
+      context: ./adapters/r2-adapter
+    container_name: r2-adapter
+    environment:
+      R2_S3_ENDPOINT: minio:9000
+      R2_ACCESS_KEY: minioadmin
+      R2_SECRET_KEY: minioadmin
+      R2_SECURE: "false"
+      R2_DEFAULT_REGION: auto
+    depends_on:
+      - minio
+    networks:
+      - lh-network
+
+  kv-adapter:
+    build:
+      context: ./adapters/kv-adapter
+    container_name: kv-adapter
+    environment:
+      KV_REDIS_URL: redis://valkey:6379/0
+    depends_on:
+      - valkey
+    networks:
+      - lh-network
+
+  d1-adapter:
+    build:
+      context: ./adapters/d1-adapter
+    container_name: d1-adapter
+    environment:
+      D1_DATA_DIR: /data
+      D1_BACKUP_DIR: /backups
+      D1_MIGRATIONS_DIR: /migrations
+    volumes:
+      - d1_data:/data
+      - d1_backups:/backups
+      - ./migrations:/migrations
+    networks:
+      - lh-network
+
+  autoscale-demo:
+    image: nginx:alpine
+    container_name: autoscale-demo
+    labels:
+      autoscale.group: autoscale-demo
+      autoscale.target: "true"
+    networks:
+      - lh-network
+
+  workers-runtime:
+    build:
+      context: ./adapters/workers-runtime
+    container_name: workers-runtime
+    networks:
+      - lh-network
+
+  autoscaler:
+    build:
+      context: ./autoscaler
+    container_name: autoscaler
+    environment:
+      AUTOSCALE_TARGET_GROUP: autoscale-demo
+      AUTOSCALE_MIN_REPLICAS: "1"
+      AUTOSCALE_MAX_REPLICAS: "5"
+      AUTOSCALE_UP_CPU_PCT: "60"
+      AUTOSCALE_DOWN_CPU_PCT: "20"
+      AUTOSCALE_COOLDOWN_SEC: "60"
+      AUTOSCALE_CHECK_INTERVAL_SEC: "20"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - autoscale-demo
+    networks:
+      - lh-network
+
+networks:
+  lh-network:
+    external: true
+
+volumes:
+  minio_data:
+  valkey_data:
+  d1_data:
+  d1_backups:

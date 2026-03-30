@@ -46,6 +46,84 @@ SERVICE_MAP = [
         "urls": [],
         "notes": "n8n database",
     },
+    {
+        "service": "R2 (Cloudflare local)",
+        "container": "r2-adapter",
+        "urls": ["http://r2.lh"],
+        "notes": "S3-compatible API (MinIO backend)",
+        "credentials": [
+            "S3/MinIO (dev): access key minioadmin · secret minioadmin",
+        ],
+        "management_links": [
+            {"label": "Management & bucket explorer", "url": "http://r2.lh/panel"},
+            {"label": "Health JSON", "url": "http://r2.lh/health"},
+            {"label": "MinIO console (same credentials)", "url": "http://minio-console.lh"},
+        ],
+    },
+    {
+        "service": "KV (Cloudflare local)",
+        "container": "kv-adapter",
+        "urls": ["http://kv.lh"],
+        "notes": "KV-style API on Valkey",
+        "credentials": [
+            "Default Valkey: no password (redis://valkey:6379 inside compose).",
+        ],
+        "management_links": [
+            {"label": "Management & namespace explorer", "url": "http://kv.lh/panel"},
+            {"label": "Health JSON", "url": "http://kv.lh/health"},
+        ],
+    },
+    {
+        "service": "D1 (Cloudflare local)",
+        "container": "d1-adapter",
+        "urls": ["http://d1.lh"],
+        "notes": "SQLite D1-style API",
+        "credentials": [
+            "No API auth — SQLite files under adapter volume (local dev only).",
+        ],
+        "management_links": [
+            {"label": "Management & SQL explorer", "url": "http://d1.lh/panel"},
+            {"label": "Health JSON", "url": "http://d1.lh/health"},
+        ],
+    },
+    {
+        "service": "Autoscaler",
+        "container": "autoscaler",
+        "urls": ["http://autoscale.lh"],
+        "notes": "Docker replica scaler demo API",
+        "credentials": [
+            "No API auth in local stack.",
+        ],
+        "management_links": [
+            {"label": "Management panel (live status)", "url": "http://autoscale.lh/panel"},
+            {"label": "Status JSON", "url": "http://autoscale.lh/status"},
+        ],
+    },
+    {
+        "service": "MinIO Console",
+        "container": "minio",
+        "urls": ["http://minio-console.lh"],
+        "notes": "Object store web UI",
+        "credentials": [
+            "Console login: minioadmin / minioadmin (dev defaults from compose).",
+        ],
+        "management_links": [
+            {"label": "Open console", "url": "http://minio-console.lh"},
+        ],
+    },
+    {
+        "service": "Workers (Miniflare)",
+        "container": "workers-runtime",
+        "urls": ["http://workers.lh"],
+        "notes": "Local Cloudflare Workers runtime (Miniflare)",
+        "credentials": [
+            "No auth — fetch handler only. Root URL returns JSON.",
+        ],
+        "management_links": [
+            {"label": "Info & troubleshooting", "url": "http://workers.lh/panel"},
+            {"label": "Health JSON", "url": "http://workers.lh/health"},
+        ],
+    },
 ]
 
 ERROR_REGEX = re.compile(r"\b(error|exception|fatal|panic|failed|traceback)\b", re.IGNORECASE)
@@ -53,6 +131,13 @@ WARN_REGEX = re.compile(r"\b(warn|warning|deprecated|timeout)\b", re.IGNORECASE)
 INFO_REGEX = re.compile(r"\b(info|started|ready|listening|connected|ok)\b", re.IGNORECASE)
 LOG_WINDOW_SECONDS = 300
 LOG_TAIL_LINES = 300
+CLOUDFLARE_ENDPOINTS = {
+    "r2": "http://r2-adapter:8081",
+    "kv": "http://kv-adapter:8082",
+    "d1": "http://d1-adapter:8083",
+    "autoscale": "http://autoscaler:8084",
+    "workers": "http://workers-runtime:8787",
+}
 
 
 def to_float(value):
@@ -161,7 +246,25 @@ def get_container_sizes(client, container):
         return {"size_rw": 0, "size_root_fs": 0}
 
 
-def get_container_metrics(client, container):
+def get_container_metrics(client, container_or_name):
+    if client is None:
+        return {
+            "cpu_percent": 0.0,
+            "memory_usage": 0,
+            "memory_limit": 0,
+            "memory_percent": 0.0,
+            "network_rx": 0,
+            "network_tx": 0,
+            "blk_read": 0,
+            "blk_write": 0,
+            "size_rw": 0,
+            "size_root_fs": 0,
+        }
+
+    container = container_or_name
+    if isinstance(container_or_name, str):
+        container = get_container(client, container_or_name)
+
     if container is None:
         return {
             "cpu_percent": 0.0,
@@ -392,6 +495,39 @@ def build_system_status(services, docker_overview):
     }
 
 
+def collect_reference_status():
+    from reference_data import REFERENCE_CATEGORIES
+
+    categories = []
+    for cat in REFERENCE_CATEGORIES:
+        items_out = []
+        for item in cat["items"]:
+            url_checks = [check_url(url) for url in item.get("urls", [])]
+            items_out.append({**item, "url_checks": url_checks})
+        categories.append(
+            {
+                "id": cat["id"],
+                "title": cat["title"],
+                "description": cat.get("description", ""),
+                "items": items_out,
+            }
+        )
+    healthy = sum(
+        1
+        for c in categories
+        for it in c["items"]
+        for chk in it.get("url_checks", [])
+        if chk.get("ok")
+    )
+    total = sum(len(it.get("url_checks", [])) for c in categories for it in c["items"])
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "categories": categories,
+        "healthy_urls": healthy,
+        "total_urls": total,
+    }
+
+
 def collect_overview():
     client = get_docker_client()
     docker_overview = get_docker_overview(client)
@@ -409,6 +545,8 @@ def collect_overview():
                 "service": item["service"],
                 "container": item["container"],
                 "notes": item["notes"],
+                "credentials": item.get("credentials") or [],
+                "management_links": item.get("management_links") or [],
                 "container_info": container_info,
                 "metrics": get_container_metrics(client, container),
                 "logs": get_log_metrics(container),
@@ -436,6 +574,13 @@ def collect_overview():
 
     system_status = build_system_status(services, docker_overview)
 
+    try:
+        from timeseries import append_snapshot
+
+        append_snapshot(client, docker_overview)
+    except Exception:
+        pass
+
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "service_count": len(services),
@@ -445,6 +590,7 @@ def collect_overview():
         "containers": sorted(containers, key=lambda c: c["name"]),
         "docker_overview": docker_overview,
         "system_status": system_status,
+        "reference": collect_reference_status(),
     }
 
 
@@ -526,4 +672,48 @@ def collect_service_logs(service_container, search="", level="all", tail=500, si
         "returned": len(entries),
         "level_counts": level_counts,
         "entries": entries[-1000:],
+    }
+
+
+def _fetch_json(url):
+    try:
+        res = requests.get(url, timeout=3)
+        res.raise_for_status()
+        return True, res.json()
+    except Exception as exc:
+        return False, {"ok": False, "error": str(exc)}
+
+
+def collect_cloudflare_local_status():
+    r2_ok, r2_health = _fetch_json(f"{CLOUDFLARE_ENDPOINTS['r2']}/health")
+    kv_ok, kv_health = _fetch_json(f"{CLOUDFLARE_ENDPOINTS['kv']}/health")
+    d1_ok, d1_health = _fetch_json(f"{CLOUDFLARE_ENDPOINTS['d1']}/health")
+    as_ok, as_status = _fetch_json(f"{CLOUDFLARE_ENDPOINTS['autoscale']}/status")
+    w_ok, w_health = _fetch_json(f"{CLOUDFLARE_ENDPOINTS['workers']}/health")
+
+    buckets_ok, buckets_data = _fetch_json(f"{CLOUDFLARE_ENDPOINTS['r2']}/buckets")
+    namespaces_ok, ns_data = _fetch_json(f"{CLOUDFLARE_ENDPOINTS['kv']}/namespaces")
+    dbs_ok, dbs_data = _fetch_json(f"{CLOUDFLARE_ENDPOINTS['d1']}/databases")
+
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "services": {
+            "r2": {"reachable": r2_ok, "health": r2_health},
+            "kv": {"reachable": kv_ok, "health": kv_health},
+            "d1": {"reachable": d1_ok, "health": d1_health},
+            "autoscale": {"reachable": as_ok, "status": as_status},
+            "workers": {"reachable": w_ok, "health": w_health},
+        },
+        "counts": {
+            "buckets": len(buckets_data.get("buckets", [])) if buckets_ok else 0,
+            "namespaces": len(ns_data.get("namespaces", [])) if namespaces_ok else 0,
+            "databases": len(dbs_data.get("databases", [])) if dbs_ok else 0,
+            "autoscale_replicas": int(as_status.get("replicas_running", 0)) if as_ok else 0,
+        },
+        "raw": {
+            "buckets": buckets_data if buckets_ok else {"error": buckets_data.get("error")},
+            "namespaces": ns_data if namespaces_ok else {"error": ns_data.get("error")},
+            "databases": dbs_data if dbs_ok else {"error": dbs_data.get("error")},
+            "autoscale_status": as_status if as_ok else {"error": as_status.get("error")},
+        },
     }
