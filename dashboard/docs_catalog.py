@@ -8,7 +8,7 @@ DOC_MODULES = [
     {
         "id": "ecosystem-readme",
         "title": "Local Ecosystem — README",
-        "category": "Overview",
+        "category": "Develop",
         "rel_path": "README.md",
         "blurb": "Main project guide, URLs, CLI, structure.",
     },
@@ -88,6 +88,13 @@ DOC_MODULES = [
         "category": "DevOps",
         "rel_path": "docs/DEPLOY_CUSTOM_APPS.md",
         "blurb": "Traefik routing, full service inventory, Workers vs containers, Node on infra, NGINX patterns.",
+    },
+    {
+        "id": "devops-deploy-cli",
+        "title": "leco-app — multi-app deploy CLI",
+        "category": "DevOps",
+        "rel_path": "docs/DEPLOY_CLI.md",
+        "blurb": "Plug-and-play leco.app.yaml, docker compose, Wrangler, Traefik fragments.",
     },
     {
         "id": "service-management",
@@ -271,7 +278,13 @@ def get_doc_content(doc_id: str):
             md = build_service_management_markdown()
         except Exception as exc:
             return None, str(exc)
-        return {"id": doc_id, "title": meta["title"], "markdown": md, "synthetic": False}, None
+        return {
+            "id": doc_id,
+            "title": meta["title"],
+            "markdown": md,
+            "synthetic": False,
+            "path": meta.get("rel_path") or "",
+        }, None
     path = _safe_resolve(meta["rel_path"])
     if path is None or not path.is_file():
         return (
@@ -287,6 +300,7 @@ def get_doc_content(doc_id: str):
                     "- Rebuild/restart the dashboard after changing compose or mount.\n"
                 ),
                 "synthetic": True,
+                "path": meta.get("rel_path") or "",
             },
             None,
         )
@@ -294,4 +308,10 @@ def get_doc_content(doc_id: str):
         text = path.read_text(encoding="utf-8", errors="replace")
     except OSError as exc:
         return None, str(exc)
-    return {"id": doc_id, "title": meta["title"], "markdown": text, "synthetic": False}, None
+    return {
+        "id": doc_id,
+        "title": meta["title"],
+        "markdown": text,
+        "synthetic": False,
+        "path": meta.get("rel_path") or "",
+    }, None

@@ -273,10 +273,19 @@ Use `proxy_pass http://backend:PORT;` in a custom `nginx.conf`, mount it in the 
 
 ---
 
-## 10. Related documentation
+## 10. **leco-app** CLI (plug-and-play apps)
+
+For **third-party** repos (many apps, no edits to `ai-stack` / `core.sh`), use **`leco-app`** in `tools/deploy-cli/`: it writes `leco.app.yaml`, runs `docker compose` deploy/stop/logs/status, optional **`wrangler deploy`**, and prints **Traefik** YAML fragments for manual paste.
+
+See [DEPLOY_CLI.md](DEPLOY_CLI.md) and [tools/deploy-cli/README.md](../tools/deploy-cli/README.md).
+
+---
+
+## 11. Related documentation
 
 - [DEVOPS_GUIDE.md](DEVOPS_GUIDE.md) — Workers, KV, R2, D1 APIs, compose reference  
 - [DEPLOYMENT.md](DEPLOYMENT.md) — backups, bulk lifecycle  
+- [DEPLOY_CLI.md](DEPLOY_CLI.md) — `leco-app` install and commands  
 - [DEVELOPMENT_PLAYBOOK.md](DEVELOPMENT_PLAYBOOK.md) — repo layout, security notes  
 - Dashboard **Documentation** tab — same files when the repo is mounted at `/project`  
 - Dynamic CLI mirror: **Service management commands** (Operations category)

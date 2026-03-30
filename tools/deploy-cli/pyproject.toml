@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "leco-app"
+version = "0.1.0"
+description = "Plug-and-play multi-app deploy CLI for Docker Compose and Cloudflare Wrangler (local-ecosystem)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "typer>=0.12.3",
+  "pydantic>=2.5.0",
+  "PyYAML>=6.0.1",
+]
+
+[project.scripts]
+leco-app = "leco_app.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["leco_app*"]

@@ -505,6 +505,143 @@ function docLinkShouldOpenNewTab(href) {
   return externalNavigationAttrs(href).length > 0;
 }
 
+/** repo-relative path → catalog doc id (filled when Docs tab loads). */
+let docPathToId = new Map();
+
+function normalizeRepoRelPath(p) {
+  let s = String(p || "")
+    .trim()
+    .replace(/\\/g, "/");
+  if (s.startsWith("./")) s = s.slice(2);
+  const parts = s.split("/").filter((x) => x && x !== ".");
+  const out = [];
+  for (const x of parts) {
+    if (x === "..") out.pop();
+    else out.push(x);
+  }
+  return out.join("/");
+}
+
+/**
+ * Resolve markdown href relative to current doc file path (repo-relative, e.g. docs/SETUP.md).
+ * @returns {{ kind: string, hash?: string, repoPath?: string }}
+ */
+function resolveDocMarkdownHref(baseRelPath, href) {
+  const raw = String(href || "").trim();
+  const hashIdx = raw.indexOf("#");
+  const pathPart = hashIdx >= 0 ? raw.slice(0, hashIdx) : raw;
+  const hash = hashIdx >= 0 ? raw.slice(hashIdx) : "";
+  if (!pathPart && hash) return { kind: "same-doc-hash", hash };
+  if (!pathPart) return { kind: "empty" };
+  if (/^[a-z][a-z0-9+.-]*:/i.test(pathPart)) {
+    const proto = pathPart.split(":")[0].toLowerCase();
+    if (proto !== "http" && proto !== "https") return { kind: "external" };
+    try {
+      const u = new URL(pathPart);
+      if (!isDashboardLocalHostname(u.hostname)) return { kind: "external" };
+    } catch {
+      return { kind: "external" };
+    }
+    return { kind: "external" };
+  }
+  if (pathPart.startsWith("//")) return { kind: "external" };
+  const baseDir = baseRelPath.includes("/") ? baseRelPath.replace(/[^/]+$/, "") : "";
+  try {
+    const baseUrl = `http://doc.invalid/${baseDir}`;
+    const resolved = new URL(pathPart, baseUrl);
+    let p = resolved.pathname.replace(/^\/+/, "");
+    p = normalizeRepoRelPath(p);
+    return { kind: "relative-md", repoPath: p, hash };
+  } catch {
+    return { kind: "external" };
+  }
+}
+
+function scrollDocToHash(rootEl, hash) {
+  if (!rootEl || !hash || hash === "#") return;
+  const raw = hash.startsWith("#") ? hash.slice(1) : hash;
+  let decoded = raw;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    /* keep raw */
+  }
+  const tryFrags = raw === decoded ? [raw] : [raw, decoded];
+  const escId =
+    typeof CSS !== "undefined" && CSS.escape ? (s) => CSS.escape(s) : (s) => String(s).replace(/([^a-zA-Z0-9_-])/g, "\\$1");
+  requestAnimationFrame(() => {
+    for (const frag of tryFrags) {
+      if (!frag) continue;
+      let el = null;
+      try {
+        el = rootEl.querySelector(`#${escId(frag)}`);
+      } catch {
+        /* invalid id selector */
+      }
+      if (!el) {
+        rootEl.querySelectorAll("a[name]").forEach((node) => {
+          const n = node.getAttribute("name");
+          if (n === frag) el = node;
+        });
+      }
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+        break;
+      }
+    }
+  });
+}
+
+function docContentLinkClick(e) {
+  const a = e.target.closest("a[href]");
+  if (!a) return;
+  const docRoot = document.getElementById("docContent");
+  if (!docRoot?.contains(a)) return;
+  const href = a.getAttribute("href");
+  if (!href || href.startsWith("javascript:")) return;
+  if (docLinkShouldOpenNewTab(href)) return;
+
+  const curPath = normalizeRepoRelPath(window.__docCurrentRelPath || "");
+  const parsed = resolveDocMarkdownHref(window.__docCurrentRelPath || "", href);
+
+  if (parsed.kind === "same-doc-hash") {
+    e.preventDefault();
+    scrollDocToHash(docRoot, parsed.hash);
+    return;
+  }
+  if (parsed.kind !== "relative-md") return;
+
+  let repoPath = parsed.repoPath;
+  let docId = docPathToId.get(repoPath);
+  if (!docId && repoPath && !repoPath.endsWith(".md") && !repoPath.endsWith(".markdown")) {
+    docId = docPathToId.get(`${repoPath}.md`);
+  }
+  if (!docId) return;
+
+  if (repoPath === curPath) {
+    e.preventDefault();
+    if (parsed.hash) scrollDocToHash(docRoot, parsed.hash);
+    return;
+  }
+
+  e.preventDefault();
+  loadDocContent(docId, { hash: parsed.hash || "" });
+}
+
+function initDocPanelLinkNavigation() {
+  const el = document.getElementById("docContent");
+  if (!el || el.dataset.internalNavBound === "1") return;
+  el.dataset.internalNavBound = "1";
+  el.addEventListener("click", docContentLinkClick);
+}
+
+function setDocSidebarActive(id) {
+  document.querySelectorAll("#docSidebar [data-doc]").forEach((b) => {
+    const on = b.getAttribute("data-doc") === id;
+    b.classList.toggle("doc-link--active", on);
+  });
+}
+
 function decorateDocsProseLinks(rootEl) {
   if (!rootEl) return;
   rootEl.querySelectorAll("a[href]").forEach((a) => {
@@ -615,22 +752,32 @@ async function loadReferenceTab() {
   }
 }
 
-async function loadDocsCatalog() {
+async function loadDocsCatalog(preferredDocId = null) {
   const sb = document.getElementById("docSidebar");
   const content = document.getElementById("docContent");
   if (!sb || !content) return;
+  initDocPanelLinkNavigation();
   sb.innerHTML = "<div class='muted'>Loading catalog…</div>";
   try {
     const res = await fetch("/api/docs/catalog");
     const data = await res.json();
     const modules = data.modules || [];
+    docPathToId = new Map();
+    modules.forEach((m) => {
+      if (m.path) docPathToId.set(normalizeRepoRelPath(m.path), m.id);
+    });
     const byCat = {};
     modules.forEach((m) => {
       byCat[m.category] = byCat[m.category] || [];
       byCat[m.category].push(m);
     });
+    const catOrder = ["Develop", "DevOps", "Cloudflare Local", "Extending the platform", "Operations", "Overview"];
+    const catRank = (c) => {
+      const i = catOrder.indexOf(c);
+      return i === -1 ? 500 + String(c).charCodeAt(0) : i;
+    };
     sb.innerHTML = Object.keys(byCat)
-      .sort()
+      .sort((a, b) => catRank(a) - catRank(b) || a.localeCompare(b))
       .map(
         (cat) => `
         <div class="doc-cat">
@@ -649,8 +796,12 @@ async function loadDocsCatalog() {
     sb.querySelectorAll("[data-doc]").forEach((b) => {
       b.addEventListener("click", () => loadDocContent(b.getAttribute("data-doc")));
     });
-    const first = modules.find((m) => m.available) || modules[0];
-    if (first) await loadDocContent(first.id);
+    let pick = null;
+    if (preferredDocId) {
+      pick = modules.find((m) => m.id === preferredDocId) || null;
+    }
+    if (!pick) pick = modules.find((m) => m.available) || modules[0];
+    if (pick) await loadDocContent(pick.id);
     else content.innerHTML = "<p class='muted'>No documentation modules configured.</p>";
   } catch (e) {
     sb.innerHTML = "";
@@ -658,10 +809,16 @@ async function loadDocsCatalog() {
   }
 }
 
-async function loadDocContent(id) {
+/** Switch to Docs tab and optionally open a catalog entry (e.g. from Develop tab). */
+function openDocumentationDoc(docId) {
+  activateTab("docsTab", { preferredDocId: docId || null });
+}
+
+async function loadDocContent(id, opts = {}) {
   const content = document.getElementById("docContent");
   const toolbar = document.getElementById("docToolbar");
   if (!content || !id) return;
+  setDocSidebarActive(id);
   content.innerHTML = "<p class='muted'>Loading…</p>";
   try {
     const res = await fetch(`/api/docs/content?id=${encodeURIComponent(id)}`);
@@ -670,6 +827,7 @@ async function loadDocContent(id) {
       content.innerHTML = `<p class='muted'>${escapeHtml(data.error || "Error")}</p>`;
       return;
     }
+    window.__docCurrentRelPath = data.path || "";
     const raw = data.markdown || "";
     let html;
     if (typeof marked !== "undefined" && marked.parse) {
@@ -688,6 +846,7 @@ async function loadDocContent(id) {
       <span><strong>${escapeHtml(data.title || "")}</strong>${escapeHtml(syn)}</span>
       <button type="button" id="docReloadBtn">Reload</button>`;
     document.getElementById("docReloadBtn")?.addEventListener("click", () => loadDocContent(id));
+    if (opts.hash) scrollDocToHash(content, opts.hash);
   } catch (e) {
     content.innerHTML = `<p class='muted'>${escapeHtml(String(e))}</p>`;
   }
@@ -698,6 +857,13 @@ function renderDevelopCards() {
   if (!el || el.dataset.rendered === "1") return;
   el.dataset.rendered = "1";
   el.innerHTML = `
+    <div class="card dev-card dev-card--readme">
+      <strong>Local ecosystem</strong>
+      <p class="muted small" style="margin:8px 0 0">
+        Root <code>README.md</code> — stack overview, <code>*.lh</code> URLs, CLI, and links to setup / deployment docs.
+      </p>
+      <button type="button" class="dev-open-doc" data-doc-id="ecosystem-readme">Open README in Docs viewer</button>
+    </div>
     <div class="card dev-card">
       <strong>Rebuild &amp; run</strong>
       <ul>
@@ -731,9 +897,15 @@ function renderDevelopCards() {
       </ul>
     </div>
     <div class="card dev-card">
-      <strong>Long-form docs</strong>
-      <p class="muted small" style="margin:8px 0 0">Open the <strong>Docs</strong> tab for architecture, user manual, implementation guide, and development playbook (from the repo).</p>
+      <strong>More in Docs</strong>
+      <p class="muted small" style="margin:8px 0 0">
+        The <strong>Docs</strong> tab lists all guides (DevOps, Cloudflare local, development playbook, etc.).
+      </p>
+      <button type="button" class="dev-open-doc" data-doc-id="dev-playbook">Open development playbook</button>
     </div>`;
+  el.querySelectorAll(".dev-open-doc").forEach((btn) => {
+    btn.addEventListener("click", () => openDocumentationDoc(btn.getAttribute("data-doc-id")));
+  });
 }
 
 function setCompactHeaderSummary(data) {
@@ -755,6 +927,28 @@ function setCompactHeaderSummary(data) {
     <span>dir ${ref.healthy_urls ?? "—"}/${ref.total_urls ?? "—"}</span>
     <span class="header-sep">·</span>
     <span class="hl-${lvl}">${lvl.toUpperCase()}</span>`;
+}
+
+/** Map docker-py `container.status` to engine donut segment (matches Docker engine counts). */
+function classifyEngineContainerStatus(status) {
+  const s = String(status || "").toLowerCase();
+  if (s === "paused") return "paused";
+  if (s === "running" || s === "restarting") return "running";
+  return "stopped";
+}
+
+/** Build sorted name lists per segment for engine chart tooltips. */
+function bucketEngineContainerNames(containers) {
+  const by = { running: [], paused: [], stopped: [] };
+  for (const c of containers || []) {
+    const name = c?.name;
+    if (!name) continue;
+    by[classifyEngineContainerStatus(c.status)].push(name);
+  }
+  by.running.sort((a, b) => a.localeCompare(b));
+  by.paused.sort((a, b) => a.localeCompare(b));
+  by.stopped.sort((a, b) => a.localeCompare(b));
+  return by;
 }
 
 function destroyOverviewChartsIfStale() {
@@ -935,7 +1129,32 @@ function ensureOverviewCharts() {
         maintainAspectRatio: false,
         animation: false,
         cutout: "45%",
-        plugins: { legend: { position: "bottom", labels: { boxWidth: 8, font: { size: 10 } } } },
+        plugins: {
+          legend: { position: "bottom", labels: { boxWidth: 8, font: { size: 10 } } },
+          tooltip: {
+            bodySpacing: 2,
+            callbacks: {
+              footer(tooltipItems) {
+                const ti = tooltipItems[0];
+                if (!ti) return "";
+                const chart = ti.chart;
+                const idx = ti.dataIndex;
+                const keys = ["running", "paused", "stopped"];
+                const key = keys[idx];
+                const names = chart._engineNames?.[key] ?? [];
+                const max = 35;
+                if (names.length === 0) {
+                  return "No containers listed";
+                }
+                const lines = names.slice(0, max).map((n) => `• ${n}`);
+                if (names.length > max) {
+                  lines.push(`• … +${names.length - max} more`);
+                }
+                return lines.join("\n");
+              },
+            },
+          },
+        },
       },
     });
   }
@@ -1166,6 +1385,7 @@ function updateOverviewDashboard(data, cf, metricsData) {
   const paused = Number(counts.containers_paused || 0);
   const stopped = Number(counts.containers_stopped || 0);
   overviewCharts.engine.data.datasets[0].data = [run, paused, stopped];
+  overviewCharts.engine._engineNames = bucketEngineContainerNames(data.containers);
   overviewCharts.engine.update();
 
   const topSvc = [...(data.services || [])]
@@ -1636,7 +1856,7 @@ function initOllamaModelsPanel() {
   });
 }
 
-function activateTab(tabId) {
+function activateTab(tabId, opts = {}) {
   activeTab = tabId;
   try {
     localStorage.setItem(LS_ACTIVE_TAB_KEY, tabId);
@@ -1667,7 +1887,7 @@ function activateTab(tabId) {
     loadReferenceTab();
   }
   if (tabId === "docsTab") {
-    loadDocsCatalog();
+    loadDocsCatalog(opts.preferredDocId ?? null);
   }
   if (tabId === "developTab") {
     renderDevelopCards();

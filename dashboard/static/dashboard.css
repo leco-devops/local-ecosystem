@@ -1712,6 +1712,12 @@ button.doc-link:hover {
   border-color: #3b82f6;
 }
 
+button.doc-link.doc-link--active {
+  border-color: #8b5cf6;
+  background: #251d4a;
+  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.35);
+}
+
 button.doc-link.muted {
   opacity: 0.55;
 }
@@ -1803,6 +1809,27 @@ button.doc-link.muted {
 
 .dev-card li {
   margin: 4px 0;
+}
+
+.dev-card--readme {
+  border-color: #6d28d9;
+}
+
+button.dev-open-doc {
+  margin-top: 10px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 6px;
+  border: 1px solid #7c3aed;
+  background: #4c1d95;
+  color: #f5f3ff;
+}
+
+button.dev-open-doc:hover {
+  border-color: #a78bfa;
+  background: #5b21b6;
 }
 
 /* —— Compact header & Overview dashboard —— */
@@ -2398,6 +2425,17 @@ button.doc-link.muted {
 .svc-creds--mono code {
   font-size: 0.78rem;
   word-break: break-all;
+}
+
+/* Overview — engine containers chart: list names in tooltip (Chart.js footer) */
+#chartjs-tooltip,
+.chartjs-tooltip {
+  max-width: min(420px, 92vw);
+}
+.chartjs-tooltip-footer {
+  white-space: pre-wrap !important;
+  word-break: break-word;
+  text-align: left;
 }
 
 @media (max-width: 540px) {

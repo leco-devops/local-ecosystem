@@ -5,6 +5,7 @@ This document is for **operators and DevOps engineers** deploying and using the 
 | Document | Role |
 |----------|------|
 | [DEPLOY_CUSTOM_APPS.md](DEPLOY_CUSTOM_APPS.md) | **Your apps:** Workers vs new containers, Traefik, NGINX, Node on infra, full hostname inventory |
+| [DEPLOY_CLI.md](DEPLOY_CLI.md) | **leco-app** CLI: `leco.app.yaml`, compose + Wrangler, Traefik fragments (plug-and-play) |
 | [SETUP.md](SETUP.md) | First-time install: DNS, TLS, Docker, mkcert |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Day-two: start/stop, bulk actions, backups |
 | [cloudflare-local/docs/USER_MANUAL.md](../cloudflare-local/docs/USER_MANUAL.md) | CF-local URLs and dashboard notes |
