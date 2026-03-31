@@ -354,7 +354,7 @@
       <section id="hostedAppsTab" class="tab-content">
         <h2 class="tab-heading">Hosted apps</h2>
         <p class="tab-lead muted small">
-          Per-app monitoring, compose logs, and lifecycle controls for entries in <code>config/leco-registry.yaml</code> (<code>leco-app ecosystem-register</code>). CPU/memory/net series are scoped to this compose project’s containers. Set the <strong>Control token</strong> on the Control tab when <code>DASHBOARD_CONTROL_TOKEN</code> is enabled.
+          Per-app monitoring, compose logs, and lifecycle controls for entries in <code>config/leco-registry.yaml</code> (<code>leco-app ecosystem-register</code>). <strong>Control → Remove</strong> or <strong>Reset</strong> on a hosted stack runs <code>docker compose down</code> and then automatically unregisters the app (Traefik keys from the manifest, <code>leco.local-cf.yaml</code> cleanup, registry row) — same as <strong>Remove from ecosystem</strong>. If you stopped the stack only with <code>docker compose down</code> in a terminal, the app stays registered until you use <strong>Remove from ecosystem</strong>, the <strong>Routes</strong> tab, or <code>leco-app ecosystem-unregister</code>. Set the <strong>Control token</strong> on the Control tab when <code>DASHBOARD_CONTROL_TOKEN</code> is enabled.
         </p>
         <p id="hostedAppsTokenHint" class="muted small is-hidden"></p>
         <div class="hosted-apps-layout">
@@ -370,6 +370,7 @@
                 <p id="hostedAppsRuntime" class="control-card__runtime"></p>
               </header>
               <div class="hosted-apps-links" id="hostedAppsLinks"></div>
+              <div id="hostedAppsUnregisterHint" class="hosted-apps-unregister-hint is-hidden" role="status" aria-live="polite"></div>
               <div class="hosted-apps-kpi" id="hostedAppsKpi"></div>
               <div class="hosted-apps-charts">
                 <article class="dash-panel dash-panel--compact">

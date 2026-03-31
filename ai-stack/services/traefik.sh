@@ -2,6 +2,11 @@ if [ -z "${PROJECT_ROOT:-}" ]; then
   PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 fi
 
+# Bind mounts in `docker run` are resolved on the Docker *host* (e.g. macOS). Inside the Ops
+# dashboard container PROJECT_ROOT is /project, which does not exist on the host — set
+# DASHBOARD_DOCKER_BIND_ROOT to the real repo path (dashboard.sh does this automatically).
+DOCKER_BIND="${DASHBOARD_DOCKER_BIND_ROOT:-$PROJECT_ROOT}"
+
 NAME="traefik"
 
 start() {
@@ -15,8 +20,8 @@ start() {
     -p 80:80 \
     -p 443:443 \
     -p 8080:8080 \
-    -v "$PROJECT_ROOT/traefik:/etc/traefik" \
-    -v "$PROJECT_ROOT/certs:/certs" \
+    -v "$DOCKER_BIND/traefik:/etc/traefik" \
+    -v "$DOCKER_BIND/certs:/certs" \
     traefik:v3.3 \
     --configFile=/etc/traefik/traefik-static.yaml
 }

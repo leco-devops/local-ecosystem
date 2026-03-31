@@ -67,6 +67,7 @@ start() {
     -p "$HOST_PORT:$CONTAINER_PORT" \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v "$PROJECT_ROOT:/project:rw" \
+    -e "DASHBOARD_DOCKER_BIND_ROOT=$PROJECT_ROOT" \
     "${WORKSPACE_PARENT_MOUNT[@]}" \
     $HOST_PROC_MOUNT \
     $HOST_SYS_MOUNT \

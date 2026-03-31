@@ -3568,6 +3568,29 @@ async function refreshHostedAppsPanel() {
   }
 
   const agg = snap.aggregate;
+  const unregisterHintEl = document.getElementById("hostedAppsUnregisterHint");
+  const rs = agg != null && snap.ok ? Number(agg.running_services) : NaN;
+  const stackLooksDown = app && (rt.running === false || (Number.isFinite(rs) && rs === 0));
+  if (unregisterHintEl) {
+    if (stackLooksDown) {
+      unregisterHintEl.classList.remove("is-hidden");
+      unregisterHintEl.innerHTML = `<div class="hosted-apps-unregister-hint__inner">
+        <strong>Stack is down, but this app is still registered.</strong>
+        The sidebar lists <code>config/leco-registry.yaml</code> — stopping or removing containers does not remove that entry.
+        Traefik may still have routes to old service names, which often shows as <strong>Bad Gateway</strong>.
+        Use <strong>Remove from ecosystem</strong> (Control token) to unregister and strip manifest-derived Traefik keys, or run
+        <code>leco-app ecosystem-unregister ${escapeHtml(slug)} --ecosystem-root …</code>.
+        If routes were added manually to <code>traefik/dynamic.yml</code>, edit or redeploy Traefik after removing them.
+        <div class="hosted-apps-unregister-hint__actions">
+          <button type="button" class="ctrl-act ctrl-act--ops" data-hosted-offboard="${escapeAttr(slug)}">Remove from ecosystem…</button>
+        </div>
+      </div>`;
+    } else {
+      unregisterHintEl.classList.add("is-hidden");
+      unregisterHintEl.innerHTML = "";
+    }
+  }
+
   if (kpiEl) {
     if (agg && snap.ok) {
       const memPctKpi =
@@ -3709,6 +3732,13 @@ function initHostedAppsLogToolbar() {
     if (e.target.checked) {
       hostedLogsScrollToBottomIfFollow();
     }
+  });
+
+  root.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-hosted-offboard]");
+    if (!btn) return;
+    const sl = btn.getAttribute("data-hosted-offboard") || "";
+    if (sl) runHostedOffboard(sl, true, true);
   });
 }
 

@@ -2507,6 +2507,24 @@ button.dev-open-doc:hover {
   font-size: 13px;
 }
 
+.hosted-apps-unregister-hint {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(127, 29, 29, 0.25);
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.hosted-apps-unregister-hint__inner code {
+  font-size: 12px;
+}
+
+.hosted-apps-unregister-hint__actions {
+  margin-top: 12px;
+}
+
 .hosted-apps-kpi {
   display: flex;
   flex-wrap: wrap;

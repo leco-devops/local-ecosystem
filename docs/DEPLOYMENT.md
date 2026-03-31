@@ -100,6 +100,8 @@ Bulk Control actions intentionally avoid tearing down **Traefik** (routing), **P
 | Dashboard — restart (same rebuild path as deploy) | `./ai-stack/ai-stack.sh restart dashboard` |
 | Dashboard — stop | `./ai-stack/ai-stack.sh stop dashboard` |
 
+**Ops dashboard + Traefik on Docker Desktop (macOS):** The dashboard container mounts the repo at `/project` and talks to the host Docker daemon via the socket. `docker run -v …` bind sources must be **host** paths (e.g. `/Users/you/.../local-ecosystem`), not `/project/...`. `dashboard.sh` sets `DASHBOARD_DOCKER_BIND_ROOT` automatically; Traefik’s script uses it for `/traefik` and `/certs` mounts. If Traefik was created **before** this (or the env is missing), remove the old container (`docker rm -f traefik`) and start again from the host or **Control** — do not only “Start” the broken container in Docker Desktop. Ensure **Docker Desktop → Settings → Resources → File sharing** includes your repo directory if it lives outside the default allowed paths.
+
 **Full stack without bulk safeguards** (stops **every** service, including dashboard and Traefik): `./ai-stack/ai-stack.sh stop` with no service name (see § 4.2).
 
 ### 4.5 Pause / unpause
