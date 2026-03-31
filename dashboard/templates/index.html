@@ -45,6 +45,8 @@
         <button class="tab-btn" data-tab="infrastructureTab">Infrastructure</button>
         <button class="tab-btn" data-tab="metricsTab">Metrics</button>
         <button class="tab-btn" data-tab="controlTab">Control</button>
+        <button class="tab-btn" data-tab="hostedAppsTab">Hosted apps</button>
+        <button class="tab-btn" data-tab="routesTab">Routes</button>
         <button class="tab-btn" data-tab="docsTab">Docs</button>
         <button class="tab-btn" data-tab="developTab">Develop</button>
         <button class="tab-btn" data-tab="logsTab">Logs</button>
@@ -305,7 +307,7 @@
       <section id="controlTab" class="tab-content">
         <h2 class="tab-heading">Control</h2>
         <p class="tab-lead muted small">
-          Cards are grouped: <strong>AI-stack bulk</strong>, <strong>AI services</strong>, <strong>Infra add-ons</strong> (MySQL, Adminer, Redis Commander, cache lab, …), then <strong>Cloudflare local</strong>. Each card is a stack or service — click an action. Destructive ops may wipe volumes; read the JSON response.
+          Cards are grouped: <strong>AI-stack bulk</strong>, <strong>AI services</strong>, <strong>Infra add-ons</strong> (MySQL, Adminer, Redis Commander, cache lab, …), then <strong>Cloudflare local</strong>. Registered <strong>leco</strong> compose apps live under the <strong>Hosted apps</strong> tab. Each card is a stack or service — click an action. Destructive ops may wipe volumes; read the JSON response.
         </p>
 
         <div class="control-token-row" id="controlTokenRow" style="display: none">
@@ -347,30 +349,178 @@
           <summary>Full API response</summary>
           <pre id="controlResult" class="control-result"></pre>
         </details>
+      </section>
 
-        <div id="controlActionOverlay" class="control-action-overlay" hidden>
-          <div class="control-action-dialog" role="dialog" aria-modal="true" aria-labelledby="controlActionTitle">
-            <div class="control-action-dialog__inner">
-              <div id="controlActionSpinner" class="control-action-spinner" aria-hidden="true"></div>
-              <h3 id="controlActionTitle" class="control-action-title">Running…</h3>
-              <p id="controlActionLive" class="control-action-live">Starting…</p>
-              <p class="muted small control-action-hint">
-                Live output streams as Docker/bash prints lines. If this box stays empty for minutes behind <code>*.lh</code>, open the dashboard on
-                <strong>port 8090</strong> (direct to the container) or check <code>docker logs service-dashboard</code>.
-              </p>
-              <p id="controlActionSummary" class="control-action-summary is-hidden"></p>
-              <pre id="controlActionSnippet" class="control-action-snippet is-hidden"></pre>
-              <div id="controlActionRunningBar" class="control-action-bar">
-                <button type="button" id="controlActionCancel" class="ctrl-overlay-btn ctrl-overlay-btn--caution">Cancel request</button>
+      <section id="hostedAppsTab" class="tab-content">
+        <h2 class="tab-heading">Hosted apps</h2>
+        <p class="tab-lead muted small">
+          Per-app monitoring, compose logs, and lifecycle controls for entries in <code>config/leco-registry.yaml</code> (<code>leco-app ecosystem-register</code>). CPU/memory/net series are scoped to this compose project’s containers. Set the <strong>Control token</strong> on the Control tab when <code>DASHBOARD_CONTROL_TOKEN</code> is enabled.
+        </p>
+        <p id="hostedAppsTokenHint" class="muted small is-hidden"></p>
+        <div class="hosted-apps-layout">
+          <nav class="hosted-apps-sidebar" id="hostedAppsSidebar" aria-label="Registered apps"></nav>
+          <div class="hosted-apps-main" id="hostedAppsMain">
+            <p id="hostedAppsEmpty" class="muted">Loading…</p>
+            <div id="hostedAppsDetail" class="hosted-apps-detail is-hidden">
+              <header class="hosted-apps-detail__head">
+                <div>
+                  <h3 id="hostedAppsTitle">—</h3>
+                  <p id="hostedAppsMeta" class="muted small"></p>
+                </div>
+                <p id="hostedAppsRuntime" class="control-card__runtime"></p>
+              </header>
+              <div class="hosted-apps-links" id="hostedAppsLinks"></div>
+              <div class="hosted-apps-kpi" id="hostedAppsKpi"></div>
+              <div class="hosted-apps-charts">
+                <article class="dash-panel dash-panel--compact">
+                  <header class="dash-panel__head dash-panel__head--hosted-expand">
+                    <span class="dash-panel__title">CPU (app stack)</span>
+                    <button type="button" class="hosted-chart-expand-btn" data-hosted-expand-chart="cpu" title="Larger view">Expand</button>
+                  </header>
+                  <div class="dash-panel__chart dash-panel__chart--short">
+                    <canvas id="hostedChartCpu" aria-label="Hosted app CPU"></canvas>
+                  </div>
+                </article>
+                <article class="dash-panel dash-panel--compact">
+                  <header class="dash-panel__head dash-panel__head--hosted-expand">
+                    <span class="dash-panel__title">Memory (% of limits · GB used)</span>
+                    <button type="button" class="hosted-chart-expand-btn" data-hosted-expand-chart="mem" title="Larger view">Expand</button>
+                  </header>
+                  <div class="dash-panel__chart dash-panel__chart--short">
+                    <canvas id="hostedChartMem" aria-label="Hosted app memory percent and GB used"></canvas>
+                  </div>
+                </article>
+                <article class="dash-panel dash-panel--compact">
+                  <header class="dash-panel__head dash-panel__head--hosted-expand">
+                    <span class="dash-panel__title">Net Mb/s (RX / TX)</span>
+                    <button type="button" class="hosted-chart-expand-btn" data-hosted-expand-chart="net" title="Larger view">Expand</button>
+                  </header>
+                  <div class="dash-panel__chart dash-panel__chart--short">
+                    <canvas id="hostedChartNet" aria-label="Hosted app network"></canvas>
+                  </div>
+                </article>
               </div>
-              <p id="controlActionToast" class="control-action-toast is-hidden" role="status" aria-live="polite"></p>
-              <div id="controlActionDoneBar" class="control-action-done is-hidden">
-                <button type="button" id="controlActionCopy" class="ctrl-overlay-btn ctrl-overlay-btn--safe">Copy result</button>
-                <button type="button" id="controlActionDismiss" class="ctrl-overlay-btn ctrl-overlay-btn--primary">Close</button>
+              <h4 class="hosted-apps-subhead">Services</h4>
+              <div class="hosted-apps-table-wrap">
+                <table class="hosted-apps-table">
+                  <thead>
+                    <tr>
+                      <th>Service</th>
+                      <th>Container</th>
+                      <th>State</th>
+                      <th>CPU %</th>
+                      <th>RAM % / GB</th>
+                      <th>Restarts</th>
+                    </tr>
+                  </thead>
+                  <tbody id="hostedAppsServicesBody"></tbody>
+                </table>
               </div>
+              <h4 class="hosted-apps-subhead">Insights</h4>
+              <ul id="hostedAppsInsights" class="hosted-apps-insights"></ul>
+              <h4 class="hosted-apps-subhead">Compose logs</h4>
+              <div class="hosted-apps-log-toolbar">
+                <label class="hosted-apps-log-field"
+                  >Tail
+                  <select id="hostedLogTail">
+                    <option value="200">200</option>
+                    <option value="400" selected>400</option>
+                    <option value="800">800</option>
+                    <option value="1500">1500</option>
+                  </select>
+                </label>
+                <label class="hosted-apps-log-field"
+                  >Since (s)
+                  <select id="hostedLogSince">
+                    <option value="600">600</option>
+                    <option value="1800" selected>1800</option>
+                    <option value="3600">3600</option>
+                    <option value="86400">86400</option>
+                  </select>
+                </label>
+                <label class="hosted-apps-log-field"
+                  >Service
+                  <select id="hostedLogService">
+                    <option value="">(all)</option>
+                  </select>
+                </label>
+                <label class="hosted-apps-log-field hosted-apps-log-field--grow"
+                  >Search
+                  <input type="text" id="hostedLogSearch" placeholder="filter lines (refresh only)" autocomplete="off" />
+                </label>
+                <label class="hosted-apps-log-field hosted-apps-log--live"><input type="checkbox" id="hostedLogLive" /> Live tail</label>
+                <label class="hosted-apps-log-field hosted-apps-log--live"
+                  ><input type="checkbox" id="hostedLogFollowBottom" checked /> Follow latest (auto-scroll)</label>
+                <button type="button" id="hostedLogRefresh" class="ctrl-act ctrl-act--ops">Refresh logs</button>
+              </div>
+              <pre id="hostedAppsLogPre" class="hosted-apps-log-pre"></pre>
+              <h4 class="hosted-apps-subhead">Controls</h4>
+              <p class="muted small">Same <code>docker compose</code> actions as before; streams live output.</p>
+              <div id="hostedAppsControls" class="hosted-apps-controls"></div>
             </div>
           </div>
         </div>
+      </section>
+
+      <section id="routesTab" class="tab-content">
+        <h2>Traefik routes</h2>
+        <p class="muted small">
+          File-provider config at <code id="traefikRoutesPath">—</code> (mounted repo). Traefik reloads when the file changes. Mutations require the same
+          <strong>Control token</strong> as the Control tab when <code>DASHBOARD_CONTROL_TOKEN</code> is set.
+        </p>
+        <div class="routes-toolbar">
+          <button type="button" id="traefikRoutesRefresh" class="ctrl-act ctrl-act--ops">Refresh</button>
+        </div>
+        <h3 class="routes-subhead">Routers</h3>
+        <div class="routes-table-wrap">
+          <table class="routes-table" aria-label="Traefik routers">
+            <thead>
+              <tr>
+                <th>Key</th>
+                <th>Rule</th>
+                <th>Service</th>
+                <th>Entry points</th>
+                <th>TLS</th>
+              </tr>
+            </thead>
+            <tbody id="traefikRoutersBody"></tbody>
+          </table>
+        </div>
+        <h3 class="routes-subhead">Services</h3>
+        <div class="routes-table-wrap">
+          <table class="routes-table" aria-label="Traefik services">
+            <thead>
+              <tr>
+                <th>Key</th>
+                <th>Upstream URLs</th>
+              </tr>
+            </thead>
+            <tbody id="traefikServicesBody"></tbody>
+          </table>
+        </div>
+        <h3 class="routes-subhead">Hosted apps (registry overlap)</h3>
+        <p class="muted small">
+          Router/service keys derived from each app’s <code>leco.app.yaml</code> (same rules as <code>leco-app traefik-fragment</code>). <strong>Remove from registry</strong> also strips matching Traefik keys and deletes
+          <code>leco.local-cf.yaml</code> resources (KV/R2/D1) when checked below.
+        </p>
+        <div id="traefikHostedHints" class="routes-hosted-hints"></div>
+        <h3 class="routes-subhead">Merge YAML fragment</h3>
+        <p class="muted small">
+          Paste a snippet with top-level <code>http:</code> containing <code>routers</code> and/or <code>services</code>; keys are merged (overwriting on collision). A <code>.bak</code> copy is written first.
+        </p>
+        <textarea id="traefikMergeYaml" class="routes-yaml-input" rows="10" spellcheck="false" placeholder="http:
+  routers:
+    myapp-http:
+      rule: &quot;Host(`myapp.lh`)&quot;
+      service: myapp-svc
+      entryPoints: [web]
+  services:
+    myapp-svc:
+      loadBalancer:
+        servers:
+          - url: &quot;http://myapp:8080&quot;"></textarea>
+        <p><button type="button" id="traefikMergeBtn" class="ctrl-act ctrl-act--ops">Merge into dynamic.yml</button></p>
+        <p id="traefikRoutesMsg" class="muted small" role="status"></p>
       </section>
 
       <section id="docsTab" class="tab-content">
@@ -438,6 +588,42 @@
           <tbody id="logsBody"></tbody>
         </table>
       </section>
+    </div>
+
+    <div id="controlActionOverlay" class="control-action-overlay" hidden>
+      <div class="control-action-dialog" role="dialog" aria-modal="true" aria-labelledby="controlActionTitle">
+        <div class="control-action-dialog__inner">
+          <div id="controlActionSpinner" class="control-action-spinner" aria-hidden="true"></div>
+          <h3 id="controlActionTitle" class="control-action-title">Running…</h3>
+          <p id="controlActionLive" class="control-action-live">Starting…</p>
+          <p class="muted small control-action-hint">
+            Live output streams as Docker/bash prints lines. If this box stays empty for minutes behind <code>*.lh</code>, open the dashboard on
+            <strong>port 8090</strong> (direct to the container) or check <code>docker logs service-dashboard</code>.
+          </p>
+          <p id="controlActionSummary" class="control-action-summary is-hidden"></p>
+          <pre id="controlActionSnippet" class="control-action-snippet is-hidden"></pre>
+          <div id="controlActionRunningBar" class="control-action-bar">
+            <button type="button" id="controlActionCancel" class="ctrl-overlay-btn ctrl-overlay-btn--caution">Cancel request</button>
+          </div>
+          <p id="controlActionToast" class="control-action-toast is-hidden" role="status" aria-live="polite"></p>
+          <div id="controlActionDoneBar" class="control-action-done is-hidden">
+            <button type="button" id="controlActionCopy" class="ctrl-overlay-btn ctrl-overlay-btn--safe">Copy result</button>
+            <button type="button" id="controlActionDismiss" class="ctrl-overlay-btn ctrl-overlay-btn--primary">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="hostedChartExpandOverlay" class="hosted-chart-expand-overlay" hidden>
+      <div class="hosted-chart-expand-dialog" role="dialog" aria-modal="true" aria-labelledby="hostedChartExpandTitle">
+        <div class="hosted-chart-expand-head">
+          <h3 id="hostedChartExpandTitle" class="hosted-chart-expand-title">Chart</h3>
+          <button type="button" id="hostedChartExpandClose" class="ctrl-overlay-btn ctrl-overlay-btn--primary">Close</button>
+        </div>
+        <div class="hosted-chart-expand-canvas-wrap">
+          <canvas id="hostedChartExpandCanvas" aria-label="Expanded chart"></canvas>
+        </div>
+      </div>
     </div>
 
     <div id="appModalOverlay" class="app-modal-overlay" hidden>

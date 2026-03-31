@@ -3,6 +3,9 @@ __pycache__/
 *.pyc
 *.egg-info/
 
+# Per-machine leco apps registered for Ops Dashboard Control
+config/leco-registry.yaml
+
 # Local TLS material
 certs/*.pem
 certs/*.key

@@ -11,7 +11,8 @@ This guide covers **starting, updating, stopping, and debugging** the stack afte
 | Interactive menu | `./ai-stack/ai-stack.sh menu` | Exploring services |
 | CLI | `./ai-stack/ai-stack.sh <action> [service]` | Scripts and CI |
 | Per-service script | `./ai-stack/services/<name>.sh <action>` | Direct control of one unit |
-| Dashboard **Control** tab | http://localhost.lh | Same actions with optional token |
+| Dashboard **Control** tab | http://localhost.lh | Platform targets (AI stack, infra, CF-local) with optional token |
+| Dashboard **Hosted apps** tab | http://localhost.lh | Per registered leco app: metrics, charts, logs, insights, compose controls (`leco-stack-<id>`) |
 
 Always run commands from the **repository root** (or pass absolute paths). The variable **`PROJECT_ROOT`** is inferred from each service script’s location.
 

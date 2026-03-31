@@ -13,11 +13,11 @@ def _safe_id(hostname: str) -> str:
     return s or "app"
 
 
-def routing_entry_fragment(manifest: ApplicationManifest, entry: RoutingEntry) -> dict[str, Any]:
+def _legacy_routing_fragment(manifest: ApplicationManifest, entry: RoutingEntry) -> dict[str, Any]:
     sid = f"{_safe_id(manifest.name)}-{_safe_id(entry.hostname)}-svc"
     rid_http = f"{_safe_id(manifest.name)}-{_safe_id(entry.hostname)}-http"
     rid_https = f"{_safe_id(manifest.name)}-{_safe_id(entry.hostname)}-https"
-    backend = f"http://{entry.backend_host}:{entry.backend_port}"
+    backend = f"http://{entry.backend_host.strip()}:{entry.backend_port}"
     return {
         "http": {
             "routers": {
@@ -38,6 +38,62 @@ def routing_entry_fragment(manifest: ApplicationManifest, entry: RoutingEntry) -
             },
         }
     }
+
+
+def _split_routing_fragment(manifest: ApplicationManifest, entry: RoutingEntry) -> dict[str, Any]:
+    """Host + PathPrefix(api) → API container; Host → UI (matches CrawlerVision / local-ecosystem pattern)."""
+    assert entry.frontend is not None and entry.api_backend is not None
+    name = _safe_id(manifest.name)
+    h = _safe_id(entry.hostname)
+    prefix = entry.api_path_prefix
+    api_rule = f"Host(`{entry.hostname}`) && PathPrefix(`{prefix}`)"
+    ui_rule = f"Host(`{entry.hostname}`)"
+    fe_url = f"http://{entry.frontend.host}:{entry.frontend.port}"
+    api_url = f"http://{entry.api_backend.host}:{entry.api_backend.port}"
+    fe_svc = f"{name}-{h}-fe-svc"
+    api_svc = f"{name}-{h}-api-svc"
+    return {
+        "http": {
+            "routers": {
+                f"{name}-{h}-api-http": {
+                    "rule": api_rule,
+                    "service": api_svc,
+                    "entryPoints": ["web"],
+                    "priority": 20,
+                },
+                f"{name}-{h}-api-https": {
+                    "rule": api_rule,
+                    "service": api_svc,
+                    "entryPoints": ["websecure"],
+                    "tls": True,
+                    "priority": 20,
+                },
+                f"{name}-{h}-http": {
+                    "rule": ui_rule,
+                    "service": fe_svc,
+                    "entryPoints": ["web"],
+                    "priority": 10,
+                },
+                f"{name}-{h}-https": {
+                    "rule": ui_rule,
+                    "service": fe_svc,
+                    "entryPoints": ["websecure"],
+                    "tls": True,
+                    "priority": 10,
+                },
+            },
+            "services": {
+                fe_svc: {"loadBalancer": {"servers": [{"url": fe_url}]}},
+                api_svc: {"loadBalancer": {"servers": [{"url": api_url}]}},
+            },
+        }
+    }
+
+
+def routing_entry_fragment(manifest: ApplicationManifest, entry: RoutingEntry) -> dict[str, Any]:
+    if entry.frontend is not None and entry.api_backend is not None:
+        return _split_routing_fragment(manifest, entry)
+    return _legacy_routing_fragment(manifest, entry)
 
 
 def merge_fragments(fragments: list[dict[str, Any]]) -> dict[str, Any]:
@@ -61,6 +117,8 @@ def manifest_to_traefik_yaml(manifest: ApplicationManifest) -> str:
     merged = merge_fragments(frags)
     return (
         "# Paste under traefik/dynamic.yml → http.routers / http.services (merge keys manually).\n"
-        "# Traefik watches the file; backup dynamic.yml first.\n\n"
+        "# Traefik watches the file; backup dynamic.yml first.\n"
+        "# Split routes (frontend + apiBackend): PathPrefix → API (priority 20), Host → UI (priority 10).\n"
+        "# Compose: attach those containers to external network lh-network (see local-ecosystem docs).\n\n"
         + yaml.safe_dump(merged, default_flow_style=False, sort_keys=False, allow_unicode=True)
     )

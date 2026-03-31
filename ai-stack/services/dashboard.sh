@@ -48,6 +48,17 @@ start() {
   docker network inspect lh-network >/dev/null 2>&1 || docker network create lh-network >/dev/null
   docker rm -f "$NAME" 2>/dev/null
 
+  # Sibling repos (e.g. ../CrawlerVision/leco.app.yaml in config/leco-registry.yaml) must be visible
+  # inside the container; /project alone cannot resolve ".." to the host parent directory.
+  WORKSPACE_PARENT="$(cd "$PROJECT_ROOT/.." && pwd)"
+  WORKSPACE_PARENT_MOUNT=()
+  if [ -d "$WORKSPACE_PARENT" ]; then
+    WORKSPACE_PARENT_MOUNT=(
+      -v "$WORKSPACE_PARENT:/workspace-parent:ro"
+      -e DASHBOARD_WORKSPACE_PARENT=/workspace-parent
+    )
+  fi
+
   # shellcheck disable=SC2086
   docker run -d \
     --name "$NAME" \
@@ -56,6 +67,7 @@ start() {
     -p "$HOST_PORT:$CONTAINER_PORT" \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v "$PROJECT_ROOT:/project:rw" \
+    "${WORKSPACE_PARENT_MOUNT[@]}" \
     $HOST_PROC_MOUNT \
     $HOST_SYS_MOUNT \
     $HOST_MAC_TEMP_MOUNT \

@@ -277,6 +277,8 @@ Use `proxy_pass http://backend:PORT;` in a custom `nginx.conf`, mount it in the 
 
 For **third-party** repos (many apps, no edits to `ai-stack` / `core.sh`), use **`leco-app`** in `tools/deploy-cli/`: it writes `leco.app.yaml`, runs `docker compose` deploy/stop/logs/status, optional **`wrangler deploy`**, and prints **Traefik** YAML fragments for manual paste.
 
+**Install:** `cd tools/deploy-cli` (from repo root), then `pip install -e .` — not from `tools/` alone.
+
 See [DEPLOY_CLI.md](DEPLOY_CLI.md) and [tools/deploy-cli/README.md](../tools/deploy-cli/README.md).
 
 ---

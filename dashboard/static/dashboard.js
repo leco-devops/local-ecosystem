@@ -5,6 +5,14 @@ let charts = { line: null, bar: null, pie: null };
 let metricsCharts = { cpu: null, ram: null, net: null, iops: null, temp: null };
 let metricsTimer = null;
 let activeTab = "overviewTab";
+let hostedAppsList = [];
+let hostedSelectedSlug = "";
+let hostedAppCharts = { cpu: null, mem: null, net: null };
+let hostedLogStreamAbort = null;
+let hostedLogStreamStarted = false;
+/** Slug|tail|service — restart stream when this changes while live. */
+let hostedLogStreamLiveKey = "";
+let hostedExpandChart = null;
 const trendHistory = { labels: [], cpu: [], memory: [], errors: [] };
 const MAX_POINTS = 25;
 const METRICS_MAX = 60;
@@ -15,6 +23,9 @@ let lastMetricsData = null;
 const LS_OVERVIEW_CACHE_KEY = "local_ecosystem_dashboard_overview_v1";
 const LS_OVERVIEW_MAX_AGE_MS = 1000 * 60 * 60 * 48;
 const LS_METRICS_CACHE_KEY = "local_ecosystem_dashboard_metrics_v1";
+/** Deep metrics history can stay useful longer than overview snapshots (separate key + TTL). */
+const LS_METRICS_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7;
+const LS_TREND_CACHE_KEY = "local_ecosystem_dashboard_infra_trend_v1";
 const LS_ACTIVE_TAB_KEY = "dashboard_active_tab";
 /** Bump when cache shape changes so stale / corrupted entries are dropped. */
 const CACHE_SCHEMA_VERSION = 5;
@@ -126,7 +137,7 @@ function hydrateMetricsFromCache() {
       lsRemove(LS_METRICS_CACHE_KEY);
       return null;
     }
-    if (Date.now() - (payload.savedAt || 0) > LS_OVERVIEW_MAX_AGE_MS) return null;
+    if (Date.now() - (payload.savedAt || 0) > LS_METRICS_MAX_AGE_MS) return null;
     const m = payload.metrics;
     if (!m || typeof m !== "object" || !Array.isArray(m.points)) {
       lsRemove(LS_METRICS_CACHE_KEY);
@@ -139,13 +150,71 @@ function hydrateMetricsFromCache() {
   }
 }
 
-/** Prefer dedicated metrics cache; fall back to metrics embedded in last overview fetch/hydrate. */
+/** Prefer the richest metrics series (dedicated cache vs overview-embedded); avoids empty seed when one source expired. */
 function getSeededMetricsHistory() {
   const fromKey = hydrateMetricsFromCache();
-  if (fromKey && fromKey.points.length > 0) return fromKey;
   const fromOverview = lastMetricsData;
-  if (fromOverview && Array.isArray(fromOverview.points) && fromOverview.points.length > 0) return fromOverview;
+  const nKey = fromKey?.points?.length ?? 0;
+  const nOv = fromOverview && Array.isArray(fromOverview.points) ? fromOverview.points.length : 0;
+  if (nKey >= nOv && nKey > 0) return fromKey;
+  if (nOv > 0) return fromOverview;
   return null;
+}
+
+function hydrateTrendHistoryFromCache() {
+  try {
+    const raw = localStorage.getItem(LS_TREND_CACHE_KEY);
+    if (!raw) return;
+    const payload = JSON.parse(raw);
+    if (payload.schemaVersion !== CACHE_SCHEMA_VERSION) {
+      lsRemove(LS_TREND_CACHE_KEY);
+      return;
+    }
+    if (Date.now() - (payload.savedAt || 0) > LS_OVERVIEW_MAX_AGE_MS) return;
+    const { labels, cpu, memory, errors } = payload;
+    if (!Array.isArray(labels) || !Array.isArray(cpu)) return;
+    trendHistory.labels = labels.slice(-MAX_POINTS);
+    const n = trendHistory.labels.length;
+    const align = (arr) => {
+      const a = (arr || []).slice(-MAX_POINTS).map((x) => Number(x));
+      if (a.length > n) return a.slice(a.length - n);
+      while (a.length < n) a.push(0);
+      return a;
+    };
+    trendHistory.cpu = align(cpu);
+    trendHistory.memory = align(memory);
+    trendHistory.errors = align(errors);
+  } catch (_) {
+    lsRemove(LS_TREND_CACHE_KEY);
+  }
+}
+
+function saveTrendHistoryCache() {
+  try {
+    const payload = {
+      schemaVersion: CACHE_SCHEMA_VERSION,
+      savedAt: Date.now(),
+      labels: trendHistory.labels,
+      cpu: trendHistory.cpu,
+      memory: trendHistory.memory,
+      errors: trendHistory.errors,
+    };
+    const s = JSON.stringify(payload);
+    if (s.length > 500_000) return;
+    localStorage.setItem(LS_TREND_CACHE_KEY, s);
+  } catch (_) {
+    /* quota */
+  }
+}
+
+/** Sync infrastructure line chart from in-memory trend history (after cache hydrate, before live tick). */
+function applyTrendHistoryToLineChart() {
+  if (!ensureCharts() || !charts.line) return;
+  charts.line.data.labels = [...trendHistory.labels];
+  charts.line.data.datasets[0].data = [...trendHistory.cpu];
+  charts.line.data.datasets[1].data = [...trendHistory.memory];
+  charts.line.data.datasets[2].data = [...trendHistory.errors];
+  charts.line.update();
 }
 const overviewCharts = { cpu: null, ram: null, url: null, cf: null, engine: null, svcBar: null };
 const OVERVIEW_METRICS_LIMIT = 45;
@@ -448,6 +517,19 @@ function formatRamPctWithBytes(pct, usedBytes, totalBytes) {
   }
   if (Number.isFinite(u) && u >= 0) return `${p} · ${formatBytes(u)}`;
   return p;
+}
+
+/** Used / limit in GB (2 decimal places) for hosted-app RAM display. */
+function formatRamGbUsedLimit(usedBytes, limitBytes) {
+  const toGb = (b) => {
+    const n = Number(b);
+    if (!Number.isFinite(n) || n < 0) return "—";
+    return `${(n / 1024 ** 3).toFixed(2)} GB`;
+  };
+  const u = toGb(usedBytes);
+  const l = toGb(limitBytes);
+  if (u === "—" && l === "—") return "— / —";
+  return `${u} / ${l}`;
 }
 
 /** RAM % of MemTotal → approximate bytes (exact when series is MemAvailable or kernel used%). */
@@ -1485,13 +1567,19 @@ function ollamaActionWrap(act, label, apiModel, canonical, variant, { disabled, 
 
 function controlRuntimeActionState(action, rt) {
   const a = (action || "").toLowerCase();
-  if (rt.running === null || rt.kind === "stack") return { disabled: false, activeDot: false };
+  // Bulk stack cards (ecosystem / cf-all / infra-all) use running: null — every action stays available.
+  // Compose apps (leco-registry) use kind "stack" too but set running true/false from compose ps.
+  if (rt.running === null || rt.running === undefined) return { disabled: false, activeDot: false };
   const st = (rt.status || "").toLowerCase();
+  const partial = st === "partial";
   const running = rt.running === true;
   const paused = st === "paused";
   const up = running || paused;
 
-  if (a === "start") return { disabled: up, activeDot: up, title: up ? "Already running" : "" };
+  if (a === "start") {
+    if (partial) return { disabled: false, activeDot: false, title: "" };
+    return { disabled: up, activeDot: up, title: up ? "Already running" : "" };
+  }
   if (a === "unpause")
     return {
       disabled: !paused,
@@ -1500,6 +1588,10 @@ function controlRuntimeActionState(action, rt) {
     };
   if (a === "pause") return { disabled: !running || paused, activeDot: paused, title: paused ? "Already paused" : "" };
   if (a === "stop") return { disabled: !up, activeDot: !up, title: !up ? "Already stopped" : "" };
+  if (a === "restart") {
+    const hasWork = running || partial;
+    return { disabled: !hasWork, activeDot: false, title: !hasWork ? "Nothing running" : "" };
+  }
   return { disabled: false, activeDot: false, title: "" };
 }
 
@@ -1508,7 +1600,7 @@ function controlActionButtonHtml(action, buttonClass, targetId, cardLabel, rt) {
   const dis = disabled ? " disabled" : "";
   const tit = title ? ` title="${escapeAttr(title)}"` : "";
   const dot = activeDot ? '<span class="action-state-dot" aria-hidden="true"></span>' : "";
-  return `<span class="ctrl-act-wrap"><button type="button" class="${buttonClass}" data-target="${escapeAttr(
+  return `<span class="ctrl-act-wrap"><button type="button" class="${buttonClass}" data-control-target="${escapeAttr(
     targetId,
   )}" data-action="${escapeAttr(action)}" data-label="${escapeAttr(cardLabel)}"${dis}${tit}>${escapeHtml(action)}</button>${dot}</span>`;
 }
@@ -1856,7 +1948,286 @@ function initOllamaModelsPanel() {
   });
 }
 
+function stopHostedLogStream() {
+  if (hostedLogStreamAbort) {
+    hostedLogStreamAbort.abort();
+    hostedLogStreamAbort = null;
+  }
+  hostedLogStreamStarted = false;
+}
+
+/** When checked, log panel scrolls to bottom on each content update (live or refresh). */
+function hostedLogsScrollToBottomIfFollow() {
+  const pre = document.getElementById("hostedAppsLogPre");
+  if (!pre) return;
+  const follow = document.getElementById("hostedLogFollowBottom");
+  if (follow && !follow.checked) return;
+  requestAnimationFrame(() => {
+    pre.scrollTop = pre.scrollHeight;
+  });
+}
+
+function initHostedLogFollowScrollSync() {
+  const pre = document.getElementById("hostedAppsLogPre");
+  const chk = document.getElementById("hostedLogFollowBottom");
+  if (!pre || !chk || pre.dataset.followScrollSync === "1") return;
+  pre.dataset.followScrollSync = "1";
+  const syncFromScroll = () => {
+    const slack = 12;
+    const nearBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight <= slack;
+    chk.checked = nearBottom;
+  };
+  pre.addEventListener("scroll", syncFromScroll, { passive: true });
+}
+
+async function startHostedLogStream() {
+  if (activeTab !== "hostedAppsTab" || !hostedSelectedSlug) return;
+  if (!document.getElementById("hostedLogLive")?.checked) return;
+  stopHostedLogStream();
+  hostedLogStreamStarted = true;
+  hostedLogStreamAbort = new AbortController();
+  const pre = document.getElementById("hostedAppsLogPre");
+  const slug = hostedSelectedSlug;
+  const u = encodeURIComponent(slug);
+  const tail = document.getElementById("hostedLogTail")?.value || "200";
+  const svcRaw = document.getElementById("hostedLogService")?.value || "";
+  const svc = svcRaw.trim();
+  const url = `/api/hosted-apps/${u}/logs/stream?tail=${encodeURIComponent(tail)}${svc ? `&service=${encodeURIComponent(svc)}` : ""}`;
+  if (pre) {
+    pre.textContent = "Connecting live tail (docker compose logs -f)…\n";
+    hostedLogsScrollToBottomIfFollow();
+  }
+  try {
+    const res = await fetch(url, { signal: hostedLogStreamAbort.signal });
+    if (!res.ok || !res.body?.getReader) {
+      if (pre) {
+        pre.textContent = `Live tail failed: HTTP ${res.status}`;
+        hostedLogsScrollToBottomIfFollow();
+      }
+      return;
+    }
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let carry = "";
+    let acc = "";
+    const maxChars = 450000;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      carry += dec.decode(value, { stream: true });
+      const ix = carry.lastIndexOf("\n");
+      if (ix >= 0) {
+        acc = (acc + carry.slice(0, ix + 1)).slice(-maxChars);
+        carry = carry.slice(ix + 1);
+        if (pre) {
+          pre.textContent = acc + carry;
+          hostedLogsScrollToBottomIfFollow();
+        }
+      }
+    }
+    if (carry && pre) {
+      acc = (acc + carry).slice(-maxChars);
+      pre.textContent = acc;
+      hostedLogsScrollToBottomIfFollow();
+    }
+  } catch (e) {
+    const aborted = e && (e.name === "AbortError" || e.code === 20);
+    if (!aborted && pre) {
+      pre.textContent += `\n[live tail error: ${String(e.message || e)}]\n`;
+      hostedLogsScrollToBottomIfFollow();
+    }
+  } finally {
+    hostedLogStreamAbort = null;
+    hostedLogStreamStarted = false;
+  }
+}
+
+function closeHostedChartExpand() {
+  const ov = document.getElementById("hostedChartExpandOverlay");
+  if (hostedExpandChart) {
+    try {
+      hostedExpandChart.destroy();
+    } catch (_) {
+      /* noop */
+    }
+    hostedExpandChart = null;
+  }
+  if (ov) ov.hidden = true;
+}
+
+/** Plain Chart options for the modal — do not clone Chart instances (callbacks / internals break clone/JSON). */
+function hostedExpandChartBuildOptions(key) {
+  const gridColor = THEME.grid;
+  const tickStyle = { color: "#e9d5ff", font: { size: 13 } };
+  const legendBottom = { position: "bottom", labels: { boxWidth: 12, font: { size: 13, color: "#faf5ff" } } };
+  const base = {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    interaction: { mode: "index", intersect: false },
+    plugins: { legend: legendBottom },
+  };
+  const tooltipCpu = {
+    callbacks: {
+      label(ctx) {
+        const y = ctx.parsed.y;
+        if (y == null || Number.isNaN(Number(y))) return `${ctx.dataset.label || ""}: —`;
+        return `${ctx.dataset.label}: ${Number(y).toFixed(2)}%`;
+      },
+    },
+  };
+  const tooltipMem = {
+    callbacks: {
+      label(ctx) {
+        const y = ctx.parsed.y;
+        const name = ctx.dataset.label || "";
+        if (y == null || Number.isNaN(Number(y))) return `${name}: —`;
+        if (ctx.datasetIndex === 0) return `${name}: ${Number(y).toFixed(2)}%`;
+        return `${name}: ${Number(y).toFixed(2)} GB`;
+      },
+    },
+  };
+  if (key === "cpu") {
+    return {
+      ...base,
+      scales: {
+        x: { ticks: tickStyle, grid: { color: gridColor } },
+        y: { beginAtZero: true, grid: { color: gridColor }, ticks: ticksPercentStyle("#e9d5ff", 13) },
+      },
+      plugins: { ...base.plugins, tooltip: tooltipCpu },
+    };
+  }
+  if (key === "mem") {
+    return {
+      ...base,
+      scales: {
+        x: { ticks: tickStyle, grid: { color: gridColor } },
+        y: {
+          position: "left",
+          beginAtZero: true,
+          max: 100,
+          grid: { color: gridColor },
+          ticks: ticksPercentStyle("#e9d5ff", 13),
+        },
+        y1: {
+          position: "right",
+          beginAtZero: true,
+          grid: { drawOnChartArea: false },
+          ticks: {
+            color: "#e9d5ff",
+            font: { size: 13 },
+            callback(raw) {
+              const v = typeof raw === "number" ? raw : Number(raw);
+              if (!Number.isFinite(v)) return String(raw);
+              return `${v.toFixed(2)} GB`;
+            },
+          },
+        },
+      },
+      plugins: { ...base.plugins, tooltip: tooltipMem },
+    };
+  }
+  return {
+    ...base,
+    scales: {
+      x: { ticks: tickStyle, grid: { color: gridColor } },
+      y: { beginAtZero: true, grid: { color: gridColor }, ticks: tickStyle },
+    },
+  };
+}
+
+function openHostedChartExpand(key) {
+  if (typeof Chart === "undefined") return;
+  const src = hostedAppCharts[key];
+  if (!src) return;
+  const ov = document.getElementById("hostedChartExpandOverlay");
+  const wrap = document.querySelector(".hosted-chart-expand-canvas-wrap");
+  const titleEl = document.getElementById("hostedChartExpandTitle");
+  if (!ov || !wrap || !titleEl) return;
+  const titles = {
+    cpu: "CPU (app stack)",
+    mem: "Memory % of limits · GB used",
+    net: "Net Mb/s (RX / TX)",
+  };
+  titleEl.textContent = titles[key] || "Chart";
+  closeHostedChartExpand();
+
+  const oldCanvas = document.getElementById("hostedChartExpandCanvas");
+  if (oldCanvas && oldCanvas.parentNode === wrap) {
+    const fresh = document.createElement("canvas");
+    fresh.id = "hostedChartExpandCanvas";
+    fresh.setAttribute("aria-label", "Expanded chart");
+    wrap.replaceChild(fresh, oldCanvas);
+  }
+
+  const h = Math.min(Math.round(window.innerHeight * 0.62), 540);
+  wrap.style.minHeight = `${Math.max(h, 320)}px`;
+
+  ov.hidden = false;
+
+  const data = {
+    labels: [...src.data.labels],
+    datasets: src.data.datasets.map((ds) => ({
+      label: ds.label,
+      data: [...ds.data],
+      borderColor: ds.borderColor,
+      backgroundColor: ds.backgroundColor || "transparent",
+      tension: ds.tension,
+      spanGaps: ds.spanGaps,
+      pointRadius: ds.pointRadius ?? 2,
+      pointHoverRadius: ds.pointHoverRadius ?? 4,
+      borderWidth: ds.borderWidth ?? 2,
+      yAxisID: ds.yAxisID || "y",
+      fill: false,
+    })),
+  };
+  const opts = hostedExpandChartBuildOptions(key);
+
+  const buildChart = () => {
+    const canvas = document.getElementById("hostedChartExpandCanvas");
+    if (!canvas) return;
+    if (hostedExpandChart) {
+      try {
+        hostedExpandChart.destroy();
+      } catch (_) {
+        /* noop */
+      }
+      hostedExpandChart = null;
+    }
+    hostedExpandChart = new Chart(canvas, {
+      type: "line",
+      data,
+      options: opts,
+    });
+    try {
+      hostedExpandChart.resize();
+    } catch (_) {
+      /* noop */
+    }
+  };
+  requestAnimationFrame(() => {
+    requestAnimationFrame(buildChart);
+  });
+}
+
+function initHostedChartExpandModal() {
+  const root = document.body;
+  if (root.dataset.hostedExpandWired === "1") return;
+  root.dataset.hostedExpandWired = "1";
+  document.getElementById("hostedChartExpandClose")?.addEventListener("click", closeHostedChartExpand);
+  document.getElementById("hostedChartExpandOverlay")?.addEventListener("click", (e) => {
+    if (e.target?.id === "hostedChartExpandOverlay") closeHostedChartExpand();
+  });
+  document.querySelectorAll("[data-hosted-expand-chart]").forEach((btn) => {
+    btn.addEventListener("click", () => openHostedChartExpand(btn.getAttribute("data-hosted-expand-chart") || ""));
+  });
+}
+
 function activateTab(tabId, opts = {}) {
+  if (activeTab === "hostedAppsTab" && tabId !== "hostedAppsTab") {
+    hostedLogStreamLiveKey = "";
+    stopHostedLogStream();
+  }
   activeTab = tabId;
   try {
     localStorage.setItem(LS_ACTIVE_TAB_KEY, tabId);
@@ -1882,6 +2253,12 @@ function activateTab(tabId, opts = {}) {
   }
   if (tabId === "controlTab") {
     loadControlTargets();
+  }
+  if (tabId === "hostedAppsTab") {
+    loadHostedAppsList();
+  }
+  if (tabId === "routesTab") {
+    loadTraefikRoutesPanel();
   }
   if (tabId === "referenceTab") {
     loadReferenceTab();
@@ -2814,6 +3191,671 @@ function controlTargetCardHtml(SB, t) {
           </div>`;
 }
 
+const HOSTED_APP_ACTIONS = ["deploy", "recreate", "pause", "remove", "reset", "restart", "start", "stop", "unpause"];
+
+function destroyHostedAppCharts() {
+  ["cpu", "mem", "net"].forEach((k) => {
+    const c = hostedAppCharts[k];
+    if (c) {
+      try {
+        c.destroy();
+      } catch (_) {
+        /* noop */
+      }
+      hostedAppCharts[k] = null;
+    }
+  });
+}
+
+function ensureHostedAppCharts() {
+  if (typeof Chart === "undefined") return false;
+  const cpuEl = document.getElementById("hostedChartCpu");
+  const memEl = document.getElementById("hostedChartMem");
+  const netEl = document.getElementById("hostedChartNet");
+  if (!cpuEl || !memEl || !netEl) return false;
+  const gridColor = THEME.grid;
+  const tickStyle = { color: "#e9d5ff", font: { size: 11 } };
+  const dockerLine = { borderColor: THEME.docker, tension: 0.2, spanGaps: true, ...LINE_STYLE };
+  const sysLine = { borderColor: THEME.system, tension: 0.2, spanGaps: true, ...LINE_STYLE };
+  const legendBottom = { position: "bottom", labels: { boxWidth: 10, font: { size: 11, color: "#faf5ff" } } };
+
+  if (!hostedAppCharts.cpu) {
+    hostedAppCharts.cpu = new Chart(cpuEl, {
+      type: "line",
+      data: {
+        labels: [],
+        datasets: [
+          { label: "CPU Σ (raw %)", data: [], yAxisID: "y", ...dockerLine },
+          { label: "CPU (÷ host vCPUs)", data: [], yAxisID: "y", ...sysLine },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        interaction: { mode: "index", intersect: false },
+        scales: {
+          x: { ticks: tickStyle, grid: { color: gridColor } },
+          y: { beginAtZero: true, grid: { color: gridColor }, ticks: ticksPercentStyle("#e9d5ff", 11) },
+        },
+        plugins: {
+          legend: legendBottom,
+          tooltip: {
+            callbacks: {
+              label(ctx) {
+                const y = ctx.parsed.y;
+                if (y == null || Number.isNaN(Number(y))) return `${ctx.dataset.label || ""}: —`;
+                return `${ctx.dataset.label}: ${Number(y).toFixed(2)}%`;
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+  if (hostedAppCharts.mem && hostedAppCharts.mem.data.datasets.length < 2) {
+    try {
+      hostedAppCharts.mem.destroy();
+    } catch (_) {
+      /* noop */
+    }
+    hostedAppCharts.mem = null;
+  }
+  if (!hostedAppCharts.mem) {
+    hostedAppCharts.mem = new Chart(memEl, {
+      type: "line",
+      data: {
+        labels: [],
+        datasets: [
+          { label: "Memory % of limits", data: [], yAxisID: "y", ...dockerLine },
+          { label: "RAM used (GB)", data: [], yAxisID: "y1", ...sysLine },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        interaction: { mode: "index", intersect: false },
+        scales: {
+          x: { ticks: tickStyle, grid: { color: gridColor } },
+          y: {
+            position: "left",
+            beginAtZero: true,
+            max: 100,
+            grid: { color: gridColor },
+            ticks: ticksPercentStyle("#e9d5ff", 11),
+          },
+          y1: {
+            position: "right",
+            beginAtZero: true,
+            grid: { drawOnChartArea: false },
+            ticks: {
+              color: "#e9d5ff",
+              font: { size: 11 },
+              callback(raw) {
+                const v = typeof raw === "number" ? raw : Number(raw);
+                if (!Number.isFinite(v)) return String(raw);
+                return `${v.toFixed(2)} GB`;
+              },
+            },
+          },
+        },
+        plugins: {
+          legend: legendBottom,
+          tooltip: {
+            callbacks: {
+              label(ctx) {
+                const y = ctx.parsed.y;
+                const name = ctx.dataset.label || "";
+                if (y == null || Number.isNaN(Number(y))) return `${name}: —`;
+                if (ctx.datasetIndex === 0) return `${name}: ${Number(y).toFixed(2)}%`;
+                return `${name}: ${Number(y).toFixed(2)} GB`;
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+  if (!hostedAppCharts.net) {
+    hostedAppCharts.net = new Chart(netEl, {
+      type: "line",
+      data: {
+        labels: [],
+        datasets: [
+          { label: "RX Mb/s", data: [], ...dockerLine },
+          { label: "TX Mb/s", data: [], ...sysLine },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        interaction: { mode: "index", intersect: false },
+        scales: {
+          x: { ticks: tickStyle, grid: { color: gridColor } },
+          y: { beginAtZero: true, grid: { color: gridColor }, ticks: tickStyle },
+        },
+        plugins: { legend: legendBottom },
+      },
+    });
+  }
+  return true;
+}
+
+function updateHostedAppChartsFromHistory(hist) {
+  const pts = (hist && hist.points) || [];
+  const labels = pts.map((p) => {
+    try {
+      return new Date(p.ts).toLocaleTimeString();
+    } catch {
+      return "";
+    }
+  });
+  const cpuRaw = pts.map((p) => (p.app && p.app.cpu_sum_raw != null ? Number(p.app.cpu_sum_raw) : null));
+  const cpuN = pts.map((p) => (p.app && p.app.cpu_percent != null ? Number(p.app.cpu_percent) : null));
+  const memPct = pts.map((p) => (p.app && p.app.memory_percent_limits != null ? Number(p.app.memory_percent_limits) : null));
+  const memGbUsed = pts.map((p) => {
+    const b = p.app && p.app.memory_usage != null ? Number(p.app.memory_usage) : NaN;
+    return Number.isFinite(b) && b >= 0 ? b / 1024 ** 3 : null;
+  });
+  const rx = pts.map((p) => (p.app && p.app.net_rx_mbps != null ? Number(p.app.net_rx_mbps) : null));
+  const tx = pts.map((p) => (p.app && p.app.net_tx_mbps != null ? Number(p.app.net_tx_mbps) : null));
+  if (!ensureHostedAppCharts()) return;
+  hostedAppCharts.cpu.data.labels = labels;
+  hostedAppCharts.cpu.data.datasets[0].data = cpuRaw;
+  hostedAppCharts.cpu.data.datasets[1].data = cpuN;
+  hostedAppCharts.cpu.update();
+  hostedAppCharts.mem.data.labels = labels;
+  hostedAppCharts.mem.data.datasets[0].data = memPct;
+  hostedAppCharts.mem.data.datasets[1].data = memGbUsed;
+  hostedAppCharts.mem.update();
+  hostedAppCharts.net.data.labels = labels;
+  hostedAppCharts.net.data.datasets[0].data = rx;
+  hostedAppCharts.net.data.datasets[1].data = tx;
+  hostedAppCharts.net.update();
+}
+
+function renderHostedAppsSidebar() {
+  const nav = document.getElementById("hostedAppsSidebar");
+  if (!nav) return;
+  if (!hostedAppsList.length) {
+    nav.innerHTML = "";
+    return;
+  }
+  nav.innerHTML = hostedAppsList
+    .map(
+      (a) =>
+        `<button type="button" data-hosted-slug="${escapeAttr(a.id)}" class="${a.id === hostedSelectedSlug ? "is-active" : ""}">${escapeHtml(a.label || a.id)}</button>`,
+    )
+    .join("");
+  nav.querySelectorAll("[data-hosted-slug]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      hostedSelectedSlug = btn.getAttribute("data-hosted-slug") || "";
+      renderHostedAppsSidebar();
+      refreshHostedAppsPanel();
+    });
+  });
+}
+
+async function loadHostedAppsList() {
+  const empty = document.getElementById("hostedAppsEmpty");
+  const detail = document.getElementById("hostedAppsDetail");
+  const hint = document.getElementById("hostedAppsTokenHint");
+  try {
+    const res = await fetch("/api/hosted-apps");
+    const data = await res.json();
+    if (hint) {
+      if (data.token_required) {
+        hint.textContent =
+          "Control token is required for lifecycle actions — open the Control tab and save your token in the field above (shared with Control).";
+        hint.classList.remove("is-hidden");
+      } else {
+        hint.classList.add("is-hidden");
+      }
+    }
+    hostedAppsList = data.apps || [];
+    if (!hostedAppsList.length) {
+      if (empty) {
+        empty.classList.remove("is-hidden");
+        empty.innerHTML =
+          'No registered apps. Add <code>config/leco-registry.yaml</code> via <code>leco-app ecosystem-register</code>. See <code>config/leco-registry.example.yaml</code>.';
+      }
+      if (detail) detail.classList.add("is-hidden");
+      const nav = document.getElementById("hostedAppsSidebar");
+      if (nav) nav.innerHTML = "";
+      destroyHostedAppCharts();
+      return;
+    }
+    if (empty) empty.classList.add("is-hidden");
+    if (detail) detail.classList.remove("is-hidden");
+    const still = hostedAppsList.some((a) => a.id === hostedSelectedSlug);
+    if (!still) hostedSelectedSlug = hostedAppsList[0].id;
+    renderHostedAppsSidebar();
+    await refreshHostedAppsPanel();
+  } catch (e) {
+    if (empty) {
+      empty.classList.remove("is-hidden");
+      empty.textContent = `Failed to load hosted apps: ${e.message || e}`;
+    }
+    if (detail) detail.classList.add("is-hidden");
+  }
+}
+
+function hostedComposeControlActionsHtml(SB, target) {
+  const rt = target.runtime || {};
+  const { safe, danger } = SB.partitionControlActions(target.actions);
+  const primaryBtns = safe
+    .map((a) => {
+      const cls = SB.actionButtonClasses(a);
+      return controlActionButtonHtml(a, cls, target.id, target.label || target.id, rt);
+    })
+    .join("");
+  const dangerBtns = danger
+    .map((a) => {
+      const cls = SB.actionButtonClasses(a);
+      return controlActionButtonHtml(a, cls, target.id, target.label || target.id, rt);
+    })
+    .join("");
+  const wrapClass =
+    danger.length === 0
+      ? "control-card__actions-wrap control-card__actions-wrap--safe-only"
+      : "control-card__actions-wrap";
+  const aside =
+    danger.length === 0
+      ? ""
+      : `<aside class="control-actions control-actions--danger" aria-label="Destructive actions">
+            <div class="control-actions__label">Destructive</div>
+            ${dangerBtns}
+          </aside>`;
+  return `<div class="${wrapClass}">
+    <div class="control-actions control-actions--primary">${primaryBtns}</div>
+    ${aside}
+  </div>`;
+}
+
+async function refreshHostedAppsPanel() {
+  if (activeTab !== "hostedAppsTab" || !hostedSelectedSlug) return;
+  const slug = hostedSelectedSlug;
+  const titleEl = document.getElementById("hostedAppsTitle");
+  const metaEl = document.getElementById("hostedAppsMeta");
+  const rtEl = document.getElementById("hostedAppsRuntime");
+  const linksEl = document.getElementById("hostedAppsLinks");
+  const kpiEl = document.getElementById("hostedAppsKpi");
+  const tbody = document.getElementById("hostedAppsServicesBody");
+  const insightsEl = document.getElementById("hostedAppsInsights");
+  const logPre = document.getElementById("hostedAppsLogPre");
+  const controlsEl = document.getElementById("hostedAppsControls");
+  const svcSel = document.getElementById("hostedLogService");
+
+  const app = hostedAppsList.find((x) => x.id === slug);
+  const tailSel = document.getElementById("hostedLogTail");
+  const sinceSel = document.getElementById("hostedLogSince");
+  const tail = tailSel ? tailSel.value : "400";
+  const since = sinceSel ? sinceSel.value : "1800";
+  const searchEl = document.getElementById("hostedLogSearch");
+  const search = searchEl ? searchEl.value.trim() : "";
+  const svc = svcSel && svcSel.value ? svcSel.value : "";
+  const liveLogs = !!document.getElementById("hostedLogLive")?.checked;
+
+  let snap = { ok: false };
+  let hist = { points: [] };
+  let ins = { ok: false, insights: [] };
+  let logs = { ok: false, log: "" };
+  try {
+    const u = encodeURIComponent(slug);
+    const fetches = [
+      fetch(`/api/hosted-apps/${u}/snapshot`),
+      fetch(`/api/hosted-apps/${u}/metrics/history?limit=120`),
+      fetch(`/api/hosted-apps/${u}/insights`),
+    ];
+    if (!liveLogs) {
+      fetches.push(
+        fetch(
+          `/api/hosted-apps/${u}/logs?tail=${tail}&since=${since}&search=${encodeURIComponent(search)}${svc ? `&service=${encodeURIComponent(svc)}` : ""}`,
+        ),
+      );
+    }
+    const results = await Promise.all(fetches);
+    snap = await results[0].json();
+    hist = await results[1].json();
+    ins = await results[2].json();
+    if (!liveLogs && results[3]) {
+      logs = await results[3].json();
+    }
+  } catch (e) {
+    if (logPre && !liveLogs) {
+      logPre.textContent = String(e.message || e);
+      hostedLogsScrollToBottomIfFollow();
+    }
+    return;
+  }
+
+  if (!liveLogs) {
+    hostedLogStreamLiveKey = "";
+    stopHostedLogStream();
+  }
+
+  if (titleEl && app) titleEl.textContent = app.label || slug;
+  if (metaEl && app) metaEl.textContent = `Registry id: ${slug} · Target: ${app.target_id || "—"}`;
+
+  const rt = snap.runtime || (app && app.runtime) || {};
+  const rtLabel = escapeHtml(rt.label || "—");
+  const rtClass =
+    rt.running === true
+      ? "control-runtime--up"
+      : rt.running === false
+        ? "control-runtime--down"
+        : rt.kind === "stack"
+          ? "control-runtime--stack"
+          : "control-runtime--na";
+  if (rtEl) {
+    rtEl.className = `control-card__runtime ${rtClass}`;
+    rtEl.title = rt.label || "";
+    rtEl.innerHTML = `<span class="control-runtime-dot" aria-hidden="true"></span><span class="control-runtime-text">${rtLabel}</span>`;
+  }
+
+  if (linksEl && app) {
+    const parts = [];
+    (app.health_urls || []).forEach((u) => {
+      parts.push(`<a href="${escapeAttr(u)}" target="_blank" rel="noopener">Health · ${escapeHtml(u)}</a>`);
+    });
+    (app.routes || []).forEach((r) => {
+      const h = r.hostname || "";
+      if (h) parts.push(`<span><strong>${escapeHtml(h)}</strong>${r.api_path_prefix ? ` API ${escapeHtml(r.api_path_prefix)}` : ""}</span>`);
+    });
+    linksEl.innerHTML = parts.length ? parts.join(" · ") : '<span class="muted">No routes or health URLs in manifest.</span>';
+  }
+
+  const agg = snap.aggregate;
+  if (kpiEl) {
+    if (agg && snap.ok) {
+      const memPctKpi =
+        agg.memory_percent_limits != null && agg.memory_percent_limits !== ""
+          ? `${Number(agg.memory_percent_limits).toFixed(2)}%`
+          : "—";
+      kpiEl.innerHTML = `
+        <span class="hosted-kpi-chip">Services running <strong>${agg.running_services ?? "—"}</strong> / ${agg.total_services ?? "—"}</span>
+        <span class="hosted-kpi-chip">CPU <strong>${agg.cpu_sum_raw ?? "—"}%</strong> (compose Σ) · <strong>${agg.cpu_percent_normalized ?? "—"}%</strong> of host · ${agg.host_cpus ?? "—"} vCPU</span>
+        <span class="hosted-kpi-chip">RAM <strong>${memPctKpi}</strong> of limits · <strong>${formatRamGbUsedLimit(agg.memory_usage, agg.memory_limit_sum)}</strong></span>
+        <span class="hosted-kpi-chip">Compose ps <strong>${snap.compose_ps_ok ? "ok" : "failed"}</strong></span>`;
+    } else {
+      kpiEl.innerHTML = `<span class="muted">${escapeHtml(snap.error || "No aggregate (compose unreachable?)")}</span>`;
+    }
+  }
+
+  if (tbody) {
+    tbody.innerHTML = (snap.services || [])
+      .map((s) => {
+        const m = s.metrics || {};
+        const cpuCell =
+          m.cpu_percent != null && m.cpu_percent !== "" ? `${escapeHtml(String(m.cpu_percent))}%` : "—";
+        const memPctCell =
+          m.memory_percent != null && m.memory_percent !== ""
+            ? `${Number(m.memory_percent).toFixed(1)}%`
+            : "—";
+        const memGbCell = formatRamGbUsedLimit(m.memory_usage, m.memory_limit);
+        return `<tr>
+          <td>${escapeHtml(s.service || "—")}</td>
+          <td><code>${escapeHtml(s.container || "—")}</code></td>
+          <td>${escapeHtml(s.state || "—")}</td>
+          <td>${cpuCell}</td>
+          <td><strong>${memPctCell}</strong> · ${memGbCell}</td>
+          <td>${s.restart_count != null ? escapeHtml(String(s.restart_count)) : "—"}</td>
+        </tr>`;
+      })
+      .join("");
+  }
+
+  if (svcSel && snap.services) {
+    const prev = svcSel.value;
+    const opts = ['<option value="">(all)</option>']
+      .concat(
+        snap.services
+          .filter((s) => s.service && s.service !== "—")
+          .map((s) => `<option value="${escapeAttr(s.service)}">${escapeHtml(s.service)}</option>`),
+      )
+      .join("");
+    svcSel.innerHTML = opts;
+    if (prev && [...svcSel.options].some((o) => o.value === prev)) svcSel.value = prev;
+  }
+
+  if (insightsEl) {
+    const lvl = (x) => (["ok", "warn", "info"].includes(x) ? x : "info");
+    const items = (ins.insights || []).map(
+      (it) =>
+        `<li class="insight-${lvl((it.level || "info").toLowerCase())}"><strong>${escapeHtml(it.title || "")}</strong> — ${escapeHtml(it.detail || "")}</li>`,
+    );
+    insightsEl.innerHTML = items.length ? items : '<li class="muted">No insights.</li>';
+    if (ins.health_probes && ins.health_probes.length) {
+      const probeLine = ins.health_probes
+        .map(
+          (p) =>
+            `${p.url}: ${p.ok ? "ok" : "fail"}${p.status_code != null ? ` HTTP ${p.status_code}` : ""}${p.ms != null ? ` ${p.ms}ms` : ""}${p.error ? ` ${escapeHtml(p.error)}` : ""}`,
+        )
+        .join(" · ");
+      insightsEl.innerHTML += `<li class="insight-info muted small"><strong>Probes</strong> — ${probeLine}</li>`;
+    }
+  }
+
+  if (logPre && !liveLogs) {
+    logPre.textContent = logs.ok ? logs.log || "(empty)" : logs.error || "Logs request failed";
+    hostedLogsScrollToBottomIfFollow();
+  }
+
+  updateHostedAppChartsFromHistory(hist);
+
+  if (liveLogs) {
+    const streamKey = `${slug}|${tail}|${svc}`;
+    const streamRunning = hostedLogStreamAbort != null;
+    if (!streamRunning || streamKey !== hostedLogStreamLiveKey) {
+      hostedLogStreamLiveKey = streamKey;
+      startHostedLogStream();
+    }
+  }
+
+  if (controlsEl && app) {
+    const SB = serviceBrandUi();
+    const target = {
+      id: app.target_id,
+      label: app.label || slug,
+      actions: HOSTED_APP_ACTIONS,
+      runtime: snap.runtime || app.runtime,
+    };
+    controlsEl.innerHTML = hostedComposeControlActionsHtml(SB, target);
+    controlsEl.querySelectorAll("button.ctrl-act").forEach((btn) => {
+      btn.addEventListener("click", () =>
+        runControlAction(
+          btn.getAttribute("data-control-target") || "",
+          btn.getAttribute("data-action") || "",
+          btn.getAttribute("data-label") || "",
+        ),
+      );
+    });
+  }
+}
+
+function initHostedAppsLogToolbar() {
+  const root = document.getElementById("hostedAppsTab");
+  if (!root || root.dataset.logWired === "1") return;
+  root.dataset.logWired = "1";
+  initHostedLogFollowScrollSync();
+  const refresh = document.getElementById("hostedLogRefresh");
+  const search = document.getElementById("hostedLogSearch");
+  if (refresh) {
+    refresh.addEventListener("click", () => refreshHostedAppsPanel());
+  }
+  if (search) {
+    search.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") refreshHostedAppsPanel();
+    });
+  }
+  ["hostedLogTail", "hostedLogSince", "hostedLogService"].forEach((id) => {
+    document.getElementById(id)?.addEventListener("change", () => refreshHostedAppsPanel());
+  });
+  const liveChk = document.getElementById("hostedLogLive");
+  if (liveChk) {
+    liveChk.addEventListener("change", () => {
+      if (!liveChk.checked) {
+        hostedLogStreamLiveKey = "";
+        stopHostedLogStream();
+      }
+      if (activeTab === "hostedAppsTab" && hostedSelectedSlug) {
+        refreshHostedAppsPanel();
+      }
+    });
+  }
+  document.getElementById("hostedLogFollowBottom")?.addEventListener("change", (e) => {
+    if (e.target.checked) {
+      hostedLogsScrollToBottomIfFollow();
+    }
+  });
+}
+
+function initRoutesTab() {
+  const tab = document.getElementById("routesTab");
+  if (!tab || tab.dataset.wired === "1") return;
+  tab.dataset.wired = "1";
+  document.getElementById("traefikRoutesRefresh")?.addEventListener("click", () => loadTraefikRoutesPanel());
+  document.getElementById("traefikMergeBtn")?.addEventListener("click", () => traefikMergeFragment());
+}
+
+async function loadTraefikRoutesPanel() {
+  const msg = document.getElementById("traefikRoutesMsg");
+  const pathEl = document.getElementById("traefikRoutesPath");
+  const rb = document.getElementById("traefikRoutersBody");
+  const sb = document.getElementById("traefikServicesBody");
+  const hh = document.getElementById("traefikHostedHints");
+  if (!rb || !sb) return;
+  try {
+    const res = await fetch("/api/traefik/routes");
+    const data = await res.json();
+    if (!data.ok) {
+      if (pathEl) pathEl.textContent = data.path || "—";
+      rb.innerHTML = `<tr><td colspan="5">${escapeHtml(data.error || "Failed to load")}</td></tr>`;
+      sb.innerHTML = "";
+      if (hh) hh.innerHTML = "";
+      return;
+    }
+    if (pathEl) pathEl.textContent = data.path || "—";
+    const routers = data.routers || [];
+    rb.innerHTML = routers.length
+      ? routers
+          .map(
+            (r) =>
+              `<tr><td><code>${escapeHtml(r.key)}</code></td><td>${escapeHtml(String(r.rule || "—"))}</td><td><code>${escapeHtml(String(r.service || "—"))}</code></td><td>${escapeHtml((r.entryPoints || []).join(", ") || "—")}</td><td>${r.tls ? "yes" : "—"}</td></tr>`,
+          )
+          .join("")
+      : `<tr><td colspan="5" class="muted">No routers</td></tr>`;
+    const services = data.services || [];
+    sb.innerHTML = services.length
+      ? services
+          .map((s) => {
+            const urls = (s.urls || []).join(", ") || "—";
+            return `<tr><td><code>${escapeHtml(s.key)}</code></td><td>${escapeHtml(urls)}</td></tr>`;
+          })
+          .join("")
+      : `<tr><td colspan="2" class="muted">No services</td></tr>`;
+
+    if (hh) {
+      const hints = data.hosted_hints || [];
+      if (!hints.length) {
+        hh.innerHTML =
+          "<p class=\"muted small\">No hosted apps with <code>routing.entries</code> (or <code>traefikCleanup</code>) in the manifest.</p>";
+      } else {
+        hh.innerHTML = hints
+          .map((h) => {
+            return `<div class="routes-hint-card" data-hint-slug="${escapeAttr(h.slug)}">
+            <div class="routes-hint-card__title">${escapeHtml(h.label || h.slug)} <span class="muted">(${escapeHtml(h.slug)})</span></div>
+            <div class="routes-hint-card__meta">Manifest: <code>${escapeHtml(h.manifest || "")}</code></div>
+            <div class="muted small">${h.in_traefik ? "" : "<strong>Not in dynamic.yml</strong> — "}Routers in file: ${(h.routers_present || []).map((x) => `<code>${escapeHtml(x)}</code>`).join(" ") || "—"}</div>
+            <div class="muted small">Services in file: ${(h.services_present || []).map((x) => `<code>${escapeHtml(x)}</code>`).join(" ") || "—"}</div>
+            <div class="routes-hint-actions">
+              <label><input type="checkbox" class="routes-offboard-strip" checked /> Strip Traefik keys</label>
+              <label><input type="checkbox" class="routes-offboard-cf" checked /> Clean KV/R2/D1 (<code>leco.local-cf.yaml</code>)</label>
+              <button type="button" class="routes-offboard-btn" data-offboard-slug="${escapeAttr(h.slug)}">Remove from registry</button>
+            </div></div>`;
+          })
+          .join("");
+        hh.querySelectorAll("[data-offboard-slug]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const slug = btn.getAttribute("data-offboard-slug") || "";
+            const card = btn.closest("[data-hint-slug]");
+            const strip = card?.querySelector(".routes-offboard-strip")?.checked !== false;
+            const cleanCf = card?.querySelector(".routes-offboard-cf")?.checked !== false;
+            runHostedOffboard(slug, strip, cleanCf);
+          });
+        });
+      }
+    }
+    if (msg) msg.textContent = "";
+  } catch (e) {
+    rb.innerHTML = `<tr><td colspan="5">${escapeHtml(e.message || String(e))}</td></tr>`;
+  }
+}
+
+async function runHostedOffboard(slug, stripTraefik, cleanLocalCf) {
+  const ok = await showAppConfirm({
+    title: `Remove hosted app ${slug}`,
+    message:
+      "Removes this id from config/leco-registry.yaml. Optionally strips Traefik routers/services derived from the manifest and deletes local KV/R2/D1 resources listed in leco.local-cf.yaml.",
+    confirmText: "Remove",
+  });
+  if (!ok) return;
+  const msg = document.getElementById("traefikRoutesMsg");
+  try {
+    const res = await fetch(`/api/hosted-apps/${encodeURIComponent(slug)}/offboard`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Control-Token": controlToken(),
+      },
+      body: JSON.stringify({
+        strip_traefik: stripTraefik,
+        clean_local_cf: cleanLocalCf,
+        token: controlToken(),
+      }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      if (msg) msg.textContent = data.error || JSON.stringify(data);
+      return;
+    }
+    if (msg)
+      msg.textContent = `Removed ${slug}. registry_removed=${data.registry_removed}. See browser console for details.`;
+    console.info("offboard result", data);
+    await loadTraefikRoutesPanel();
+    if (activeTab === "hostedAppsTab") loadHostedAppsList();
+  } catch (e) {
+    if (msg) msg.textContent = String(e.message || e);
+  }
+}
+
+async function traefikMergeFragment() {
+  const ta = document.getElementById("traefikMergeYaml");
+  const msg = document.getElementById("traefikRoutesMsg");
+  const yamlText = ta?.value?.trim() || "";
+  if (!yamlText) {
+    if (msg) msg.textContent = "Paste YAML first.";
+    return;
+  }
+  try {
+    const res = await fetch("/api/traefik/merge-fragment", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Control-Token": controlToken(),
+      },
+      body: JSON.stringify({ yaml: yamlText, token: controlToken() }),
+    });
+    const data = await res.json();
+    if (msg) msg.textContent = data.message || JSON.stringify(data);
+    if (res.ok && data.ok) await loadTraefikRoutesPanel();
+  } catch (e) {
+    if (msg) msg.textContent = String(e.message || e);
+  }
+}
+
 async function loadControlTargets() {
   const row = document.getElementById("controlTokenRow");
   const grid = document.getElementById("controlTargets");
@@ -2850,7 +3892,11 @@ async function loadControlTargets() {
 
     grid.querySelectorAll("button.ctrl-act").forEach((btn) => {
       btn.addEventListener("click", () =>
-        runControlAction(btn.dataset.target, btn.dataset.action, btn.dataset.label || ""),
+        runControlAction(
+          btn.getAttribute("data-control-target") || "",
+          btn.getAttribute("data-action") || "",
+          btn.getAttribute("data-label") || "",
+        ),
       );
     });
   } catch (e) {
@@ -3150,6 +4196,7 @@ async function runControlAction(targetId, action, cardLabel) {
     if (runningBar) runningBar.classList.add("is-hidden");
     if (doneBar) doneBar.classList.remove("is-hidden");
     loadControlTargets();
+    refreshHostedAppsPanel().catch(() => {});
     try {
       if (lastControlActionResultText) {
         localStorage.setItem("dashboard_last_control_result", lastControlActionResultText);
@@ -3181,11 +4228,8 @@ function updateCharts(data) {
     trendHistory.errors.shift();
   }
 
-  charts.line.data.labels = trendHistory.labels;
-  charts.line.data.datasets[0].data = trendHistory.cpu;
-  charts.line.data.datasets[1].data = trendHistory.memory;
-  charts.line.data.datasets[2].data = trendHistory.errors;
-  charts.line.update();
+  applyTrendHistoryToLineChart();
+  saveTrendHistoryCache();
 
   charts.bar.data.labels = services.map((x) => x.service);
   charts.bar.data.datasets[0].data = services.map((x) => Number(x.metrics?.cpu_percent || 0));
@@ -3460,6 +4504,10 @@ function scheduleRefresh() {
         loadLogs();
       } else if (activeTab === "metricsTab") {
         loadMetricsCharts();
+      } else if (activeTab === "hostedAppsTab") {
+        refreshHostedAppsPanel();
+      } else if (activeTab === "routesTab") {
+        loadTraefikRoutesPanel();
       } else if (activeTab === "referenceTab") {
         loadReferenceTab();
       }
@@ -3504,7 +4552,7 @@ async function loadOverview() {
     updateOverviewDashboard(data, cloudflareData, metricsData);
     renderInfrastructurePanel(data, cloudflareData);
     saveOverviewCache(data, cloudflareData, metricsData);
-    saveMetricsCache(metricsData);
+    /* Do not saveMetricsCache here: overview uses a shorter history limit and would overwrite the Deep metrics tab cache. */
   } catch (e) {
     console.warn("loadOverview failed", e);
   }
@@ -3567,7 +4615,12 @@ async function bootstrap() {
   initTabs();
   initHostMetricsPanelRefresh();
   initControlBulkBar();
+  initHostedAppsLogToolbar();
+  initRoutesTab();
+  initHostedChartExpandModal();
+  hydrateTrendHistoryFromCache();
   hydrateOverviewFromCache();
+  applyTrendHistoryToLineChart();
   initControlActionOverlay();
   initOllamaModelsPanel();
   await initLogsPanel();
@@ -3592,6 +4645,10 @@ async function bootstrap() {
       loadDocsCatalog();
     } else if (activeTab === "controlTab") {
       loadControlTargets();
+    } else if (activeTab === "hostedAppsTab") {
+      refreshHostedAppsPanel();
+    } else if (activeTab === "routesTab") {
+      loadTraefikRoutesPanel();
     } else {
       loadLogs();
     }

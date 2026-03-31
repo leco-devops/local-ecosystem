@@ -101,6 +101,151 @@ def api_control_targets():
     return jsonify(list_targets())
 
 
+@app.get("/api/hosted-apps")
+def api_hosted_apps():
+    from hosted_apps import list_hosted_apps
+
+    return jsonify(list_hosted_apps())
+
+
+@app.get("/api/hosted-apps/<slug>/snapshot")
+def api_hosted_snapshot(slug: str):
+    from hosted_app_timeseries import maybe_append_from_aggregate
+    from hosted_apps import snapshot_for_slug
+
+    data = snapshot_for_slug(slug)
+    if data.get("ok") and data.get("aggregate"):
+        maybe_append_from_aggregate(slug, data["aggregate"])
+    return jsonify(data)
+
+
+@app.get("/api/hosted-apps/<slug>/metrics/history")
+def api_hosted_metrics_history(slug: str):
+    from hosted_app_timeseries import get_history, maybe_append_from_aggregate
+    from hosted_apps import build_aggregate_for_timeseries
+
+    agg = build_aggregate_for_timeseries(slug)
+    if agg:
+        maybe_append_from_aggregate(slug, agg)
+    limit = request.args.get("limit", type=int)
+    return jsonify(get_history(slug, limit))
+
+
+@app.get("/api/hosted-apps/<slug>/logs")
+def api_hosted_logs(slug: str):
+    from hosted_apps import logs_for_slug
+
+    tail = request.args.get("tail", "400")
+    since = request.args.get("since", "1800")
+    service = (request.args.get("service") or "").strip() or None
+    search = request.args.get("search", "") or ""
+    try:
+        tail_v = int(tail)
+    except ValueError:
+        tail_v = 400
+    try:
+        since_v = int(since)
+    except ValueError:
+        since_v = 1800
+    return jsonify(logs_for_slug(slug, tail=tail_v, since_seconds=since_v, service=service, search=search))
+
+
+@app.get("/api/hosted-apps/<slug>/logs/stream")
+def api_hosted_logs_stream(slug: str):
+    from hosted_apps import logs_stream_for_slug
+
+    tail = request.args.get("tail", 200, type=int) or 200
+    service = (request.args.get("service") or "").strip() or None
+
+    @stream_with_context
+    def gen():
+        try:
+            for line in logs_stream_for_slug(slug, tail=tail, service=service):
+                yield line
+        except GeneratorExit:
+            raise
+
+    return Response(
+        gen(),
+        mimetype="text/plain; charset=utf-8",
+        headers={
+            "Cache-Control": "no-store, no-transform",
+            "X-Accel-Buffering": "no",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@app.get("/api/hosted-apps/<slug>/insights")
+def api_hosted_insights(slug: str):
+    from hosted_apps import insights_for_slug
+
+    return jsonify(insights_for_slug(slug))
+
+
+@app.get("/api/traefik/routes")
+def api_traefik_routes():
+    from hosted_offboard import traefik_routes_with_hosted_hints
+
+    return jsonify(traefik_routes_with_hosted_hints())
+
+
+@app.post("/api/hosted-apps/<slug>/offboard")
+def api_hosted_offboard(slug: str):
+    from hosted_offboard import offboard_hosted_app
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    strip_t = data.get("strip_traefik", True)
+    clean_cf = data.get("clean_local_cf", True)
+    if isinstance(strip_t, str):
+        strip_t = strip_t.lower() in ("1", "true", "yes")
+    if isinstance(clean_cf, str):
+        clean_cf = clean_cf.lower() in ("1", "true", "yes")
+    return jsonify(offboard_hosted_app(slug, strip_traefik=bool(strip_t), clean_local_cf=bool(clean_cf)))
+
+
+@app.post("/api/traefik/merge-fragment")
+def api_traefik_merge_fragment():
+    from traefik_dynamic_file import merge_http_fragment
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    frag = (data.get("yaml") or data.get("fragment") or "").strip()
+    if not frag:
+        return jsonify({"ok": False, "error": "yaml / fragment required"}), 400
+    ok, msg = merge_http_fragment(frag)
+    return jsonify({"ok": ok, "message": msg}), (200 if ok else 400)
+
+
+@app.post("/api/traefik/strip-keys")
+def api_traefik_strip_keys():
+    from traefik_dynamic_file import strip_router_service_keys
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    routers = data.get("routers") or []
+    services = data.get("services") or []
+    if not isinstance(routers, list):
+        routers = []
+    if not isinstance(services, list):
+        services = []
+    rks = [str(x) for x in routers if x]
+    sks = [str(x) for x in services if x]
+    nr, ns, err = strip_router_service_keys(rks, sks)
+    return jsonify(
+        {
+            "ok": err is None,
+            "routers_removed": nr,
+            "services_removed": ns,
+            "error": err,
+        }
+    )
+
+
 @app.get("/api/ollama/models")
 def api_ollama_models():
     return jsonify(build_models_payload())

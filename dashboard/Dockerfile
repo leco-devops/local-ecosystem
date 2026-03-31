@@ -29,6 +29,13 @@ COPY docs_catalog.py .
 COPY host_metrics.py .
 COPY timeseries.py .
 COPY control_targets.py .
+COPY leco_control.py .
+COPY hosted_apps.py .
+COPY hosted_app_timeseries.py .
+COPY traefik_manifest_keys.py .
+COPY traefik_dynamic_file.py .
+COPY local_cf_teardown.py .
+COPY hosted_offboard.py .
 COPY control.py .
 COPY ollama_models.py .
 COPY templates ./templates

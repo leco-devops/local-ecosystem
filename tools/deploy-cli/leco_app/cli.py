@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -10,12 +11,20 @@ from pathlib import Path
 from typing import Annotated, Optional
 
 import typer
+import yaml
 
 from leco_app import __version__
 from leco_app.compose_runner import run_compose, run_compose_capture
 from leco_app.detectors.compose import detect_compose
 from leco_app.detectors.ports import check_host_ports
 from leco_app.detectors.wrangler import detect_wrangler, list_likely_secret_var_keys
+from leco_app.ecosystem_registry import (
+    register_in_ecosystem,
+    resolve_registered_manifest_path,
+    unregister_from_ecosystem,
+)
+from leco_app.local_cf_teardown import teardown_from_leco_local_cf_path
+from leco_app.local_cf_provision import provision_from_manifest
 from leco_app.paths import app_state_dir, default_manifest_name
 from leco_app.schema import (
     ApplicationManifest,
@@ -23,9 +32,11 @@ from leco_app.schema import (
     DockerComposeSpec,
     RoutingEntry,
     RoutingSpec,
+    ServiceTarget,
     load_manifest,
     save_manifest,
 )
+from leco_app.traefik_dynamic_cleanup import manifest_traefik_keys, strip_traefik_dynamic_yml
 from leco_app.traefik_fragment import manifest_to_traefik_yaml
 
 app = typer.Typer(
@@ -77,6 +88,20 @@ def cmd_init(
         typer.Option("--out", "-o", help=f"Write manifest (default: <path>/{default_manifest_name()})"),
     ] = None,
     non_interactive: Annotated[bool, typer.Option("--yes", "-y", help="Skip prompts; use defaults")] = False,
+    provision_local_cf: Annotated[
+        bool,
+        typer.Option(
+            "--provision-local-cf",
+            help="After init, create KV/R2/D1 on local cloudflare-local (kv.lh, r2.lh, d1.lh) from wrangler.toml",
+        ),
+    ] = False,
+    no_provision_local_cf: Annotated[
+        bool,
+        typer.Option(
+            "--no-provision-local-cf",
+            help="Never run local CF provision (overrides prompt / --provision-local-cf)",
+        ),
+    ] = False,
 ) -> None:
     """Analyze the repo and write leco.app.yaml (interactive unless -y)."""
     root = path.resolve()
@@ -131,14 +156,44 @@ def cmd_init(
 
     routing: RoutingSpec | None = None
     if not non_interactive and typer.confirm("Add optional Traefik routing (*.lh) entries?", default=False):
+        typer.echo("Enter each route, then press Enter on an empty hostname to finish.")
         entries: list[RoutingEntry] = []
         while True:
-            hn = typer.prompt("Hostname (e.g. myapp.lh)", default="")
+            hn = typer.prompt(
+                "Hostname (e.g. myapp.lh; empty = done)",
+                default="",
+                show_default=False,
+            )
             if not hn.strip():
                 break
-            bh = typer.prompt("Backend Docker DNS name (container/service)", default="")
-            bp = typer.prompt("Backend port", default=8080, type=int)
-            entries.append(RoutingEntry(hostname=hn.strip(), backend_host=bh.strip(), backend_port=bp))
+            split_ui_api = typer.confirm(
+                "Split route (browser UI + same-host /api → backend)? Recommended for React + FastAPI.",
+                default=False,
+            )
+            if split_ui_api:
+                fh = typer.prompt("Frontend container/DNS name (e.g. cv-frontend)", default="")
+                fp = typer.prompt("Frontend container port", default=3000, type=int)
+                ap = typer.prompt("API path prefix", default="/api")
+                ah = typer.prompt("API backend container/DNS name (e.g. cv-backend)", default="")
+                api_p = typer.prompt("API backend container port", default=8001, type=int)
+                if not fh.strip() or not ah.strip():
+                    typer.secho("Split mode needs non-empty frontend and API host names.", fg=typer.colors.RED, err=True)
+                    raise typer.Exit(1)
+                entries.append(
+                    RoutingEntry(
+                        hostname=hn.strip(),
+                        api_path_prefix=ap.strip() or "/api",
+                        frontend=ServiceTarget(host=fh.strip(), port=fp),
+                        api_backend=ServiceTarget(host=ah.strip(), port=api_p),
+                    )
+                )
+            else:
+                bh = typer.prompt("Backend Docker DNS name (container/service)", default="")
+                bp = typer.prompt("Backend port", default=8080, type=int)
+                if not bh.strip():
+                    typer.secho("Skipped this host: backend name empty.", fg=typer.colors.YELLOW, err=True)
+                    continue
+                entries.append(RoutingEntry(hostname=hn.strip(), backend_host=bh.strip(), backend_port=bp))
         if entries:
             routing = RoutingSpec(entries=entries)
 
@@ -200,6 +255,29 @@ def cmd_init(
         json.dumps({"root": str(root), "manifest": str(out.resolve())}, indent=2),
         encoding="utf-8",
     )
+
+    if cf_spec and not no_provision_local_cf:
+        do_pv = False
+        if provision_local_cf:
+            do_pv = True
+        elif not non_interactive:
+            do_pv = typer.confirm(
+                "Create dedicated local KV namespaces, R2 buckets, and D1 DBs from wrangler (cloudflare-local)?",
+                default=True,
+            )
+        if do_pv:
+            code = provision_from_manifest(
+                out.resolve(),
+                app_slug=name,
+                wrangler_env=cf_spec.wrangler_env,
+                echo=typer.echo,
+            )
+            if code != 0:
+                typer.secho(
+                    "Local CF provision had failures (is cloudflare-local up? Try LECO_LOCAL_KV_URL etc.).",
+                    fg=typer.colors.YELLOW,
+                    err=True,
+                )
 
 
 @app.command("deploy")
@@ -272,6 +350,91 @@ def cmd_down(
     raise typer.Exit(code)
 
 
+@app.command("offload")
+def cmd_offload(
+    cwd: Path = Path("."),
+    manifest: Optional[Path] = None,
+    volumes: Annotated[bool, typer.Option("--volumes", "-v", help="docker compose down -v (delete volumes)")] = False,
+    traefik_dynamic: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--traefik-dynamic",
+            help="Remove this app's routers/services from Traefik file-provider YAML (e.g. ../local-ecosystem/traefik/dynamic.yml)",
+        ),
+    ] = None,
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Print plan only; no compose or file changes")] = False,
+    yes: Annotated[bool, typer.Option("-y", "--yes", help="Skip confirmation")] = False,
+) -> None:
+    """Remove app from localhost: optional Traefik routes + docker compose down."""
+    mp = _find_manifest(cwd, manifest)
+    m = load_manifest(mp)
+
+    has_compose = bool(m.docker_compose)
+    rkeys, skeys = manifest_traefik_keys(m)
+    has_traefik_keys = bool(rkeys or skeys)
+
+    if traefik_dynamic and not has_traefik_keys:
+        typer.secho(
+            "Manifest has no routing-derived Traefik keys and no traefikCleanup block — "
+            "nothing to remove from dynamic.yml (add traefikCleanup.routers/services if you renamed keys).",
+            fg=typer.colors.YELLOW,
+            err=True,
+        )
+
+    if not has_compose and not traefik_dynamic:
+        typer.secho(
+            "Nothing to do: manifest has no dockerCompose and --traefik-dynamic not set.",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    if not dry_run and not yes:
+        parts = []
+        if traefik_dynamic and has_traefik_keys:
+            parts.append(f"edit Traefik file ({len(rkeys)} routers, {len(skeys)} services)")
+        if has_compose:
+            parts.append("docker compose down" + (" -v" if volumes else ""))
+        if parts and not typer.confirm(f"Offload: {'; '.join(parts)} — continue?", default=False):
+            raise typer.Exit(0)
+
+    if traefik_dynamic and has_traefik_keys:
+        tf = traefik_dynamic.resolve()
+        if not tf.is_file():
+            typer.secho(f"Not a file: {tf}", fg=typer.colors.RED, err=True)
+            raise typer.Exit(1)
+        try:
+            rr, ss, bak = strip_traefik_dynamic_yml(tf, rkeys, skeys, dry_run=dry_run)
+        except (OSError, ValueError, yaml.YAMLError) as exc:
+            typer.secho(f"Traefik YAML error: {exc}", fg=typer.colors.RED, err=True)
+            raise typer.Exit(1) from exc
+        if dry_run:
+            typer.echo(f"Traefik [dry-run]: would remove {rr} router(s), {ss} service(s) from {tf}")
+        elif rr == 0 and ss == 0:
+            typer.secho(
+                f"No matching router/service keys in {tf} (already removed or keys differ from manifest).",
+                fg=typer.colors.YELLOW,
+                err=True,
+            )
+        else:
+            typer.secho(
+                f"Traefik: removed {rr} router(s), {ss} service(s); backup {bak}",
+                fg=typer.colors.GREEN,
+            )
+
+    if has_compose:
+        if dry_run:
+            typer.echo(f"[dry-run] docker compose down{' -v' if volumes else ''} (app {m.name}, {mp.parent})")
+        else:
+            args = ["down", "--remove-orphans"]
+            if volumes:
+                args.append("-v")
+            code = run_compose(m, mp, args)
+            if code == 0:
+                typer.secho("Compose stack removed.", fg=typer.colors.GREEN)
+            raise typer.Exit(code)
+
+
 @app.command("logs")
 def cmd_logs(
     cwd: Path = Path("."),
@@ -340,6 +503,172 @@ def cmd_traefik_fragment(
         typer.secho(f"Wrote {out}", fg=typer.colors.GREEN)
     else:
         typer.echo(text)
+
+
+@app.command("ecosystem-register")
+def cmd_ecosystem_register(
+    cwd: Path = Path("."),
+    manifest: Optional[Path] = None,
+    ecosystem_root: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--ecosystem-root",
+            "-E",
+            help="local-ecosystem repository root (or set LECO_ECOSYSTEM_ROOT)",
+        ),
+    ] = None,
+    app_id: Annotated[Optional[str], typer.Option("--id", help="Registry slug (default: manifest name)")] = None,
+    label: Annotated[Optional[str], typer.Option("--label", "-l", help="Ops Dashboard card title")] = None,
+    wrangler_env: Annotated[
+        Optional[str],
+        typer.Option(
+            "--wrangler-env",
+            help="Which [env.NAME] to read for KV/R2/D1 (default: manifest cloudflare.wranglerEnv or top-level)",
+        ),
+    ] = None,
+    no_provision_local_cf: Annotated[
+        bool,
+        typer.Option(
+            "--no-provision-local-cf",
+            help="Skip creating local KV/R2/D1 from wrangler on kv.lh / r2.lh / d1.lh",
+        ),
+    ] = False,
+) -> None:
+    """Register this app in local-ecosystem config/leco-registry.yaml for the Ops Dashboard Control tab."""
+    er = ecosystem_root
+    if er is None:
+        raw = (os.environ.get("LECO_ECOSYSTEM_ROOT") or "").strip()
+        er = Path(raw).expanduser() if raw else None
+    if er is None or not er.is_dir():
+        typer.secho(
+            "Pass --ecosystem-root /path/to/local-ecosystem or export LECO_ECOSYSTEM_ROOT.",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(1)
+    mp = _find_manifest(cwd, manifest)
+    try:
+        entry = register_in_ecosystem(er.resolve(), mp.resolve(), app_id=app_id, label=label)
+    except (OSError, ValueError) as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from exc
+    typer.secho(
+        f"Registered {entry['id']} → {er / 'config' / 'leco-registry.yaml'} (Control target leco-stack-{entry['id']})",
+        fg=typer.colors.GREEN,
+    )
+    if not no_provision_local_cf:
+        code = provision_from_manifest(
+            mp.resolve(),
+            app_slug=entry["id"],
+            wrangler_env=wrangler_env,
+            echo=typer.echo,
+        )
+        if code != 0:
+            typer.secho(
+                "Local CF provision had failures — registry entry is still saved. "
+                "Fix adapters/DNS and run: leco-app provision-local-cf",
+                fg=typer.colors.YELLOW,
+                err=True,
+            )
+
+
+@app.command("provision-local-cf")
+def cmd_provision_local_cf(
+    cwd: Path = Path("."),
+    manifest: Optional[Path] = None,
+    wrangler_env: Annotated[
+        Optional[str],
+        typer.Option("--wrangler-env", help="Override manifest cloudflare.wranglerEnv"),
+    ] = None,
+    app_slug: Annotated[
+        Optional[str],
+        typer.Option("--app-slug", help="Override app id for KV namespace prefix (default: manifest name)"),
+    ] = None,
+) -> None:
+    """Create KV namespaces, R2 buckets, and D1 databases on local adapters from wrangler.toml (manifest path)."""
+    mp = _find_manifest(cwd, manifest)
+    m = load_manifest(mp)
+    slug = (app_slug or "").strip() or m.name
+    code = provision_from_manifest(mp.resolve(), app_slug=slug, wrangler_env=wrangler_env, echo=typer.echo)
+    raise typer.Exit(code)
+
+
+@app.command("ecosystem-unregister")
+def cmd_ecosystem_unregister(
+    app_id: Annotated[str, typer.Argument(help="Registry slug (same as ecosystem-register id)")],
+    ecosystem_root: Annotated[
+        Optional[Path],
+        typer.Option("--ecosystem-root", "-E", help="local-ecosystem repo root"),
+    ] = None,
+    strip_traefik: Annotated[
+        bool,
+        typer.Option(
+            "--strip-traefik/--no-strip-traefik",
+            help="Remove routers/services derived from manifest (traefik/dynamic.yml)",
+        ),
+    ] = True,
+    clean_local_cf: Annotated[
+        bool,
+        typer.Option(
+            "--clean-local-cf/--no-clean-local-cf",
+            help="Delete KV/R2/D1 from leco.local-cf.yaml via kv.lh / r2.lh / d1.lh",
+        ),
+    ] = True,
+    traefik_dynamic: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--traefik-dynamic",
+            help="Traefik file-provider YAML (default: <ecosystem-root>/traefik/dynamic.yml)",
+        ),
+    ] = None,
+) -> None:
+    """Remove an app from leco-registry.yaml; optionally strip Traefik routes and clean local CF adapters."""
+    er = ecosystem_root
+    if er is None:
+        raw = (os.environ.get("LECO_ECOSYSTEM_ROOT") or "").strip()
+        er = Path(raw).expanduser() if raw else None
+    if er is None or not er.is_dir():
+        typer.secho("Pass --ecosystem-root or set LECO_ECOSYSTEM_ROOT.", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+    eco = er.resolve()
+    mp = resolve_registered_manifest_path(eco, app_id)
+    if not mp:
+        typer.secho(
+            f"No registry entry or manifest file for {app_id!r} — only registry row will be removed if present.",
+            fg=typer.colors.YELLOW,
+            err=True,
+        )
+
+    tf = traefik_dynamic.resolve() if traefik_dynamic else (eco / "traefik" / "dynamic.yml")
+
+    if mp and clean_local_cf:
+        cf = mp.parent / "leco.local-cf.yaml"
+        fails = teardown_from_leco_local_cf_path(cf, echo=typer.echo)
+        if fails:
+            typer.secho(
+                "Local CF cleanup failed — registry not changed. Fix adapters or use --no-clean-local-cf.",
+                fg=typer.colors.RED,
+                err=True,
+            )
+            raise typer.Exit(1)
+
+    if mp and strip_traefik:
+        try:
+            m = load_manifest(mp)
+            rkeys, skeys = manifest_traefik_keys(m)
+            if rkeys or skeys:
+                rr, ss, bak = strip_traefik_dynamic_yml(tf, rkeys, skeys, dry_run=False)
+                typer.secho(f"Traefik: removed {rr} router(s), {ss} service(s)" + (f" (backup {bak.name})" if bak else ""), fg=typer.colors.GREEN)
+            else:
+                typer.secho("Traefik: no routing-derived keys in manifest — skipped.", fg=typer.colors.YELLOW, err=True)
+        except (OSError, ValueError) as exc:
+            typer.secho(f"Traefik strip skipped: {exc}", fg=typer.colors.YELLOW, err=True)
+
+    if unregister_from_ecosystem(eco, app_id):
+        typer.secho(f"Unregistered {app_id}", fg=typer.colors.GREEN)
+    else:
+        typer.secho(f"No entry with id {app_id!r}", fg=typer.colors.YELLOW, err=True)
+        raise typer.Exit(1)
 
 
 @app.command("cf-deploy")

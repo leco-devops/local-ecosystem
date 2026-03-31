@@ -11,6 +11,7 @@ import docker
 import requests
 
 from control_targets import AI_TARGETS, CF_TARGETS, COMPOSE_REL, INFRA_COMPOSE_REL, INFRA_TARGETS
+from leco_control import resolve_leco_target
 
 PROJECT_ROOT = os.getenv("DASHBOARD_PROJECT_ROOT", "/project")
 COMPOSE_FILE = os.path.join(PROJECT_ROOT, COMPOSE_REL)
@@ -364,6 +365,10 @@ def run_action(target_id: str, action: str):
     if target_id == "stack-ecosystem-all":
         return _stack_ecosystem_all(action)
 
+    leco_m = resolve_leco_target(target_id)
+    if leco_m:
+        return _leco_stack_action(leco_m, action)
+
     meta = _BY_ID.get(target_id)
     if not meta:
         return {"ok": False, "error": "unknown target"}
@@ -449,6 +454,102 @@ def _stack_cf_all(action: str):
         ok, res = _backup_d1_all()
         return {"ok": ok, "detail": res}
     return {"ok": False, "error": f"action {action} not supported for full stack"}
+
+
+def _leco_compose_run(meta: dict, args: list, *, timeout: int) -> tuple[int, str]:
+    tail = meta["compose_tail"]
+    root = meta["root"]
+    return _run(["docker", "compose", *tail, *args], cwd=root, timeout=timeout)
+
+
+def _leco_stack_action(meta: dict, action: str) -> dict:
+    """Whole-project docker compose for a leco.app.yaml registered in config/leco-registry.yaml."""
+    if action == "backup":
+        return {"ok": False, "error": "backup not defined for leco compose stacks"}
+    to = 3600 if action in {"deploy", "recreate"} else 600
+    if action == "deploy":
+        code, log = _leco_compose_run(meta, ["up", "-d", "--build"], timeout=to)
+        return {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
+    if action == "recreate":
+        code, log = _leco_compose_run(meta, ["up", "-d", "--force-recreate"], timeout=to)
+        return {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
+    if action == "stop":
+        code, log = _leco_compose_run(meta, ["stop"], timeout=to)
+        return {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
+    if action == "restart":
+        code, log = _leco_compose_run(meta, ["restart"], timeout=to)
+        return {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
+    if action == "remove":
+        code, log = _leco_compose_run(meta, ["down", "--remove-orphans"], timeout=to)
+        return {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
+    if action == "reset":
+        code, log = _leco_compose_run(meta, ["down", "-v", "--remove-orphans"], timeout=to)
+        return {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
+    if action == "start":
+        code, log = _leco_compose_run(meta, ["start"], timeout=to)
+        if code != 0:
+            code, log = _leco_compose_run(meta, ["up", "-d"], timeout=to)
+        return {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
+    if action == "pause":
+        code, log = _leco_compose_run(meta, ["pause"], timeout=to)
+        return {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
+    if action == "unpause":
+        code, log = _leco_compose_run(meta, ["unpause"], timeout=to)
+        return {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
+    return {"ok": False, "error": f"unsupported action {action} for leco stack"}
+
+
+def _stream_leco_compose(meta: dict, args: list, *, timeout: int) -> Iterator[dict[str, Any] | Any]:
+    tail = meta["compose_tail"]
+    root = meta["root"]
+    code, log = yield from _yield_run(["docker", "compose", *tail, *args], cwd=root, timeout=timeout)
+    return (code, log)
+
+
+def _stream_leco_stack_action(meta: dict, action: str) -> Iterator[dict[str, Any]]:
+    if action == "backup":
+        yield _emit_done(False, error="backup not defined for leco compose stacks")
+        return
+    to = 3600 if action in {"deploy", "recreate"} else 600
+    if action == "deploy":
+        code, log = yield from _stream_leco_compose(meta, ["up", "-d", "--build"], timeout=to)
+        yield _emit_done(code == 0, exit_code=code, log=log[-12000:])
+        return
+    if action == "recreate":
+        code, log = yield from _stream_leco_compose(meta, ["up", "-d", "--force-recreate"], timeout=to)
+        yield _emit_done(code == 0, exit_code=code, log=log[-12000:])
+        return
+    if action == "stop":
+        code, log = yield from _stream_leco_compose(meta, ["stop"], timeout=to)
+        yield _emit_done(code == 0, exit_code=code, log=log[-12000:])
+        return
+    if action == "restart":
+        code, log = yield from _stream_leco_compose(meta, ["restart"], timeout=to)
+        yield _emit_done(code == 0, exit_code=code, log=log[-12000:])
+        return
+    if action == "remove":
+        code, log = yield from _stream_leco_compose(meta, ["down", "--remove-orphans"], timeout=to)
+        yield _emit_done(code == 0, exit_code=code, log=log[-12000:])
+        return
+    if action == "reset":
+        code, log = yield from _stream_leco_compose(meta, ["down", "-v", "--remove-orphans"], timeout=to)
+        yield _emit_done(code == 0, exit_code=code, log=log[-12000:])
+        return
+    if action == "start":
+        code, log = yield from _stream_leco_compose(meta, ["start"], timeout=to)
+        if code != 0:
+            code, log = yield from _stream_leco_compose(meta, ["up", "-d"], timeout=to)
+        yield _emit_done(code == 0, exit_code=code, log=log[-12000:])
+        return
+    if action == "pause":
+        code, log = yield from _stream_leco_compose(meta, ["pause"], timeout=to)
+        yield _emit_done(code == 0, exit_code=code, log=log[-12000:])
+        return
+    if action == "unpause":
+        code, log = yield from _stream_leco_compose(meta, ["unpause"], timeout=to)
+        yield _emit_done(code == 0, exit_code=code, log=log[-12000:])
+        return
+    yield _emit_done(False, error=f"unsupported action {action} for leco stack")
 
 
 def _cf_service_action(meta: dict, action: str):
@@ -719,6 +820,11 @@ def run_action_streaming(target_id: str, action: str) -> Iterator[dict[str, Any]
         return
     if target_id == "stack-ecosystem-all":
         yield from _stream_stack_ecosystem_all_stream(action)
+        return
+
+    leco_m = resolve_leco_target(target_id)
+    if leco_m:
+        yield from _stream_leco_stack_action(leco_m, action)
         return
 
     meta = _BY_ID.get(target_id)

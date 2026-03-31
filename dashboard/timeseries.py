@@ -262,6 +262,14 @@ def append_snapshot(client=None, docker_overview=None, precomputed_container_agg
     with _lock:
         _history.append(point)
 
+    try:
+        from hosted_apps import build_aggregate_for_timeseries
+        from hosted_app_timeseries import sample_all_registered
+
+        sample_all_registered(build_aggregate_for_timeseries)
+    except Exception:
+        pass
+
 
 def get_history(limit: int | None = None):
     with _lock:

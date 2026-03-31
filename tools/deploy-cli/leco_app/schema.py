@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class DockerComposeSpec(BaseModel):
@@ -25,18 +25,70 @@ class CloudflareSpec(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-class RoutingEntry(BaseModel):
+class ServiceTarget(BaseModel):
+    """Docker DNS name (container or compose service) on lh-network + container port."""
+
     model_config = ConfigDict(populate_by_name=True)
 
-    hostname: str
-    backend_host: str = Field(alias="backendHost")
-    backend_port: int = Field(alias="backendPort", ge=1, le=65535)
+    host: str = Field(min_length=1)
+    port: int = Field(ge=1, le=65535)
+
+
+class RoutingEntry(BaseModel):
+    """Traefik file-provider fragment.
+
+    **Legacy:** single `backendHost` + `backendPort` → one service for the hostname.
+
+    **Split (recommended for React + API):** `frontend` + `apiBackend` + `apiPathPrefix`
+    → higher-priority `Host && PathPrefix` routers to the API, catch-all `Host` to the UI
+    (same pattern as local-ecosystem apps behind Traefik).
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    hostname: str = Field(min_length=1)
+    api_path_prefix: str = Field(default="/api", alias="apiPathPrefix")
+    frontend: ServiceTarget | None = None
+    api_backend: ServiceTarget | None = Field(None, alias="apiBackend")
+    backend_host: str = Field(default="", alias="backendHost")
+    backend_port: int = Field(default=8080, alias="backendPort", ge=1, le=65535)
+
+    @field_validator("api_path_prefix")
+    @classmethod
+    def normalize_api_prefix(cls, v: str) -> str:
+        p = (v or "/api").strip()
+        if not p.startswith("/"):
+            raise ValueError("apiPathPrefix must start with /")
+        return p
+
+    @model_validator(mode="after")
+    def routing_shape(self) -> RoutingEntry:
+        split = self.frontend is not None and self.api_backend is not None
+        legacy = bool(self.backend_host and self.backend_host.strip())
+        if split and legacy:
+            raise ValueError("routing entry: use either (frontend + apiBackend) or backendHost, not both")
+        if not split and not legacy:
+            raise ValueError("routing entry: set non-empty backendHost or both frontend and apiBackend")
+        return self
 
 
 class RoutingSpec(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     entries: list[RoutingEntry] = Field(default_factory=list)
+
+
+class TraefikCleanupSpec(BaseModel):
+    """Explicit router/service keys in traefik/dynamic.yml to remove on offload (optional).
+
+    Use when you renamed keys while merging (leco defaults use ``{name}-{hostslug}-…``).
+    If omitted, keys are derived from ``routing`` the same way as ``traefik-fragment``.
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    routers: list[str] = Field(default_factory=list)
+    services: list[str] = Field(default_factory=list)
 
 
 class ApplicationManifest(BaseModel):
@@ -51,9 +103,8 @@ class ApplicationManifest(BaseModel):
     docker_compose: DockerComposeSpec | None = Field(default=None, alias="dockerCompose")
     cloudflare: CloudflareSpec | None = Field(default=None)
     routing: RoutingSpec | None = None
+    traefik_cleanup: TraefikCleanupSpec | None = Field(default=None, alias="traefikCleanup")
     healthcheck_urls: list[str] = Field(default_factory=list, alias="healthcheckUrls")
-
-    model_config = {"populate_by_name": True}
 
     def resolved_root(self, manifest_path: Path) -> Path:
         r = Path(self.root)
