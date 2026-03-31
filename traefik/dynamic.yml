@@ -259,6 +259,39 @@ http:
         - websecure
       tls: true
 
+    # ========================
+    # CRAWLERVISION (external compose on lh-network; cv-frontend / cv-backend)
+    # ========================
+    crawlervision-api-http:
+      rule: "Host(`cv.lh`) && PathPrefix(`/api`)"
+      service: crawlervision-backend-service
+      entryPoints:
+        - web
+      priority: 20
+
+    crawlervision-api-https:
+      rule: "Host(`cv.lh`) && PathPrefix(`/api`)"
+      service: crawlervision-backend-service
+      entryPoints:
+        - websecure
+      tls: true
+      priority: 20
+
+    crawlervision-http:
+      rule: "Host(`cv.lh`)"
+      service: crawlervision-frontend-service
+      entryPoints:
+        - web
+      priority: 10
+
+    crawlervision-https:
+      rule: "Host(`cv.lh`)"
+      service: crawlervision-frontend-service
+      entryPoints:
+        - websecure
+      tls: true
+      priority: 10
+
   services:
 
     ai-service:
@@ -347,6 +380,16 @@ http:
       loadBalancer:
         servers:
           - url: "http://redis-commander:8081"
+
+    crawlervision-frontend-service:
+      loadBalancer:
+        servers:
+          - url: "http://cv-frontend:3000"
+
+    crawlervision-backend-service:
+      loadBalancer:
+        servers:
+          - url: "http://cv-backend:8001"
 
 # Paths are inside the Traefik container (see ai-stack/services/traefik.sh: -v .../certs:/certs)
 tls:
