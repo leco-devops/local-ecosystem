@@ -20,8 +20,23 @@ from leco_app.wrangler_cf_resources import parse_wrangler_cf_resources
 Echo = Callable[[str], None]
 
 
-def adapter_http_bases() -> dict[str, str]:
-    """URLs for urllib calls (provision/teardown). Prefer Docker DNS when running inside service-dashboard."""
+def adapter_http_bases(*, dedicated: bool = False) -> dict[str, str]:
+    """URLs for urllib calls (provision/teardown). Prefer Docker DNS when running inside service-dashboard.
+
+    ``dedicated=True`` — per-app compose services on ``lh-network`` (see docker-compose.leco-dedicated-cf example).
+    """
+    if dedicated:
+        return {
+            "kv": (
+                os.environ.get("LECO_DEDICATED_KV_ADAPTER_URL") or "http://leco-local-kv-adapter:8082"
+            ).rstrip("/"),
+            "r2": (
+                os.environ.get("LECO_DEDICATED_R2_ADAPTER_URL") or "http://leco-local-r2-adapter:8081"
+            ).rstrip("/"),
+            "d1": (
+                os.environ.get("LECO_DEDICATED_D1_ADAPTER_URL") or "http://leco-local-d1-adapter:8083"
+            ).rstrip("/"),
+        }
     return {
         "kv": (
             os.environ.get("LECO_LOCAL_KV_INTERNAL_URL")
@@ -217,9 +232,17 @@ def provision_from_manifest(
     if not ignore_policy and not should_provision_local_cf(m, cli_skip=no_provision_local_cf):
         _echo_skip_local_cf(echo, no_provision_cli=no_provision_local_cf, ignore_policy=ignore_policy)
         return 0
-    hb = adapter_http_bases()
+    dedicated = bool(m.cloudflare.dedicated_local_adapters)
+    hb = adapter_http_bases(dedicated=dedicated)
     rb = adapter_record_bases_default()
-    if m.cloudflare.local_cf_public_prefix:
+    if dedicated:
+        rb = dict(hb)
+        echo(
+            "Using dedicated in-compose adapters (dedicatedLocalAdapters: true) — "
+            "targets: leco-local-{kv,r2,d1}-adapter on lh-network. "
+            "Ensure docker-compose.leco-dedicated-cf.yml is merged and stack is up."
+        )
+    elif m.cloudflare.local_cf_public_prefix:
         pfx = m.cloudflare.local_cf_public_prefix
         rb = {
             "kv": f"https://{pfx}-kv.lh",
@@ -237,7 +260,7 @@ def provision_from_manifest(
         echo(f"No KV/R2/D1 tables in {wp.name}" + (f" (env {env!r})" if env else "") + ".")
         return 0
     host_line = ""
-    if m.cloudflare.local_cf_public_prefix:
+    if m.cloudflare.local_cf_public_prefix and not dedicated:
         host_line = (
             f"\n  public adapter hosts: {rb['kv']}, {rb['r2']}, {rb['d1']} "
             f"(Traefik must merge localCfPublicPrefix routes; re-run ecosystem-register if needed)"

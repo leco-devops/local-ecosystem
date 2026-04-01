@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Local Ecosystem Ops Dashboard</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/static/dashboard.css" />
   </head>
   <body>
@@ -371,6 +372,8 @@
               it only runs <code>leco-app ecosystem-register</code> (no silent overwrite). Generate/Save/Register require the
               <strong>control token</strong> when enabled. Read-only app roots materialize under <code>hosting/app-available/&lt;id&gt;/</code>
               (app id required). Path: repo-relative, <code>wsp:…</code>, or a host path when the dashboard was started with path hints.
+              <strong>Label</strong> after Detect is guessed from <code>package.json</code> / Wrangler <code>name</code> / Compose top-level <code>name</code> when present (not from the folder name).
+              <strong>URLs in Traefik</strong> (e.g. <code>cv.lh</code>) come from <code>infrastructure.routing.entries[].hostname</code> in your profile (<code>leco.yaml</code>), not from the registry slug; <code>cloudflare.localCfPublicPrefix</code> only shapes KV/R2/D1 hosts (<code>cv-kv.lh</code>, …).
             </p>
             <div class="hosted-register-path-row">
               <label class="hosted-register-field hosted-register-field--grow"
@@ -425,12 +428,34 @@
               <input type="checkbox" id="hostedRegDeployAfter" checked />
               After register, run <strong><code>leco-app deploy</code></strong> (<code>docker compose up -d --build</code>) so containers appear in Docker Desktop. Uncheck if you only want registry + Traefik without starting the stack.
             </label>
-            <div class="hosted-register-actions">
-              <button type="button" id="hostedRegDetect" class="ctrl-act ctrl-act--ops">Detect</button>
-              <button type="button" id="hostedRegGenerateYaml" class="ctrl-act ctrl-act--ops">Generate YAML</button>
-              <button type="button" id="hostedRegSaveYaml" class="ctrl-act ctrl-act--ops">Save YAML</button>
-              <button type="button" id="hostedRegValidateYaml" class="ctrl-act ctrl-act--ops">Validate YAML</button>
-              <button type="button" id="hostedRegSubmit" class="ctrl-act ctrl-act--ops" disabled>Register</button>
+            <div class="hosted-reg-workflow" id="hostedRegWorkflow" aria-label="Registration workflow steps">
+              <div class="hosted-reg-workflow__track" role="group" aria-describedby="hostedRegWorkflowHint">
+                <div class="hosted-reg-workflow__step" data-wf-step="detect">
+                  <span class="hosted-reg-workflow__badge" aria-hidden="true">1</span>
+                  <button type="button" id="hostedRegDetect" class="hosted-reg-workflow__btn">Detect</button>
+                </div>
+                <span class="hosted-reg-workflow__rail" aria-hidden="true"></span>
+                <div class="hosted-reg-workflow__step" data-wf-step="generate">
+                  <span class="hosted-reg-workflow__badge" aria-hidden="true">2</span>
+                  <button type="button" id="hostedRegGenerateYaml" class="hosted-reg-workflow__btn">Generate YAML</button>
+                </div>
+                <span class="hosted-reg-workflow__rail" aria-hidden="true"></span>
+                <div class="hosted-reg-workflow__step" data-wf-step="save">
+                  <span class="hosted-reg-workflow__badge" aria-hidden="true">3</span>
+                  <button type="button" id="hostedRegSaveYaml" class="hosted-reg-workflow__btn">Save YAML</button>
+                </div>
+                <span class="hosted-reg-workflow__rail" aria-hidden="true"></span>
+                <div class="hosted-reg-workflow__step" data-wf-step="validate">
+                  <span class="hosted-reg-workflow__badge" aria-hidden="true">4</span>
+                  <button type="button" id="hostedRegValidateYaml" class="hosted-reg-workflow__btn">Validate YAML</button>
+                </div>
+                <span class="hosted-reg-workflow__rail" aria-hidden="true"></span>
+                <div class="hosted-reg-workflow__step" data-wf-step="register">
+                  <span class="hosted-reg-workflow__badge" aria-hidden="true">5</span>
+                  <button type="button" id="hostedRegSubmit" class="hosted-reg-workflow__btn hosted-reg-workflow__btn--primary" disabled>Register</button>
+                </div>
+              </div>
+              <p class="hosted-reg-workflow__hint muted small" id="hostedRegWorkflowHint" role="status"></p>
             </div>
             <div id="hostedRegBusy" class="hosted-reg-busy is-hidden" role="status" aria-live="polite">
               <span class="hosted-reg-busy__spin" aria-hidden="true"></span>
@@ -508,6 +533,11 @@
               <div class="hosted-apps-links" id="hostedAppsLinks"></div>
               <div id="hostedAppsUnregisterHint" class="hosted-apps-unregister-hint is-hidden" role="status" aria-live="polite"></div>
               <div class="hosted-apps-kpi" id="hostedAppsKpi"></div>
+              <div
+                id="hostedAppsResourceLedger"
+                class="hosted-resource-ledger"
+                aria-label="Resources declared in leco.yaml and running under this app"
+              ></div>
               <div id="hostedAppsLocalProfile" class="hosted-local-profile"></div>
               <div id="hostedAppsCfResources" class="hosted-cf-resources" aria-label="Wrangler and local CF adapters"></div>
               <div class="hosted-apps-charts">
@@ -541,7 +571,9 @@
               </div>
               <h4 class="hosted-apps-subhead">
                 Compose services
-                <span class="muted small" style="font-weight: normal"> — Docker containers from your compose file only</span>
+                <span class="muted small" style="font-weight: normal">
+                  — containers from <code>infrastructure.dockerCompose</code> in your profile (<code>leco.yaml</code>);
+                  metrics/logs only for this compose project</span>
               </h4>
               <div class="hosted-apps-table-wrap">
                 <table class="hosted-apps-table">

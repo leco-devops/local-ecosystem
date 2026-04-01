@@ -485,7 +485,7 @@ def _leco_app_manifest_run(
 
 
 def _leco_autooffboard_after_teardown(meta: dict[str, Any], *, compose_volumes: bool = False) -> dict[str, Any]:
-    """docker compose down (unless disabled), then strip Traefik, local CF teardown, registry + hosting (hosted offboard)."""
+    """Hosted offboard via leco-app ecosystem-unregister: local CF teardown, compose down, Traefik strip, registry (order fixed in CLI)."""
     slug = str(meta.get("leco_slug") or "").strip()
     if not slug:
         return {"ok": False, "error": "missing leco_slug"}

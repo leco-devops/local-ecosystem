@@ -17,6 +17,29 @@ from leco_app.local_cf_provision import adapter_http_bases
 Echo = Callable[[str], None]
 
 
+def teardown_http_bases(doc: dict[str, Any]) -> dict[str, str]:
+    """Bases for DELETE requests to kv/r2/d1 adapters.
+
+    ``leco.local-cf.yaml`` ``adapters:`` stores **public** URLs (``https://kv.lh``) for app
+    containers. **service-dashboard** reaches shared adapters via ``LECO_LOCAL_*_INTERNAL_URL``
+    (Docker DNS on ``lh-network``). Using the YAML bases for teardown from the dashboard
+    therefore fails with connection errors (HTTP -1).
+
+    When the record points at **in-compose** services (``http://leco-local-kv-adapter:8082`` …),
+    those bases are used so dedicated stacks delete against the right processes.
+    """
+    raw = doc.get("adapters")
+    if isinstance(raw, dict):
+        bases: dict[str, str] = {}
+        for k in ("kv", "r2", "d1"):
+            v = raw.get(k)
+            if isinstance(v, str) and v.strip():
+                bases[k] = v.strip().rstrip("/")
+        if len(bases) == 3 and any("leco-local-" in u for u in bases.values()):
+            return bases
+    return adapter_http_bases()
+
+
 def _delete(url: str, *, timeout: float = 45.0) -> tuple[int, str]:
     req = urllib.request.Request(url, method="DELETE")
     ctx = None
@@ -47,8 +70,7 @@ def teardown_from_leco_local_cf_path(cf_path: Path, echo: Echo | None = None) ->
         return 1
     if not isinstance(doc, dict):
         return 1
-    # DELETE must hit the same adapter processes provision used (often internal Docker DNS from dashboard).
-    bases = adapter_http_bases()
+    bases = teardown_http_bases(doc)
     failed = 0
 
     for row in doc.get("kv") or []:

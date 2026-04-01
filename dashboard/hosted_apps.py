@@ -57,7 +57,38 @@ def _empty_manifest_ui() -> dict[str, Any]:
         "wrangler_expected": {},
         "local_cf_public_prefix": None,
         "local_cf_adapter_hosts": None,
+        "dedicated_local_adapters": False,
+        "profile_docker_compose": None,
+        "profile_cloudflare": None,
     }
+
+
+def _profile_docker_compose_ui(infra: dict[str, Any]) -> dict[str, Any] | None:
+    dc = infra.get("dockerCompose") or infra.get("docker_compose")
+    if not isinstance(dc, dict):
+        return None
+    cf = dc.get("composeFile") or dc.get("compose_file")
+    if not isinstance(cf, str) or not cf.strip():
+        return None
+    raw_ex = dc.get("additionalComposeFiles") or dc.get("additional_compose_files")
+    extras: list[str] = []
+    if isinstance(raw_ex, list):
+        extras = [str(x).strip() for x in raw_ex if isinstance(x, str) and str(x).strip()]
+    return {"compose_file": cf.strip(), "additional_compose_files": extras}
+
+
+def _profile_cloudflare_ui(infra: dict[str, Any]) -> dict[str, Any] | None:
+    cf = infra.get("cloudflare")
+    if not isinstance(cf, dict):
+        return None
+    w = cf.get("wranglerConfig") or cf.get("wrangler_config")
+    wc = str(w).strip() if isinstance(w, str) and w.strip() else ""
+    if not wc:
+        return None
+    ded = cf.get("dedicatedLocalAdapters")
+    if ded is None:
+        ded = cf.get("dedicated_local_adapters")
+    return {"wrangler_config": wc, "dedicated_local_adapters": ded is True}
 
 
 def _merge_localhost_yaml(file_data: dict[str, Any], inline: dict[str, Any]) -> dict[str, Any]:
@@ -336,6 +367,16 @@ def manifest_ui_fields(manifest_path: str) -> dict[str, Any]:
             }
             break
 
+    dedicated_local_adapters = False
+    try:
+        from leco_app.schema import load_effective_manifest
+
+        em = load_effective_manifest(mp)
+        if em.cloudflare:
+            dedicated_local_adapters = bool(em.cloudflare.dedicated_local_adapters)
+    except Exception:
+        pass
+
     return {
         "routes": routes,
         "health_urls": health_urls,
@@ -349,6 +390,9 @@ def manifest_ui_fields(manifest_path: str) -> dict[str, Any]:
         "wrangler_expected": _wrangler_resource_expectations(manifest_path),
         "local_cf_public_prefix": lcp,
         "local_cf_adapter_hosts": adapter_hosts,
+        "dedicated_local_adapters": dedicated_local_adapters,
+        "profile_docker_compose": _profile_docker_compose_ui(infra_prof),
+        "profile_cloudflare": _profile_cloudflare_ui(infra_prof),
     }
 
 

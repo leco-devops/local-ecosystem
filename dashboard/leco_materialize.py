@@ -160,7 +160,9 @@ def materialize_registration_yaml(path_rel: str, app_id: str) -> dict[str, Any]:
     staging.mkdir(parents=True, exist_ok=True)
     man_path = staging / "leco.app.yaml"
     source_target = compute_hosting_source_symlink_target(orig_root, m)
-    ensure_docker_compose_in_profile_infrastructure(lo, orig_root, m, app_tree_base=source_target)
+    ensure_docker_compose_in_profile_infrastructure(
+        lo, orig_root, m, app_tree_base=source_target, allow_compose_discovery=True
+    )
     ensure_wrangler_in_profile_infrastructure(lo, orig_root, m, app_tree_base=source_target)
     enrich_infrastructure_wrangler_binding_preview(lo.get("infrastructure") or {}, source_target)
     patch_manifest_root_for_hosting(m)
@@ -236,7 +238,7 @@ def save_registration_yaml(
     def _apply_infra_ensures(app_tree: Path) -> None:
         if isinstance(parsed_l.get("infrastructure"), dict):
             ensure_docker_compose_in_profile_infrastructure(
-                parsed_l, orig_root, parsed_m, app_tree_base=app_tree
+                parsed_l, orig_root, parsed_m, app_tree_base=app_tree, allow_compose_discovery=False
             )
             ensure_wrangler_in_profile_infrastructure(
                 parsed_l, orig_root, parsed_m, app_tree_base=app_tree

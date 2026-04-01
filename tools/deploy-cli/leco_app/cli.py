@@ -1047,7 +1047,7 @@ def cmd_ecosystem_unregister(
         bool,
         typer.Option(
             "--compose-down/--no-compose-down",
-            help="Run docker compose down before registry/Traefik/local CF steps (default: on)",
+            help="Run docker compose down after local CF cleanup (when both on) so in-project adapters stay up for DELETE",
         ),
     ] = True,
     compose_volumes: Annotated[
@@ -1068,7 +1068,7 @@ def cmd_ecosystem_unregister(
         bool,
         typer.Option(
             "--clean-local-cf/--no-clean-local-cf",
-            help="Delete KV/R2/D1 from leco.local-cf.yaml via kv.lh / r2.lh / d1.lh",
+            help="Delete KV/R2/D1 using bases in leco.local-cf.yaml (runs before compose-down when both on)",
         ),
     ] = True,
     traefik_dynamic: Annotated[
@@ -1079,7 +1079,7 @@ def cmd_ecosystem_unregister(
         ),
     ] = None,
 ) -> None:
-    """Remove an app from leco-registry.yaml; by default docker compose down first, then Traefik/local CF cleanup."""
+    """Remove an app from leco-registry.yaml; local CF cleanup before compose down when both are enabled (dedicated adapters need this)."""
     er = ecosystem_root
     if er is None:
         raw = (os.environ.get("LECO_ECOSYSTEM_ROOT") or "").strip()
@@ -1098,6 +1098,20 @@ def cmd_ecosystem_unregister(
 
     tf = traefik_dynamic.resolve() if traefik_dynamic else (eco / "traefik" / "dynamic.yml")
 
+    # Tear down KV/R2/D1 on adapters while the stack is still up. Dedicated adapters
+    # (leco-local-*) live in the compose project; compose down first makes DELETEs fail (HTTP -1).
+    if mp and clean_local_cf:
+        cf_yaml = mp.parent / "leco.local-cf.yaml"
+        typer.secho("Local CF cleanup (before docker compose down when enabled)…", fg=typer.colors.BLUE)
+        fails = teardown_from_leco_local_cf_path(cf_yaml, echo=typer.echo)
+        if fails:
+            typer.secho(
+                "Local CF cleanup failed — registry not changed. Fix adapters or use --no-clean-local-cf.",
+                fg=typer.colors.RED,
+                err=True,
+            )
+            raise typer.Exit(1)
+
     if mp and compose_down:
         try:
             m = load_effective_manifest(mp)
@@ -1111,7 +1125,7 @@ def cmd_ecosystem_unregister(
                     dcode = run_compose(m, mp, args)
                     if dcode == 0:
                         typer.secho(
-                            "docker compose down completed (before unregister).",
+                            "docker compose down completed.",
                             fg=typer.colors.GREEN,
                         )
                     else:
@@ -1128,17 +1142,6 @@ def cmd_ecosystem_unregister(
                     )
         except (OSError, ValidationError, ValueError) as exc:
             typer.secho(f"Compose down skipped: {exc}", fg=typer.colors.YELLOW, err=True)
-
-    if mp and clean_local_cf:
-        cf = mp.parent / "leco.local-cf.yaml"
-        fails = teardown_from_leco_local_cf_path(cf, echo=typer.echo)
-        if fails:
-            typer.secho(
-                "Local CF cleanup failed — registry not changed. Fix adapters or use --no-clean-local-cf.",
-                fg=typer.colors.RED,
-                err=True,
-            )
-            raise typer.Exit(1)
 
     if mp and strip_traefik:
         try:

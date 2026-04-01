@@ -1,7 +1,7 @@
 import json
 import os
 
-from flask import Flask, Response, abort, jsonify, render_template, request, stream_with_context
+from flask import Flask, Response, abort, jsonify, redirect, render_template, request, stream_with_context, url_for
 
 from control import CONTROL_TOKEN, check_control_token, list_targets, run_action, run_action_streaming
 from ollama_models import build_models_payload, handle_inspect, handle_models_action, list_manifest_backups
@@ -16,6 +16,12 @@ from monitor import (
 from service_hub import get_hub_detail, list_hub_slugs
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
+
+
+@app.get("/favicon.ico")
+def favicon_legacy():
+    """Browsers default to /favicon.ico; serve the same asset as static/favicon.svg."""
+    return redirect(url_for("static", filename="favicon.svg"), 302)
 
 
 def _dashboard_boot_dict() -> dict:

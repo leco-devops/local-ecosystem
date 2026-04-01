@@ -50,12 +50,15 @@ See **`hosting/README.md`**.
 
 ---
 
-## 5. Docker Compose
+## 5. Docker Compose (optional; configured only in YAML)
 
-- **`infrastructure.dockerCompose.composeFile`** — primary file (relative to resolved root unless absolute).
-- **`infrastructure.dockerCompose.additionalComposeFiles`** — optional list; `leco-app` / `docker compose` is invoked as **`-f` primary `-f` extra …** (later files merge/overrides per Compose rules).
-- Extra compose definitions (e.g. **`leco.df.yaml`**) must exist **next to the primary file in the app repo** (resolved root). Files that exist only under **`hosting/app-available/...`** are **not** visible to Compose unless copied or symlinked into the app tree.
-- If the primary compose file is **missing**, **`leco-app down`** exits **0** with a warning (stack treated as already removed); the dashboard **Remove** still runs **full offboard** afterward.
+The registry and `leco-app` read **`leco.app.yaml` + `leco.yaml`** (effective manifest). **Docker is not discovered from disk as the source of truth** on **Save YAML** — only **`leco.yaml`’s** optional **`infrastructure.dockerCompose`** tells LEco which compose file(s) to run.
+
+- **`infrastructure.dockerCompose.composeFile`** — primary file path **you choose** (relative to resolved root unless absolute), e.g. **`docker-compose.yml`** or **`../docker-compose.yml`** for a Worker subfolder that shares the repo’s stack.
+- **`infrastructure.dockerCompose.additionalComposeFiles`** — optional list of extra **`-f`** files (your build/deploy split, overrides, etc.).
+- **`leco-app` / `docker compose`** uses those paths only; it does not invent KV/R2/D1 containers — those bindings are **not** services in your compose file (same idea as production Cloudflare: managed APIs). Local provision targets the ecosystem’s **kv-adapter / r2-adapter / d1-adapter** (see **cloudflare-local** in Docker Desktop), not six extra containers in your app’s compose project.
+- **Generate YAML** (first-time materialization) may still **suggest** a compose file when the tree is scanned; **Save YAML** does **not** inject or overwrite **`dockerCompose`** unless you already set paths (see `allow_compose_discovery` in `dashboard/leco_detect.py`).
+- If the primary compose file is **missing**, **`leco-app down`** exits **0** with a warning; offboard still runs.
 
 ---
 
@@ -65,7 +68,8 @@ See **`hosting/README.md`**.
 |----------|------|
 | **`infrastructure.cloudflare.wranglerConfig`** | Path to `wrangler.toml`; **provision** and **deploy** hooks read this file. |
 | **`infrastructure.wranglerBindingPreview`** | Informational mirror (KV/R2/D1 rows) for UI; **does not** create Docker services. |
-| **Local CF provision** | Creates namespaces/buckets/databases on **kv.lh / r2.lh / d1.lh** adapters; writes **`leco.local-cf.yaml`**. |
+| **`leco.local-cf.yaml`** | Records **names** of namespaces / buckets / databases provisioned on the **shared** local adapters; still not per-binding containers in your repo. |
+| **Local CF provision** | Creates those resources on **kv.lh / r2.lh / d1.lh** adapters; look under the **cloudflare-local** stack in Docker, not inside your app’s compose project. |
 
 ---
 
@@ -86,7 +90,7 @@ See **`hosting/README.md`**.
 | Save YAML | `POST /api/leco/save-yaml` — validate Pydantic schemas, same symlink rules; **Save** runs path normalization against resolved tree **after** refreshing **`source`**. |
 | Register | `POST /api/leco/register` — requires YAML on disk; **`leco-app ecosystem-register`**; optional **`deploy`**. |
 
-**Hosted apps list:** entries are loaded from the registry; **metadata** requires resolving **effective** manifest compose (bridge-only compose is insufficient for v3). Implementation: `dashboard/leco_control.py` (`parse_leco_effective_manifest_for_compose`, worker-only fallback). **Remove / Reset** on `leco-stack-<id>`: call **`leco-app ecosystem-unregister`**, which runs **`docker compose down`** (with **`-v`** on **Reset**) before Traefik / local CF / registry (`dashboard/control.py`, `dashboard/hosted_offboard.py`). **Remove from ecosystem** uses the same command, so containers are torn down with the registry.
+**Hosted apps list:** entries come from the registry (manifest paths only). Per-app **compose controls** need an **effective** **`dockerCompose`** block when you use Docker; **Workers-only** apps omit it and use the worker-only control path in `dashboard/leco_control.py`. **Remove / Reset** on `leco-stack-<id>`: **`leco-app ecosystem-unregister`** runs **local CF teardown** (when enabled) before **`docker compose down`** so dedicated adapters stay reachable, then Traefik / registry (`dashboard/control.py`, `dashboard/hosted_offboard.py`).
 
 ---
 

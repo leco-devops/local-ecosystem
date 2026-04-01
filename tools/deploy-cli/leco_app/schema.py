@@ -71,6 +71,16 @@ class CloudflareSpec(BaseModel):
             "Wrangler browser binding stays on the shared Workers stack."
         ),
     )
+    dedicated_local_adapters: bool = Field(
+        default=False,
+        alias="dedicatedLocalAdapters",
+        description=(
+            "When true, provision/teardown talk to in-compose adapter services (leco-local-kv-adapter, "
+            "leco-local-r2-adapter, leco-local-d1-adapter on lh-network) instead of the ecosystem-wide "
+            "kv-adapter/r2-adapter/d1-adapter. Merge docker-compose.leco-dedicated-cf.yml (see sample) "
+            "via additionalComposeFiles and bring the stack up before provision-local-cf."
+        ),
+    )
 
     model_config = {"populate_by_name": True}
 

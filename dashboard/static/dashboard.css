@@ -2738,10 +2738,201 @@ button.dev-open-doc:hover {
   color: inherit;
 }
 
-.hosted-register-actions {
+/* Hosted register: stepper workflow (buttons are NOT inside .control-actions — need explicit styles) */
+.hosted-reg-workflow {
+  margin: 12px 0 8px;
+}
+
+.hosted-reg-workflow__track {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.hosted-reg-workflow__step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 120px;
+  text-align: center;
+}
+
+.hosted-reg-workflow__badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  border: 2px solid rgba(100, 116, 139, 0.55);
+  background: rgba(30, 41, 59, 0.85);
+  color: rgba(148, 163, 184, 0.95);
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.hosted-reg-workflow__step--enabled .hosted-reg-workflow__badge {
+  border-color: rgba(56, 189, 248, 0.65);
+  color: #e0f2fe;
+  background: rgba(12, 74, 110, 0.55);
+}
+
+.hosted-reg-workflow__step--current .hosted-reg-workflow__badge {
+  border-color: #7dd3fc;
+  color: #fff;
+  background: rgba(14, 116, 170, 0.75);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.22);
+}
+
+.hosted-reg-workflow__step--done .hosted-reg-workflow__badge {
+  border-color: rgba(34, 197, 94, 0.75);
+  background: rgba(22, 101, 52, 0.65);
+  color: #ecfdf5;
+}
+
+.hosted-reg-workflow__step--done .hosted-reg-workflow__badge::after {
+  content: "✓";
+  font-size: 13px;
+  line-height: 1;
+}
+
+.hosted-reg-workflow__step--done .hosted-reg-workflow__badge {
+  font-size: 0;
+}
+
+.hosted-reg-workflow__step--locked .hosted-reg-workflow__badge {
+  border-color: rgba(71, 85, 105, 0.45);
+  background: rgba(15, 23, 42, 0.55);
+  color: rgba(100, 116, 139, 0.65);
+}
+
+.hosted-reg-workflow[data-busy="1"] .hosted-reg-workflow__badge {
+  opacity: 0.55;
+}
+
+.hosted-reg-workflow__rail {
+  flex: 1 1 12px;
+  min-width: 8px;
+  max-width: 36px;
+  height: 3px;
+  margin-top: 14px;
+  border-radius: 2px;
+  background: rgba(71, 85, 105, 0.45);
+  transition: background 0.15s ease;
+}
+
+.hosted-reg-workflow__rail--active {
+  background: linear-gradient(90deg, rgba(56, 189, 248, 0.35), rgba(129, 140, 248, 0.45));
+}
+
+.hosted-reg-workflow__btn {
+  width: 100%;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 10px;
+  min-height: 40px;
+  border-radius: 10px;
+  border: 2px solid rgba(56, 189, 248, 0.55);
+  background: rgba(12, 74, 110, 0.42);
+  color: #e0f2fe;
+  cursor: pointer;
+  font-family: inherit;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease,
+    opacity 0.15s ease,
+    filter 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.hosted-reg-workflow__btn:hover:not(:disabled) {
+  border-color: #7dd3fc;
+  background: rgba(14, 100, 140, 0.55);
+  color: #fff;
+}
+
+.hosted-reg-workflow__btn--primary {
+  border-color: rgba(129, 140, 248, 0.85);
+  background: rgba(67, 56, 202, 0.45);
+  color: #eef2ff;
+}
+
+.hosted-reg-workflow__btn--primary:hover:not(:disabled) {
+  border-color: #a5b4fc;
+  background: rgba(79, 70, 229, 0.55);
+}
+
+.hosted-reg-workflow__step--current .hosted-reg-workflow__btn:not(:disabled) {
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.35);
+}
+
+.hosted-reg-workflow__btn:disabled,
+.hosted-reg-workflow__btn[disabled] {
+  opacity: 0.38;
+  cursor: not-allowed;
+  filter: grayscale(0.45);
+  border-style: dashed;
+  border-color: rgba(71, 85, 105, 0.55) !important;
+  background: rgba(15, 23, 42, 0.35) !important;
+  color: rgba(148, 163, 184, 0.55) !important;
+  box-shadow: none !important;
+}
+
+.hosted-reg-workflow__btn:disabled:hover,
+.hosted-reg-workflow__btn[disabled]:hover {
+  border-color: rgba(71, 85, 105, 0.55) !important;
+  background: rgba(15, 23, 42, 0.35) !important;
+  color: rgba(148, 163, 184, 0.55) !important;
+  filter: grayscale(0.45);
+}
+
+.hosted-reg-workflow__hint {
+  margin: 10px 0 0;
+  min-height: 1.25em;
+}
+
+@media (max-width: 720px) {
+  .hosted-reg-workflow__track {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hosted-reg-workflow__step {
+    flex-direction: row;
+    max-width: none;
+    justify-content: flex-start;
+    text-align: left;
+    gap: 12px;
+  }
+
+  .hosted-reg-workflow__btn {
+    flex: 1;
+    width: auto;
+  }
+
+  .hosted-reg-workflow__rail {
+    width: 3px;
+    height: 14px;
+    min-height: 14px;
+    max-width: none;
+    margin-top: 0;
+    margin-left: 12px;
+    align-self: stretch;
+  }
 }
 
 .hosted-reg-busy {
@@ -2876,6 +3067,69 @@ button.dev-open-doc:hover {
 .hosted-cf-resources__warn {
   color: #fca5a5;
   margin-top: 8px;
+}
+
+.hosted-resource-ledger {
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: linear-gradient(145deg, rgba(12, 74, 110, 0.22), rgba(15, 23, 42, 0.55));
+}
+
+.hosted-resource-ledger__title {
+  font-weight: 700;
+  font-size: 15px;
+  margin: 0 0 8px;
+  color: #e0f2fe;
+}
+
+.hosted-resource-ledger__lead {
+  margin: 0 0 14px;
+  line-height: 1.5;
+}
+
+.hosted-resource-ledger__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.hosted-resource-ledger__card {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(100, 116, 139, 0.4);
+  background: rgba(15, 23, 42, 0.65);
+}
+
+.hosted-resource-ledger__card--cf {
+  border-color: rgba(129, 140, 248, 0.4);
+  background: rgba(49, 46, 129, 0.2);
+}
+
+.hosted-resource-ledger__card-title {
+  font-weight: 600;
+  font-size: 13px;
+  margin: 0 0 8px;
+  color: #cbd5e1;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.hosted-resource-ledger__card-body {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.hosted-resource-ledger__counts {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+
+.hosted-resource-ledger__count strong {
+  color: #a5f3fc;
+  font-size: 1.15em;
 }
 
 .hosted-apps-kpi {

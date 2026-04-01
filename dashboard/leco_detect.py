@@ -246,6 +246,99 @@ def detect_archetype(root: Path) -> str:
     return "generic"
 
 
+def _humanize_project_label(raw: str) -> str:
+    """Turn package / worker / compose project tokens into a short display title."""
+    s = (raw or "").strip()
+    if not s:
+        return ""
+    if s.startswith("@") and "/" in s:
+        s = s.split("/", 1)[-1].strip()
+    parts = [p for p in re.split(r"[-_.\s]+", s) if p]
+    if not parts:
+        return raw.strip()
+    return " ".join((p[0].upper() + p[1:].lower()) if len(p) > 1 else p.upper() for p in parts)
+
+
+def _read_package_json_name(root: Path) -> str | None:
+    p = root / "package.json"
+    if not p.is_file():
+        return None
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, TypeError):
+        return None
+    n = data.get("name")
+    return str(n).strip() if isinstance(n, str) and str(n).strip() else None
+
+
+def _read_composer_json_name(root: Path) -> str | None:
+    p = root / "composer.json"
+    if not p.is_file():
+        return None
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, TypeError):
+        return None
+    n = data.get("name")
+    if not isinstance(n, str) or not n.strip():
+        return None
+    s = n.strip()
+    if "/" in s:
+        s = s.split("/", 1)[-1].strip()
+    return s or None
+
+
+def _read_wrangler_toml_name(root: Path) -> str | None:
+    wrel = _detect_wrangler(root)
+    if wrel is None:
+        return None
+    path = root / wrel
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    for pat in (r'^\s*name\s*=\s*"([^"]+)"', r"^\s*name\s*=\s*'([^']+)'"):
+        m = re.search(pat, text, re.MULTILINE)
+        if m:
+            t = m.group(1).strip()
+            return t if t else None
+    return None
+
+
+def _read_compose_top_level_name(root: Path) -> str | None:
+    files = _list_compose_files(root)
+    if not files:
+        return None
+    primary = _pick_primary_compose(files)
+    if primary is None:
+        return None
+    path = root / primary
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    n = data.get("name")
+    return str(n).strip() if isinstance(n, str) and str(n).strip() else None
+
+
+def infer_suggested_label(root: Path) -> str | None:
+    """Best-effort display name from repo config (registry label), not the Traefik hostname."""
+    r = root.resolve()
+    for raw in (
+        _read_package_json_name(r),
+        _read_wrangler_toml_name(r),
+        _read_compose_top_level_name(r),
+        _read_composer_json_name(r),
+    ):
+        if not raw:
+            continue
+        human = _humanize_project_label(raw)
+        return human if human else raw
+    return None
+
+
 def scan_app_directory(root: Path) -> dict[str, Any]:
     root = root.resolve()
     compose_files = _list_compose_files(root)
@@ -261,6 +354,7 @@ def scan_app_directory(root: Path) -> dict[str, Any]:
         "compose_files": [p.as_posix() for p in compose_files],
         "host_ports": host_ports,
         "suggested_archetype": arch,
+        "suggested_label": infer_suggested_label(root),
         "existing_manifest": manifest_path.is_file(),
         "manifest_path": manifest_path.resolve().as_posix(),
         "config_signals": collect_config_signals(root),
@@ -534,8 +628,18 @@ def ensure_docker_compose_in_profile_infrastructure(
     bridge_manifest_dict: dict[str, Any],
     *,
     app_tree_base: Path | None = None,
+    allow_compose_discovery: bool = False,
 ) -> None:
-    """Set or fix ``infrastructure.dockerCompose.composeFile`` relative to the app tree (walk-up)."""
+    """
+    Optionally infer ``infrastructure.dockerCompose.composeFile`` by walking up the tree.
+
+    - **Registry / Save** (``allow_compose_discovery=False``): Trust ``leco.yaml`` only. If there is
+      no ``dockerCompose`` block, do not inject one (Workers-only apps stay compose-free). If
+      ``composeFile`` is set, never replace it when the path fails to resolve (operator path is
+      authoritative).
+    - **Generate default** (``allow_compose_discovery=True``): When compose is missing or has no
+      file path, try to find a compose file under the app tree (convenience for new materialization).
+    """
     infra = profile_dict.setdefault("infrastructure", {})
     base = (
         app_tree_base.resolve()
@@ -552,12 +656,17 @@ def ensure_docker_compose_in_profile_infrastructure(
                     return
             except (OSError, ValueError):
                 pass
+            # Explicit path in leco.yaml — do not overwrite with walk-up discovery.
+            return
         for k, v in dc.items():
             lk = str(k).lower()
             if lk in ("composefile", "compose_file"):
                 continue
             if v is not None and v != []:
                 preserved[k] = v
+
+    if not allow_compose_discovery:
+        return
 
     try_root: Path | None = base
     for _ in range(6):
@@ -708,7 +817,9 @@ def build_default_manifest_and_localhost(
         "notes": "",
     }
 
-    ensure_docker_compose_in_profile_infrastructure(localhost, root, manifest)
+    ensure_docker_compose_in_profile_infrastructure(
+        localhost, root, manifest, allow_compose_discovery=True
+    )
     ensure_wrangler_in_profile_infrastructure(localhost, root, manifest)
     enrich_infrastructure_wrangler_binding_preview(localhost.get("infrastructure") or {}, root)
 

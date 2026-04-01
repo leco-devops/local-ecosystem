@@ -3504,6 +3504,80 @@ function hostedComposeControlActionsHtml(SB, target) {
   </div>`;
 }
 
+function renderHostedResourceLedger(manifestUi, snap) {
+  const el = document.getElementById("hostedAppsResourceLedger");
+  if (!el) return;
+  if (!manifestUi && !snap) {
+    el.innerHTML = "";
+    return;
+  }
+  const mu = manifestUi || {};
+  const lhp = mu.local_host_profile || "—";
+  const pdc = mu.profile_docker_compose;
+  const pcf = mu.profile_cloudflare;
+  const dedicatedAdapters = mu.dedicated_local_adapters === true;
+  const lc = mu.local_cf || {};
+  const services = (snap && snap.services) || [];
+  const nKv = Array.isArray(lc.kv) ? lc.kv.length : 0;
+  const nR2 = Array.isArray(lc.r2) ? lc.r2.length : 0;
+  const nD1 = Array.isArray(lc.d1) ? lc.d1.length : 0;
+  const cfProvisioned = nKv + nR2 + nD1;
+  const w = mu.wrangler_expected || {};
+  const expKv = Array.isArray(w.expected_kv) ? w.expected_kv.length : 0;
+  const expR2 = Array.isArray(w.expected_r2) ? w.expected_r2.length : 0;
+  const expD1 = Array.isArray(w.expected_d1) ? w.expected_d1.length : 0;
+  const expTotal = expKv + expR2 + expD1;
+
+  let html = '<div class="hosted-resource-ledger__title">Resources for this app (from <code>leco.yaml</code> + bridge)</div>';
+  html += `<p class="hosted-resource-ledger__lead muted small">The dashboard uses your <strong>effective manifest</strong>: <code>leco.app.yaml</code> plus the profile file (<code>${escapeHtml(String(lhp))}</code>). Nothing here is inferred from disk outside those files.</p>`;
+  html += '<div class="hosted-resource-ledger__grid">';
+
+  html += '<div class="hosted-resource-ledger__card">';
+  html += '<div class="hosted-resource-ledger__card-title">Docker / Compose</div>';
+  if (pdc && pdc.compose_file) {
+    html += `<p class="hosted-resource-ledger__card-body"><strong>Compose file</strong> (profile <code>infrastructure.dockerCompose.composeFile</code>): <code>${escapeHtml(String(pdc.compose_file))}</code>`;
+    const ax = pdc.additional_compose_files;
+    if (Array.isArray(ax) && ax.length) {
+      html += `<br /><strong>Additional <code>-f</code> files:</strong> ${ax.map((x) => `<code>${escapeHtml(String(x))}</code>`).join(", ")}`;
+    }
+    html += "</p>";
+    html += `<p class="muted small">${services.length} service row(s) below are <strong>all</strong> resources from that compose project. They are the only containers that appear under <em>this</em> app in Docker Desktop.</p>`;
+  } else {
+    html +=
+      '<p class="muted small">No <code>infrastructure.dockerCompose</code> in the profile — this app is not driving a compose stack from <code>leco.yaml</code>.</p>';
+  }
+  html += "</div>";
+
+  html += '<div class="hosted-resource-ledger__card hosted-resource-ledger__card--cf">';
+  html += '<div class="hosted-resource-ledger__card-title">Dedicated local KV / R2 / D1</div>';
+  if (pcf && pcf.wrangler_config) {
+    html += `<p class="hosted-resource-ledger__card-body"><strong>Wrangler</strong> (profile <code>infrastructure.cloudflare.wranglerConfig</code>): <code>${escapeHtml(String(pcf.wrangler_config))}</code></p>`;
+  }
+  if (cfProvisioned > 0) {
+    html += `<p class="hosted-resource-ledger__counts"><span class="hosted-resource-ledger__count"><strong>${nKv}</strong> KV</span> · <span class="hosted-resource-ledger__count"><strong>${nR2}</strong> R2</span> · <span class="hosted-resource-ledger__count"><strong>${nD1}</strong> D1</span></p>`;
+    if (dedicatedAdapters) {
+      html +=
+        '<p class="muted small">This app uses <strong>dedicatedLocalAdapters</strong>: resources live on <strong>in-compose</strong> services (<code>leco-local-kv-adapter</code>, <code>leco-local-r2-adapter</code>, <code>leco-local-d1-adapter</code> plus Valkey/MinIO) in <strong>your</strong> compose project — they show under this app in Docker Desktop. <code>leco.local-cf.yaml</code> records the same Docker DNS bases the adapters use. See <code>docker-compose.leco-dedicated-cf.example.yml</code> in the sample-cloudflare-application hosting pack.</p>';
+    } else {
+      html +=
+        '<p class="muted small">These are <strong>provisioned names</strong> on the ecosystem&rsquo;s shared <code>kv-adapter</code>, <code>r2-adapter</code>, and <code>d1-adapter</code> (the <strong>cloudflare-local</strong> Docker stack). They are <strong>not</strong> extra containers inside your app&rsquo;s compose file — same model as Cloudflare production (managed APIs). The full list is in the table below and in <code>leco.local-cf.yaml</code>.</p>';
+    }
+  } else if (expTotal > 0 && w.wrangler_configured) {
+    const dedHint = dedicatedAdapters
+      ? " With <strong>dedicatedLocalAdapters</strong>, start the stack (including <code>leco-local-*</code> services) first so provision can reach the adapters on <code>lh-network</code>."
+      : "";
+    html += `<p class="muted small">Wrangler lists <strong>${expKv}</strong> KV, <strong>${expR2}</strong> R2, <strong>${expD1}</strong> D1 bindings, but <code>leco.local-cf.yaml</code> is missing or empty — run <strong>Deploy</strong> (local CF provision on) or <code>leco-app provision-local-cf</code> so dedicated names appear here.${dedHint}</p>`;
+  } else if (w.wrangler_configured) {
+    html += '<p class="muted small">Wrangler is configured; no KV/R2/D1 tables in this env or nothing provisioned yet.</p>';
+  } else {
+    html += '<p class="muted small">No Wrangler-driven local CF resources for this manifest.</p>';
+  }
+  html += "</div>";
+
+  html += "</div>";
+  el.innerHTML = html;
+}
+
 function renderHostedLocalProfile(manifestUi) {
   const el = document.getElementById("hostedAppsLocalProfile");
   if (!el) return;
@@ -3581,19 +3655,19 @@ function renderHostedCfResources(manifestUi) {
     return;
   }
 
-  let html = '<div class="hosted-cf-resources__title">Local Cloudflare resources (wrangler)</div>';
-  html += `<div class="hosted-cf-resources__why" role="note">
-    <strong>Why Docker Desktop only shows Mongo (and your app containers)?</strong>
-    MongoDB is a <em>service in your project&rsquo;s <code>docker-compose.yml</code></em>, so it appears under the crawlervision stack.
-    The three KV namespaces, one R2 bucket, and one D1 database from <code>wrangler.toml</code> are <strong>not</strong> implemented as six extra containers in that file &mdash; same as real Cloudflare (managed APIs, not VMs in your repo).
-    Here they are <strong>dedicated resources</strong> (separate namespace names, bucket name, DB name) on the ecosystem&rsquo;s shared
-    <code>kv-adapter</code>, <code>r2-adapter</code>, and <code>d1-adapter</code> (the <strong>cloudflare-local</strong> stack &mdash; look there in Docker, not inside crawlervision).
-    The table below lists what was provisioned for <em>this</em> app; details are also in <code>leco.local-cf.yaml</code>.
+  const dedicatedAdapters = manifestUi.dedicated_local_adapters === true;
+  let html = '<div class="hosted-cf-resources__title">Local Cloudflare bindings (detail)</div>';
+  html += dedicatedAdapters
+    ? `<div class="hosted-cf-resources__why muted small" role="note">
+    Same rows as the <strong>Dedicated local KV / R2 / D1</strong> card. With <strong>dedicatedLocalAdapters</strong>, adapter containers are part of your compose project; <code>leco.local-cf.yaml</code> stores bases such as <code>http://leco-local-kv-adapter:8082</code> for services on the same network.
+  </div>`
+    : `<div class="hosted-cf-resources__why muted small" role="note">
+    Same rows as the <strong>Dedicated local KV / R2 / D1</strong> card above. These bindings come from your profile / <code>wrangler.toml</code> and <code>leco.local-cf.yaml</code>; with the default shared adapters they do not add containers to your app&rsquo;s compose project.
   </div>`;
   const hosts = manifestUi.local_cf_adapter_hosts;
-  if (hosts && hosts.kv) {
+  if (hosts && hosts.kv && !dedicatedAdapters) {
     html += `<p class="muted small">This app uses <strong>localCfPublicPrefix</strong>: public API bases <code>${escapeHtml(hosts.kv)}</code>, <code>${escapeHtml(hosts.r2)}</code>, <code>${escapeHtml(hosts.d1)}</code> (Traefik routes to the same shared adapters). Resolve <code>*.lh</code> like other ecosystem hosts.</p>`;
-  } else {
+  } else if (!dedicatedAdapters) {
     html +=
       '<p class="muted small">By default, <code>leco.local-cf.yaml</code> records <code>https://kv.lh</code>, <code>https://r2.lh</code>, <code>https://d1.lh</code> for your app. Set <code>cloudflare.localCfPublicPrefix: cv</code> in <code>leco.app.yaml</code> for <code>https://cv-kv.lh</code> etc., then re-run <strong>ecosystem-register</strong> (merge Traefik) and <strong>Deploy</strong>.</p>';
   }
@@ -3800,6 +3874,7 @@ async function refreshHostedAppsPanel() {
     }
   }
 
+  renderHostedResourceLedger(snap.manifest_ui, snap);
   renderHostedLocalProfile(snap.manifest_ui);
   renderHostedCfResources(snap.manifest_ui);
 
@@ -4113,23 +4188,117 @@ function initHostedRegisterWizard() {
   const busyReg = document.getElementById("hostedRegBusy");
   const busyRegText = busyReg?.querySelector("[data-hosted-reg-busy-text]");
   const deployChk = document.getElementById("hostedRegDeployAfter");
+  const workflowEl = document.getElementById("hostedRegWorkflow");
+  const workflowHintEl = document.getElementById("hostedRegWorkflowHint");
+  /** Path for which the last Detect succeeded (step 1 “done” until path changes). */
+  let hostedRegDetectOkForPath = "";
   if (!detectBtn || !submitBtn || !pathIn) return;
+
+  function syncHostedRegWorkflow(st, busy, opts) {
+    if (!workflowEl) return;
+    const pathOk = pathIn.value.trim().length > 0;
+    const idOk = idIn && idIn.value.trim().length > 0;
+    const canMutate = pathOk && idOk;
+    const yamlFilled = !!(manTa?.value?.trim() && locTa?.value?.trim());
+    const registrationReady = !!(st && st.registration_ready);
+    const detectDone = !!(pathOk && hostedRegOkForPathMatches());
+    const tokReq = dashboardTokenRequired();
+    const tokOk = !!controlToken();
+    const registerEnabled = registrationReady && canMutate && (!tokReq || tokOk);
+    const rails = workflowEl.querySelectorAll(".hosted-reg-workflow__rail");
+    workflowEl.dataset.busy = busy ? "1" : "0";
+
+    const steps = workflowEl.querySelectorAll(".hosted-reg-workflow__step");
+    steps.forEach((step) => {
+      const btn = step.querySelector(".hosted-reg-workflow__btn");
+      const locked = !!(btn && btn.disabled);
+      step.classList.toggle("hosted-reg-workflow__step--locked", locked);
+      step.classList.toggle("hosted-reg-workflow__step--enabled", !locked);
+      step.classList.remove("hosted-reg-workflow__step--current");
+    });
+
+    const stepEls = Array.from(steps);
+    const markDone = (idx, on) => {
+      if (stepEls[idx]) stepEls[idx].classList.toggle("hosted-reg-workflow__step--done", !!on);
+    };
+    markDone(0, detectDone);
+    markDone(1, registrationReady);
+    markDone(2, registrationReady);
+    markDone(3, false);
+    markDone(4, registerEnabled);
+
+    let currentSet = false;
+    for (let i = 0; i < stepEls.length; i++) {
+      const btn = stepEls[i].querySelector(".hosted-reg-workflow__btn");
+      const done = stepEls[i].classList.contains("hosted-reg-workflow__step--done");
+      const locked = !!(btn && btn.disabled);
+      if (!locked && !done && !currentSet) {
+        stepEls[i].classList.add("hosted-reg-workflow__step--current");
+        currentSet = true;
+      }
+    }
+    if (!currentSet && stepEls.length) {
+      const last = stepEls[stepEls.length - 1];
+      const btn = last.querySelector(".hosted-reg-workflow__btn");
+      if (
+        btn &&
+        !btn.disabled &&
+        !last.classList.contains("hosted-reg-workflow__step--done")
+      ) {
+        last.classList.add("hosted-reg-workflow__step--current");
+      }
+    }
+
+    rails.forEach((rail, i) => {
+      const leftDone = stepEls[i] ? stepEls[i].classList.contains("hosted-reg-workflow__step--done") : false;
+      rail.classList.toggle("hosted-reg-workflow__rail--active", !!leftDone);
+    });
+
+    if (!workflowHintEl || busy) {
+      if (workflowHintEl && busy) workflowHintEl.textContent = opts?.busyLabel || "Working…";
+      return;
+    }
+    let hint = "";
+    if (!pathOk) hint = "Step 1: enter an app root path, then run Detect.";
+    else if (!idOk) hint = "Enter app id (slug) for steps 2–5.";
+    else if (!detectDone) hint = "Step 1: run Detect to scan compose / wrangler / archetype.";
+    else if (!registrationReady)
+      hint = "Steps 2–3: Generate YAML from the scan and/or Save YAML to write files to disk.";
+    else if (tokReq && !tokOk) hint = "Set the control token on the Control tab to enable Register.";
+    else hint = "Step 5: Register runs ecosystem-register (and optional deploy).";
+
+    workflowHintEl.textContent = hint;
+  }
+
+  function hostedRegOkForPathMatches() {
+    const p = pathIn.value.trim();
+    return !!(p && hostedRegDetectOkForPath && p === hostedRegDetectOkForPath);
+  }
 
   function applyRegistrationYamlStatus(st) {
     const pathOk = pathIn.value.trim().length > 0;
     const idOk = idIn && idIn.value.trim().length > 0;
     const ready = !!(st && st.registration_ready) && pathOk && idOk;
+    const tokReq = dashboardTokenRequired();
+    const tokOk = !!controlToken();
+    const registerEnabled = ready && (!tokReq || tokOk);
     if (submitBtn) {
-      submitBtn.disabled = !ready;
-      submitBtn.title = ready
+      submitBtn.disabled = !registerEnabled;
+      submitBtn.title = registerEnabled
         ? ""
         : !pathOk || !idOk
           ? "Enter app root path and app id"
-          : "Generate YAML or Save YAML so leco.app.yaml and the profile file exist on disk";
+          : !ready
+            ? "Generate YAML or Save YAML so leco.app.yaml and the profile file exist on disk"
+            : "Set the control token on the Control tab";
     }
     const canMutate = pathOk && idOk;
+    const yamlFilled = !!(manTa?.value?.trim() && locTa?.value?.trim());
     if (genBtn) genBtn.disabled = !canMutate;
     if (saveYamlBtn) saveYamlBtn.disabled = !canMutate;
+    if (valBtn) valBtn.disabled = !yamlFilled;
+    if (detectBtn) detectBtn.disabled = !pathOk;
+    syncHostedRegWorkflow(st, false, {});
   }
 
   async function refreshYamlStatus() {
@@ -4162,7 +4331,10 @@ function initHostedRegisterWizard() {
     [detectBtn, valBtn, submitBtn, genBtn, saveYamlBtn].forEach((b) => {
       if (b) b.disabled = !!on;
     });
-    if (on) return;
+    if (on) {
+      syncHostedRegWorkflow(null, true, { busyLabel: label || "Working…" });
+      return;
+    }
     refreshYamlStatus();
   }
 
@@ -4170,6 +4342,36 @@ function initHostedRegisterWizard() {
     if (!msg) return;
     msg.textContent = text || "";
     msg.classList.toggle("hosted-reg-msg--error", !!isErr);
+  }
+
+  /** After a successful register: collapse panel, clear fields, sync workflow UI. */
+  function resetHostedRegisterFormAfterSuccess() {
+    setRegFormBusy(false);
+    hostedRegDetectOkForPath = "";
+    if (pathIn) pathIn.value = "";
+    if (idIn) idIn.value = "";
+    if (labelIn) labelIn.value = "";
+    if (manTa) manTa.value = "";
+    if (locTa) locTa.value = "";
+    if (sampleSel) sampleSel.value = "";
+    if (loadExistingChk) loadExistingChk.checked = true;
+    if (deployChk) deployChk.checked = true;
+    if (pre) {
+      pre.textContent = "";
+      pre.classList.add("is-hidden");
+    }
+    if (yamlRep) {
+      yamlRep.textContent = "";
+      yamlRep.classList.add("is-hidden");
+      yamlRep.classList.remove("hosted-reg-yaml-report--pass", "hosted-reg-yaml-report--fail");
+    }
+    setMsg("");
+    const hostedRegRootDirInp = document.getElementById("hostedRegRootDir");
+    if (hostedRegRootDirInp) hostedRegRootDirInp.value = "";
+    if (regPanel && regPanel.tagName === "DETAILS") {
+      regPanel.open = false;
+    }
+    refreshYamlStatus();
   }
 
   /** @param {{ fromBrowse?: boolean }} [how] */
@@ -4202,6 +4404,7 @@ function initHostedRegisterWizard() {
       });
       const data = await res.json();
       if (!data.ok) {
+        hostedRegDetectOkForPath = "";
         if (pre) {
           pre.classList.add("is-hidden");
           pre.textContent = "";
@@ -4238,13 +4441,22 @@ function initHostedRegisterWizard() {
         idIn.value = previewId;
       }
       if (labelIn && !labelIn.value.trim() && idIn && idIn.value.trim()) {
-        const slug = idIn.value.trim();
-        labelIn.value = slug
-          .split(/[-_.]+/)
-          .filter(Boolean)
-          .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-          .join(" ");
+        const suggest =
+          data.suggested_label != null && String(data.suggested_label).trim()
+            ? String(data.suggested_label).trim()
+            : "";
+        if (suggest) {
+          labelIn.value = suggest;
+        } else {
+          const slug = idIn.value.trim();
+          labelIn.value = slug
+            .split(/[-_.]+/)
+            .filter(Boolean)
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+            .join(" ");
+        }
       }
+      hostedRegDetectOkForPath = pathIn.value.trim();
       await refreshYamlStatus();
       if (how && how.fromBrowse) {
         setMsg(
@@ -4260,6 +4472,7 @@ function initHostedRegisterWizard() {
         );
       }
     } catch (e) {
+      hostedRegDetectOkForPath = "";
       setMsg(String(e.message || e), true);
     } finally {
       setRegFormBusy(false);
@@ -4292,6 +4505,13 @@ function initHostedRegisterWizard() {
     runHostedRegisterDetect({});
   }
 
+  let pathInputDebounce = null;
+  pathIn.addEventListener("input", () => {
+    const p = pathIn.value.trim();
+    if (hostedRegDetectOkForPath && p !== hostedRegDetectOkForPath) hostedRegDetectOkForPath = "";
+    if (pathInputDebounce) clearTimeout(pathInputDebounce);
+    pathInputDebounce = setTimeout(() => refreshYamlStatus(), 220);
+  });
   pathIn.addEventListener("blur", () => {
     tryAutoDetectFromPathField();
     refreshYamlStatus();
@@ -4300,6 +4520,13 @@ function initHostedRegisterWizard() {
     setTimeout(() => tryAutoDetectFromPathField(), 0);
     setTimeout(() => refreshYamlStatus(), 100);
   });
+  let yamlFieldDebounce = null;
+  function scheduleYamlFieldSync() {
+    if (yamlFieldDebounce) clearTimeout(yamlFieldDebounce);
+    yamlFieldDebounce = setTimeout(() => refreshYamlStatus(), 200);
+  }
+  manTa?.addEventListener("input", scheduleYamlFieldSync);
+  locTa?.addEventListener("input", scheduleYamlFieldSync);
   let yamlStatusDebounce = null;
   idIn?.addEventListener("blur", () => refreshYamlStatus());
   idIn?.addEventListener("input", () => {
@@ -4329,14 +4556,7 @@ function initHostedRegisterWizard() {
     if (idIn && !idIn.value.trim()) {
       idIn.value = hostedRegisterPathToSlug(path);
     }
-    if (labelIn && !labelIn.value.trim() && idIn && idIn.value.trim()) {
-      const slug = idIn.value.trim();
-      labelIn.value = slug
-        .split(/[-_.]+/)
-        .filter(Boolean)
-        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-        .join(" ");
-    }
+    // Label: leave empty here so auto-Detect can fill suggested_label from package.json / wrangler / compose.
     setMsg(
       `Folder “${dirName}” → ${path}. If the app root is nested (e.g. …/Repo/subapp), edit the path. Then Detect or Register.`,
       false,
@@ -4400,6 +4620,9 @@ function initHostedRegisterWizard() {
     if (regPanel.open) {
       ensureRegisterSamplesLoaded();
       refreshYamlStatus();
+    } else {
+      const ov = document.getElementById("controlActionOverlay");
+      if (!ov || ov.hidden) setRegFormBusy(false);
     }
   });
 
@@ -4563,11 +4786,7 @@ function initHostedRegisterWizard() {
       label,
       deploy_stack: deployChk ? !!deployChk.checked : true,
     };
-    submitBtn.disabled = true;
-    if (detectBtn) detectBtn.disabled = true;
-    if (valBtn) valBtn.disabled = true;
-    if (genBtn) genBtn.disabled = true;
-    if (saveYamlBtn) saveYamlBtn.disabled = true;
+    setRegFormBusy(true, "Registering…");
     try {
       const out = await runDashboardSyncRegisterOverlay({
         body: regBody,
@@ -4579,12 +4798,18 @@ function initHostedRegisterWizard() {
           loadOverview().catch(() => {});
         },
       });
-      if (out.ok && out.result?.registry_entry?.id) {
-        setMsg(
-          `Registered: ${out.result.registry_entry.id}. ${out.result.deploy_stack_ran ? "Deploy ran — check Docker / Hosted apps." : "Deploy skipped (checkbox)."} List refreshed.`,
-        );
-      } else if (out.result?.registry_entry?.id && out.error) {
-        setMsg(`${out.error} (registry id: ${out.result.registry_entry.id})`, true);
+      const regId = out.result?.registry_entry?.id;
+      if (regId) {
+        resetHostedRegisterFormAfterSuccess();
+        if (!out.ok) {
+          setMsg(
+            out.error ||
+              "Registry updated; docker deploy reported an issue — see overlay for the log.",
+            true,
+          );
+        } else {
+          hideControlActionOverlay();
+        }
       } else if (out.error) {
         setMsg(out.error, true);
       } else {
@@ -4593,12 +4818,7 @@ function initHostedRegisterWizard() {
     } catch (e) {
       setMsg(String(e.message || e), true);
     } finally {
-      submitBtn.disabled = false;
-      if (detectBtn) detectBtn.disabled = false;
-      if (valBtn) valBtn.disabled = false;
-      if (genBtn) genBtn.disabled = false;
-      if (saveYamlBtn) saveYamlBtn.disabled = false;
-      refreshYamlStatus();
+      setRegFormBusy(false);
     }
   });
 
@@ -5067,7 +5287,7 @@ function parseNdjsonFromFullText(text, appendStreamLog) {
 
 /**
  * Shared overlay + NDJSON stream reader (Control actions, Register app, …).
- * @param {{ title: string, url: string, body: Record<string, unknown>, actionVerb?: string, onFinally?: () => void | Promise<void> }} opts
+ * @param {{ title: string, url: string, body: Record<string, unknown>, actionVerb?: string, onFinally?: (outcome: { ok: boolean, result?: object, error?: string }) => void | Promise<void> }} opts
  * @returns {Promise<{ ok: boolean, result?: object, error?: string }>}
  */
 async function runDashboardStreamOverlay(opts) {
@@ -5267,7 +5487,7 @@ async function runDashboardStreamOverlay(opts) {
     if (runningBar) runningBar.classList.add("is-hidden");
     if (doneBar) doneBar.classList.remove("is-hidden");
     try {
-      await onFinally?.();
+      await onFinally?.(outcome);
     } catch (_) {
       /* ignore */
     }
@@ -5445,7 +5665,7 @@ async function runDashboardSyncRegisterOverlay(opts) {
     if (runningBar) runningBar.classList.add("is-hidden");
     if (doneBar) doneBar.classList.remove("is-hidden");
     try {
-      await onFinally?.();
+      await onFinally?.(outcome);
     } catch (_) {
       /* ignore */
     }
@@ -5460,8 +5680,16 @@ async function runDashboardSyncRegisterOverlay(opts) {
   return outcome;
 }
 
+function hideControlActionOverlay() {
+  const o = document.getElementById("controlActionOverlay");
+  if (!o) return;
+  o.hidden = true;
+  o.setAttribute("hidden", "");
+}
+
 async function runControlAction(targetId, action, cardLabel) {
   const label = (cardLabel || targetId || "").trim();
+  const act = String(action || "").toLowerCase();
   return runDashboardStreamOverlay({
     title: `${action} · ${label}`,
     url: "/api/control/stream",
@@ -5469,7 +5697,11 @@ async function runControlAction(targetId, action, cardLabel) {
     actionVerb: action,
     async onFinally() {
       loadControlTargets();
-      await refreshHostedAppsPanel().catch(() => {});
+      if (act === "remove" || act === "reset") {
+        await loadHostedAppsList();
+      } else if (activeTab === "hostedAppsTab") {
+        await refreshHostedAppsPanel().catch(() => {});
+      }
       loadOverview().catch(() => {});
     },
   });

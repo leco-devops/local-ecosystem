@@ -179,7 +179,7 @@ If **`DASHBOARD_CONTROL_TOKEN`** is set, you must configure the token in the das
 | **`leco-app run-hooks --phase <prepare\|build\|preStart>`** | Run merged sidecar profile lifecycle |
 | **`leco-app traefik-fragment`** | Emit Traefik YAML snippet |
 | **`leco-app ecosystem-register`** | Append/update **`leco-registry.yaml`** |
-| **`leco-app ecosystem-unregister`** | **`docker compose down`** (default), then registry row + optional Traefik / local CF cleanup; **`--no-compose-down`** / **`--compose-volumes`** |
+| **`leco-app ecosystem-unregister`** | **Local CF cleanup** (default), then **`docker compose down`**, then registry row + optional Traefik strip; **`--no-compose-down`** / **`--compose-volumes`** / **`--no-clean-local-cf`** |
 | **`leco-app cf-deploy`**, **`cf-secrets-checklist`** | Wrangler deploy and secrets hints |
 
 Full syntax, offload, and edge cases: **[DEPLOY_CLI.md](DEPLOY_CLI.md)**.

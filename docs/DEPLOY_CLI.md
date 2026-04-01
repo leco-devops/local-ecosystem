@@ -268,7 +268,7 @@ traefikCleanup:
 
 Compose-only offload (no Traefik file): `leco-app down` or `leco-app offload` without `--traefik-dynamic`.
 
-**Dashboard Hosted apps:** **Remove** / **Reset** and **`leco-app ecosystem-unregister`** (default) run **`docker compose down`** first when the manifest defines compose and the compose file exists, then Traefik strip, local CF cleanup, and registry/hosting removal. Use **`--no-compose-down`** only if you must unregister without touching containers; **`--compose-volumes`** matches **`leco-app down -v`** (used by dashboard **Reset**).
+**Dashboard Hosted apps:** **Remove** / **Reset** and **`leco-app ecosystem-unregister`** (default) run **local CF cleanup** first (when enabled), then **`docker compose down`** when the manifest defines compose and the compose file exists, then Traefik strip and registry/hosting removal. Use **`--no-compose-down`** only if you must unregister without touching containers; **`--compose-volumes`** matches **`leco-app down -v`** (used by dashboard **Reset**).
 
 ## Relationship to local-ecosystem
 
