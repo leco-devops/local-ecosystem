@@ -273,9 +273,9 @@ Use `proxy_pass http://backend:PORT;` in a custom `nginx.conf`, mount it in the 
 
 ---
 
-## 10. **leco-app** CLI (plug-and-play apps)
+## 10. **LEco DevOps** (`leco-app` / `leco-devops`)
 
-For **third-party** repos (many apps, no edits to `ai-stack` / `core.sh`), use **`leco-app`** in `tools/deploy-cli/`: it writes `leco.app.yaml`, runs `docker compose` deploy/stop/logs/status, optional **`wrangler deploy`**, and prints **Traefik** YAML fragments for manual paste.
+For **third-party** repos (many apps, no edits to `ai-stack` / `core.sh`), use **LEco DevOps** in `tools/deploy-cli/`: the **`leco-app`** and **`leco-devops`** commands write `leco.app.yaml`, run `docker compose` deploy/stop/logs/status, optional **`wrangler deploy`**, and print **Traefik** YAML fragments for manual paste.
 
 **Install:** `cd tools/deploy-cli` (from repo root), then `pip install -e .` — not from `tools/` alone.
 
@@ -287,7 +287,7 @@ See [DEPLOY_CLI.md](DEPLOY_CLI.md) and [tools/deploy-cli/README.md](../tools/dep
 
 - [DEVOPS_GUIDE.md](DEVOPS_GUIDE.md) — Workers, KV, R2, D1 APIs, compose reference  
 - [DEPLOYMENT.md](DEPLOYMENT.md) — backups, bulk lifecycle  
-- [DEPLOY_CLI.md](DEPLOY_CLI.md) — `leco-app` install and commands  
+- [DEPLOY_CLI.md](DEPLOY_CLI.md) — LEco DevOps install and commands  
 - [DEVELOPMENT_PLAYBOOK.md](DEVELOPMENT_PLAYBOOK.md) — repo layout, security notes  
 - Dashboard **Documentation** tab — same files when the repo is mounted at `/project`  
 - Dynamic CLI mirror: **Service management commands** (Operations category)

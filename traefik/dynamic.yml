@@ -4,352 +4,311 @@ http:
       forwardingTimeouts:
         dialTimeout: 45s
         responseHeaderTimeout: 90s
-
   routers:
-
-    # ========================
-    # TRAEFIK
-    # ========================
     traefik-http:
-      rule: "Host(`traefik.lh`)"
+      rule: Host(`traefik.lh`)
       service: api@internal
       entryPoints:
-        - web
-
+      - web
     traefik-https:
-      rule: "Host(`traefik.lh`)"
+      rule: Host(`traefik.lh`)
       service: api@internal
       entryPoints:
-        - websecure
+      - websecure
       tls: true
-
-    # ========================
-    # AI (Open WebUI)
-    # ========================
     ai-http:
-      rule: "Host(`ai.lh`)"
+      rule: Host(`ai.lh`)
       service: ai-service
       entryPoints:
-        - web
-
+      - web
     ai-https:
-      rule: "Host(`ai.lh`)"
+      rule: Host(`ai.lh`)
       service: ai-service
       entryPoints:
-        - websecure
+      - websecure
       tls: true
-
-    # ========================
-    # N8N
-    # ========================
     n8n-http:
-      rule: "Host(`n8n.lh`)"
+      rule: Host(`n8n.lh`)
       service: n8n-service
       entryPoints:
-        - web
-
+      - web
     n8n-https:
-      rule: "Host(`n8n.lh`)"
+      rule: Host(`n8n.lh`)
       service: n8n-service
       entryPoints:
-        - websecure
+      - websecure
       tls: true
-
-    # ========================
-    # OLLAMA
-    # ========================
     ollama-http:
-      rule: "Host(`ollama.lh`)"
+      rule: Host(`ollama.lh`)
       service: ollama-service
       entryPoints:
-        - web
-
+      - web
     ollama-https:
-      rule: "Host(`ollama.lh`)"
+      rule: Host(`ollama.lh`)
       service: ollama-service
       entryPoints:
-        - websecure
+      - websecure
       tls: true
-
-    # ========================
-    # SERVICE DASHBOARD
-    # ========================
     dashboard-http:
-      rule: "Host(`localhost.lh`)"
+      rule: Host(`localhost.lh`)
       service: dashboard-service
       entryPoints:
-        - web
-
+      - web
     dashboard-https:
-      rule: "Host(`localhost.lh`)"
+      rule: Host(`localhost.lh`)
       service: dashboard-service
       entryPoints:
-        - websecure
+      - websecure
       tls: true
-
-    # ========================
-    # CLOUDFLARE LOCAL
-    # ========================
     r2-http:
-      rule: "Host(`r2.lh`)"
+      rule: Host(`r2.lh`)
       service: r2-service
       entryPoints:
-        - web
-
+      - web
     r2-https:
-      rule: "Host(`r2.lh`)"
+      rule: Host(`r2.lh`)
       service: r2-service
       entryPoints:
-        - websecure
+      - websecure
       tls: true
-
     kv-http:
-      rule: "Host(`kv.lh`)"
+      rule: Host(`kv.lh`)
       service: kv-service
       entryPoints:
-        - web
-
+      - web
     kv-https:
-      rule: "Host(`kv.lh`)"
+      rule: Host(`kv.lh`)
       service: kv-service
       entryPoints:
-        - websecure
+      - websecure
       tls: true
-
     d1-http:
-      rule: "Host(`d1.lh`)"
+      rule: Host(`d1.lh`)
       service: d1-service
       entryPoints:
-        - web
-
+      - web
     d1-https:
-      rule: "Host(`d1.lh`)"
+      rule: Host(`d1.lh`)
       service: d1-service
       entryPoints:
-        - websecure
+      - websecure
       tls: true
-
     autoscale-http:
-      rule: "Host(`autoscale.lh`)"
+      rule: Host(`autoscale.lh`)
       service: autoscale-service
       entryPoints:
-        - web
-
+      - web
     autoscale-https:
-      rule: "Host(`autoscale.lh`)"
+      rule: Host(`autoscale.lh`)
       service: autoscale-service
       entryPoints:
-        - websecure
+      - websecure
       tls: true
-
     minio-s3-http:
-      rule: "Host(`s3.lh`)"
+      rule: Host(`s3.lh`)
       service: minio-api-service
       entryPoints:
-        - web
-
+      - web
     minio-s3-https:
-      rule: "Host(`s3.lh`)"
+      rule: Host(`s3.lh`)
       service: minio-api-service
       entryPoints:
-        - websecure
+      - websecure
       tls: true
-
     minio-console-http:
-      rule: "Host(`minio-console.lh`)"
+      rule: Host(`minio-console.lh`)
       service: minio-console-service
       entryPoints:
-        - web
-
+      - web
     minio-console-https:
-      rule: "Host(`minio-console.lh`)"
+      rule: Host(`minio-console.lh`)
       service: minio-console-service
       entryPoints:
-        - websecure
+      - websecure
       tls: true
-
     workers-http:
-      rule: "Host(`workers.lh`)"
+      rule: Host(`workers.lh`)
       service: workers-service
       entryPoints:
-        - web
-
+      - web
     workers-https:
-      rule: "Host(`workers.lh`)"
+      rule: Host(`workers.lh`)
       service: workers-service
       entryPoints:
-        - websecure
+      - websecure
       tls: true
-
     browser-http:
-      rule: "Host(`browser.lh`)"
+      rule: Host(`browser.lh`)
       service: browser-rendering-service
       entryPoints:
-        - web
-
+      - web
     browser-https:
-      rule: "Host(`browser.lh`)"
+      rule: Host(`browser.lh`)
       service: browser-rendering-service
       entryPoints:
-        - websecure
+      - websecure
       tls: true
-
     cache-http:
-      rule: "Host(`cache.lh`)"
+      rule: Host(`cache.lh`)
       service: cache-varnish-service
       entryPoints:
-        - web
-
+      - web
     cache-https:
-      rule: "Host(`cache.lh`)"
+      rule: Host(`cache.lh`)
       service: cache-varnish-service
       entryPoints:
-        - websecure
+      - websecure
       tls: true
-
     mailpit-http:
-      rule: "Host(`mail.lh`)"
+      rule: Host(`mail.lh`)
       service: mailpit-service
       entryPoints:
-        - web
-
+      - web
     mailpit-https:
-      rule: "Host(`mail.lh`)"
+      rule: Host(`mail.lh`)
       service: mailpit-service
       entryPoints:
-        - websecure
+      - websecure
       tls: true
-
     telegram-http:
-      rule: "Host(`telegram.lh`)"
+      rule: Host(`telegram.lh`)
       service: telegram-gateway-service
       entryPoints:
-        - web
-
+      - web
     telegram-https:
-      rule: "Host(`telegram.lh`)"
+      rule: Host(`telegram.lh`)
       service: telegram-gateway-service
       entryPoints:
-        - websecure
+      - websecure
       tls: true
-
     adminer-http:
-      rule: "Host(`adminer.lh`)"
+      rule: Host(`adminer.lh`)
       service: adminer-service
       entryPoints:
-        - web
-
+      - web
     adminer-https:
-      rule: "Host(`adminer.lh`)"
+      rule: Host(`adminer.lh`)
       service: adminer-service
       entryPoints:
-        - websecure
+      - websecure
       tls: true
-
     redis-ui-http:
-      rule: "Host(`redis-ui.lh`)"
+      rule: Host(`redis-ui.lh`)
       service: redis-commander-service
       entryPoints:
-        - web
-
+      - web
     redis-ui-https:
-      rule: "Host(`redis-ui.lh`)"
+      rule: Host(`redis-ui.lh`)
       service: redis-commander-service
       entryPoints:
-        - websecure
+      - websecure
       tls: true
-
+    crawlervision-cv-lh-api-http:
+      rule: Host(`cv.lh`) && PathPrefix(`/api`)
+      service: crawlervision-cv-lh-api-svc
+      entryPoints:
+      - web
+      priority: 20
+    crawlervision-cv-lh-api-https:
+      rule: Host(`cv.lh`) && PathPrefix(`/api`)
+      service: crawlervision-cv-lh-api-svc
+      entryPoints:
+      - websecure
+      tls: true
+      priority: 20
+    crawlervision-cv-lh-http:
+      rule: Host(`cv.lh`)
+      service: crawlervision-cv-lh-fe-svc
+      entryPoints:
+      - web
+      priority: 10
+    crawlervision-cv-lh-https:
+      rule: Host(`cv.lh`)
+      service: crawlervision-cv-lh-fe-svc
+      entryPoints:
+      - websecure
+      tls: true
+      priority: 10
   services:
-
     ai-service:
       loadBalancer:
         servers:
-          - url: "http://open-webui:8080"
-
+        - url: http://open-webui:8080
     n8n-service:
       loadBalancer:
         servers:
-          - url: "http://n8n:5678"
-
+        - url: http://n8n:5678
     ollama-service:
       loadBalancer:
         servers:
-          - url: "http://ollama:11434"
-
+        - url: http://ollama:11434
     dashboard-service:
       loadBalancer:
         servers:
-          - url: "http://service-dashboard:8090"
-
+        - url: http://service-dashboard:8090
     r2-service:
       loadBalancer:
         servers:
-          - url: "http://r2-adapter:8081"
-
+        - url: http://r2-adapter:8081
     kv-service:
       loadBalancer:
         servers:
-          - url: "http://kv-adapter:8082"
-
+        - url: http://kv-adapter:8082
     d1-service:
       loadBalancer:
         servers:
-          - url: "http://d1-adapter:8083"
-
+        - url: http://d1-adapter:8083
     autoscale-service:
       loadBalancer:
         servers:
-          - url: "http://autoscaler:8084"
-
+        - url: http://autoscaler:8084
     minio-console-service:
       loadBalancer:
         servers:
-          - url: "http://minio:9001"
-
+        - url: http://minio:9001
     minio-api-service:
       loadBalancer:
         servers:
-          - url: "http://minio:9000"
-
+        - url: http://minio:9000
     workers-service:
       loadBalancer:
         serversTransport: local-relaxed-timeout
         servers:
-          - url: "http://workers-runtime:8787"
-
+        - url: http://workers-runtime:8787
     browser-rendering-service:
       loadBalancer:
         serversTransport: local-relaxed-timeout
         servers:
-          - url: "http://browser-rendering-local:8085"
-
+        - url: http://browser-rendering-local:8085
     cache-varnish-service:
       loadBalancer:
         servers:
-          - url: "http://cache-varnish:80"
-
+        - url: http://cache-varnish:80
     mailpit-service:
       loadBalancer:
         servers:
-          - url: "http://mailpit:8025"
-
+        - url: http://mailpit:8025
     telegram-gateway-service:
       loadBalancer:
         servers:
-          - url: "http://telegram-gateway:8091"
-
+        - url: http://telegram-gateway:8091
     adminer-service:
       loadBalancer:
         servers:
-          - url: "http://adminer:8080"
-
+        - url: http://adminer:8080
     redis-commander-service:
       loadBalancer:
         servers:
-          - url: "http://redis-commander:8081"
-
-# Paths are inside the Traefik container (see ai-stack/services/traefik.sh: -v .../certs:/certs)
+        - url: http://redis-commander:8081
+    crawlervision-cv-lh-fe-svc:
+      loadBalancer:
+        servers:
+        - url: http://cv-frontend:3000
+    crawlervision-cv-lh-api-svc:
+      loadBalancer:
+        servers:
+        - url: http://cv-backend:8001
 tls:
   certificates:
-    - certFile: "/certs/wildcard.lh.pem"
-      keyFile: "/certs/wildcard.lh-key.pem"
+  - certFile: /certs/wildcard.lh.pem
+    keyFile: /certs/wildcard.lh-key.pem

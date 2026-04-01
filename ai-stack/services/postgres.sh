@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+# Safe to `source` from ai-stack/core.sh; also runnable as ./ai-stack/services/postgres.sh …
 NAME="n8n_postgres"
 VOLUME="n8n_postgres_data"
 

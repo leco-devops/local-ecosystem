@@ -96,6 +96,33 @@ def routing_entry_fragment(manifest: ApplicationManifest, entry: RoutingEntry) -
     return _legacy_routing_fragment(manifest, entry)
 
 
+def local_cf_adapter_host_aliases_fragment(manifest: ApplicationManifest) -> dict[str, Any] | None:
+    """Traefik routers: {prefix}-kv.lh / -r2.lh / -d1.lh → existing kv-service, r2-service, d1-service."""
+    if not manifest.cloudflare or not manifest.cloudflare.local_cf_public_prefix:
+        return None
+    prefix = manifest.cloudflare.local_cf_public_prefix
+    key_id = _safe_id(manifest.name)
+    routers: dict[str, Any] = {}
+    for kind, host, svc in (
+        ("kv", f"{prefix}-kv.lh", "kv-service"),
+        ("r2", f"{prefix}-r2.lh", "r2-service"),
+        ("d1", f"{prefix}-d1.lh", "d1-service"),
+    ):
+        base = f"{key_id}-cf-{kind}"
+        routers[f"{base}-http"] = {
+            "rule": f"Host(`{host}`)",
+            "service": svc,
+            "entryPoints": ["web"],
+        }
+        routers[f"{base}-https"] = {
+            "rule": f"Host(`{host}`)",
+            "service": svc,
+            "entryPoints": ["websecure"],
+            "tls": True,
+        }
+    return {"http": {"routers": routers, "services": {}}}
+
+
 def merge_fragments(fragments: list[dict[str, Any]]) -> dict[str, Any]:
     routers: dict[str, Any] = {}
     services: dict[str, Any] = {}
@@ -111,14 +138,23 @@ def merge_fragments(fragments: list[dict[str, Any]]) -> dict[str, Any]:
 def manifest_to_traefik_yaml(manifest: ApplicationManifest) -> str:
     import yaml
 
-    if not manifest.routing or not manifest.routing.entries:
-        return "# No routing.entries in manifest — add hosts under routing:\n"
-    frags = [routing_entry_fragment(manifest, e) for e in manifest.routing.entries]
+    frags: list[dict[str, Any]] = []
+    if manifest.routing and manifest.routing.entries:
+        frags.extend([routing_entry_fragment(manifest, e) for e in manifest.routing.entries])
+    cf_frag = local_cf_adapter_host_aliases_fragment(manifest)
+    if cf_frag:
+        frags.append(cf_frag)
+    if not frags:
+        return (
+            "# No routing.entries and no cloudflare.localCfPublicPrefix — nothing to merge.\n"
+            "# Add routing.entries and/or localCfPublicPrefix (e.g. cv → cv-kv.lh, cv-r2.lh, cv-d1.lh).\n"
+        )
     merged = merge_fragments(frags)
     return (
         "# Paste under traefik/dynamic.yml → http.routers / http.services (merge keys manually).\n"
         "# Traefik watches the file; backup dynamic.yml first.\n"
         "# Split routes (frontend + apiBackend): PathPrefix → API (priority 20), Host → UI (priority 10).\n"
+        "# localCfPublicPrefix adds Host rules for {prefix}-kv.lh → kv-service (shared adapter).\n"
         "# Compose: attach those containers to external network lh-network (see local-ecosystem docs).\n\n"
         + yaml.safe_dump(merged, default_flow_style=False, sort_keys=False, allow_unicode=True)
     )

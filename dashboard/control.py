@@ -3,6 +3,7 @@ import shlex
 import shutil
 import subprocess
 import time
+from pathlib import Path
 from collections.abc import Iterator
 from datetime import datetime, timezone
 from typing import Any
@@ -12,6 +13,7 @@ import requests
 
 from control_targets import AI_TARGETS, CF_TARGETS, COMPOSE_REL, INFRA_COMPOSE_REL, INFRA_TARGETS
 from leco_control import resolve_leco_target
+from leco_subprocess import run_leco_app
 
 PROJECT_ROOT = os.getenv("DASHBOARD_PROJECT_ROOT", "/project")
 COMPOSE_FILE = os.path.join(PROJECT_ROOT, COMPOSE_REL)
@@ -462,52 +464,85 @@ def _leco_compose_run(meta: dict, args: list, *, timeout: int) -> tuple[int, str
     return _run(["docker", "compose", *tail, *args], cwd=root, timeout=timeout)
 
 
-def _leco_autooffboard_after_teardown(meta: dict[str, Any]) -> dict[str, Any]:
-    """Strip manifest Traefik keys, tear down leco.local-cf.yaml resources, remove registry row (hosted offboard)."""
+def _leco_app_manifest_run(
+    meta: dict,
+    subcommand: str,
+    extra_args: list | None = None,
+    *,
+    timeout: int,
+) -> tuple[int, str]:
+    """Run LEco DevOps CLI (leco-app) with --manifest (deploy/stop/down)."""
+    mp = meta["manifest_path"]
+    # meta["root"] is remapped for the Docker daemon (host paths). leco-app runs inside this
+    # container and must use a cwd that exists here — same as leco_subprocess.run_leco_deploy.
+    leco_cwd = str(Path(mp).resolve().parent)
+    argv = [subcommand, "--manifest", mp]
+    if extra_args:
+        argv.extend(extra_args)
+    code, out, err = run_leco_app(argv, cwd=leco_cwd, timeout=timeout)
+    log = ((out or "") + ("\n" if out and err else "") + (err or "")).strip() or "(no output)"
+    return code, log
+
+
+def _leco_autooffboard_after_teardown(meta: dict[str, Any], *, compose_volumes: bool = False) -> dict[str, Any]:
+    """docker compose down (unless disabled), then strip Traefik, local CF teardown, registry + hosting (hosted offboard)."""
     slug = str(meta.get("leco_slug") or "").strip()
     if not slug:
         return {"ok": False, "error": "missing leco_slug"}
     from hosted_offboard import offboard_hosted_app
 
-    return offboard_hosted_app(slug, strip_traefik=True, clean_local_cf=True)
+    return offboard_hosted_app(
+        slug,
+        strip_traefik=True,
+        clean_local_cf=True,
+        compose_down=True,
+        compose_volumes=compose_volumes,
+    )
+
+
+def _leco_offboard_log(offboard: dict[str, Any]) -> str:
+    return ((offboard.get("leco_log") or "").strip())[-12000:]
 
 
 def _leco_stack_action(meta: dict, action: str) -> dict:
-    """Whole-project docker compose for a leco.app.yaml registered in config/leco-registry.yaml."""
+    """leco.app.yaml stack: LEco DevOps deploy/stop/down where supported; compose for restart/recreate/pause."""
     if action == "backup":
         return {"ok": False, "error": "backup not defined for leco compose stacks"}
     to = 3600 if action in {"deploy", "recreate"} else 600
     if action == "deploy":
-        code, log = _leco_compose_run(meta, ["up", "-d", "--build"], timeout=to)
+        code, log = _leco_app_manifest_run(meta, "deploy", timeout=to)
         return {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
     if action == "recreate":
+        # leco-app has no force-recreate; use compose directly
         code, log = _leco_compose_run(meta, ["up", "-d", "--force-recreate"], timeout=to)
         return {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
     if action == "stop":
-        code, log = _leco_compose_run(meta, ["stop"], timeout=to)
+        code, log = _leco_app_manifest_run(meta, "stop", timeout=to)
         return {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
     if action == "restart":
         code, log = _leco_compose_run(meta, ["restart"], timeout=to)
         return {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
     if action == "remove":
-        code, log = _leco_compose_run(meta, ["down", "--remove-orphans"], timeout=to)
-        out: dict[str, Any] = {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
-        if code == 0:
-            ob = _leco_autooffboard_after_teardown(meta)
-            out["offboard"] = ob
-            out["ok"] = bool(ob.get("ok"))
-            if not out["ok"] and ob.get("error"):
-                out["error"] = ob["error"]
+        ob = _leco_autooffboard_after_teardown(meta, compose_volumes=False)
+        out: dict[str, Any] = {
+            "ok": bool(ob.get("ok")),
+            "exit_code": int(ob.get("exit_code") or (0 if ob.get("ok") else 1)),
+            "log": _leco_offboard_log(ob),
+            "offboard": ob,
+        }
+        if not out["ok"] and ob.get("error"):
+            out["error"] = ob["error"]
         return out
     if action == "reset":
-        code, log = _leco_compose_run(meta, ["down", "-v", "--remove-orphans"], timeout=to)
-        out = {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
-        if code == 0:
-            ob = _leco_autooffboard_after_teardown(meta)
-            out["offboard"] = ob
-            out["ok"] = bool(ob.get("ok"))
-            if not out["ok"] and ob.get("error"):
-                out["error"] = ob["error"]
+        ob = _leco_autooffboard_after_teardown(meta, compose_volumes=True)
+        out = {
+            "ok": bool(ob.get("ok")),
+            "exit_code": int(ob.get("exit_code") or (0 if ob.get("ok") else 1)),
+            "log": _leco_offboard_log(ob),
+            "offboard": ob,
+        }
+        if not out["ok"] and ob.get("error"):
+            out["error"] = ob["error"]
         return out
     if action == "start":
         code, log = _leco_compose_run(meta, ["start"], timeout=to)
@@ -536,7 +571,9 @@ def _stream_leco_stack_action(meta: dict, action: str) -> Iterator[dict[str, Any
         return
     to = 3600 if action in {"deploy", "recreate"} else 600
     if action == "deploy":
-        code, log = yield from _stream_leco_compose(meta, ["up", "-d", "--build"], timeout=to)
+        code, log = _leco_app_manifest_run(meta, "deploy", timeout=to)
+        if log:
+            yield {"type": "log", "text": log}
         yield _emit_done(code == 0, exit_code=code, log=log[-12000:])
         return
     if action == "recreate":
@@ -544,7 +581,9 @@ def _stream_leco_stack_action(meta: dict, action: str) -> Iterator[dict[str, Any
         yield _emit_done(code == 0, exit_code=code, log=log[-12000:])
         return
     if action == "stop":
-        code, log = yield from _stream_leco_compose(meta, ["stop"], timeout=to)
+        code, log = _leco_app_manifest_run(meta, "stop", timeout=to)
+        if log:
+            yield {"type": "log", "text": log}
         yield _emit_done(code == 0, exit_code=code, log=log[-12000:])
         return
     if action == "restart":
@@ -552,29 +591,33 @@ def _stream_leco_stack_action(meta: dict, action: str) -> Iterator[dict[str, Any
         yield _emit_done(code == 0, exit_code=code, log=log[-12000:])
         return
     if action == "remove":
-        code, log = yield from _stream_leco_compose(meta, ["down", "--remove-orphans"], timeout=to)
-        offboard = None
-        if code == 0:
-            offboard = _leco_autooffboard_after_teardown(meta)
-        ok_done = code == 0 and (offboard is None or offboard.get("ok"))
-        extra: dict[str, Any] = {"exit_code": code, "log": log[-12000:]}
-        if offboard is not None:
-            extra["offboard"] = offboard
-        if not ok_done and offboard and offboard.get("error"):
-            extra["error"] = offboard["error"]
+        ob = _leco_autooffboard_after_teardown(meta, compose_volumes=False)
+        if ob.get("leco_log"):
+            yield {"type": "log", "text": ob["leco_log"]}
+        ok_done = bool(ob.get("ok"))
+        ec = int(ob.get("exit_code") or (0 if ok_done else 1))
+        extra: dict[str, Any] = {
+            "exit_code": ec,
+            "log": _leco_offboard_log(ob),
+            "offboard": ob,
+        }
+        if not ok_done and ob.get("error"):
+            extra["error"] = ob["error"]
         yield _emit_done(ok_done, **extra)
         return
     if action == "reset":
-        code, log = yield from _stream_leco_compose(meta, ["down", "-v", "--remove-orphans"], timeout=to)
-        offboard = None
-        if code == 0:
-            offboard = _leco_autooffboard_after_teardown(meta)
-        ok_done = code == 0 and (offboard is None or offboard.get("ok"))
-        extra = {"exit_code": code, "log": log[-12000:]}
-        if offboard is not None:
-            extra["offboard"] = offboard
-        if not ok_done and offboard and offboard.get("error"):
-            extra["error"] = offboard["error"]
+        ob = _leco_autooffboard_after_teardown(meta, compose_volumes=True)
+        if ob.get("leco_log"):
+            yield {"type": "log", "text": ob["leco_log"]}
+        ok_done = bool(ob.get("ok"))
+        ec = int(ob.get("exit_code") or (0 if ok_done else 1))
+        extra = {
+            "exit_code": ec,
+            "log": _leco_offboard_log(ob),
+            "offboard": ob,
+        }
+        if not ok_done and ob.get("error"):
+            extra["error"] = ob["error"]
         yield _emit_done(ok_done, **extra)
         return
     if action == "start":

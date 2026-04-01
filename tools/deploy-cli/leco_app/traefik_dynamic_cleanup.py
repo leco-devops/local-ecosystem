@@ -10,7 +10,11 @@ from typing import Any
 import yaml
 
 from leco_app.schema import ApplicationManifest
-from leco_app.traefik_fragment import merge_fragments, routing_entry_fragment
+from leco_app.traefik_fragment import (
+    local_cf_adapter_host_aliases_fragment,
+    merge_fragments,
+    routing_entry_fragment,
+)
 
 
 def manifest_traefik_keys(manifest: ApplicationManifest) -> tuple[list[str], list[str]]:
@@ -18,9 +22,15 @@ def manifest_traefik_keys(manifest: ApplicationManifest) -> tuple[list[str], lis
     tc = manifest.traefik_cleanup
     if tc and (tc.routers or tc.services):
         return list(tc.routers), list(tc.services)
-    if not manifest.routing or not manifest.routing.entries:
+    frags: list[dict[str, Any]] = []
+    if manifest.routing and manifest.routing.entries:
+        frags.extend([routing_entry_fragment(manifest, e) for e in manifest.routing.entries])
+    cff = local_cf_adapter_host_aliases_fragment(manifest)
+    if cff:
+        frags.append(cff)
+    if not frags:
         return [], []
-    merged = merge_fragments([routing_entry_fragment(manifest, e) for e in manifest.routing.entries])
+    merged = merge_fragments(frags)
     http = merged.get("http") or {}
     r = list((http.get("routers") or {}).keys())
     s = list((http.get("services") or {}).keys())

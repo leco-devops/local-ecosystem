@@ -8,25 +8,45 @@ import ssl
 import urllib.error
 import urllib.request
 from pathlib import Path
-from urllib.parse import quote
 from typing import Any, Callable
+from urllib.parse import quote
 
 import yaml
 
-from leco_app.wrangler_cf_resources import (
-    WranglerCfResourcePlan,
-    local_kv_namespace_name,
-    parse_wrangler_cf_resources,
-)
+from leco_app.local_cf_policy import should_provision_local_cf
+from leco_app.resource_plan import LocalCfResourcePlan, local_kv_namespace_name
+from leco_app.wrangler_cf_resources import parse_wrangler_cf_resources
 
 Echo = Callable[[str], None]
 
 
-def _adapter_bases() -> dict[str, str]:
+def adapter_http_bases() -> dict[str, str]:
+    """URLs for urllib calls (provision/teardown). Prefer Docker DNS when running inside service-dashboard."""
     return {
-        "kv": os.environ.get("LECO_LOCAL_KV_URL", "https://kv.lh").rstrip("/"),
-        "r2": os.environ.get("LECO_LOCAL_R2_URL", "https://r2.lh").rstrip("/"),
-        "d1": os.environ.get("LECO_LOCAL_D1_URL", "https://d1.lh").rstrip("/"),
+        "kv": (
+            os.environ.get("LECO_LOCAL_KV_INTERNAL_URL")
+            or os.environ.get("LECO_LOCAL_KV_URL")
+            or "https://kv.lh"
+        ).rstrip("/"),
+        "r2": (
+            os.environ.get("LECO_LOCAL_R2_INTERNAL_URL")
+            or os.environ.get("LECO_LOCAL_R2_URL")
+            or "https://r2.lh"
+        ).rstrip("/"),
+        "d1": (
+            os.environ.get("LECO_LOCAL_D1_INTERNAL_URL")
+            or os.environ.get("LECO_LOCAL_D1_URL")
+            or "https://d1.lh"
+        ).rstrip("/"),
+    }
+
+
+def adapter_record_bases_default() -> dict[str, str]:
+    """Public bases written to leco.local-cf.yaml (apps / Workers). Ignores *_INTERNAL_URL."""
+    return {
+        "kv": (os.environ.get("LECO_LOCAL_KV_URL") or "https://kv.lh").rstrip("/"),
+        "r2": (os.environ.get("LECO_LOCAL_R2_URL") or "https://r2.lh").rstrip("/"),
+        "d1": (os.environ.get("LECO_LOCAL_D1_URL") or "https://d1.lh").rstrip("/"),
     }
 
 
@@ -67,29 +87,37 @@ def _http_post_json(url: str, payload: dict[str, Any], *, timeout: float = 45.0)
 
 
 def provision_plan(
-    plan: WranglerCfResourcePlan,
+    plan: LocalCfResourcePlan,
     *,
     app_slug: str,
     wrangler_env: str | None,
     manifest_path: Path,
     echo: Echo,
+    http_bases: dict[str, str] | None = None,
+    record_bases: dict[str, str] | None = None,
 ) -> int:
-    """Returns 0 if all calls succeeded, 1 if any failed."""
-    bases = _adapter_bases()
+    """Returns 0 if all calls succeeded, 1 if any failed.
+
+    ``http_bases`` — used for POST to adapters (often ``http://kv-adapter:8082`` from service-dashboard).
+    ``record_bases`` — written to ``leco.local-cf.yaml`` (usually ``https://kv.lh`` for app containers).
+    """
+    hb = http_bases if http_bases is not None else adapter_http_bases()
+    rb = record_bases if record_bases is not None else adapter_record_bases_default()
     record: dict[str, Any] = {
         "lecoLocalCfVersion": 1,
         "app": app_slug,
         "wranglerEnv": wrangler_env,
-        "adapters": bases,
+        "adapters": rb,
         "kv": [],
         "r2": [],
         "d1": [],
     }
     failed = 0
+    total = plan.total_bindings()
 
     for row in plan.kv:
         local_name = local_kv_namespace_name(app_slug, row.binding, row.cf_id)
-        url = f"{bases['kv']}/namespaces"
+        url = f"{hb['kv']}/namespaces"
         ok, err, _ = _http_post_json(url, {"name": local_name})
         if ok:
             echo(f"  KV namespace OK: {local_name} (binding {row.binding})")
@@ -98,7 +126,7 @@ def provision_plan(
                     "binding": row.binding,
                     "cloudflareId": row.cf_id,
                     "localNamespace": local_name,
-                    "putUrlPrefix": f"{bases['kv']}/namespaces/{quote(local_name, safe='')}/values/",
+                    "putUrlPrefix": f"{rb['kv']}/namespaces/{quote(local_name, safe='')}/values/",
                 }
             )
         else:
@@ -106,7 +134,7 @@ def provision_plan(
             failed += 1
 
     for row in plan.r2:
-        url = f"{bases['r2']}/buckets"
+        url = f"{hb['r2']}/buckets"
         ok, err, _ = _http_post_json(url, {"name": row.bucket_name})
         if ok:
             echo(f"  R2 bucket OK: {row.bucket_name} (binding {row.binding})")
@@ -114,7 +142,7 @@ def provision_plan(
                 {
                     "binding": row.binding,
                     "bucketName": row.bucket_name,
-                    "objectsPrefix": f"{bases['r2']}/objects/{quote(row.bucket_name, safe='')}/",
+                    "objectsPrefix": f"{rb['r2']}/objects/{quote(row.bucket_name, safe='')}/",
                 }
             )
         else:
@@ -122,7 +150,7 @@ def provision_plan(
             failed += 1
 
     for row in plan.d1:
-        url = f"{bases['d1']}/databases"
+        url = f"{hb['d1']}/databases"
         ok, err, _ = _http_post_json(url, {"name": row.database_name})
         if ok:
             echo(f"  D1 database OK: {row.database_name} (binding {row.binding})")
@@ -130,7 +158,7 @@ def provision_plan(
                 {
                     "binding": row.binding,
                     "databaseName": row.database_name,
-                    "queryUrl": f"{bases['d1']}/databases/{quote(row.database_name, safe='')}/query",
+                    "queryUrl": f"{rb['d1']}/databases/{quote(row.database_name, safe='')}/query",
                 }
             )
         else:
@@ -143,7 +171,25 @@ def provision_plan(
         encoding="utf-8",
     )
     echo(f"Wrote resource map: {out_path}")
+    ok_n = total - failed
+    echo(
+        f"Local CF provision summary: {ok_n}/{total} resource(s) OK "
+        f"({len(plan.kv)} KV, {len(plan.r2)} R2, {len(plan.d1)} D1)."
+    )
     return 1 if failed else 0
+
+
+def _echo_skip_local_cf(echo: Echo, *, no_provision_cli: bool, ignore_policy: bool) -> None:
+    if ignore_policy:
+        return
+    if no_provision_cli:
+        echo("Skipping local CF provision (--no-provision-local-cf).")
+        return
+    raw = (os.environ.get("LECO_PROVISION_LOCAL_CF") or "").strip().lower()
+    if raw in ("0", "false", "no", "off"):
+        echo("Skipping local CF provision (LECO_PROVISION_LOCAL_CF is disabled).")
+        return
+    echo("Skipping local CF provision (cloudflare.provisionLocalResources: false in manifest).")
 
 
 def provision_from_manifest(
@@ -152,13 +198,34 @@ def provision_from_manifest(
     app_slug: str,
     wrangler_env: str | None,
     echo: Echo,
+    no_provision_local_cf: bool = False,
+    ignore_policy: bool = False,
 ) -> int:
-    from leco_app.schema import load_manifest
+    """
+    Parse wrangler from manifest and provision local adapters.
 
-    m = load_manifest(manifest_path)
-    if not m.cloudflare or not m.cloudflare.wrangler_config:
-        echo("No cloudflare.wranglerConfig in manifest — skipping local CF provision.")
+    ``ignore_policy=True`` (e.g. ``leco-app provision-local-cf``) skips manifest/env policy
+    and runs whenever ``cloudflare.wranglerConfig`` resolves to a file.
+    """
+    from leco_app.schema import load_effective_manifest
+
+    m = load_effective_manifest(manifest_path)
+    if not m.cloudflare or not (m.cloudflare.wrangler_config or "").strip():
+        if ignore_policy:
+            echo("No cloudflare.wranglerConfig in manifest — nothing to provision.")
         return 0
+    if not ignore_policy and not should_provision_local_cf(m, cli_skip=no_provision_local_cf):
+        _echo_skip_local_cf(echo, no_provision_cli=no_provision_local_cf, ignore_policy=ignore_policy)
+        return 0
+    hb = adapter_http_bases()
+    rb = adapter_record_bases_default()
+    if m.cloudflare.local_cf_public_prefix:
+        pfx = m.cloudflare.local_cf_public_prefix
+        rb = {
+            "kv": f"https://{pfx}-kv.lh",
+            "r2": f"https://{pfx}-r2.lh",
+            "d1": f"https://{pfx}-d1.lh",
+        }
     root = m.resolved_root(manifest_path)
     wp = (root / m.cloudflare.wrangler_config).resolve()
     if not wp.is_file():
@@ -166,13 +233,28 @@ def provision_from_manifest(
         return 1
     env = wrangler_env if wrangler_env is not None else m.cloudflare.wrangler_env
     plan = parse_wrangler_cf_resources(wp, env)
-    if not plan.kv and not plan.r2 and not plan.d1:
+    if plan.is_empty():
         echo(f"No KV/R2/D1 tables in {wp.name}" + (f" (env {env!r})" if env else "") + ".")
         return 0
+    host_line = ""
+    if m.cloudflare.local_cf_public_prefix:
+        host_line = (
+            f"\n  public adapter hosts: {rb['kv']}, {rb['r2']}, {rb['d1']} "
+            f"(Traefik must merge localCfPublicPrefix routes; re-run ecosystem-register if needed)"
+        )
     echo(
         "Provisioning local Cloudflare-local resources (from wrangler, not modifying wrangler.toml)…\n"
         f"  wrangler: {wp}\n"
         f"  env: {env or '(top-level)'}\n"
         f"  KV: {len(plan.kv)} · R2: {len(plan.r2)} · D1: {len(plan.d1)}"
+        f"{host_line}"
     )
-    return provision_plan(plan, app_slug=app_slug, wrangler_env=env, manifest_path=manifest_path, echo=echo)
+    return provision_plan(
+        plan,
+        app_slug=app_slug,
+        wrangler_env=env,
+        manifest_path=manifest_path,
+        echo=echo,
+        http_bases=hb,
+        record_bases=rb,
+    )

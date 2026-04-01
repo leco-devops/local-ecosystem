@@ -1,0 +1,26 @@
+# Used when the build context is the repo root (e.g. `docker build -f dashboard/Dockerfile .`).
+# Sub-service builds that use their own context dir are unaffected.
+
+.git
+.github
+.cursor
+.idea
+**/.DS_Store
+
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info
+.pytest_cache
+.mypy_cache
+.tox
+.coverage
+htmlcov
+
+**/.venv
+**/venv
+node_modules
+**/node_modules
+
+*.log
+.env
+.env.*

@@ -14,6 +14,50 @@ def _compose_cmd() -> list[str]:
     return ["docker", "compose"]
 
 
+def path_for_docker_daemon(container_path: Path) -> Path:
+    """
+    Map a path inside the Ops Dashboard (or similar) container to the path the Docker daemon expects.
+
+    When ``docker compose`` runs in a container with only the socket mounted, bind-mount sources in
+    the API must be paths on the **Docker host** (e.g. macOS paths Docker Desktop has in File
+    Sharing). Paths like ``/workspace-parent/...`` exist in the container but are unknown to the
+    daemon; remap using ``LECO_WORKSPACE_PARENT_HOST`` / ``LECO_PROJECT_ROOT_HOST`` when the same
+    trees are also bind-mounted at those host paths (see ``ai-stack/services/dashboard.sh``).
+    """
+    try:
+        rp = container_path.resolve()
+    except OSError:
+        rp = container_path
+
+    hw = (os.environ.get("LECO_WORKSPACE_PARENT_HOST") or "").strip()
+    if hw:
+        wsp_in = Path(os.environ.get("LECO_WORKSPACE_PARENT_CONTAINER", "/workspace-parent"))
+        try:
+            wsp_res = wsp_in.resolve()
+        except OSError:
+            wsp_res = wsp_in
+        try:
+            rel = rp.relative_to(wsp_res)
+            return Path(hw).joinpath(rel).resolve()
+        except ValueError:
+            pass
+
+    hp = (os.environ.get("LECO_PROJECT_ROOT_HOST") or "").strip()
+    if hp:
+        proj_in = Path(os.environ.get("LECO_PROJECT_CONTAINER", "/project"))
+        try:
+            proj_res = proj_in.resolve()
+        except OSError:
+            proj_res = proj_in
+        try:
+            rel = rp.relative_to(proj_res)
+            return Path(hp).joinpath(rel).resolve()
+        except ValueError:
+            pass
+
+    return rp
+
+
 def _env_for_manifest(manifest: ApplicationManifest, manifest_path: Path) -> dict[str, str]:
     """Pass through host env; optional COMPOSE_PROJECT_NAME only if set in manifest."""
     env = os.environ.copy()
@@ -26,14 +70,30 @@ def compose_args(manifest: ApplicationManifest, manifest_path: Path) -> list[str
     if not manifest.docker_compose:
         raise ValueError("Manifest has no dockerCompose section")
     root = manifest.resolved_root(manifest_path)
-    rel = Path(manifest.docker_compose.compose_file)
-    file_arg = str(root / rel) if not rel.is_absolute() else str(rel)
-    args = [*_compose_cmd(), "-f", file_arg]
+    root_d = path_for_docker_daemon(root)
+    dc = manifest.docker_compose
+    compose_paths: list[str] = []
+    rel = Path(dc.compose_file)
+    if rel.is_absolute():
+        compose_paths.append(str(path_for_docker_daemon(rel.resolve())))
+    else:
+        compose_paths.append(str(path_for_docker_daemon((root_d / rel).resolve())))
+    for extra in dc.additional_compose_files or []:
+        er = Path(str(extra).strip())
+        if not str(er):
+            continue
+        if er.is_absolute():
+            compose_paths.append(str(path_for_docker_daemon(er.resolve())))
+        else:
+            compose_paths.append(str(path_for_docker_daemon((root_d / er).resolve())))
+    args = [*_compose_cmd()]
+    for fp in compose_paths:
+        args.extend(["-f", fp])
     if manifest.docker_compose.env_file:
         ef = Path(manifest.docker_compose.env_file)
         ef_path = (root / ef) if not ef.is_absolute() else ef
         if ef_path.is_file():
-            args.extend(["--env-file", str(ef_path)])
+            args.extend(["--env-file", str(path_for_docker_daemon(ef_path.resolve()))])
     if manifest.docker_compose.project_name:
         args.extend(["-p", manifest.docker_compose.project_name])
     for prof in manifest.docker_compose.profiles or []:
@@ -49,8 +109,9 @@ def run_compose(
     cwd: Path | None = None,
 ) -> int:
     root = manifest.resolved_root(manifest_path)
+    root_d = path_for_docker_daemon(root)
     cmd = [*compose_args(manifest, manifest_path), *subcmd]
-    return subprocess.call(cmd, cwd=cwd or root, env=_env_for_manifest(manifest, manifest_path))
+    return subprocess.call(cmd, cwd=cwd or root_d, env=_env_for_manifest(manifest, manifest_path))
 
 
 def run_compose_capture(
@@ -59,10 +120,11 @@ def run_compose_capture(
     subcmd: Sequence[str],
 ) -> subprocess.CompletedProcess[str]:
     root = manifest.resolved_root(manifest_path)
+    root_d = path_for_docker_daemon(root)
     cmd = [*compose_args(manifest, manifest_path), *subcmd]
     return subprocess.run(
         cmd,
-        cwd=root,
+        cwd=root_d,
         env=_env_for_manifest(manifest, manifest_path),
         capture_output=True,
         text=True,

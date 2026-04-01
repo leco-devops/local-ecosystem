@@ -12,15 +12,9 @@ from urllib.parse import quote
 
 import yaml
 
+from leco_app.local_cf_provision import adapter_http_bases
+
 Echo = Callable[[str], None]
-
-
-def _bases() -> dict[str, str]:
-    return {
-        "kv": os.environ.get("LECO_LOCAL_KV_URL", "https://kv.lh").rstrip("/"),
-        "r2": os.environ.get("LECO_LOCAL_R2_URL", "https://r2.lh").rstrip("/"),
-        "d1": os.environ.get("LECO_LOCAL_D1_URL", "https://d1.lh").rstrip("/"),
-    }
 
 
 def _delete(url: str, *, timeout: float = 45.0) -> tuple[int, str]:
@@ -53,7 +47,8 @@ def teardown_from_leco_local_cf_path(cf_path: Path, echo: Echo | None = None) ->
         return 1
     if not isinstance(doc, dict):
         return 1
-    bases = _bases()
+    # DELETE must hit the same adapter processes provision used (often internal Docker DNS from dashboard).
+    bases = adapter_http_bases()
     failed = 0
 
     for row in doc.get("kv") or []:

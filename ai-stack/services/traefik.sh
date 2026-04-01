@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+# Safe to `source` from ai-stack/core.sh; also runnable as ./ai-stack/services/traefik.sh …
 if [ -z "${PROJECT_ROOT:-}" ]; then
   PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 fi

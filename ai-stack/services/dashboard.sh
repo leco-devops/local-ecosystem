@@ -1,3 +1,11 @@
+#!/usr/bin/env bash
+# Rebuild and run the ops dashboard (`service-dashboard`). Safe to `source` from ai-stack/core.sh.
+#
+# Speed: full `deploy` always runs `docker build` (slow when Dockerfile/layers change or cache cold).
+# For day-to-day work, app code is read from the /project bind mount — use:
+#   DASHBOARD_SKIP_BUILD=1 ./ai-stack/services/dashboard.sh start
+#   or: ./ai-stack/services/dashboard.sh quick
+# Rebuild when you change Dockerfile, requirements.txt, or tools/deploy-cli baked into the image.
 if [ -z "${PROJECT_ROOT:-}" ]; then
   PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 fi
@@ -43,8 +51,17 @@ start() {
     return 1
   fi
 
-  echo "🔨 Building dashboard image (always rebuild on start)…"
-  docker build -t "$IMAGE" "$APP_DIR" || return 1
+  export DOCKER_BUILDKIT=1
+  if [ "${DASHBOARD_SKIP_BUILD:-0}" = "1" ] && docker image inspect "$IMAGE" >/dev/null 2>&1; then
+    echo "⏭️  Skipping docker build (DASHBOARD_SKIP_BUILD=1, image exists). Use deploy without skip to rebuild."
+  elif [ "${DASHBOARD_SKIP_BUILD:-0}" = "1" ]; then
+    echo "⚠️  DASHBOARD_SKIP_BUILD=1 but $IMAGE missing — building…"
+    docker build -t "$IMAGE" -f "$APP_DIR/Dockerfile" "$PROJECT_ROOT" || return 1
+  else
+    echo "🔨 Building dashboard image…"
+    docker build -t "$IMAGE" -f "$APP_DIR/Dockerfile" "$PROJECT_ROOT" || return 1
+  fi
+  echo "ℹ️  Flask runs from /project/dashboard when mounted — for app.py/static/template edits use: docker restart $NAME (or quick start) without rebuilding."
   docker network inspect lh-network >/dev/null 2>&1 || docker network create lh-network >/dev/null
   docker rm -f "$NAME" 2>/dev/null
 
@@ -53,11 +70,31 @@ start() {
   WORKSPACE_PARENT="$(cd "$PROJECT_ROOT/.." && pwd)"
   WORKSPACE_PARENT_MOUNT=()
   if [ -d "$WORKSPACE_PARENT" ]; then
+    # Mount sibling workspace twice: /workspace-parent (stable in-container path) and the host
+    # absolute path. leco-app remaps /workspace-parent → host path for docker compose so bind mounts
+    # resolve on Docker Desktop (daemon needs host paths, not paths only visible inside this container).
     WORKSPACE_PARENT_MOUNT=(
       -v "$WORKSPACE_PARENT:/workspace-parent:ro"
+      -v "$WORKSPACE_PARENT:$WORKSPACE_PARENT:ro"
       -e DASHBOARD_WORKSPACE_PARENT=/workspace-parent
+      -e "DASHBOARD_WORKSPACE_PARENT_HOST=$WORKSPACE_PARENT"
+      -e "LECO_WORKSPACE_PARENT_HOST=$WORKSPACE_PARENT"
     )
   fi
+
+  # Optional: require a shared secret for Control / Hosted apps / Routes mutations:
+  #   -e "DASHBOARD_CONTROL_TOKEN=your-secret"
+  # Trusted local only — embed same token in HTML and seed the browser (see docs/DEPLOYMENT.md):
+  #   -e "DASHBOARD_INJECT_CONTROL_TOKEN_UI=1"
+
+  # Register/Deploy runs leco-app here; https://kv.lh from inside the container often hits connection
+  # refused (Traefik/DNS not reachable the same way). Talk to cloudflare-local adapters on lh-network;
+  # leco.local-cf.yaml still gets public https://kv.lh / r2 / d1 unless you set LECO_LOCAL_*_URL.
+  LOCAL_CF_INTERNAL=(
+    -e LECO_LOCAL_KV_INTERNAL_URL=http://kv-adapter:8082
+    -e LECO_LOCAL_R2_INTERNAL_URL=http://r2-adapter:8081
+    -e LECO_LOCAL_D1_INTERNAL_URL=http://d1-adapter:8083
+  )
 
   # shellcheck disable=SC2086
   docker run -d \
@@ -67,7 +104,11 @@ start() {
     -p "$HOST_PORT:$CONTAINER_PORT" \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v "$PROJECT_ROOT:/project:rw" \
+    -v "$PROJECT_ROOT:$PROJECT_ROOT:rw" \
     -e "DASHBOARD_DOCKER_BIND_ROOT=$PROJECT_ROOT" \
+    -e "DASHBOARD_PROJECT_ROOT_HOST=$PROJECT_ROOT" \
+    -e "LECO_PROJECT_ROOT_HOST=$PROJECT_ROOT" \
+    "${LOCAL_CF_INTERNAL[@]}" \
     "${WORKSPACE_PARENT_MOUNT[@]}" \
     $HOST_PROC_MOUNT \
     $HOST_SYS_MOUNT \
@@ -80,6 +121,11 @@ start() {
 # Alias: full image rebuild + container recreate (same as start).
 deploy() {
   start
+}
+
+# Recreate container without `docker build` (uses existing image). OK when only bind-mounted code changed.
+quick() {
+  DASHBOARD_SKIP_BUILD=1 start
 }
 
 stop() {
@@ -102,6 +148,7 @@ if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
   shift || true
   case "$act" in
     start | deploy) deploy ;;
+    quick) quick ;;
     stop) stop ;;
     restart) restart ;;
     remove) remove ;;
@@ -111,7 +158,7 @@ if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
     logs) logs ;;
     reset) reset ;;
     *)
-      echo "Usage: $0 {start|deploy|stop|restart|remove|pause|unpause|status|logs|reset}"
+      echo "Usage: $0 {start|deploy|quick|stop|restart|remove|pause|unpause|status|logs|reset}"
       exit 1
       ;;
   esac

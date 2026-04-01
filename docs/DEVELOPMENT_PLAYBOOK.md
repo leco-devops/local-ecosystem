@@ -37,7 +37,8 @@ The dashboard runs in Docker. Rebuild the image:
 
 ```bash
 ./ai-stack/ai-stack.sh restart dashboard
-# or: docker build -t local/service-dashboard:latest dashboard && docker rm -f service-dashboard && …
+# Manual image build (context must be repo root — includes tools/deploy-cli for LEco DevOps):
+# docker build -t local/service-dashboard:latest -f dashboard/Dockerfile . && docker rm -f service-dashboard && …
 ```
 
 The container should mount **`$PROJECT_ROOT:/project`** so Control actions and in-dashboard docs can read the repo. The run script uses **`--restart unless-stopped`** so the dashboard comes back when the Docker daemon restarts (unless the container was explicitly stopped).
@@ -93,3 +94,13 @@ The static UI (`dashboard/static/dashboard.js`) writes **`local_ecosystem_dashbo
 ```
 
 Requires Traefik routing `*.lh` to backends on port 80.
+
+## 10. LEco DevOps + Hosted apps (maintainers)
+
+When changing registration, materialization, or compose behavior, treat these as one system:
+
+- **Effective manifest:** bridge (`leco.app.yaml`) + profile **`infrastructure`** (`leco.yaml`). Dashboard listing and control paths must resolve compose the same way as **`leco-app`** (`dashboard/leco_control.py`, `tools/deploy-cli/leco_app/schema.py`).
+- **Read-only `wsp:` paths:** **`source`** symlink target and **`configRefs`** sync live in **`dashboard/leco_detect.py`**, **`dashboard/leco_materialize.py`**, **`dashboard/hosting_layout.py`**.
+- **Teardown:** **`dashboard/control.py`** + **`dashboard/hosted_offboard.py`** — offboard after **`leco-app down`** even on failure.
+
+Operator-facing map: **[LECO_APP_BLUEPRINT.md](LECO_APP_BLUEPRINT.md)**. Dashboard **Docs** catalog: **`dashboard/docs_catalog.py`** (`leco-app-blueprint` id).

@@ -1,4 +1,4 @@
-"""leco-app CLI entrypoint."""
+"""LEco DevOps CLI entrypoint (command: leco-app or leco-devops)."""
 
 from __future__ import annotations
 
@@ -8,15 +8,18 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated, Any, Optional
 
 import typer
 import yaml
+from pydantic import ValidationError
 
-from leco_app import __version__
+from leco_app import DISPLAY_NAME, __version__
 from leco_app.compose_runner import run_compose, run_compose_capture
+from leco_app.detectors.archetype import detect_archetype
 from leco_app.detectors.compose import detect_compose
 from leco_app.detectors.ports import check_host_ports
+from leco_app.hooks_runner import run_hooks_phase
 from leco_app.detectors.wrangler import detect_wrangler, list_likely_secret_var_keys
 from leco_app.ecosystem_registry import (
     register_in_ecosystem,
@@ -25,15 +28,25 @@ from leco_app.ecosystem_registry import (
 )
 from leco_app.local_cf_teardown import teardown_from_leco_local_cf_path
 from leco_app.local_cf_provision import provision_from_manifest
-from leco_app.paths import app_state_dir, default_manifest_name
+from leco_app.onboarding import (
+    resolve_ecosystem_root,
+    run_registry_and_provision,
+    run_traefik_merge_for_manifest,
+)
+from leco_app.paths import app_state_dir, default_localhost_profile_name, default_manifest_name
 from leco_app.schema import (
     ApplicationManifest,
     CloudflareSpec,
     DockerComposeSpec,
+    LocalhostProfile,
+    MergedApplication,
+    ProfileInfrastructureSpec,
     RoutingEntry,
     RoutingSpec,
     ServiceTarget,
-    load_manifest,
+    load_effective_manifest,
+    load_merged_manifest,
+    save_localhost_profile,
     save_manifest,
 )
 from leco_app.traefik_dynamic_cleanup import manifest_traefik_keys, strip_traefik_dynamic_yml
@@ -41,9 +54,65 @@ from leco_app.traefik_fragment import manifest_to_traefik_yaml
 
 app = typer.Typer(
     name="leco-app",
-    help="Plug-and-play deploy helper: Docker Compose + optional Wrangler (see README resource model).",
+    help=f"{DISPLAY_NAME} — Docker Compose + optional Wrangler; manifests and Traefik hints (see README).",
     no_args_is_help=True,
 )
+
+# Shared manifest path (``-f`` is not used on ``logs`` — that reserves ``-f`` for ``--follow``).
+ManifestPathOption = Annotated[
+    Optional[Path],
+    typer.Option("--manifest", "-f", help="Path to leco.app.yaml"),
+]
+
+EcosystemRootOption = Annotated[
+    Optional[Path],
+    typer.Option(
+        "--ecosystem-root",
+        "-E",
+        help="local-ecosystem repo root (or set LECO_ECOSYSTEM_ROOT)",
+    ),
+]
+
+
+def _run_onboard_after_deploy(
+    mp: Path,
+    *,
+    ecosystem_root_opt: Path | None,
+    register_id: str | None,
+    register_label: str | None,
+    no_provision_local_cf: bool,
+    wrangler_env: str | None,
+    traefik_dynamic: Path | None,
+) -> None:
+    """Register + merge Traefik (raises typer.Exit on registry failure)."""
+    er = resolve_ecosystem_root(ecosystem_root_opt)
+    if er is None:
+        typer.secho(
+            "--onboard requires --ecosystem-root / -E or LECO_ECOSYSTEM_ROOT.",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(1)
+    try:
+        run_registry_and_provision(
+            er,
+            mp.resolve(),
+            app_id=register_id,
+            label=register_label,
+            wrangler_env=wrangler_env,
+            no_provision_local_cf=no_provision_local_cf,
+            echo=typer.secho,
+        )
+    except (OSError, ValueError) as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from exc
+    m = load_effective_manifest(mp)
+    run_traefik_merge_for_manifest(
+        m,
+        ecosystem_root=er,
+        traefik_dynamic=traefik_dynamic,
+        echo=typer.secho,
+    )
 
 
 def _slugify(name: str) -> str:
@@ -51,13 +120,11 @@ def _slugify(name: str) -> str:
     return s or "app"
 
 
-def _find_manifest(start: Path, explicit: Path | None) -> Path:
+def _try_find_manifest(start: Path, explicit: Path | None) -> Path | None:
+    """Return path to leco.app.yaml if it exists, else None."""
     if explicit:
         p = explicit.resolve()
-        if not p.is_file():
-            typer.secho(f"Manifest not found: {p}", fg=typer.colors.RED, err=True)
-            raise typer.Exit(1)
-        return p
+        return p if p.is_file() else None
     cur = start.resolve()
     for _ in range(20):
         cand = cur / default_manifest_name()
@@ -66,26 +133,168 @@ def _find_manifest(start: Path, explicit: Path | None) -> Path:
         if cur.parent == cur:
             break
         cur = cur.parent
-    typer.secho(
-        f"No {default_manifest_name()} found (walk up from {start}). "
-        "Run `leco-app init` or pass --manifest.",
-        fg=typer.colors.RED,
-        err=True,
-    )
-    raise typer.Exit(1)
+    return None
+
+
+def _find_manifest(start: Path, explicit: Path | None) -> Path:
+    mp = _try_find_manifest(start, explicit)
+    if mp is None:
+        if explicit:
+            p = explicit.resolve()
+            typer.secho(f"Manifest not found: {p}", fg=typer.colors.RED, err=True)
+        else:
+            typer.secho(
+                f"No {default_manifest_name()} found (walk up from {start}). "
+                "Run `leco-app init` or pass --manifest.",
+                fg=typer.colors.RED,
+                err=True,
+            )
+        raise typer.Exit(1)
+    return mp
+
+
+def _validate_existing_manifest_tree(mp: Path) -> tuple[MergedApplication | None, str | None]:
+    """Parse leco.app.yaml + profile; ensure referenced files exist. Returns (merged, error_message)."""
+    try:
+        merged = load_merged_manifest(mp)
+    except (ValidationError, ValueError, yaml.YAMLError) as e:
+        return None, str(e)
+    except OSError as e:
+        return None, str(e)
+    m = merged.manifest
+    if m.local_host_profile:
+        rel = Path(m.local_host_profile.strip())
+        prof = (mp.parent / rel).resolve()
+        if not prof.is_file():
+            return None, f"localHostProfile not found: {prof} (manifest references {m.local_host_profile!r})"
+    root = m.resolved_root(mp)
+    if m.docker_compose:
+        cf = root / Path(m.docker_compose.compose_file)
+        if not cf.is_file():
+            return None, f"dockerCompose.composeFile not found: {cf}"
+        for rel in m.docker_compose.additional_compose_files or []:
+            p = Path(str(rel).strip())
+            if not str(p):
+                continue
+            ap = p.resolve() if p.is_absolute() else (root / p).resolve()
+            if not ap.is_file():
+                return None, f"dockerCompose.additionalComposeFiles entry not found: {ap}"
+    if m.cloudflare and m.cloudflare.wrangler_config:
+        wc = root / Path(m.cloudflare.wrangler_config)
+        if not wc.is_file():
+            return None, f"cloudflare.wranglerConfig not found: {wc}"
+    return merged, None
+
+
+def _deploy_from_manifest(mp: Path, *, strict_compose: bool = True) -> int:
+    """docker compose up -d --build from manifest paths only (same as deploy command).
+
+    If ``strict_compose`` is False (e.g. after ``init``), missing dockerCompose logs a warning and returns 0.
+    """
+    m = load_effective_manifest(mp)
+    if not m.docker_compose:
+        msg = (
+            "Manifest has no dockerCompose — skipping Docker deploy "
+            "(add dockerCompose to leco.yaml infrastructure or leco.app.yaml, or use leco-app cf-deploy for Workers)."
+        )
+        if strict_compose:
+            typer.secho("Manifest has no dockerCompose section.", fg=typer.colors.RED, err=True)
+            return 1
+        typer.secho(msg, fg=typer.colors.YELLOW, err=True)
+        return 0
+    root = m.resolved_root(mp)
+    cd = detect_compose(root)
+    if cd.host_ports:
+        conflicts = check_host_ports(cd.host_ports)
+        busy = [p for p, used in conflicts.items() if used]
+        if busy:
+            typer.secho(
+                f"Warning: possible port conflicts: {busy} — continuing.",
+                fg=typer.colors.YELLOW,
+                err=True,
+            )
+    code = run_compose(m, mp, ["up", "-d", "--build"])
+    if code == 0:
+        typer.secho("Deploy finished.", fg=typer.colors.GREEN)
+        meta = app_state_dir(m.name)
+        (meta / "last-deploy.json").write_text(
+            json.dumps({"manifest": str(mp.resolve()), "root": str(root)}),
+            encoding="utf-8",
+        )
+    return code
 
 
 @app.command("version")
 def cmd_version() -> None:
-    typer.echo(__version__)
+    typer.echo(f"{DISPLAY_NAME} {__version__}")
+
+
+@app.command("detect")
+def cmd_detect(
+    path: Annotated[Path, typer.Argument(help="Application root directory")] = Path("."),
+    as_json: Annotated[bool, typer.Option("--json/--text", help="Emit JSON (default) or one-line summary")] = True,
+) -> None:
+    """Print detected compose/wrangler/archetype hints (for dashboard registration wizard)."""
+    root = path.resolve()
+    if not root.is_dir():
+        typer.secho(f"Not a directory: {root}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+    cd = detect_compose(root)
+    wd = detect_wrangler(root)
+    arch = detect_archetype(root)
+    manifest_path = root / default_manifest_name()
+    wc = wd.config_path
+    data = {
+        "root": str(root),
+        "has_wrangler": wc is not None,
+        "wrangler_config": wc.as_posix() if wc else None,
+        "compose_files": [p.as_posix() for p in cd.compose_files],
+        "host_ports": cd.host_ports,
+        "suggested_archetype": arch,
+        "existing_manifest": manifest_path.is_file(),
+        "manifest_path": manifest_path.resolve().as_posix(),
+    }
+    if as_json:
+        typer.echo(json.dumps(data, indent=2))
+    else:
+        typer.echo(
+            f"archetype={arch} wrangler={data['has_wrangler']} "
+            f"compose={len(cd.compose_files)} manifest={data['existing_manifest']}"
+        )
+
+
+@app.command("run-hooks")
+def cmd_run_hooks(
+    phase: Annotated[str, typer.Argument(help="prepare | build | preStart")],
+    cwd: Annotated[Path, typer.Option("--cwd", help="Search manifest from this directory")] = Path("."),
+    manifest: ManifestPathOption = None,
+) -> None:
+    """Run localhost profile lifecycle commands for the given phase."""
+    valid = frozenset({"prepare", "build", "preStart"})
+    if phase not in valid:
+        typer.secho(f"phase must be one of: {', '.join(sorted(valid))}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+    mp = _find_manifest(cwd, manifest)
+    code = run_hooks_phase(mp, phase, echo=typer.echo)  # type: ignore[arg-type]
+    raise typer.Exit(code)
 
 
 @app.command("init")
 def cmd_init(
-    path: Annotated[Path, typer.Argument(help="Application root directory")] = Path("."),
+    path: Annotated[
+        Path,
+        typer.Argument(
+            help="Directory to search upward for leco.app.yaml, or app root when creating files",
+        ),
+    ] = Path("."),
+    manifest: ManifestPathOption = None,
     manifest_out: Annotated[
         Optional[Path],
-        typer.Option("--out", "-o", help=f"Write manifest (default: <path>/{default_manifest_name()})"),
+        typer.Option(
+            "--out",
+            "-o",
+            help=f"When creating files: write manifest here (default: <path>/{default_manifest_name()})",
+        ),
     ] = None,
     non_interactive: Annotated[bool, typer.Option("--yes", "-y", help="Skip prompts; use defaults")] = False,
     provision_local_cf: Annotated[
@@ -102,9 +311,93 @@ def cmd_init(
             help="Never run local CF provision (overrides prompt / --provision-local-cf)",
         ),
     ] = False,
+    manifest_only: Annotated[
+        bool,
+        typer.Option(
+            "--manifest-only",
+            help="Allow init with no docker-compose and no wrangler (profile + registry-oriented manifest)",
+        ),
+    ] = False,
+    ecosystem_root: EcosystemRootOption = None,
+    onboard: Annotated[
+        bool,
+        typer.Option(
+            "--onboard",
+            help="After deploy: ecosystem-register + merge routing into traefik/dynamic.yml (needs -E or LECO_ECOSYSTEM_ROOT)",
+        ),
+    ] = False,
+    register_id: Annotated[
+        Optional[str],
+        typer.Option("--register-id", help="With --onboard: registry id (default: manifest name)"),
+    ] = None,
+    register_label: Annotated[
+        Optional[str],
+        typer.Option("--register-label", "-L", help="With --onboard: Hosted apps card title"),
+    ] = None,
 ) -> None:
-    """Analyze the repo and write leco.app.yaml (interactive unless -y)."""
-    root = path.resolve()
+    """Validate **leco.app.yaml** + sidecar profile and deploy, or run the wizard then deploy.
+
+    If a manifest already exists (walk up from *path* or ``--manifest``): load and validate YAML, ensure
+    ``localHostProfile`` file exists when set, ensure compose / wrangler paths exist, then run Docker
+    deploy. On error, print and stop (no prompts). Use ``--provision-local-cf`` to provision local CF.
+
+    If no manifest is found: prompts (unless ``-y``) create **leco.app.yaml** and default **leco.yaml**,
+    then deploy. The hub file is always **leco.app.yaml** (not manifest.yaml); **leco.yaml** is the
+    optional profile for URLs and lifecycle hooks (see README).
+
+    Use ``--onboard`` with ``-E`` (or ``LECO_ECOSYSTEM_ROOT``) to register the app for Hosted apps and
+    merge ``routing.entries`` into ``traefik/dynamic.yml`` (same as ``leco-app onboard``).
+    """
+    start = path.resolve()
+    mp_existing = _try_find_manifest(start, manifest)
+
+    if mp_existing is not None:
+        merged, err = _validate_existing_manifest_tree(mp_existing)
+        if err:
+            typer.secho(err, fg=typer.colors.RED, err=True)
+            raise typer.Exit(1)
+        typer.secho(f"Validated {mp_existing}", fg=typer.colors.GREEN)
+        app_root = merged.manifest.resolved_root(mp_existing)
+        st = app_state_dir(merged.manifest.name)
+        (st / "last-init.json").write_text(
+            json.dumps({"root": str(app_root), "manifest": str(mp_existing.resolve())}, indent=2),
+            encoding="utf-8",
+        )
+        cf = merged.manifest.cloudflare
+        if (
+            not onboard
+            and cf
+            and not no_provision_local_cf
+            and provision_local_cf
+        ):
+            code_cf = provision_from_manifest(
+                mp_existing.resolve(),
+                app_slug=merged.manifest.name,
+                wrangler_env=cf.wrangler_env,
+                echo=typer.echo,
+                no_provision_local_cf=no_provision_local_cf,
+            )
+            if code_cf != 0:
+                typer.secho(
+                    "Local CF provision had failures (is cloudflare-local up? Try LECO_LOCAL_KV_URL etc.).",
+                    fg=typer.colors.YELLOW,
+                    err=True,
+                )
+        code = _deploy_from_manifest(mp_existing, strict_compose=False)
+        if onboard and code == 0:
+            w_env = cf.wrangler_env if cf else None
+            _run_onboard_after_deploy(
+                mp_existing,
+                ecosystem_root_opt=ecosystem_root,
+                register_id=register_id,
+                register_label=register_label,
+                no_provision_local_cf=no_provision_local_cf,
+                wrangler_env=w_env,
+                traefik_dynamic=None,
+            )
+        raise typer.Exit(code)
+
+    root = start
     if not root.is_dir():
         typer.secho(f"Not a directory: {root}", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
@@ -204,24 +497,46 @@ def cmd_init(
             health_urls.append(hp)
 
     if not docker_spec and not cf_spec:
-        typer.secho(
-            "No docker-compose file or wrangler.toml found — nothing to configure.",
-            fg=typer.colors.RED,
-            err=True,
-        )
-        raise typer.Exit(1)
-
-    manifest = ApplicationManifest(
-        leco_app_version="1",
-        name=name,
-        root=".",
-        docker_compose=docker_spec,
-        cloudflare=cf_spec,
-        routing=routing,
-        healthcheck_urls=health_urls,
-    )
+        if not manifest_only:
+            typer.secho(
+                "No docker-compose file or wrangler.toml found — pass --manifest-only or add files.",
+                fg=typer.colors.RED,
+                err=True,
+            )
+            raise typer.Exit(1)
+        if not non_interactive and not typer.confirm(
+            "No compose/wrangler: create manifest-only entry with leco.yaml?",
+            default=True,
+        ):
+            raise typer.Exit(0)
 
     out = manifest_out or (root / default_manifest_name())
+    arche = detect_archetype(root)
+    localhost_name = default_localhost_profile_name()
+    lp_path = out.parent / localhost_name
+
+    infra_kw: dict[str, Any] = {}
+    if docker_spec is not None:
+        infra_kw["docker_compose"] = docker_spec
+    if cf_spec is not None:
+        infra_kw["cloudflare"] = cf_spec
+    if routing is not None and routing.entries:
+        infra_kw["routing"] = routing
+    if health_urls:
+        infra_kw["healthcheck_urls"] = list(health_urls)
+    profile_infra = ProfileInfrastructureSpec(**infra_kw) if infra_kw else None
+    init_profile = LocalhostProfile(schema_version=2, archetype=arche, infrastructure=profile_infra)
+    if not lp_path.exists():
+        save_localhost_profile(lp_path, init_profile)
+        typer.secho(f"Wrote {lp_path}", fg=typer.colors.GREEN)
+
+    manifest = ApplicationManifest(
+        leco_app_version="3",
+        name=name,
+        root=".",
+        local_host_profile=localhost_name,
+    )
+
     save_manifest(out, manifest)
 
     typer.secho(f"Wrote {out}", fg=typer.colors.GREEN)
@@ -256,7 +571,7 @@ def cmd_init(
         encoding="utf-8",
     )
 
-    if cf_spec and not no_provision_local_cf:
+    if cf_spec and not no_provision_local_cf and not onboard:
         do_pv = False
         if provision_local_cf:
             do_pv = True
@@ -271,6 +586,7 @@ def cmd_init(
                 app_slug=name,
                 wrangler_env=cf_spec.wrangler_env,
                 echo=typer.echo,
+                no_provision_local_cf=no_provision_local_cf,
             )
             if code != 0:
                 typer.secho(
@@ -279,51 +595,146 @@ def cmd_init(
                     err=True,
                 )
 
+    merged_post, err_post = _validate_existing_manifest_tree(out.resolve())
+    if err_post:
+        typer.secho(f"Invalid generated manifest: {err_post}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+    code_dep = _deploy_from_manifest(out.resolve(), strict_compose=False)
+    if onboard and code_dep == 0:
+        w_env = cf_spec.wrangler_env if cf_spec else None
+        _run_onboard_after_deploy(
+            out.resolve(),
+            ecosystem_root_opt=ecosystem_root,
+            register_id=register_id,
+            register_label=register_label,
+            no_provision_local_cf=no_provision_local_cf,
+            wrangler_env=w_env,
+            traefik_dynamic=None,
+        )
+    raise typer.Exit(code_dep)
+
 
 @app.command("deploy")
 def cmd_deploy(
     cwd: Annotated[Path, typer.Option("--cwd", help="Search manifest from this directory")] = Path("."),
-    manifest: Annotated[
-        Optional[Path],
-        typer.Option("--manifest", "-f", help="Path to leco.app.yaml"),
-    ] = None,
+    manifest: ManifestPathOption = None,
+    no_provision_local_cf: Annotated[
+        bool,
+        typer.Option(
+            "--no-provision-local-cf",
+            help="Skip local KV/R2/D1 from wrangler after compose (default: provision when cloudflare.wranglerConfig is set)",
+        ),
+    ] = False,
 ) -> None:
-    """docker compose up -d --build"""
+    """docker compose up -d --build; then local KV/R2/D1 from wrangler when policy allows (see README)."""
     mp = _find_manifest(cwd, manifest)
-    m = load_manifest(mp)
-    if not m.docker_compose:
-        typer.secho("Manifest has no dockerCompose section.", fg=typer.colors.RED, err=True)
+    merged, err = _validate_existing_manifest_tree(mp)
+    if err:
+        typer.secho(f"Invalid manifest or missing files: {err}", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
-    root = m.resolved_root(mp)
-    cd = detect_compose(root)
-    if cd.host_ports:
-        conflicts = check_host_ports(cd.host_ports)
-        busy = [p for p, used in conflicts.items() if used]
-        if busy:
+    code = _deploy_from_manifest(mp, strict_compose=True)
+    if code != 0:
+        raise typer.Exit(code)
+    m = load_effective_manifest(mp)
+    code_cf = provision_from_manifest(
+        mp.resolve(),
+        app_slug=m.name,
+        wrangler_env=m.cloudflare.wrangler_env if m.cloudflare else None,
+        echo=typer.secho,
+        no_provision_local_cf=no_provision_local_cf,
+    )
+    if code_cf != 0:
+        typer.secho(
+            "Local CF provision had failures (Docker deploy succeeded). "
+            "Fix adapters/DNS and run: leco-app provision-local-cf",
+            fg=typer.colors.YELLOW,
+            err=True,
+        )
+    raise typer.Exit(0)
+
+
+@app.command("onboard")
+def cmd_onboard(
+    cwd: Annotated[Path, typer.Option("--cwd", help="Search manifest from this directory")] = Path("."),
+    manifest: ManifestPathOption = None,
+    ecosystem_root: EcosystemRootOption = None,
+    app_id: Annotated[Optional[str], typer.Option("--id", help="Registry slug (default: manifest name)")] = None,
+    label: Annotated[Optional[str], typer.Option("--label", "-l", help="Hosted apps card title")] = None,
+    no_deploy: Annotated[bool, typer.Option("--no-deploy", help="Skip docker compose up -d --build")] = False,
+    no_register: Annotated[bool, typer.Option("--no-register", help="Skip leco-registry.yaml")] = False,
+    no_traefik_merge: Annotated[
+        bool,
+        typer.Option("--no-traefik-merge", help="Skip merging routing into traefik/dynamic.yml"),
+    ] = False,
+    traefik_dynamic: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--traefik-dynamic",
+            help="Path to dynamic.yml (default: <ecosystem-root>/traefik/dynamic.yml)",
+        ),
+    ] = None,
+    wrangler_env: Annotated[
+        Optional[str],
+        typer.Option("--wrangler-env", help="Override for local KV/R2/D1 provision"),
+    ] = None,
+    no_provision_local_cf: Annotated[
+        bool,
+        typer.Option("--no-provision-local-cf", help="Skip local cloudflare-local resource creation"),
+    ] = False,
+) -> None:
+    """Deploy stack, register for Hosted apps, merge Traefik routes — typical new-app flow for local-ecosystem."""
+    mp = _find_manifest(cwd, manifest)
+    merged, err = _validate_existing_manifest_tree(mp)
+    if err:
+        typer.secho(f"Invalid manifest or missing files: {err}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+    m = merged.manifest
+    if not no_deploy:
+        if m.docker_compose:
+            code = _deploy_from_manifest(mp, strict_compose=True)
+            if code != 0:
+                raise typer.Exit(code)
+        else:
+            typer.secho("No dockerCompose in manifest — deploy step skipped.", fg=typer.colors.YELLOW, err=True)
+    er = resolve_ecosystem_root(ecosystem_root)
+    if not no_register:
+        if er is None:
             typer.secho(
-                f"Warning: possible port conflicts: {busy} — continuing.",
-                fg=typer.colors.YELLOW,
+                "Registration needs --ecosystem-root / -E or LECO_ECOSYSTEM_ROOT.",
+                fg=typer.colors.RED,
                 err=True,
             )
-    code = run_compose(m, mp, ["up", "-d", "--build"])
-    if code == 0:
-        typer.secho("Deploy finished.", fg=typer.colors.GREEN)
-        meta = app_state_dir(m.name)
-        (meta / "last-deploy.json").write_text(
-            json.dumps({"manifest": str(mp.resolve()), "root": str(root)}),
-            encoding="utf-8",
+            raise typer.Exit(1)
+        try:
+            run_registry_and_provision(
+                er,
+                mp.resolve(),
+                app_id=app_id,
+                label=label,
+                wrangler_env=wrangler_env,
+                no_provision_local_cf=no_provision_local_cf,
+                echo=typer.secho,
+            )
+        except (OSError, ValueError) as exc:
+            typer.secho(str(exc), fg=typer.colors.RED, err=True)
+            raise typer.Exit(1) from exc
+    if not no_traefik_merge:
+        run_traefik_merge_for_manifest(
+            load_effective_manifest(mp),
+            ecosystem_root=er,
+            traefik_dynamic=traefik_dynamic,
+            echo=typer.secho,
         )
-    raise typer.Exit(code)
 
 
 @app.command("stop")
 def cmd_stop(
     cwd: Path = Path("."),
-    manifest: Optional[Path] = None,
+    manifest: ManifestPathOption = None,
 ) -> None:
     """docker compose stop"""
     mp = _find_manifest(cwd, manifest)
-    m = load_manifest(mp)
+    m = load_effective_manifest(mp)
     if not m.docker_compose:
         typer.secho("Manifest has no dockerCompose section.", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
@@ -334,15 +745,24 @@ def cmd_stop(
 @app.command("down")
 def cmd_down(
     cwd: Path = Path("."),
-    manifest: Optional[Path] = None,
+    manifest: ManifestPathOption = None,
     volumes: Annotated[bool, typer.Option("--volumes", "-v", help="docker compose down -v")] = False,
 ) -> None:
     """docker compose down"""
     mp = _find_manifest(cwd, manifest)
-    m = load_manifest(mp)
+    m = load_effective_manifest(mp)
     if not m.docker_compose:
         typer.secho("Manifest has no dockerCompose section.", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
+    root = m.resolved_root(mp)
+    cf = root / Path(m.docker_compose.compose_file)
+    if not cf.is_file():
+        typer.secho(
+            f"Compose file not on disk ({cf}) — treating stack as already removed (exit 0).",
+            fg=typer.colors.YELLOW,
+            err=True,
+        )
+        raise typer.Exit(0)
     args = ["down", "--remove-orphans"]
     if volumes:
         args.append("-v")
@@ -353,7 +773,7 @@ def cmd_down(
 @app.command("offload")
 def cmd_offload(
     cwd: Path = Path("."),
-    manifest: Optional[Path] = None,
+    manifest: ManifestPathOption = None,
     volumes: Annotated[bool, typer.Option("--volumes", "-v", help="docker compose down -v (delete volumes)")] = False,
     traefik_dynamic: Annotated[
         Optional[Path],
@@ -367,7 +787,7 @@ def cmd_offload(
 ) -> None:
     """Remove app from localhost: optional Traefik routes + docker compose down."""
     mp = _find_manifest(cwd, manifest)
-    m = load_manifest(mp)
+    m = load_effective_manifest(mp)
 
     has_compose = bool(m.docker_compose)
     rkeys, skeys = manifest_traefik_keys(m)
@@ -445,7 +865,7 @@ def cmd_logs(
 ) -> None:
     """docker compose logs"""
     mp = _find_manifest(cwd, manifest)
-    m = load_manifest(mp)
+    m = load_effective_manifest(mp)
     if not m.docker_compose:
         typer.secho("Manifest has no dockerCompose section.", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
@@ -463,11 +883,11 @@ def cmd_logs(
 @app.command("status")
 def cmd_status(
     cwd: Path = Path("."),
-    manifest: Optional[Path] = None,
+    manifest: ManifestPathOption = None,
 ) -> None:
     """docker compose ps and optional HTTP health checks"""
     mp = _find_manifest(cwd, manifest)
-    m = load_manifest(mp)
+    m = load_effective_manifest(mp)
     if not m.docker_compose:
         typer.secho("Manifest has no dockerCompose section.", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
@@ -491,12 +911,12 @@ def cmd_status(
 @app.command("traefik-fragment")
 def cmd_traefik_fragment(
     cwd: Path = Path("."),
-    manifest: Optional[Path] = None,
+    manifest: ManifestPathOption = None,
     out: Annotated[Optional[Path], typer.Option("--out", "-o", help="Write YAML fragment")] = None,
 ) -> None:
-    """Print YAML to paste into traefik/dynamic.yml (no auto-merge)."""
+    """Print YAML fragment (use ``onboard`` / ``init --onboard`` / ``ecosystem-register --merge-traefik`` to merge automatically)."""
     mp = _find_manifest(cwd, manifest)
-    m = load_manifest(mp)
+    m = load_effective_manifest(mp)
     text = manifest_to_traefik_yaml(m)
     if out:
         out.write_text(text, encoding="utf-8")
@@ -508,15 +928,8 @@ def cmd_traefik_fragment(
 @app.command("ecosystem-register")
 def cmd_ecosystem_register(
     cwd: Path = Path("."),
-    manifest: Optional[Path] = None,
-    ecosystem_root: Annotated[
-        Optional[Path],
-        typer.Option(
-            "--ecosystem-root",
-            "-E",
-            help="local-ecosystem repository root (or set LECO_ECOSYSTEM_ROOT)",
-        ),
-    ] = None,
+    manifest: ManifestPathOption = None,
+    ecosystem_root: EcosystemRootOption = None,
     app_id: Annotated[Optional[str], typer.Option("--id", help="Registry slug (default: manifest name)")] = None,
     label: Annotated[Optional[str], typer.Option("--label", "-l", help="Ops Dashboard card title")] = None,
     wrangler_env: Annotated[
@@ -533,13 +946,24 @@ def cmd_ecosystem_register(
             help="Skip creating local KV/R2/D1 from wrangler on kv.lh / r2.lh / d1.lh",
         ),
     ] = False,
+    merge_traefik: Annotated[
+        bool,
+        typer.Option(
+            "--merge-traefik/--no-merge-traefik",
+            help="Merge routing.entries into traefik/dynamic.yml (atomic write + .bak)",
+        ),
+    ] = False,
+    registry_manifest_relpath: Annotated[
+        Optional[str],
+        typer.Option(
+            "--registry-manifest-relpath",
+            help="Store this path in leco-registry.yaml (must be same inode as --manifest; e.g. hosting/app-enabled/slug/leco.app.yaml)",
+        ),
+    ] = None,
 ) -> None:
     """Register this app in local-ecosystem config/leco-registry.yaml for the Ops Dashboard Control tab."""
-    er = ecosystem_root
+    er = resolve_ecosystem_root(ecosystem_root)
     if er is None:
-        raw = (os.environ.get("LECO_ECOSYSTEM_ROOT") or "").strip()
-        er = Path(raw).expanduser() if raw else None
-    if er is None or not er.is_dir():
         typer.secho(
             "Pass --ecosystem-root /path/to/local-ecosystem or export LECO_ECOSYSTEM_ROOT.",
             fg=typer.colors.RED,
@@ -548,7 +972,13 @@ def cmd_ecosystem_register(
         raise typer.Exit(1)
     mp = _find_manifest(cwd, manifest)
     try:
-        entry = register_in_ecosystem(er.resolve(), mp.resolve(), app_id=app_id, label=label)
+        entry = register_in_ecosystem(
+            er.resolve(),
+            mp.resolve(),
+            app_id=app_id,
+            label=label,
+            registry_manifest_relpath=registry_manifest_relpath,
+        )
     except (OSError, ValueError) as exc:
         typer.secho(str(exc), fg=typer.colors.RED, err=True)
         raise typer.Exit(1) from exc
@@ -556,26 +986,33 @@ def cmd_ecosystem_register(
         f"Registered {entry['id']} → {er / 'config' / 'leco-registry.yaml'} (Control target leco-stack-{entry['id']})",
         fg=typer.colors.GREEN,
     )
-    if not no_provision_local_cf:
-        code = provision_from_manifest(
-            mp.resolve(),
-            app_slug=entry["id"],
-            wrangler_env=wrangler_env,
-            echo=typer.echo,
+    code = provision_from_manifest(
+        mp.resolve(),
+        app_slug=entry["id"],
+        wrangler_env=wrangler_env,
+        echo=typer.echo,
+        no_provision_local_cf=no_provision_local_cf,
+    )
+    if code != 0:
+        typer.secho(
+            "Local CF provision had failures — registry entry is still saved. "
+            "Fix adapters/DNS and run: leco-app provision-local-cf",
+            fg=typer.colors.YELLOW,
+            err=True,
         )
-        if code != 0:
-            typer.secho(
-                "Local CF provision had failures — registry entry is still saved. "
-                "Fix adapters/DNS and run: leco-app provision-local-cf",
-                fg=typer.colors.YELLOW,
-                err=True,
-            )
+    if merge_traefik:
+        run_traefik_merge_for_manifest(
+            load_effective_manifest(mp),
+            ecosystem_root=er,
+            traefik_dynamic=None,
+            echo=typer.secho,
+        )
 
 
 @app.command("provision-local-cf")
 def cmd_provision_local_cf(
     cwd: Path = Path("."),
-    manifest: Optional[Path] = None,
+    manifest: ManifestPathOption = None,
     wrangler_env: Annotated[
         Optional[str],
         typer.Option("--wrangler-env", help="Override manifest cloudflare.wranglerEnv"),
@@ -587,9 +1024,15 @@ def cmd_provision_local_cf(
 ) -> None:
     """Create KV namespaces, R2 buckets, and D1 databases on local adapters from wrangler.toml (manifest path)."""
     mp = _find_manifest(cwd, manifest)
-    m = load_manifest(mp)
+    m = load_effective_manifest(mp)
     slug = (app_slug or "").strip() or m.name
-    code = provision_from_manifest(mp.resolve(), app_slug=slug, wrangler_env=wrangler_env, echo=typer.echo)
+    code = provision_from_manifest(
+        mp.resolve(),
+        app_slug=slug,
+        wrangler_env=wrangler_env,
+        echo=typer.echo,
+        ignore_policy=True,
+    )
     raise typer.Exit(code)
 
 
@@ -600,6 +1043,20 @@ def cmd_ecosystem_unregister(
         Optional[Path],
         typer.Option("--ecosystem-root", "-E", help="local-ecosystem repo root"),
     ] = None,
+    compose_down: Annotated[
+        bool,
+        typer.Option(
+            "--compose-down/--no-compose-down",
+            help="Run docker compose down before registry/Traefik/local CF steps (default: on)",
+        ),
+    ] = True,
+    compose_volumes: Annotated[
+        bool,
+        typer.Option(
+            "--compose-volumes/--no-compose-volumes",
+            help="With compose-down: pass -v to docker compose down (delete volumes)",
+        ),
+    ] = False,
     strip_traefik: Annotated[
         bool,
         typer.Option(
@@ -622,7 +1079,7 @@ def cmd_ecosystem_unregister(
         ),
     ] = None,
 ) -> None:
-    """Remove an app from leco-registry.yaml; optionally strip Traefik routes and clean local CF adapters."""
+    """Remove an app from leco-registry.yaml; by default docker compose down first, then Traefik/local CF cleanup."""
     er = ecosystem_root
     if er is None:
         raw = (os.environ.get("LECO_ECOSYSTEM_ROOT") or "").strip()
@@ -641,6 +1098,37 @@ def cmd_ecosystem_unregister(
 
     tf = traefik_dynamic.resolve() if traefik_dynamic else (eco / "traefik" / "dynamic.yml")
 
+    if mp and compose_down:
+        try:
+            m = load_effective_manifest(mp)
+            if m.docker_compose:
+                root = m.resolved_root(mp)
+                cf = root / Path(m.docker_compose.compose_file)
+                if cf.is_file():
+                    args = ["down", "--remove-orphans"]
+                    if compose_volumes:
+                        args.append("-v")
+                    dcode = run_compose(m, mp, args)
+                    if dcode == 0:
+                        typer.secho(
+                            "docker compose down completed (before unregister).",
+                            fg=typer.colors.GREEN,
+                        )
+                    else:
+                        typer.secho(
+                            f"docker compose down exited {dcode} — continuing with unregister",
+                            fg=typer.colors.YELLOW,
+                            err=True,
+                        )
+                else:
+                    typer.secho(
+                        f"Compose file not on disk ({cf}) — skipping docker compose down.",
+                        fg=typer.colors.YELLOW,
+                        err=True,
+                    )
+        except (OSError, ValidationError, ValueError) as exc:
+            typer.secho(f"Compose down skipped: {exc}", fg=typer.colors.YELLOW, err=True)
+
     if mp and clean_local_cf:
         cf = mp.parent / "leco.local-cf.yaml"
         fails = teardown_from_leco_local_cf_path(cf, echo=typer.echo)
@@ -654,7 +1142,7 @@ def cmd_ecosystem_unregister(
 
     if mp and strip_traefik:
         try:
-            m = load_manifest(mp)
+            m = load_effective_manifest(mp)
             rkeys, skeys = manifest_traefik_keys(m)
             if rkeys or skeys:
                 rr, ss, bak = strip_traefik_dynamic_yml(tf, rkeys, skeys, dry_run=False)
@@ -674,7 +1162,7 @@ def cmd_ecosystem_unregister(
 @app.command("cf-deploy")
 def cmd_cf_deploy(
     cwd: Path = Path("."),
-    manifest: Optional[Path] = None,
+    manifest: ManifestPathOption = None,
     env: Annotated[
         Optional[str],
         typer.Option("--env", "-e", help="wrangler --env (e.g. staging, production)"),
@@ -690,7 +1178,7 @@ def cmd_cf_deploy(
 ) -> None:
     """Run wrangler deploy using manifest cloudflare.wranglerConfig."""
     mp = _find_manifest(cwd, manifest)
-    m = load_manifest(mp)
+    m = load_effective_manifest(mp)
     if not m.cloudflare or not m.cloudflare.wrangler_config:
         typer.secho("Manifest has no cloudflare.wranglerConfig.", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
@@ -753,12 +1241,12 @@ def cmd_cf_deploy(
 @app.command("cf-secrets-checklist")
 def cmd_cf_secrets_checklist(
     cwd: Path = Path("."),
-    manifest: Optional[Path] = None,
+    manifest: ManifestPathOption = None,
     env: Annotated[Optional[str], typer.Option("--env", "-e")] = None,
 ) -> None:
     """List [vars] keys that look like secrets from wrangler.toml."""
     mp = _find_manifest(cwd, manifest)
-    m = load_manifest(mp)
+    m = load_effective_manifest(mp)
     if not m.cloudflare or not m.cloudflare.wrangler_config:
         typer.secho("Manifest has no cloudflare.wranglerConfig.", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)

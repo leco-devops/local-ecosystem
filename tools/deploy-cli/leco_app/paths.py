@@ -19,3 +19,7 @@ def app_state_dir(slug: str) -> Path:
 
 def default_manifest_name() -> str:
     return "leco.app.yaml"
+
+
+def default_localhost_profile_name() -> str:
+    return "leco.yaml"

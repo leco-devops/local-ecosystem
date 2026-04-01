@@ -1,0 +1,32 @@
+# =============================================================================
+# LEco ↔ APPLICATION BRIDGE  (leco.app.yaml) — Compose-only (no Wrangler)
+# =============================================================================
+# BRIDGE ROLE
+#   Minimal binding: ecosystem knows the app slug, root, and that the operator
+#   profile is leco.yaml. No Cloudflare fields — local KV/R2/D1 provisioning is
+#   skipped unless you add wrangler later in the profile.
+#
+# ROOT
+#   All compose-relative paths in leco.yaml resolve from (this file's directory + root).
+#
+# WHEN TO USE
+#   Backend-only or internal services without Workers; same bridge pattern as
+#   larger apps so you can add infrastructure.cloudflare in leco.yaml later without
+#   changing this file's shape.
+#
+# CONFIG REFS
+#   Optional paths (compose, .env, Dockerfile, …) relative to resolved_root.
+# =============================================================================
+lecoAppVersion: '3'
+applicationVersion: '0.1.0-sample'
+name: sample-compose-only
+root: .
+localHostProfile: leco.yaml
+configRefs:
+  dockerComposeFile: docker-compose.yml
+  envFile: .env
+localhost:
+  notes: |
+    [BRIDGE — compose-only]
+    Infra is only infrastructure.dockerCompose in leco.yaml. Register still works;
+    Traefik/routing optional via profile when you add them.

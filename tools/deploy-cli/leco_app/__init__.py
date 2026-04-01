@@ -1,3 +1,4 @@
-"""leco-app: Wrangler-style deploy helper for Docker Compose + optional Cloudflare."""
+"""LEco DevOps — multi-app deploy tooling (Docker Compose + optional Cloudflare)."""
 
-__version__ = "0.1.5"
+DISPLAY_NAME = "LEco DevOps"
+__version__ = "0.1.9"

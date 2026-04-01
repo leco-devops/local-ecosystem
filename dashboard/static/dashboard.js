@@ -30,6 +30,30 @@ const LS_ACTIVE_TAB_KEY = "dashboard_active_tab";
 /** Bump when cache shape changes so stale / corrupted entries are dropped. */
 const CACHE_SCHEMA_VERSION = 5;
 
+/** Server-rendered in index.html: token_required, optional prefill_control_token. */
+(function initDashboardBoot() {
+  const el = document.getElementById("dashboard-boot-config");
+  const fallback = { token_required: false, prefill_control_token: null };
+  let boot = { ...fallback };
+  if (el?.textContent?.trim()) {
+    try {
+      boot = { ...fallback, ...JSON.parse(el.textContent) };
+    } catch (_) {
+      /* ignore malformed boot */
+    }
+  }
+  window.__dashboardBoot = boot;
+  if (boot.prefill_control_token) {
+    try {
+      localStorage.setItem("dashboard_control_token", String(boot.prefill_control_token));
+    } catch (_) {
+      /* private mode / quota */
+    }
+    const injectHint = document.getElementById("controlTokenInjectHint");
+    if (injectHint) injectHint.style.display = "block";
+  }
+})();
+
 /** Small Cloudflare mark for local CF adapter cards (not an official trademark asset). */
 const CLOUDFLARE_MARK_SVG = `<svg class="cf-local-card__mark" viewBox="0 0 40 28" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" width="32" height="22"><path fill="#F48120" d="M28 8c2 0 3.5 1.3 4 3.2h6.2c-.4-5-4.7-8.8-10-8.8-4.2 0-7.7 2.4-9.3 5.9-1.2-.7-2.6-1.1-4-1.1-4.4 0-8 3.6-8 8s3.6 8 8 8h10v-6H13.3c-.8 0-1.3-.9-.9-1.6l.6-1.2c.3-.6 1-.9 1.6-.9H35c.3-1 .5-2 .5-3.1C35.5 11.4 32.2 8 28 8z"/><path fill="#FAAD3F" d="M30 19h-7v6h7c4.4 0 8-3.6 8-8 0-2.6-1.3-5-3.4-6.5l-1.2 2.2c1.1.9 1.8 2.2 1.8 3.8 0 2.8-2.2 5-5 5z"/></svg>`;
 
@@ -3086,6 +3110,10 @@ function initHostMetricsPanelRefresh() {
   });
 }
 
+function dashboardTokenRequired() {
+  return window.__dashboardBoot?.token_required === true;
+}
+
 function controlToken() {
   return localStorage.getItem("dashboard_control_token") || "";
 }
@@ -3384,10 +3412,12 @@ function renderHostedAppsSidebar() {
     return;
   }
   nav.innerHTML = hostedAppsList
-    .map(
-      (a) =>
-        `<button type="button" data-hosted-slug="${escapeAttr(a.id)}" class="${a.id === hostedSelectedSlug ? "is-active" : ""}">${escapeHtml(a.label || a.id)}</button>`,
-    )
+    .map((a) => {
+      const ver = a.application_version
+        ? ` <span class="muted small">${escapeHtml(a.application_version)}</span>`
+        : "";
+      return `<button type="button" data-hosted-slug="${escapeAttr(a.id)}" class="${a.id === hostedSelectedSlug ? "is-active" : ""}">${escapeHtml(a.label || a.id)}${ver}</button>`;
+    })
     .join("");
   nav.querySelectorAll("[data-hosted-slug]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -3474,6 +3504,156 @@ function hostedComposeControlActionsHtml(SB, target) {
   </div>`;
 }
 
+function renderHostedLocalProfile(manifestUi) {
+  const el = document.getElementById("hostedAppsLocalProfile");
+  if (!el) return;
+  if (!manifestUi) {
+    el.innerHTML = "";
+    return;
+  }
+  const arch = manifestUi.localhost_archetype;
+  const lhp = manifestUi.local_host_profile;
+  const urls = manifestUi.localhost_urls || [];
+  const lc = manifestUi.localhost_lifecycle || {};
+  const phases = ["prepare", "build", "preStart"];
+  const hasLifecycle = phases.some((p) => Array.isArray(lc[p]) && lc[p].length);
+  if (!arch && !lhp && !urls.length && !hasLifecycle) {
+    el.innerHTML = "";
+    return;
+  }
+  let html = '<div class="hosted-local-profile__title">Local profile</div>';
+  html += `<p class="muted small">Archetype <strong>${escapeHtml(String(arch || "—"))}</strong> · Sidecar <code>${escapeHtml(String(lhp || "—"))}</code></p>`;
+  if (urls.length) {
+    html +=
+      "<table><thead><tr><th>Role</th><th>Label</th><th>Public URL</th></tr></thead><tbody>";
+    urls.forEach((u) => {
+      const role = u.role || "—";
+      const lab = u.label || "—";
+      const pub = u.publicUrl != null ? u.publicUrl : u.public_url != null ? u.public_url : "—";
+      html += `<tr><td>${escapeHtml(String(role))}</td><td>${escapeHtml(String(lab))}</td><td><code>${escapeHtml(String(pub))}</code></td></tr>`;
+    });
+    html += "</tbody></table>";
+  }
+  if (hasLifecycle) {
+    html += '<div class="hosted-local-profile__lifecycle">';
+    phases.forEach((phase) => {
+      const steps = lc[phase];
+      if (!Array.isArray(steps) || !steps.length) return;
+      html += `<div class="hosted-lifecycle-phase"><strong>${escapeHtml(phase)}</strong><ul>`;
+      steps.forEach((st) => {
+        const cmd = typeof st === "object" && st != null && st.command != null ? st.command : String(st);
+        html += `<li><code>${escapeHtml(String(cmd))}</code></li>`;
+      });
+      html += "</ul></div>";
+    });
+    html += "</div>";
+  }
+  el.innerHTML = html;
+}
+
+function renderHostedCfResources(manifestUi) {
+  const el = document.getElementById("hostedAppsCfResources");
+  if (!el) return;
+  if (!manifestUi) {
+    el.innerHTML = "";
+    return;
+  }
+  const w = manifestUi.wrangler_expected || {};
+  const lc = manifestUi.local_cf || { present: false };
+  if (w.available === false && w.note) {
+    el.innerHTML = `<div class="muted small">${escapeHtml(w.note)}</div>`;
+    return;
+  }
+  const hasW = w.wrangler_configured === true;
+  const hasLc = lc.present === true;
+  const browser = w.browser_binding;
+  const expKv = w.expected_kv || [];
+  const expR2 = w.expected_r2 || [];
+  const expD1 = w.expected_d1 || [];
+  const anyExpected = expKv.length + expR2.length + expD1.length > 0;
+  const lcRows =
+    hasLc && !lc.error
+      ? (lc.kv || []).length + (lc.r2 || []).length + (lc.d1 || []).length
+      : 0;
+
+  if (!hasW && !hasLc && !browser) {
+    el.innerHTML = "";
+    return;
+  }
+
+  let html = '<div class="hosted-cf-resources__title">Local Cloudflare resources (wrangler)</div>';
+  html += `<div class="hosted-cf-resources__why" role="note">
+    <strong>Why Docker Desktop only shows Mongo (and your app containers)?</strong>
+    MongoDB is a <em>service in your project&rsquo;s <code>docker-compose.yml</code></em>, so it appears under the crawlervision stack.
+    The three KV namespaces, one R2 bucket, and one D1 database from <code>wrangler.toml</code> are <strong>not</strong> implemented as six extra containers in that file &mdash; same as real Cloudflare (managed APIs, not VMs in your repo).
+    Here they are <strong>dedicated resources</strong> (separate namespace names, bucket name, DB name) on the ecosystem&rsquo;s shared
+    <code>kv-adapter</code>, <code>r2-adapter</code>, and <code>d1-adapter</code> (the <strong>cloudflare-local</strong> stack &mdash; look there in Docker, not inside crawlervision).
+    The table below lists what was provisioned for <em>this</em> app; details are also in <code>leco.local-cf.yaml</code>.
+  </div>`;
+  const hosts = manifestUi.local_cf_adapter_hosts;
+  if (hosts && hosts.kv) {
+    html += `<p class="muted small">This app uses <strong>localCfPublicPrefix</strong>: public API bases <code>${escapeHtml(hosts.kv)}</code>, <code>${escapeHtml(hosts.r2)}</code>, <code>${escapeHtml(hosts.d1)}</code> (Traefik routes to the same shared adapters). Resolve <code>*.lh</code> like other ecosystem hosts.</p>`;
+  } else {
+    html +=
+      '<p class="muted small">By default, <code>leco.local-cf.yaml</code> records <code>https://kv.lh</code>, <code>https://r2.lh</code>, <code>https://d1.lh</code> for your app. Set <code>cloudflare.localCfPublicPrefix: cv</code> in <code>leco.app.yaml</code> for <code>https://cv-kv.lh</code> etc., then re-run <strong>ecosystem-register</strong> (merge Traefik) and <strong>Deploy</strong>.</p>';
+  }
+  if (browser) {
+    html += `<p class="muted small"><strong>Browser</strong> (<code>${escapeHtml(browser)}</code>): not a separate container — it uses the shared Workers / browser-rendering stack in this ecosystem when you run Workers locally.</p>`;
+  }
+  if (w.provision_local_resources === false && hasW) {
+    html +=
+      '<p class="muted small">This manifest sets <code>cloudflare.provisionLocalResources: false</code>, so deploy will not create KV/R2/D1 on the adapters unless you run <code>leco-app provision-local-cf</code> manually.</p>';
+  }
+  if (w.note && String(w.note).includes("missing")) {
+    html += `<p class="hosted-cf-resources__warn small">${escapeHtml(w.note)}</p>`;
+  }
+
+  const cidShort = (s) => {
+    if (s == null || s === "") return "—";
+    const t = String(s);
+    return t.length > 28 ? `${escapeHtml(t.slice(0, 26))}…` : escapeHtml(t);
+  };
+
+  html +=
+    '<table class="hosted-apps-table hosted-cf-resources__table"><thead><tr><th>Kind</th><th>Binding</th><th>Local name / expected</th></tr></thead><tbody>';
+
+  if (lcRows > 0) {
+    (lc.kv || []).forEach((row) => {
+      html += `<tr><td>KV</td><td><code>${escapeHtml(row.binding || "—")}</code></td><td><code>${escapeHtml(row.local_namespace || "—")}</code></td></tr>`;
+    });
+    (lc.r2 || []).forEach((row) => {
+      html += `<tr><td>R2</td><td><code>${escapeHtml(row.binding || "—")}</code></td><td><code>${escapeHtml(row.bucket || "—")}</code></td></tr>`;
+    });
+    (lc.d1 || []).forEach((row) => {
+      html += `<tr><td>D1</td><td><code>${escapeHtml(row.binding || "—")}</code></td><td><code>${escapeHtml(row.database || "—")}</code></td></tr>`;
+    });
+  } else if (anyExpected) {
+    expKv.forEach((row) => {
+      html += `<tr><td>KV</td><td><code>${escapeHtml(row.binding)}</code></td><td class="muted">expected · CF id ${cidShort(row.cf_id)}</td></tr>`;
+    });
+    expR2.forEach((row) => {
+      html += `<tr><td>R2</td><td><code>${escapeHtml(row.binding)}</code></td><td class="muted">expected · <code>${escapeHtml(row.bucket_name)}</code></td></tr>`;
+    });
+    expD1.forEach((row) => {
+      html += `<tr><td>D1</td><td><code>${escapeHtml(row.binding)}</code></td><td class="muted">expected · <code>${escapeHtml(row.database_name)}</code></td></tr>`;
+    });
+    html +=
+      '<tr><td colspan="3" class="muted small">No <code>leco.local-cf.yaml</code> rows — run <strong>Deploy</strong> (with local CF provision enabled) or <code>leco-app provision-local-cf</code>.</td></tr>';
+  } else if (hasW && !browser) {
+    html += '<tr><td colspan="3" class="muted small">No KV/R2/D1 tables in wrangler for this env.</td></tr>';
+  }
+
+  html += "</tbody></table>";
+  if (lc.path && hasLc) {
+    html += `<p class="muted small">Resource map: <code>${escapeHtml(lc.path)}</code></p>`;
+  }
+  if (lc.error) {
+    html += `<p class="hosted-cf-resources__warn small">${escapeHtml(lc.error)}</p>`;
+  }
+
+  el.innerHTML = html;
+}
+
 async function refreshHostedAppsPanel() {
   if (activeTab !== "hostedAppsTab" || !hostedSelectedSlug) return;
   const slug = hostedSelectedSlug;
@@ -3537,7 +3717,20 @@ async function refreshHostedAppsPanel() {
   }
 
   if (titleEl && app) titleEl.textContent = app.label || slug;
-  if (metaEl && app) metaEl.textContent = `Registry id: ${slug} · Target: ${app.target_id || "—"}`;
+  if (metaEl && app) {
+    const mu = snap.manifest_ui || {};
+    const v = mu.application_version;
+    const fp = mu.deploy_fingerprint;
+    const snapAt = snap.generated_at ? ` · snapshot ${snap.generated_at}` : "";
+    let bits = `Registry id: ${slug} · Target: ${app.target_id || "—"}`;
+    if (v) bits += ` · App version: ${String(v)}`;
+    if (fp && fp.short_hash) {
+      bits += ` · Manifest fingerprint ${String(fp.short_hash)}`;
+      if (fp.mtime_iso) bits += ` (mtime ${String(fp.mtime_iso)})`;
+    }
+    bits += snapAt;
+    metaEl.textContent = bits;
+  }
 
   const rt = snap.runtime || (app && app.runtime) || {};
   const rtLabel = escapeHtml(rt.label || "—");
@@ -3580,7 +3773,7 @@ async function refreshHostedAppsPanel() {
         Traefik may still have routes to old service names, which often shows as <strong>Bad Gateway</strong>.
         Use <strong>Remove from ecosystem</strong> (Control token) to unregister and strip manifest-derived Traefik keys, or run
         <code>leco-app ecosystem-unregister ${escapeHtml(slug)} --ecosystem-root …</code>.
-        If routes were added manually to <code>traefik/dynamic.yml</code>, edit or redeploy Traefik after removing them.
+        If routes were added manually to <code>traefik/dynamic.yml</code>, edit that file (Traefik reloads it via file watch; restart Traefik only if you changed <code>traefik-static.yaml</code> or mounts).
         <div class="hosted-apps-unregister-hint__actions">
           <button type="button" class="ctrl-act ctrl-act--ops" data-hosted-offboard="${escapeAttr(slug)}">Remove from ecosystem…</button>
         </div>
@@ -3606,6 +3799,9 @@ async function refreshHostedAppsPanel() {
       kpiEl.innerHTML = `<span class="muted">${escapeHtml(snap.error || "No aggregate (compose unreachable?)")}</span>`;
     }
   }
+
+  renderHostedLocalProfile(snap.manifest_ui);
+  renderHostedCfResources(snap.manifest_ui);
 
   if (tbody) {
     tbody.innerHTML = (snap.services || [])
@@ -3698,6 +3894,717 @@ async function refreshHostedAppsPanel() {
   }
 }
 
+const hostedRegSamplesById = {};
+let hostedBrowseLast = null;
+
+function hostedRegisterPathToSlug(path) {
+  const stripped = path.replace(/^wsp:\/?/i, "").replace(/\/+$/, "");
+  const seg = stripped.split(/[/\\]/).filter(Boolean).pop() || "";
+  return seg
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase();
+}
+
+/** From server boot JSON (same-origin); used to build a host path after native folder pick. */
+function hostedBootPathHints() {
+  const b = (typeof window !== "undefined" && window.__dashboardBoot) || {};
+  return {
+    workspace_parent_host: String(b.workspace_parent_host || "").replace(/[/\\]+$/, ""),
+    project_root_host: String(b.project_root_host || "").replace(/[/\\]+$/, ""),
+  };
+}
+
+/**
+ * Browsers do not expose the full filesystem path for a picked folder. We only get its name;
+ * combine with workspace_parent_host when set (dashboard mount), else wsp:name.
+ */
+function suggestedPathForPickedFolderName(dirName, hints) {
+  const n = String(dirName || "")
+    .trim()
+    .replace(/[/\\]+/g, "");
+  if (!n || n === "." || n === "..") return "";
+  if (hints.workspace_parent_host) {
+    return `${hints.workspace_parent_host}/${n}`.replace(/\/+/g, "/");
+  }
+  return `wsp:${n}`;
+}
+
+/**
+ * Opens the browser’s native file picker; reads UTF-8 text into the textarea.
+ * @param {(text: string, isErr: boolean) => void} [setMsg]
+ */
+function wireHostedYamlFilePicker(buttonId, inputId, textareaId, setMsg) {
+  const btn = document.getElementById(buttonId);
+  const inp = document.getElementById(inputId);
+  const ta = document.getElementById(textareaId);
+  if (!btn || !inp || !ta) return;
+  btn.addEventListener("click", () => inp.click());
+  inp.addEventListener("change", () => {
+    const f = inp.files && inp.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      ta.value = typeof reader.result === "string" ? reader.result : "";
+      inp.value = "";
+      if (typeof setMsg === "function") {
+        setMsg(`Loaded file: ${f.name}`, false);
+      }
+    };
+    reader.onerror = () => {
+      inp.value = "";
+      if (typeof setMsg === "function") {
+        setMsg("Could not read file.", true);
+      }
+    };
+    reader.readAsText(f);
+  });
+}
+
+async function ensureRegisterSamplesLoaded() {
+  const sel = document.getElementById("hostedRegSampleSelect");
+  if (!sel || sel.dataset.loaded === "1") return;
+  try {
+    const res = await fetch("/api/leco/register-samples");
+    const data = await res.json();
+    if (!data.ok || !Array.isArray(data.samples)) return;
+    data.samples.forEach((s) => {
+      hostedRegSamplesById[s.id] = s;
+      const opt = document.createElement("option");
+      opt.value = s.id;
+      opt.textContent = s.title;
+      if (s.description) opt.title = s.description;
+      sel.appendChild(opt);
+    });
+    sel.dataset.loaded = "1";
+  } catch (_) {
+    /* ignore */
+  }
+}
+
+function initHostedBrowseModal(pathIn, setMsg, onFolderPicked) {
+  const modal = document.getElementById("hostedBrowseModal");
+  const backdrop = document.getElementById("hostedBrowseBackdrop");
+  const btnBrowse = document.getElementById("hostedRegBrowse");
+  const rootSel = document.getElementById("hostedBrowseRoot");
+  const listEl = document.getElementById("hostedBrowseList");
+  const crumbEl = document.getElementById("hostedBrowseCrumb");
+  const errEl = document.getElementById("hostedBrowseErr");
+  const btnUp = document.getElementById("hostedBrowseUp");
+  const btnSelect = document.getElementById("hostedBrowseSelectHere");
+  const btnClose = document.getElementById("hostedBrowseClose");
+  if (!modal || !btnBrowse || !pathIn || !rootSel || !listEl) return;
+
+  let subpath = "";
+
+  function closeModal() {
+    modal.classList.add("is-hidden");
+    document.body.style.overflow = "";
+  }
+
+  function openModal() {
+    subpath = "";
+    modal.classList.remove("is-hidden");
+    document.body.style.overflow = "hidden";
+    loadBrowse();
+  }
+
+  async function loadBrowse() {
+    if (errEl) errEl.textContent = "";
+    listEl.innerHTML = "";
+    const root = rootSel.value || "project";
+    try {
+      const q = new URLSearchParams({ root, path: subpath });
+      const res = await fetch(`/api/leco/browse?${q}`);
+      const data = await res.json();
+      hostedBrowseLast = data;
+      if (!data.ok) {
+        if (errEl) errEl.textContent = data.error || "Browse failed";
+        if (crumbEl) crumbEl.textContent = "";
+        return;
+      }
+      const label = root === "wsp" ? "workspace-parent" : "/project";
+      if (crumbEl) {
+        crumbEl.textContent = data.subpath
+          ? `${label} → ${data.subpath.replace(/\//g, " → ")}`
+          : `${label} (root)`;
+      }
+      const entries = data.entries || [];
+      if (!entries.length) {
+        listEl.innerHTML = '<li class="muted" style="padding:12px">No subfolders</li>';
+      } else {
+        entries.forEach((ent) => {
+          const li = document.createElement("li");
+          const b = document.createElement("button");
+          b.type = "button";
+          b.textContent = `📁 ${ent.name}`;
+          b.addEventListener("click", () => {
+            subpath = ent.rel;
+            loadBrowse();
+          });
+          li.appendChild(b);
+          listEl.appendChild(li);
+        });
+      }
+      if (btnUp) btnUp.disabled = !data.subpath;
+      if (btnSelect) {
+        const needSub =
+          data.root_kind === "project" && !(data.subpath && String(data.subpath).trim());
+        btnSelect.disabled = !!needSub;
+        btnSelect.title = needSub
+          ? "Pick a subfolder under the repo (not the repo root itself)"
+          : "";
+      }
+    } catch (e) {
+      if (errEl) errEl.textContent = String(e.message || e);
+    }
+  }
+
+  btnBrowse.addEventListener("click", () => {
+    ensureRegisterSamplesLoaded();
+    openModal();
+  });
+  rootSel.addEventListener("change", () => {
+    subpath = "";
+    loadBrowse();
+  });
+  btnUp?.addEventListener("click", () => {
+    if (hostedBrowseLast && hostedBrowseLast.parent_subpath != null) {
+      subpath = hostedBrowseLast.parent_subpath;
+      loadBrowse();
+    }
+  });
+  btnSelect?.addEventListener("click", () => {
+    if (hostedBrowseLast && hostedBrowseLast.ok && hostedBrowseLast.current_path_field != null) {
+      pathIn.value = hostedBrowseLast.current_path_field;
+      closeModal();
+      if (typeof onFolderPicked === "function") {
+        onFolderPicked();
+      } else {
+        setMsg("Folder selected. Click Detect to scan and load YAML.");
+      }
+    }
+  });
+  btnClose?.addEventListener("click", closeModal);
+  backdrop?.addEventListener("click", closeModal);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !modal.classList.contains("is-hidden")) closeModal();
+  });
+}
+
+function initHostedRegisterWizard() {
+  const detectBtn = document.getElementById("hostedRegDetect");
+  const genBtn = document.getElementById("hostedRegGenerateYaml");
+  const saveYamlBtn = document.getElementById("hostedRegSaveYaml");
+  const submitBtn = document.getElementById("hostedRegSubmit");
+  const pathIn = document.getElementById("hostedRegPath");
+  const idIn = document.getElementById("hostedRegId");
+  const labelIn = document.getElementById("hostedRegLabel");
+  const pre = document.getElementById("hostedRegDetectOut");
+  const msg = document.getElementById("hostedRegMsg");
+  const manTa = document.getElementById("hostedRegManifestYaml");
+  const locTa = document.getElementById("hostedRegLocalhostYaml");
+  const loadExistingChk = document.getElementById("hostedRegLoadExisting");
+  const sampleSel = document.getElementById("hostedRegSampleSelect");
+  const sampleApply = document.getElementById("hostedRegSampleApply");
+  const regPanel = document.getElementById("hostedRegisterPanel");
+  const valBtn = document.getElementById("hostedRegValidateYaml");
+  const yamlRep = document.getElementById("hostedRegYamlReport");
+  const busyReg = document.getElementById("hostedRegBusy");
+  const busyRegText = busyReg?.querySelector("[data-hosted-reg-busy-text]");
+  const deployChk = document.getElementById("hostedRegDeployAfter");
+  if (!detectBtn || !submitBtn || !pathIn) return;
+
+  function applyRegistrationYamlStatus(st) {
+    const pathOk = pathIn.value.trim().length > 0;
+    const idOk = idIn && idIn.value.trim().length > 0;
+    const ready = !!(st && st.registration_ready) && pathOk && idOk;
+    if (submitBtn) {
+      submitBtn.disabled = !ready;
+      submitBtn.title = ready
+        ? ""
+        : !pathOk || !idOk
+          ? "Enter app root path and app id"
+          : "Generate YAML or Save YAML so leco.app.yaml and the profile file exist on disk";
+    }
+    const canMutate = pathOk && idOk;
+    if (genBtn) genBtn.disabled = !canMutate;
+    if (saveYamlBtn) saveYamlBtn.disabled = !canMutate;
+  }
+
+  async function refreshYamlStatus() {
+    const path = pathIn.value.trim();
+    const app_id = idIn && idIn.value.trim() ? idIn.value.trim() : "";
+    if (!path) {
+      applyRegistrationYamlStatus(null);
+      return;
+    }
+    try {
+      const res = await fetch("/api/leco/yaml-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path, app_id }),
+        cache: "no-store",
+      });
+      const data = await res.json();
+      if (data.ok) applyRegistrationYamlStatus(data);
+      else applyRegistrationYamlStatus(null);
+    } catch (_) {
+      applyRegistrationYamlStatus(null);
+    }
+  }
+
+  function setRegFormBusy(on, label) {
+    if (busyReg) {
+      busyReg.classList.toggle("is-hidden", !on);
+      if (busyRegText && label) busyRegText.textContent = label;
+    }
+    [detectBtn, valBtn, submitBtn, genBtn, saveYamlBtn].forEach((b) => {
+      if (b) b.disabled = !!on;
+    });
+    if (on) return;
+    refreshYamlStatus();
+  }
+
+  function setMsg(text, isErr) {
+    if (!msg) return;
+    msg.textContent = text || "";
+    msg.classList.toggle("hosted-reg-msg--error", !!isErr);
+  }
+
+  /** @param {{ fromBrowse?: boolean }} [how] */
+  async function runHostedRegisterDetect(how) {
+    const path = pathIn.value.trim();
+    if (!path) {
+      setMsg("Enter an app root path.", true);
+      return;
+    }
+    const loadExisting = loadExistingChk ? loadExistingChk.checked : true;
+    if (how && how.fromBrowse && !loadExisting) {
+      setMsg("Folder selected. Turn on auto-load or click Detect to scan.");
+      return;
+    }
+    const busyLabel = how && how.fromBrowse ? "Loading folder — calling server…" : "Detecting — calling server…";
+    setRegFormBusy(true, busyLabel);
+    setMsg(how && how.fromBrowse ? "Loading configuration from folder…" : "Detecting…");
+    try {
+      let previewId = idIn && idIn.value.trim();
+      if (!previewId) {
+        previewId = hostedRegisterPathToSlug(path);
+      }
+      const body = { path };
+      if (previewId) body.app_id = previewId;
+      const res = await fetch("/api/leco/detect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        cache: "no-store",
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        if (pre) {
+          pre.classList.add("is-hidden");
+          pre.textContent = "";
+        }
+        setMsg(data.error || "Detect failed", true);
+        return;
+      }
+      if (data.path_field && pathIn) {
+        pathIn.value = data.path_field;
+      }
+      if (pre) {
+        pre.classList.remove("is-hidden");
+        const {
+          manifest_yaml_preview: _my,
+          localhost_yaml_preview: _ly,
+          existing_manifest_yaml: _em,
+          existing_localhost_yaml: _el,
+          path_field: _pf,
+          ...rest
+        } = data;
+        pre.textContent = JSON.stringify(rest, null, 2);
+      }
+      if (loadExisting) {
+        if (manTa && data.existing_manifest_yaml) manTa.value = data.existing_manifest_yaml;
+        if (locTa && data.existing_localhost_yaml) locTa.value = data.existing_localhost_yaml;
+      }
+      if (manTa && !manTa.value.trim() && data.manifest_yaml_preview != null) {
+        manTa.value = data.manifest_yaml_preview;
+      }
+      if (locTa && !locTa.value.trim() && data.localhost_yaml_preview != null) {
+        locTa.value = data.localhost_yaml_preview;
+      }
+      if (idIn && !idIn.value.trim() && previewId) {
+        idIn.value = previewId;
+      }
+      if (labelIn && !labelIn.value.trim() && idIn && idIn.value.trim()) {
+        const slug = idIn.value.trim();
+        labelIn.value = slug
+          .split(/[-_.]+/)
+          .filter(Boolean)
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+          .join(" ");
+      }
+      await refreshYamlStatus();
+      if (how && how.fromBrowse) {
+        setMsg(
+          dashboardTokenRequired()
+            ? "Detect ok — use Generate YAML or Save YAML, then Register (control token)."
+            : "Detect ok — use Generate YAML or Save YAML, then Register.",
+        );
+      } else {
+        setMsg(
+          dashboardTokenRequired()
+            ? "Detect ok — Generate YAML writes files from scan; Save YAML persists edits; Register needs both files on disk (control token)."
+            : "Detect ok — Generate YAML writes files from scan; Save YAML persists edits; Register needs both files on disk.",
+        );
+      }
+    } catch (e) {
+      setMsg(String(e.message || e), true);
+    } finally {
+      setRegFormBusy(false);
+    }
+  }
+
+  initHostedBrowseModal(pathIn, setMsg, () => {
+    runHostedRegisterDetect({ fromBrowse: true });
+  });
+
+  wireHostedYamlFilePicker(
+    "hostedRegManifestBrowseFile",
+    "hostedRegManifestFile",
+    "hostedRegManifestYaml",
+    setMsg,
+  );
+  wireHostedYamlFilePicker(
+    "hostedRegLocalhostBrowseFile",
+    "hostedRegLocalhostFile",
+    "hostedRegLocalhostYaml",
+    setMsg,
+  );
+
+  function tryAutoDetectFromPathField() {
+    const loadExisting = loadExistingChk ? loadExistingChk.checked : true;
+    if (!loadExisting) return;
+    const p = pathIn.value.trim();
+    if (!p) return;
+    if ((manTa && manTa.value.trim()) || (locTa && locTa.value.trim())) return;
+    runHostedRegisterDetect({});
+  }
+
+  pathIn.addEventListener("blur", () => {
+    tryAutoDetectFromPathField();
+    refreshYamlStatus();
+  });
+  pathIn.addEventListener("paste", () => {
+    setTimeout(() => tryAutoDetectFromPathField(), 0);
+    setTimeout(() => refreshYamlStatus(), 100);
+  });
+  let yamlStatusDebounce = null;
+  idIn?.addEventListener("blur", () => refreshYamlStatus());
+  idIn?.addEventListener("input", () => {
+    if (yamlStatusDebounce) clearTimeout(yamlStatusDebounce);
+    yamlStatusDebounce = setTimeout(() => refreshYamlStatus(), 400);
+  });
+
+  const dirInp = document.getElementById("hostedRegRootDir");
+  function hostedHtmlDirectoryPickerSupported() {
+    try {
+      const probe = document.createElement("input");
+      probe.type = "file";
+      probe.webkitdirectory = true;
+      return probe.webkitdirectory === true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function applyHostedPathAfterFsapiFolder(dirName) {
+    const path = suggestedPathForPickedFolderName(dirName, hostedBootPathHints());
+    if (!path) {
+      setMsg("Could not build a path from the selected folder.", true);
+      return;
+    }
+    pathIn.value = path;
+    if (idIn && !idIn.value.trim()) {
+      idIn.value = hostedRegisterPathToSlug(path);
+    }
+    if (labelIn && !labelIn.value.trim() && idIn && idIn.value.trim()) {
+      const slug = idIn.value.trim();
+      labelIn.value = slug
+        .split(/[-_.]+/)
+        .filter(Boolean)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(" ");
+    }
+    setMsg(
+      `Folder “${dirName}” → ${path}. If the app root is nested (e.g. …/Repo/subapp), edit the path. Then Detect or Register.`,
+      false,
+    );
+    tryAutoDetectFromPathField();
+  }
+
+  dirInp?.addEventListener("change", () => {
+    dirInp.value = "";
+    const hints = hostedBootPathHints();
+    if (hints.workspace_parent_host) {
+      const base = hints.workspace_parent_host.replace(/[/\\]+$/, "");
+      pathIn.value = `${base}/`;
+      pathIn.focus();
+      setMsg(
+        "Folder selected. Add the folder name after the trailing slash (same as in the picker), or paste the full path. Then tab away or click Detect.",
+        false,
+      );
+    } else {
+      pathIn.value = "wsp:";
+      pathIn.focus();
+      const len = pathIn.value.length;
+      try {
+        pathIn.setSelectionRange(len, len);
+      } catch (_) {
+        /* ignore */
+      }
+      setMsg(
+        "Folder selected. Finish with wsp:YourRepo/subpath or paste a full host path, then Detect.",
+        false,
+      );
+    }
+  });
+
+  const btnChooseFolder = document.getElementById("hostedRegChooseFolder");
+  btnChooseFolder?.addEventListener("click", async () => {
+    if (typeof window.showDirectoryPicker === "function") {
+      let handle;
+      try {
+        handle = await window.showDirectoryPicker();
+      } catch (e) {
+        if (e && e.name === "AbortError") return;
+        /* SecurityError / insecure context / policy — try HTML folder input */
+      }
+      if (handle && handle.name) {
+        applyHostedPathAfterFsapiFolder(String(handle.name));
+        return;
+      }
+    }
+    if (dirInp && hostedHtmlDirectoryPickerSupported()) {
+      dirInp.click();
+      return;
+    }
+    setMsg(
+      "No folder picker in this browser. Use Browse (server tree) or paste repo-relative, wsp:…, or a full host path.",
+      true,
+    );
+  });
+
+  regPanel?.addEventListener("toggle", () => {
+    if (regPanel.open) {
+      ensureRegisterSamplesLoaded();
+      refreshYamlStatus();
+    }
+  });
+
+  sampleApply?.addEventListener("click", () => {
+    const id = sampleSel?.value || "";
+    if (!id || !hostedRegSamplesById[id]) {
+      setMsg("Choose a sample template first.", true);
+      return;
+    }
+    const s = hostedRegSamplesById[id];
+    if (manTa && s.manifest_yaml) manTa.value = s.manifest_yaml;
+    if (locTa && s.localhost_yaml) locTa.value = s.localhost_yaml;
+    setMsg(`Applied sample: ${s.title}. Edit, then Save YAML (or Generate YAML) before Register.`);
+    refreshYamlStatus();
+  });
+
+  detectBtn.addEventListener("click", () => {
+    runHostedRegisterDetect({});
+  });
+
+  genBtn?.addEventListener("click", async () => {
+    const path = pathIn.value.trim();
+    const app_id = idIn ? idIn.value.trim() : "";
+    if (!path || !app_id) {
+      setMsg("Path and app id are required for Generate YAML.", true);
+      return;
+    }
+    const tok = controlToken();
+    if (dashboardTokenRequired() && !tok) {
+      setMsg("Set the control token on the Control tab (or localStorage).", true);
+      return;
+    }
+    setRegFormBusy(true, "Generating YAML on server…");
+    setMsg("Writing leco.app.yaml + profile from detected compose / wrangler / archetype…");
+    try {
+      const res = await fetch("/api/leco/generate-yaml", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Control-Token": tok },
+        body: JSON.stringify({ path, app_id, token: tok }),
+        cache: "no-store",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setMsg(data.error || `HTTP ${res.status}`, true);
+        return;
+      }
+      if (manTa && data.manifest_yaml != null) manTa.value = data.manifest_yaml;
+      if (locTa && data.localhost_yaml != null) locTa.value = data.localhost_yaml;
+      setMsg(
+        data.materialized
+          ? "YAML materialized under hosting (read-only root). You can edit and Save YAML, then Register."
+          : "YAML written under the app root. Edit if needed, Save YAML to persist changes, then Register.",
+      );
+      await refreshYamlStatus();
+    } catch (e) {
+      setMsg(String(e.message || e), true);
+    } finally {
+      setRegFormBusy(false);
+    }
+  });
+
+  saveYamlBtn?.addEventListener("click", async () => {
+    const path = pathIn.value.trim();
+    const app_id = idIn ? idIn.value.trim() : "";
+    if (!path || !app_id) {
+      setMsg("Path and app id are required for Save YAML.", true);
+      return;
+    }
+    const tok = controlToken();
+    if (dashboardTokenRequired() && !tok) {
+      setMsg("Set the control token on the Control tab (or localStorage).", true);
+      return;
+    }
+    if (!manTa || !manTa.value.trim() || !locTa || !locTa.value.trim()) {
+      setMsg("Both manifest and localhost YAML fields must be non-empty to save.", true);
+      return;
+    }
+    setRegFormBusy(true, "Saving YAML on server…");
+    setMsg("Validating and writing files…");
+    try {
+      const res = await fetch("/api/leco/save-yaml", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Control-Token": tok },
+        body: JSON.stringify({
+          path,
+          app_id,
+          manifest_yaml: manTa.value,
+          localhost_yaml: locTa.value,
+          token: tok,
+        }),
+        cache: "no-store",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setMsg(data.error || `HTTP ${res.status}`, true);
+        return;
+      }
+      setMsg(`Saved: ${data.manifest_path || ""} · ${data.localhost_path || ""}`);
+      await refreshYamlStatus();
+    } catch (e) {
+      setMsg(String(e.message || e), true);
+    } finally {
+      setRegFormBusy(false);
+    }
+  });
+
+  valBtn?.addEventListener("click", async () => {
+    if (!yamlRep) return;
+    setRegFormBusy(true, "Validating YAML on server…");
+    setMsg("Validating YAML…");
+    yamlRep.classList.remove("hosted-reg-yaml-report--pass", "hosted-reg-yaml-report--fail");
+    yamlRep.classList.add("is-hidden");
+    yamlRep.textContent = "";
+    try {
+      const body = {
+        manifest_yaml: manTa ? manTa.value : "",
+        localhost_yaml: locTa ? locTa.value : "",
+      };
+      const res = await fetch("/api/leco/validate-yaml", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        cache: "no-store",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setMsg(data.error || `HTTP ${res.status}`, true);
+        return;
+      }
+      const pass = !!data.validation_ok;
+      const jsonBlock = JSON.stringify(data.report || {}, null, 2);
+      yamlRep.textContent = `${data.summary_text || ""}\n\n— structured report —\n${jsonBlock}`;
+      yamlRep.classList.remove("is-hidden");
+      yamlRep.classList.toggle("hosted-reg-yaml-report--pass", pass);
+      yamlRep.classList.toggle("hosted-reg-yaml-report--fail", !pass);
+      setMsg(pass ? "Validation passed — see report below." : "Validation failed — see report below.", !pass);
+    } catch (e) {
+      setMsg(String(e.message || e), true);
+    } finally {
+      setRegFormBusy(false);
+    }
+  });
+
+  submitBtn.addEventListener("click", async () => {
+    const path = pathIn.value.trim();
+    const app_id = idIn ? idIn.value.trim() : "";
+    const label = labelIn ? labelIn.value.trim() : "";
+    if (!path || !app_id) {
+      setMsg("Path and app id are required.", true);
+      return;
+    }
+    const tok = controlToken();
+    if (dashboardTokenRequired() && !tok) {
+      setMsg("Set the control token on the Control tab (or localStorage).", true);
+      return;
+    }
+    setMsg("Registering — overlay shows progress; server runs registry + optional docker deploy (works via Traefik).");
+    const regBody = {
+      path,
+      app_id,
+      label,
+      deploy_stack: deployChk ? !!deployChk.checked : true,
+    };
+    submitBtn.disabled = true;
+    if (detectBtn) detectBtn.disabled = true;
+    if (valBtn) valBtn.disabled = true;
+    if (genBtn) genBtn.disabled = true;
+    if (saveYamlBtn) saveYamlBtn.disabled = true;
+    try {
+      const out = await runDashboardSyncRegisterOverlay({
+        body: regBody,
+        title: `Register · ${app_id}`,
+        actionVerb: "register",
+        async onFinally() {
+          await loadHostedAppsList();
+          await refreshHostedAppsPanel().catch(() => {});
+          loadOverview().catch(() => {});
+        },
+      });
+      if (out.ok && out.result?.registry_entry?.id) {
+        setMsg(
+          `Registered: ${out.result.registry_entry.id}. ${out.result.deploy_stack_ran ? "Deploy ran — check Docker / Hosted apps." : "Deploy skipped (checkbox)."} List refreshed.`,
+        );
+      } else if (out.result?.registry_entry?.id && out.error) {
+        setMsg(`${out.error} (registry id: ${out.result.registry_entry.id})`, true);
+      } else if (out.error) {
+        setMsg(out.error, true);
+      } else {
+        setMsg("Finished — see overlay for full output.", false);
+      }
+    } catch (e) {
+      setMsg(String(e.message || e), true);
+    } finally {
+      submitBtn.disabled = false;
+      if (detectBtn) detectBtn.disabled = false;
+      if (valBtn) valBtn.disabled = false;
+      if (genBtn) genBtn.disabled = false;
+      if (saveYamlBtn) saveYamlBtn.disabled = false;
+      refreshYamlStatus();
+    }
+  });
+
+  refreshYamlStatus();
+}
+
 function initHostedAppsLogToolbar() {
   const root = document.getElementById("hostedAppsTab");
   if (!root || root.dataset.logWired === "1") return;
@@ -3748,6 +4655,63 @@ function initRoutesTab() {
   tab.dataset.wired = "1";
   document.getElementById("traefikRoutesRefresh")?.addEventListener("click", () => loadTraefikRoutesPanel());
   document.getElementById("traefikMergeBtn")?.addEventListener("click", () => traefikMergeFragment());
+  document.getElementById("traefikLoadFragmentBtn")?.addEventListener("click", () => traefikFetchManifestFragment(false));
+  document.getElementById("traefikLoadMergeBtn")?.addEventListener("click", () => traefikFetchManifestFragment(true));
+}
+
+async function traefikFetchManifestFragment(alsoMerge) {
+  const slugIn = document.getElementById("traefikFragmentSlug");
+  const ta = document.getElementById("traefikMergeYaml");
+  const msg = document.getElementById("traefikRoutesMsg");
+  const slug = slugIn?.value?.trim() || "";
+  if (!slug) {
+    if (msg) msg.textContent = "Enter a registry id (hosted app slug).";
+    return;
+  }
+  const tok = controlToken();
+  if (dashboardTokenRequired() && !tok) {
+    if (msg) msg.textContent = "Set the control token on the Control tab.";
+    return;
+  }
+  if (msg) msg.textContent = alsoMerge ? "Loading and merging…" : "Loading fragment…";
+  try {
+    const res = await fetch("/api/traefik/fragment-from-manifest", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Control-Token": tok,
+      },
+      body: JSON.stringify({ slug, token: tok }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      if (msg) msg.textContent = data.error || `HTTP ${res.status}`;
+      return;
+    }
+    const yamlText = data.yaml || "";
+    if (ta) ta.value = yamlText;
+    if (!alsoMerge) {
+      if (msg) msg.textContent = "Fragment loaded into the textarea. Review, then Merge, or use Load and merge.";
+      return;
+    }
+    const mres = await fetch("/api/traefik/merge-fragment", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Control-Token": tok,
+      },
+      body: JSON.stringify({ yaml: yamlText, token: tok }),
+    });
+    const mdata = await mres.json();
+    if (!mdata.ok) {
+      if (msg) msg.textContent = mdata.message || mdata.error || "Merge failed";
+      return;
+    }
+    if (msg) msg.textContent = mdata.message || "Merged.";
+    await loadTraefikRoutesPanel();
+  } catch (e) {
+    if (msg) msg.textContent = String(e.message || e);
+  }
 }
 
 async function loadTraefikRoutesPanel() {
@@ -3828,22 +4792,27 @@ async function runHostedOffboard(slug, stripTraefik, cleanLocalCf) {
   const ok = await showAppConfirm({
     title: `Remove hosted app ${slug}`,
     message:
-      "Removes this id from config/leco-registry.yaml. Optionally strips Traefik routers/services derived from the manifest and deletes local KV/R2/D1 resources listed in leco.local-cf.yaml.",
+      "Runs leco-app ecosystem-unregister: removes this id from config/leco-registry.yaml, optionally strips Traefik routers/services from traefik/dynamic.yml, and deletes local KV/R2/D1 resources listed in leco.local-cf.yaml. Traefik picks up dynamic.yml changes via file watch (no Traefik restart).",
     confirmText: "Remove",
   });
   if (!ok) return;
   const msg = document.getElementById("traefikRoutesMsg");
+  const tok = controlToken();
+  if (dashboardTokenRequired() && !tok) {
+    if (msg) msg.textContent = "Set the control token on the Control tab.";
+    return;
+  }
   try {
     const res = await fetch(`/api/hosted-apps/${encodeURIComponent(slug)}/offboard`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Control-Token": controlToken(),
+        "X-Control-Token": tok,
       },
       body: JSON.stringify({
         strip_traefik: stripTraefik,
         clean_local_cf: cleanLocalCf,
-        token: controlToken(),
+        token: tok,
       }),
     });
     const data = await res.json();
@@ -3869,14 +4838,19 @@ async function traefikMergeFragment() {
     if (msg) msg.textContent = "Paste YAML first.";
     return;
   }
+  const tok = controlToken();
+  if (dashboardTokenRequired() && !tok) {
+    if (msg) msg.textContent = "Set the control token on the Control tab.";
+    return;
+  }
   try {
     const res = await fetch("/api/traefik/merge-fragment", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Control-Token": controlToken(),
+        "X-Control-Token": tok,
       },
-      body: JSON.stringify({ yaml: yamlText, token: controlToken() }),
+      body: JSON.stringify({ yaml: yamlText, token: tok }),
     });
     const data = await res.json();
     if (msg) msg.textContent = data.message || JSON.stringify(data);
@@ -4027,8 +5001,81 @@ function initControlActionOverlay() {
   });
 }
 
-async function runControlAction(targetId, action, cardLabel) {
+/** Close modals that use high z-index inside `.wrap` so the control overlay is on top. */
+function prepareDashboardGlobalOverlayLayer() {
+  document.getElementById("hostedBrowseModal")?.classList.add("is-hidden");
+  document.body.style.overflow = "";
+  closeHostedChartExpand();
+}
+
+/**
+ * @param {ReadableStreamDefaultReader<Uint8Array>} reader
+ * @param {(t: string) => void} appendStreamLog
+ */
+async function readNdjsonLinesFromReader(reader, appendStreamLog) {
+  const dec = new TextDecoder();
+  let lineBuf = "";
+  let finalResult = null;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    lineBuf += dec.decode(value, { stream: true });
+    const parts = lineBuf.split("\n");
+    lineBuf = parts.pop() ?? "";
+    for (const line of parts) {
+      if (!line.trim()) continue;
+      let ev;
+      try {
+        ev = JSON.parse(line);
+      } catch (_) {
+        appendStreamLog(`${line}\n`);
+        continue;
+      }
+      if (ev.type === "log" && ev.text != null) appendStreamLog(ev.text);
+      if (ev.type === "done") finalResult = ev.result || null;
+    }
+  }
+  if (lineBuf.trim()) {
+    try {
+      const ev = JSON.parse(lineBuf);
+      if (ev.type === "log" && ev.text != null) appendStreamLog(ev.text);
+      if (ev.type === "done") finalResult = ev.result || finalResult;
+    } catch (_) {
+      /* trailing garbage */
+    }
+  }
+  return finalResult;
+}
+
+/** When fetch body has no getReader (older browsers / proxies), parse buffered NDJSON. */
+function parseNdjsonFromFullText(text, appendStreamLog) {
+  let finalResult = null;
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue;
+    let ev;
+    try {
+      ev = JSON.parse(line);
+    } catch (_) {
+      appendStreamLog(`${line}\n`);
+      continue;
+    }
+    if (ev.type === "log" && ev.text != null) appendStreamLog(ev.text);
+    if (ev.type === "done") finalResult = ev.result || null;
+  }
+  return finalResult;
+}
+
+/**
+ * Shared overlay + NDJSON stream reader (Control actions, Register app, …).
+ * @param {{ title: string, url: string, body: Record<string, unknown>, actionVerb?: string, onFinally?: () => void | Promise<void> }} opts
+ * @returns {Promise<{ ok: boolean, result?: object, error?: string }>}
+ */
+async function runDashboardStreamOverlay(opts) {
+  const { title, url, body, actionVerb = "operation", onFinally } = opts;
+  /** @type {{ ok: boolean, result?: object, error?: string }} */
+  const outcome = { ok: false };
   initControlActionOverlay();
+  prepareDashboardGlobalOverlayLayer();
   const overlay = document.getElementById("controlActionOverlay");
   const titleEl = document.getElementById("controlActionTitle");
   const liveEl = document.getElementById("controlActionLive");
@@ -4039,7 +5086,6 @@ async function runControlAction(targetId, action, cardLabel) {
   const doneBar = document.getElementById("controlActionDoneBar");
   const out = document.getElementById("controlResult");
 
-  const label = (cardLabel || targetId || "").trim();
   const ac = new AbortController();
   controlActionOverlayAbort = ac;
   const t0 = Date.now();
@@ -4061,7 +5107,11 @@ async function runControlAction(targetId, action, cardLabel) {
     liveEl.textContent = `${phase} (${sec}s)`;
   };
 
-  if (overlay) overlay.hidden = false;
+  if (overlay) {
+    overlay.removeAttribute("hidden");
+    overlay.hidden = false;
+    overlay.style.zIndex = "32000";
+  }
   if (controlActionToastTimer) {
     clearTimeout(controlActionToastTimer);
     controlActionToastTimer = null;
@@ -4072,7 +5122,7 @@ async function runControlAction(targetId, action, cardLabel) {
     toastEl.textContent = "";
     toastEl.classList.remove("control-action-toast--ok", "control-action-toast--bad");
   }
-  if (titleEl) titleEl.textContent = `${action} · ${label}`;
+  if (titleEl) titleEl.textContent = title;
   if (summaryEl) {
     summaryEl.classList.add("is-hidden");
     summaryEl.textContent = "";
@@ -4110,15 +5160,19 @@ async function runControlAction(targetId, action, cardLabel) {
     }
   };
 
+  const tok = controlToken();
+  const payload = { ...body, token: tok };
+
   try {
-    const res = await fetch("/api/control/stream", {
+    const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Control-Token": controlToken() },
-      body: JSON.stringify({ target_id: targetId, action, token: controlToken() }),
+      headers: { "Content-Type": "application/json", "X-Control-Token": tok },
+      body: JSON.stringify(payload),
       signal: ac.signal,
+      cache: "no-store",
     });
 
-    if (!res.ok || !res.body?.getReader) {
+    if (!res.ok) {
       let data;
       try {
         data = await res.json();
@@ -4132,7 +5186,10 @@ async function runControlAction(targetId, action, cardLabel) {
       const details = document.querySelector(".control-response-details");
       if (details && (!res.ok || data?.ok === false)) details.open = true;
       const ok = res.ok && data && data.ok === true;
-      if (titleEl) titleEl.textContent = ok ? `Done · ${action}` : `Finished · ${action}`;
+      outcome.ok = ok;
+      outcome.result = data;
+      if (!ok) outcome.error = data?.error ? String(data.error) : `HTTP ${res.status}`;
+      if (titleEl) titleEl.textContent = ok ? `Done · ${actionVerb}` : `Finished · ${actionVerb}`;
       if (liveEl) {
         const sec = Math.max(0, Math.round((Date.now() - t0) / 1000));
         liveEl.textContent = ok ? `Succeeded in ${sec}s` : `Completed in ${sec}s (check details)`;
@@ -4146,52 +5203,34 @@ async function runControlAction(targetId, action, cardLabel) {
       const logBit = typeof data.log === "string" ? data.log : data.error ? String(data.error) : "";
       if (snippetEl && logBit) snippetEl.textContent = logBit;
     } else {
-      const reader = res.body.getReader();
-      const dec = new TextDecoder();
-      let lineBuf = "";
       let finalResult = null;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        lineBuf += dec.decode(value, { stream: true });
-        const parts = lineBuf.split("\n");
-        lineBuf = parts.pop() ?? "";
-        for (const line of parts) {
-          if (!line.trim()) continue;
-          let ev;
-          try {
-            ev = JSON.parse(line);
-          } catch (_) {
-            appendStreamLog(`${line}\n`);
-            continue;
-          }
-          if (ev.type === "log" && ev.text != null) appendStreamLog(ev.text);
-          if (ev.type === "done") finalResult = ev.result || null;
-        }
-      }
-      if (lineBuf.trim()) {
+      if (res.body && typeof res.body.getReader === "function") {
         try {
-          const ev = JSON.parse(lineBuf);
-          if (ev.type === "log" && ev.text != null) appendStreamLog(ev.text);
-          if (ev.type === "done") finalResult = ev.result || finalResult;
-        } catch (_) {
-          /* ignore trailing garbage */
+          finalResult = await readNdjsonLinesFromReader(res.body.getReader(), appendStreamLog);
+        } catch (streamErr) {
+          appendStreamLog(`\n[ui] stream read failed: ${String(streamErr.message || streamErr)}\n`);
+          finalResult = { ok: false, error: String(streamErr.message || streamErr) };
         }
+      } else {
+        const txt = await res.text();
+        finalResult = parseNdjsonFromFullText(txt, appendStreamLog);
       }
 
       const data = finalResult || { ok: false, error: "no result from stream" };
       const fullLog = logChunks.join("");
-      const payload = { ...data };
-      if (fullLog) payload.log_stream = fullLog;
-      const text = JSON.stringify(payload, null, 2);
+      const merged = { ...data };
+      if (fullLog) merged.log_stream = fullLog;
+      const text = JSON.stringify(merged, null, 2);
       lastControlActionResultText = text;
       if (out) out.textContent = text;
       const details = document.querySelector(".control-response-details");
       if (details && data?.ok === false) details.open = true;
 
       const ok = data && data.ok === true;
-      if (titleEl) titleEl.textContent = ok ? `Done · ${action}` : `Finished · ${action}`;
+      outcome.ok = ok;
+      outcome.result = data;
+      if (!ok) outcome.error = data?.error ? String(data.error) : "stream failed";
+      if (titleEl) titleEl.textContent = ok ? `Done · ${actionVerb}` : `Finished · ${actionVerb}`;
       if (liveEl) {
         const sec = Math.max(0, Math.round((Date.now() - t0) / 1000));
         const lines = fullLog ? fullLog.split("\n").length : 0;
@@ -4209,6 +5248,8 @@ async function runControlAction(targetId, action, cardLabel) {
   } catch (e) {
     const aborted = e && (e.name === "AbortError" || e.code === 20);
     const msg = aborted ? "Request cancelled." : String(e.message || e);
+    outcome.ok = false;
+    outcome.error = msg;
     lastControlActionResultText = msg;
     if (out) out.textContent = msg;
     if (titleEl) titleEl.textContent = aborted ? "Cancelled" : "Error";
@@ -4225,8 +5266,11 @@ async function runControlAction(targetId, action, cardLabel) {
     if (spinnerEl) spinnerEl.classList.add("is-hidden");
     if (runningBar) runningBar.classList.add("is-hidden");
     if (doneBar) doneBar.classList.remove("is-hidden");
-    loadControlTargets();
-    refreshHostedAppsPanel().catch(() => {});
+    try {
+      await onFinally?.();
+    } catch (_) {
+      /* ignore */
+    }
     try {
       if (lastControlActionResultText) {
         localStorage.setItem("dashboard_last_control_result", lastControlActionResultText);
@@ -4234,10 +5278,201 @@ async function runControlAction(targetId, action, cardLabel) {
     } catch (_) {
       /* ignore */
     }
-    loadOverview().catch(() => {
-      /* refresh overview + infra in background so runtime badges stay accurate */
-    });
   }
+  return outcome;
+}
+
+/**
+ * Register via JSON POST (works through Traefik; streaming NDJSON is often buffered).
+ * Runs ecosystem-register + optional leco-app deploy in one server round-trip.
+ */
+async function runDashboardSyncRegisterOverlay(opts) {
+  const { body, title, actionVerb = "register", onFinally } = opts;
+  /** @type {{ ok: boolean, result?: object, error?: string }} */
+  const outcome = { ok: false };
+  initControlActionOverlay();
+  prepareDashboardGlobalOverlayLayer();
+  const overlay = document.getElementById("controlActionOverlay");
+  const titleEl = document.getElementById("controlActionTitle");
+  const liveEl = document.getElementById("controlActionLive");
+  const summaryEl = document.getElementById("controlActionSummary");
+  const snippetEl = document.getElementById("controlActionSnippet");
+  const spinnerEl = document.getElementById("controlActionSpinner");
+  const runningBar = document.getElementById("controlActionRunningBar");
+  const doneBar = document.getElementById("controlActionDoneBar");
+  const out = document.getElementById("controlResult");
+
+  const ac = new AbortController();
+  controlActionOverlayAbort = ac;
+  const t0 = Date.now();
+  let phaseIdx = 0;
+  let phaseTimer = null;
+  let elapsedTimer = null;
+
+  const clearTimers = () => {
+    if (phaseTimer) clearInterval(phaseTimer);
+    if (elapsedTimer) clearInterval(elapsedTimer);
+    phaseTimer = null;
+    elapsedTimer = null;
+  };
+
+  const bumpLive = () => {
+    if (!liveEl) return;
+    const sec = Math.max(0, Math.round((Date.now() - t0) / 1000));
+    const phase = CONTROL_ACTION_PHASES[phaseIdx % CONTROL_ACTION_PHASES.length];
+    liveEl.textContent = `${phase} (${sec}s)`;
+  };
+
+  if (overlay) {
+    overlay.removeAttribute("hidden");
+    overlay.hidden = false;
+    overlay.style.zIndex = "32000";
+  }
+  if (controlActionToastTimer) {
+    clearTimeout(controlActionToastTimer);
+    controlActionToastTimer = null;
+  }
+  const toastEl = document.getElementById("controlActionToast");
+  if (toastEl) {
+    toastEl.classList.add("is-hidden");
+    toastEl.textContent = "";
+    toastEl.classList.remove("control-action-toast--ok", "control-action-toast--bad");
+  }
+  if (titleEl) titleEl.textContent = title;
+  if (summaryEl) {
+    summaryEl.classList.add("is-hidden");
+    summaryEl.textContent = "";
+    summaryEl.classList.remove("control-action-summary--ok", "control-action-summary--bad");
+  }
+  if (snippetEl) {
+    snippetEl.classList.remove("is-hidden");
+    snippetEl.classList.add("control-action-snippet--live");
+    snippetEl.textContent =
+      "Running on server: ecosystem-register, local CF (if any), then optional docker compose deploy.\nThis can take several minutes — output appears here when finished.\n";
+  }
+  if (spinnerEl) spinnerEl.classList.remove("is-hidden");
+  if (runningBar) runningBar.classList.remove("is-hidden");
+  if (doneBar) doneBar.classList.add("is-hidden");
+  bumpLive();
+  phaseTimer = setInterval(() => {
+    phaseIdx += 1;
+    bumpLive();
+  }, 750);
+  elapsedTimer = setInterval(bumpLive, 500);
+  if (out) out.textContent = "Running…";
+
+  const tok = controlToken();
+  const payload = { ...body, token: tok };
+
+  try {
+    const res = await fetch("/api/leco/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Control-Token": tok },
+      body: JSON.stringify(payload),
+      signal: ac.signal,
+      cache: "no-store",
+    });
+    let data = {};
+    try {
+      data = await res.json();
+    } catch (_) {
+      const raw = await res.text().catch(() => "");
+      data = { ok: false, error: raw || `HTTP ${res.status}` };
+    }
+    if (spinnerEl) spinnerEl.classList.add("is-hidden");
+
+    const parts = [];
+    if (data.leco_register_log) parts.push(String(data.leco_register_log));
+    if (data.deploy_stack_ran && data.deploy_log) parts.push("--- leco-app deploy ---\n" + String(data.deploy_log));
+    const logText =
+      parts.length > 0 ? parts.join("\n\n") : data.error ? String(data.error) : JSON.stringify(data, null, 2);
+    if (snippetEl) {
+      snippetEl.textContent = logText || "(empty response)";
+      snippetEl.scrollTop = snippetEl.scrollHeight;
+    }
+
+    const registerOk = res.ok && data.ok === true;
+    const deployFine = data.deploy_stack_ran !== true || data.deploy_ok === true;
+    const ok = registerOk && deployFine;
+    outcome.ok = ok;
+    outcome.result = data;
+    if (!ok) {
+      outcome.error = data.error
+        ? String(data.error)
+        : !deployFine
+          ? "Docker deploy failed (registry may still be updated). See log below."
+          : `HTTP ${res.status}`;
+    }
+
+    const text = JSON.stringify(data, null, 2);
+    lastControlActionResultText = text;
+    if (out) out.textContent = text;
+    const details = document.querySelector(".control-response-details");
+    if (details && !ok) details.open = true;
+    if (titleEl) titleEl.textContent = ok ? `Done · ${actionVerb}` : `Finished · ${actionVerb}`;
+    if (liveEl) {
+      const sec = Math.max(0, Math.round((Date.now() - t0) / 1000));
+      liveEl.textContent = ok ? `Succeeded in ${sec}s` : `Completed in ${sec}s (see log)`;
+    }
+    if (summaryEl) {
+      summaryEl.classList.remove("is-hidden");
+      summaryEl.classList.toggle("control-action-summary--ok", ok);
+      summaryEl.classList.toggle("control-action-summary--bad", !ok);
+      summaryEl.textContent = ok
+        ? "Registered and deploy finished (or skipped if unchecked)."
+        : outcome.error || "Request failed.";
+    }
+  } catch (e) {
+    const aborted = e && (e.name === "AbortError" || e.code === 20);
+    const msg = aborted ? "Request cancelled." : String(e.message || e);
+    outcome.ok = false;
+    outcome.error = msg;
+    lastControlActionResultText = msg;
+    if (out) out.textContent = msg;
+    if (titleEl) titleEl.textContent = aborted ? "Cancelled" : "Error";
+    if (liveEl) liveEl.textContent = aborted ? "You cancelled the request." : msg;
+    if (summaryEl) {
+      summaryEl.classList.remove("is-hidden");
+      summaryEl.classList.add("control-action-summary--bad");
+      summaryEl.classList.remove("control-action-summary--ok");
+      summaryEl.textContent = aborted ? "No changes applied." : "Request failed before a full response.";
+    }
+    if (snippetEl) snippetEl.textContent = msg;
+  } finally {
+    clearTimers();
+    controlActionOverlayAbort = null;
+    if (spinnerEl) spinnerEl.classList.add("is-hidden");
+    if (runningBar) runningBar.classList.add("is-hidden");
+    if (doneBar) doneBar.classList.remove("is-hidden");
+    try {
+      await onFinally?.();
+    } catch (_) {
+      /* ignore */
+    }
+    try {
+      if (lastControlActionResultText) {
+        localStorage.setItem("dashboard_last_control_result", lastControlActionResultText);
+      }
+    } catch (_) {
+      /* ignore */
+    }
+  }
+  return outcome;
+}
+
+async function runControlAction(targetId, action, cardLabel) {
+  const label = (cardLabel || targetId || "").trim();
+  return runDashboardStreamOverlay({
+    title: `${action} · ${label}`,
+    url: "/api/control/stream",
+    body: { target_id: targetId, action },
+    actionVerb: action,
+    async onFinally() {
+      loadControlTargets();
+      await refreshHostedAppsPanel().catch(() => {});
+      loadOverview().catch(() => {});
+    },
+  });
 }
 
 function updateCharts(data) {
@@ -4646,6 +5881,7 @@ async function bootstrap() {
   initHostMetricsPanelRefresh();
   initControlBulkBar();
   initHostedAppsLogToolbar();
+  initHostedRegisterWizard();
   initRoutesTab();
   initHostedChartExpandModal();
   hydrateTrendHistoryFromCache();

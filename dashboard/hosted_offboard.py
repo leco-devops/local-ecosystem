@@ -1,42 +1,17 @@
-"""Remove hosted app from registry; optionally strip Traefik routes and clean leco.local-cf resources."""
+"""Remove hosted app from registry via LEco DevOps ecosystem-unregister (Traefik strip, local CF, registry)."""
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from leco_control import LECO_REGISTRY_PATH, leco_meta_for_slug, load_leco_registry_entries
-from local_cf_teardown import teardown_from_leco_local_cf_file
-from traefik_dynamic_file import list_routers_services_summary, strip_router_service_keys
+from leco_control import load_leco_registry_entries, resolve_manifest_path
+from hosting_layout import manifest_rel_uses_hosting_layout, remove_hosting_for_slug
+from leco_subprocess import PROJECT_ROOT, run_ecosystem_unregister
+from traefik_dynamic_file import list_routers_services_summary
 from traefik_manifest_keys import manifest_traefik_keys_dict
-
-
-def _remove_registry_slug(slug: str) -> bool:
-    if not os.path.isfile(LECO_REGISTRY_PATH):
-        return False
-    try:
-        doc = yaml.safe_load(Path(LECO_REGISTRY_PATH).read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError, UnicodeDecodeError):
-        return False
-    if not isinstance(doc, dict):
-        return False
-    apps = doc.get("apps")
-    if not isinstance(apps, list):
-        return False
-    nid = slug.strip()
-    new_apps = [a for a in apps if not (isinstance(a, dict) and str(a.get("id") or "").strip() == nid)]
-    if len(new_apps) == len(apps):
-        return False
-    doc["apps"] = new_apps
-    Path(LECO_REGISTRY_PATH).parent.mkdir(parents=True, exist_ok=True)
-    Path(LECO_REGISTRY_PATH).write_text(
-        yaml.safe_dump(doc, default_flow_style=False, sort_keys=False, allow_unicode=True),
-        encoding="utf-8",
-    )
-    return True
 
 
 def offboard_hosted_app(
@@ -44,61 +19,76 @@ def offboard_hosted_app(
     *,
     strip_traefik: bool,
     clean_local_cf: bool,
+    compose_down: bool = True,
+    compose_volumes: bool = False,
 ) -> dict[str, Any]:
-    meta = leco_meta_for_slug(slug)
-    if not meta:
-        return {"ok": False, "error": f"Unknown hosted app id: {slug!r}"}
+    nid = slug.strip()
+    eco = Path(PROJECT_ROOT).resolve()
+    entries = load_leco_registry_entries()
+    in_registry = any(
+        isinstance(e, dict) and str(e.get("id") or "").strip() == nid for e in entries
+    )
+    manifest_rel = ""
+    for e in entries:
+        if isinstance(e, dict) and str(e.get("id") or "").strip() == nid:
+            manifest_rel = str(e.get("manifest") or "").strip()
+            break
 
-    manifest_path = meta["manifest_path"]
+    if not in_registry:
+        hr = remove_hosting_for_slug(eco, nid)
+        errs = hr.get("hosting_cleanup_errors")
+        ok = not errs
+        log_txt = (
+            f"No registry entry for {slug!r} — removed hosting materialization only "
+            f"(app-enabled/app-available when present).\n"
+            f"Paths touched: {hr.get('hosting_paths_removed') or []}\n"
+        )
+        return {
+            "ok": ok,
+            "slug": slug,
+            "strip_traefik": strip_traefik,
+            "clean_local_cf": clean_local_cf,
+            "exit_code": 0 if ok else 1,
+            "leco_log": log_txt,
+            "traefik": {"via": "skipped (not in registry)"},
+            "local_cf": {"via": "skipped (not in registry)"},
+            "registry_removed": False,
+            "not_in_registry": True,
+            "hosting_cleanup": hr,
+            **({"error": "; ".join(errs)} if errs else {}),
+        }
+
+    code, log = run_ecosystem_unregister(
+        slug,
+        strip_traefik=strip_traefik,
+        clean_local_cf=clean_local_cf,
+        compose_down=compose_down,
+        compose_volumes=compose_volumes,
+        timeout=300,
+    )
+    ok = code == 0
     result: dict[str, Any] = {
-        "ok": True,
+        "ok": ok,
         "slug": slug,
         "strip_traefik": strip_traefik,
         "clean_local_cf": clean_local_cf,
-        "traefik": None,
-        "local_cf": None,
+        "exit_code": code,
+        "leco_log": log[-16000:] if log else "",
+        "traefik": {"via": "leco-app ecosystem-unregister"},
+        "local_cf": {"via": "leco-app ecosystem-unregister"},
+        "registry_removed": ok,
     }
-
-    try:
-        raw = Path(manifest_path).read_text(encoding="utf-8")
-        manifest = yaml.safe_load(raw)
-    except (OSError, yaml.YAMLError, UnicodeDecodeError):
-        manifest = None
-
-    if strip_traefik:
-        if isinstance(manifest, dict):
-            rkeys, skeys = manifest_traefik_keys_dict(manifest)
-            if rkeys or skeys:
-                nr, ns, err = strip_router_service_keys(rkeys, skeys)
-                result["traefik"] = {
-                    "routers_removed": nr,
-                    "services_removed": ns,
-                    "router_keys": rkeys,
-                    "service_keys": skeys,
-                    "warning": err,
-                }
-            else:
-                result["traefik"] = {"skipped": "no routing keys in manifest"}
-        else:
-            result["traefik"] = {"skipped": "manifest unreadable"}
-
-    if clean_local_cf:
-        cf_file = Path(manifest_path).parent / "leco.local-cf.yaml"
-        result["local_cf"] = teardown_from_leco_local_cf_file(cf_file)
-        lc = result["local_cf"]
-        if isinstance(lc, dict) and not lc.get("skipped") and not lc.get("ok", True):
-            errs = lc.get("errors") or []
-            result["ok"] = False
-            result["error"] = "Local CF cleanup failed: " + "; ".join(str(x) for x in errs)[:500]
-            return result
-
-    if not _remove_registry_slug(slug):
-        result["registry_removed"] = False
-        result["ok"] = False
-        result["error"] = "registry entry not removed (missing file or id mismatch)"
-    else:
-        result["registry_removed"] = True
-
+    if not ok:
+        result["error"] = log[-2000:] if log else f"leco-app exited {code}"
+        if manifest_rel_uses_hosting_layout(manifest_rel):
+            hr = remove_hosting_for_slug(eco, nid)
+            result["hosting_fallback"] = hr
+            if hr.get("hosting_removed") and not hr.get("hosting_cleanup_errors"):
+                result["leco_log"] = (
+                    (result.get("leco_log") or "")
+                    + "\n--- hosting fallback: removed app-enabled/app-available after unregister failure ---\n"
+                    + str(hr.get("hosting_paths_removed") or [])
+                )
     return result
 
 
@@ -119,8 +109,6 @@ def traefik_routes_with_hosted_hints() -> dict[str, Any]:
         mp = entry.get("manifest")
         if not mp:
             continue
-        from leco_control import resolve_manifest_path
-
         abs_m = resolve_manifest_path(str(mp).strip())
         if not abs_m or not Path(abs_m).is_file():
             continue

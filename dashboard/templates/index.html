@@ -315,6 +315,9 @@
           <input id="controlTokenInput" type="password" autocomplete="off" placeholder="DASHBOARD_CONTROL_TOKEN" />
           <button type="button" id="controlTokenSave">Save</button>
         </div>
+        <p class="muted small" id="controlTokenInjectHint" style="display: none">
+          <code>DASHBOARD_INJECT_CONTROL_TOKEN_UI</code> is on: the token is prefilled from the server on load (trusted local only; see <strong>DEPLOYMENT.md</strong>).
+        </p>
 
         <div class="control-bulk-bar" id="controlBulkBar" aria-label="Bulk ecosystem actions">
           <div class="control-bulk-bar__head">
@@ -354,9 +357,142 @@
       <section id="hostedAppsTab" class="tab-content">
         <h2 class="tab-heading">Hosted apps</h2>
         <p class="tab-lead muted small">
-          Per-app monitoring, compose logs, and lifecycle controls for entries in <code>config/leco-registry.yaml</code> (<code>leco-app ecosystem-register</code>). <strong>Control → Remove</strong> or <strong>Reset</strong> on a hosted stack runs <code>docker compose down</code> and then automatically unregisters the app (Traefik keys from the manifest, <code>leco.local-cf.yaml</code> cleanup, registry row) — same as <strong>Remove from ecosystem</strong>. If you stopped the stack only with <code>docker compose down</code> in a terminal, the app stays registered until you use <strong>Remove from ecosystem</strong>, the <strong>Routes</strong> tab, or <code>leco-app ecosystem-unregister</code>. Set the <strong>Control token</strong> on the Control tab when <code>DASHBOARD_CONTROL_TOKEN</code> is enabled.
+          <strong>LEco DevOps</strong> — per-app monitoring, compose logs, and lifecycle controls for entries in <code>config/leco-registry.yaml</code> (<code>leco-app</code> / <code>leco-devops ecosystem-register</code>). <strong>Control → Remove</strong> or <strong>Reset</strong> on a hosted stack runs <code>leco-app ecosystem-unregister</code>, which runs <code>docker compose down</code> first (with <code>-v</code> on <strong>Reset</strong>), then Traefik strip, <code>leco.local-cf.yaml</code> cleanup, and registry row — same as <strong>Remove from ecosystem</strong>. If you stopped the stack only with <code>docker compose down</code> in a terminal, the app stays registered until you use <strong>Remove from ecosystem</strong>, the <strong>Routes</strong> tab, or <code>leco-app ecosystem-unregister</code>. Set the <strong>Control token</strong> on the Control tab when <code>DASHBOARD_CONTROL_TOKEN</code> is enabled.
         </p>
         <p id="hostedAppsTokenHint" class="muted small is-hidden"></p>
+        <details class="hosted-register-panel" id="hostedRegisterPanel">
+          <summary class="hosted-register-panel__summary">Register application (generate YAML · save · register)</summary>
+          <div class="hosted-register-panel__body">
+            <p class="muted small">
+              <strong>Workflow:</strong> set <strong>path</strong> + <strong>app id</strong>, then <strong>Detect</strong> (scans
+              <code>docker-compose</code>, <code>wrangler.toml</code>, and other config signals). Use <strong>Generate YAML</strong>
+              to write <code>leco.app.yaml</code> + the localhost profile from that scan (or regenerate). Edit the text areas,
+              then <strong>Save YAML</strong> to persist. <strong>Register</strong> stays disabled until both files exist on disk;
+              it only runs <code>leco-app ecosystem-register</code> (no silent overwrite). Generate/Save/Register require the
+              <strong>control token</strong> when enabled. Read-only app roots materialize under <code>hosting/app-available/&lt;id&gt;/</code>
+              (app id required). Path: repo-relative, <code>wsp:…</code>, or a host path when the dashboard was started with path hints.
+            </p>
+            <div class="hosted-register-path-row">
+              <label class="hosted-register-field hosted-register-field--grow"
+                >App root path
+                <input
+                  type="text"
+                  id="hostedRegPath"
+                  autocomplete="off"
+                  placeholder="wsp:CrawlerVision/cloudflare or full path from Finder"
+                />
+              </label>
+              <div class="hosted-register-path-btns">
+                <button type="button" id="hostedRegChooseFolder" class="ctrl-act ctrl-act--ops">
+                  Choose folder…
+                </button>
+                <input
+                  type="file"
+                  id="hostedRegRootDir"
+                  class="is-hidden"
+                  webkitdirectory
+                  directory
+                  multiple
+                  aria-label="Choose application root folder"
+                />
+                <button type="button" id="hostedRegBrowse" class="ctrl-act ctrl-act--ops">Browse…</button>
+              </div>
+            </div>
+            <div class="hosted-register-grid">
+              <label class="hosted-register-field"
+                >App id (slug)
+                <input type="text" id="hostedRegId" autocomplete="off" placeholder="my-app" />
+              </label>
+              <label class="hosted-register-field"
+                >Label
+                <input type="text" id="hostedRegLabel" autocomplete="off" placeholder="My application" />
+              </label>
+              <label class="hosted-register-field hosted-register-field--samples"
+                >Sample YAML templates
+                <span class="hosted-register-sample-row">
+                  <select id="hostedRegSampleSelect" aria-label="Sample template">
+                    <option value="">— Choose a sample —</option>
+                  </select>
+                  <button type="button" id="hostedRegSampleApply" class="ctrl-act ctrl-act--ops">Apply sample</button>
+                </span>
+              </label>
+            </div>
+            <label class="hosted-register-check muted small">
+              <input type="checkbox" id="hostedRegLoadExisting" checked />
+              After <strong>Browse</strong> selects a folder, auto-load existing <code>leco.app.yaml</code> / <code>leco.yaml</code> when present; <strong>Detect</strong> still fills previews if files are missing.
+            </label>
+            <label class="hosted-register-check muted small">
+              <input type="checkbox" id="hostedRegDeployAfter" checked />
+              After register, run <strong><code>leco-app deploy</code></strong> (<code>docker compose up -d --build</code>) so containers appear in Docker Desktop. Uncheck if you only want registry + Traefik without starting the stack.
+            </label>
+            <div class="hosted-register-actions">
+              <button type="button" id="hostedRegDetect" class="ctrl-act ctrl-act--ops">Detect</button>
+              <button type="button" id="hostedRegGenerateYaml" class="ctrl-act ctrl-act--ops">Generate YAML</button>
+              <button type="button" id="hostedRegSaveYaml" class="ctrl-act ctrl-act--ops">Save YAML</button>
+              <button type="button" id="hostedRegValidateYaml" class="ctrl-act ctrl-act--ops">Validate YAML</button>
+              <button type="button" id="hostedRegSubmit" class="ctrl-act ctrl-act--ops" disabled>Register</button>
+            </div>
+            <div id="hostedRegBusy" class="hosted-reg-busy is-hidden" role="status" aria-live="polite">
+              <span class="hosted-reg-busy__spin" aria-hidden="true"></span>
+              <span data-hosted-reg-busy-text>Working…</span>
+            </div>
+            <pre id="hostedRegDetectOut" class="hosted-reg-pre is-hidden" aria-live="polite"></pre>
+            <pre id="hostedRegYamlReport" class="hosted-reg-pre hosted-reg-yaml-report is-hidden" aria-live="polite"></pre>
+            <p id="hostedRegMsg" class="muted small"></p>
+            <label class="hosted-register-field hosted-register-field--full"
+              >Manifest YAML (<code>leco.app.yaml</code>) — use Generate YAML / Save YAML to write disk
+              <span class="hosted-yaml-toolbar">
+                <button type="button" id="hostedRegManifestBrowseFile" class="ctrl-act ctrl-act--ops">Browse file…</button>
+                <input
+                  type="file"
+                  id="hostedRegManifestFile"
+                  class="is-hidden"
+                  accept=".yaml,.yml,.YAML,.YML,application/x-yaml,text/yaml,text/plain"
+                  aria-label="Choose manifest YAML file"
+                />
+              </span>
+              <textarea id="hostedRegManifestYaml" rows="10" spellcheck="false"></textarea>
+            </label>
+            <label class="hosted-register-field hosted-register-field--full"
+              >Localhost profile (e.g. <code>leco.yaml</code>) — must match <code>localHostProfile</code> in the manifest
+              <span class="hosted-yaml-toolbar">
+                <button type="button" id="hostedRegLocalhostBrowseFile" class="ctrl-act ctrl-act--ops">Browse file…</button>
+                <input
+                  type="file"
+                  id="hostedRegLocalhostFile"
+                  class="is-hidden"
+                  accept=".yaml,.yml,.YAML,.YML,application/x-yaml,text/yaml,text/plain"
+                  aria-label="Choose leco.yaml file"
+                />
+              </span>
+              <textarea id="hostedRegLocalhostYaml" rows="10" spellcheck="false"></textarea>
+            </label>
+          </div>
+        </details>
+        <div id="hostedBrowseModal" class="hosted-browse-modal is-hidden" role="dialog" aria-modal="true" aria-labelledby="hostedBrowseTitle">
+          <div class="hosted-browse-backdrop" id="hostedBrowseBackdrop"></div>
+          <div class="hosted-browse-dialog">
+            <h4 id="hostedBrowseTitle" class="hosted-browse-title">Select application folder</h4>
+            <p class="muted small">Only directories under the mounted repo or workspace-parent are listed.</p>
+            <div class="hosted-browse-toolbar">
+              <label class="hosted-browse-root-label"
+                >Root
+                <select id="hostedBrowseRoot" aria-label="Browse root">
+                  <option value="project">Ecosystem repo (/project)</option>
+                  <option value="wsp">Workspace parent</option>
+                </select>
+              </label>
+              <button type="button" id="hostedBrowseUp" class="ctrl-act ctrl-act--ops">Up</button>
+            </div>
+            <p id="hostedBrowseCrumb" class="hosted-browse-crumb muted small"></p>
+            <ul id="hostedBrowseList" class="hosted-browse-list" aria-label="Subfolders"></ul>
+            <p id="hostedBrowseErr" class="hosted-browse-err muted small"></p>
+            <div class="hosted-browse-actions">
+              <button type="button" id="hostedBrowseSelectHere" class="ctrl-act ctrl-act--ops">Use this folder</button>
+              <button type="button" id="hostedBrowseClose" class="ctrl-act">Cancel</button>
+            </div>
+          </div>
+        </div>
         <div class="hosted-apps-layout">
           <nav class="hosted-apps-sidebar" id="hostedAppsSidebar" aria-label="Registered apps"></nav>
           <div class="hosted-apps-main" id="hostedAppsMain">
@@ -372,6 +508,8 @@
               <div class="hosted-apps-links" id="hostedAppsLinks"></div>
               <div id="hostedAppsUnregisterHint" class="hosted-apps-unregister-hint is-hidden" role="status" aria-live="polite"></div>
               <div class="hosted-apps-kpi" id="hostedAppsKpi"></div>
+              <div id="hostedAppsLocalProfile" class="hosted-local-profile"></div>
+              <div id="hostedAppsCfResources" class="hosted-cf-resources" aria-label="Wrangler and local CF adapters"></div>
               <div class="hosted-apps-charts">
                 <article class="dash-panel dash-panel--compact">
                   <header class="dash-panel__head dash-panel__head--hosted-expand">
@@ -401,7 +539,10 @@
                   </div>
                 </article>
               </div>
-              <h4 class="hosted-apps-subhead">Services</h4>
+              <h4 class="hosted-apps-subhead">
+                Compose services
+                <span class="muted small" style="font-weight: normal"> — Docker containers from your compose file only</span>
+              </h4>
               <div class="hosted-apps-table-wrap">
                 <table class="hosted-apps-table">
                   <thead>
@@ -456,7 +597,7 @@
               </div>
               <pre id="hostedAppsLogPre" class="hosted-apps-log-pre"></pre>
               <h4 class="hosted-apps-subhead">Controls</h4>
-              <p class="muted small">Same <code>docker compose</code> actions as before; streams live output.</p>
+              <p class="muted small"><strong>LEco DevOps</strong> — deploy/stop/down use <code>leco-app</code> (or <code>leco-devops</code>) with your manifest; restart/recreate/pause still use <code>docker compose</code>. Streaming shows live compose output where applicable.</p>
               <div id="hostedAppsControls" class="hosted-apps-controls"></div>
             </div>
           </div>
@@ -466,7 +607,7 @@
       <section id="routesTab" class="tab-content">
         <h2>Traefik routes</h2>
         <p class="muted small">
-          File-provider config at <code id="traefikRoutesPath">—</code> (mounted repo). Traefik reloads when the file changes. Mutations require the same
+          File-provider config at <code id="traefikRoutesPath">—</code> (mounted repo). With <code>watch: true</code>, Traefik reloads <code>dynamic.yml</code> when it changes — <strong>no Traefik container restart</strong> for route edits. Mutations require the same
           <strong>Control token</strong> as the Control tab when <code>DASHBOARD_CONTROL_TOKEN</code> is set.
         </p>
         <div class="routes-toolbar">
@@ -501,13 +642,19 @@
         </div>
         <h3 class="routes-subhead">Hosted apps (registry overlap)</h3>
         <p class="muted small">
-          Router/service keys derived from each app’s <code>leco.app.yaml</code> (same rules as <code>leco-app traefik-fragment</code>). <strong>Remove from registry</strong> also strips matching Traefik keys and deletes
-          <code>leco.local-cf.yaml</code> resources (KV/R2/D1) when checked below.
+          Router/service keys derived from each app’s <code>leco.app.yaml</code> (same rules as LEco DevOps <code>leco-app traefik-fragment</code>). <strong>Remove from registry</strong> runs <code>leco-app ecosystem-unregister</code>: strips Traefik keys, cleans <code>leco.local-cf.yaml</code> when checked, removes the registry row.
         </p>
         <div id="traefikHostedHints" class="routes-hosted-hints"></div>
         <h3 class="routes-subhead">Merge YAML fragment</h3>
         <p class="muted small">
-          Paste a snippet with top-level <code>http:</code> containing <code>routers</code> and/or <code>services</code>; keys are merged (overwriting on collision). A <code>.bak</code> copy is written first.
+          Load a fragment from a hosted app’s manifest via LEco DevOps <code>leco-app traefik-fragment</code>, or paste YAML manually. Top-level <code>http:</code> with <code>routers</code> / <code>services</code>; keys merge (overwrite on collision). Writes use an atomic replace; previous file is copied to <code>dynamic.yml.bak</code>.
+        </p>
+        <p class="routes-fragment-toolbar muted small">
+          <label class="routes-fragment-slug-label">Registry id
+            <input type="text" id="traefikFragmentSlug" class="routes-fragment-slug-input" placeholder="my-app" autocomplete="off" />
+          </label>
+          <button type="button" id="traefikLoadFragmentBtn" class="ctrl-act ctrl-act--ops">Load fragment from manifest</button>
+          <button type="button" id="traefikLoadMergeBtn" class="ctrl-act ctrl-act--ops">Load and merge into dynamic.yml</button>
         </p>
         <textarea id="traefikMergeYaml" class="routes-yaml-input" rows="10" spellcheck="false" placeholder="http:
   routers:
@@ -591,30 +738,6 @@
       </section>
     </div>
 
-    <div id="controlActionOverlay" class="control-action-overlay" hidden>
-      <div class="control-action-dialog" role="dialog" aria-modal="true" aria-labelledby="controlActionTitle">
-        <div class="control-action-dialog__inner">
-          <div id="controlActionSpinner" class="control-action-spinner" aria-hidden="true"></div>
-          <h3 id="controlActionTitle" class="control-action-title">Running…</h3>
-          <p id="controlActionLive" class="control-action-live">Starting…</p>
-          <p class="muted small control-action-hint">
-            Live output streams as Docker/bash prints lines. If this box stays empty for minutes behind <code>*.lh</code>, open the dashboard on
-            <strong>port 8090</strong> (direct to the container) or check <code>docker logs service-dashboard</code>.
-          </p>
-          <p id="controlActionSummary" class="control-action-summary is-hidden"></p>
-          <pre id="controlActionSnippet" class="control-action-snippet is-hidden"></pre>
-          <div id="controlActionRunningBar" class="control-action-bar">
-            <button type="button" id="controlActionCancel" class="ctrl-overlay-btn ctrl-overlay-btn--caution">Cancel request</button>
-          </div>
-          <p id="controlActionToast" class="control-action-toast is-hidden" role="status" aria-live="polite"></p>
-          <div id="controlActionDoneBar" class="control-action-done is-hidden">
-            <button type="button" id="controlActionCopy" class="ctrl-overlay-btn ctrl-overlay-btn--safe">Copy result</button>
-            <button type="button" id="controlActionDismiss" class="ctrl-overlay-btn ctrl-overlay-btn--primary">Close</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <div id="hostedChartExpandOverlay" class="hosted-chart-expand-overlay" hidden>
       <div class="hosted-chart-expand-dialog" role="dialog" aria-modal="true" aria-labelledby="hostedChartExpandTitle">
         <div class="hosted-chart-expand-head">
@@ -640,6 +763,31 @@
       </div>
     </div>
 
+    <div id="controlActionOverlay" class="control-action-overlay" hidden>
+      <div class="control-action-dialog" role="dialog" aria-modal="true" aria-labelledby="controlActionTitle">
+        <div class="control-action-dialog__inner">
+          <div id="controlActionSpinner" class="control-action-spinner" aria-hidden="true"></div>
+          <h3 id="controlActionTitle" class="control-action-title">Running…</h3>
+          <p id="controlActionLive" class="control-action-live">Starting…</p>
+          <p class="muted small control-action-hint">
+            Live output streams as Docker, shell scripts, or <code>leco-app</code> print lines (Control actions, <strong>Register application</strong>, …). If this box stays empty for minutes behind <code>*.lh</code>, open the dashboard on
+            <strong>port 8090</strong> (direct to the container) or check <code>docker logs service-dashboard</code>.
+          </p>
+          <p id="controlActionSummary" class="control-action-summary is-hidden"></p>
+          <pre id="controlActionSnippet" class="control-action-snippet is-hidden"></pre>
+          <div id="controlActionRunningBar" class="control-action-bar">
+            <button type="button" id="controlActionCancel" class="ctrl-overlay-btn ctrl-overlay-btn--caution">Cancel request</button>
+          </div>
+          <p id="controlActionToast" class="control-action-toast is-hidden" role="status" aria-live="polite"></p>
+          <div id="controlActionDoneBar" class="control-action-done is-hidden">
+            <button type="button" id="controlActionCopy" class="ctrl-overlay-btn ctrl-overlay-btn--safe">Copy result</button>
+            <button type="button" id="controlActionDismiss" class="ctrl-overlay-btn ctrl-overlay-btn--primary">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="application/json" id="dashboard-boot-config">{{ dashboard_boot | tojson }}</script>
     <script src="/static/service-brand.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>

@@ -16,6 +16,17 @@ from typing import Any
 
 import yaml
 
+try:
+    from leco_app.compose_runner import path_for_docker_daemon
+except ImportError:  # local dev without pip install -e tools/deploy-cli
+
+    def path_for_docker_daemon(container_path: Path) -> Path:  # type: ignore[misc]
+        try:
+            return container_path.resolve()
+        except OSError:
+            return container_path
+
+
 PROJECT_ROOT = os.getenv("DASHBOARD_PROJECT_ROOT", "/project")
 LECO_REGISTRY_PATH = os.getenv(
     "DASHBOARD_LECO_REGISTRY",
@@ -162,13 +173,30 @@ def parse_leco_manifest_for_compose(manifest_path: str) -> dict[str, Any] | None
     if not _allowed_path(compose_abs) or not os.path.isfile(compose_abs):
         return None
 
-    tail: list[str] = ["-f", compose_abs]
+    # Docker Desktop (dashboard in container + socket): bind sources must be host paths, not
+    # /workspace-parent/... which exists only in the dashboard container.
+    root_c = Path(root).resolve()
+    compose_c = Path(compose_abs).resolve()
+    root_for_compose = str(path_for_docker_daemon(root_c))
+    compose_for_daemon = str(path_for_docker_daemon(compose_c))
+
+    tail: list[str] = ["-f", compose_for_daemon]
+    extras = dc.get("additionalComposeFiles") or dc.get("additional_compose_files") or []
+    if isinstance(extras, list):
+        for ex in extras:
+            if not isinstance(ex, str) or not ex.strip():
+                continue
+            er = Path(ex.strip())
+            ex_abs = str(er.resolve()) if er.is_absolute() else str((Path(root) / er).resolve())
+            if not _allowed_path(ex_abs) or not os.path.isfile(ex_abs):
+                return None
+            tail.extend(["-f", str(path_for_docker_daemon(Path(ex_abs).resolve()))])
     env_file = _pick(dc, "envFile", "env_file")
     if env_file:
         ef = Path(env_file)
         ef_abs = str(ef.resolve()) if ef.is_absolute() else str((Path(root) / env_file).resolve())
         if os.path.isfile(ef_abs):
-            tail.extend(["--env-file", ef_abs])
+            tail.extend(["--env-file", str(path_for_docker_daemon(Path(ef_abs).resolve()))])
     pn = _pick(dc, "projectName", "project_name")
     if pn:
         tail.extend(["-p", str(pn)])
@@ -181,8 +209,117 @@ def parse_leco_manifest_for_compose(manifest_path: str) -> dict[str, Any] | None
 
     return {
         "manifest_path": manifest_path,
-        "root": root,
+        "root": root_for_compose,
         "compose_tail": tail,
+        "slug": slug,
+    }
+
+
+def parse_leco_effective_manifest_for_compose(manifest_path: str) -> dict[str, Any] | None:
+    """Compose metadata from bridge + ``leco.yaml`` (v3 profile ``infrastructure.dockerCompose``)."""
+    try:
+        from leco_app.schema import load_effective_manifest
+    except ImportError:
+        return None
+    mp = Path(manifest_path)
+    try:
+        m = load_effective_manifest(mp)
+    except Exception:
+        return None
+    dc = m.docker_compose
+    if dc is None:
+        return None
+    compose_rel = (dc.compose_file or "").strip()
+    if not compose_rel:
+        return None
+    root = m.resolved_root(mp)
+    root_s = str(root.resolve())
+    if not _allowed_path(root_s):
+        return None
+    cf = Path(compose_rel)
+    compose_abs = str(cf.resolve()) if cf.is_absolute() else str((root / compose_rel).resolve())
+    if not _allowed_path(compose_abs) or not os.path.isfile(compose_abs):
+        return None
+
+    root_c = Path(root).resolve()
+    compose_c = Path(compose_abs).resolve()
+    root_for_compose = str(path_for_docker_daemon(root_c))
+    compose_for_daemon = str(path_for_docker_daemon(compose_c))
+
+    tail: list[str] = ["-f", compose_for_daemon]
+    for extra in dc.additional_compose_files or []:
+        es = str(extra).strip()
+        if not es:
+            continue
+        er = Path(es)
+        ex_abs = str(er.resolve()) if er.is_absolute() else str((root / er).resolve())
+        if not _allowed_path(ex_abs) or not os.path.isfile(ex_abs):
+            return None
+        tail.extend(["-f", str(path_for_docker_daemon(Path(ex_abs).resolve()))])
+    env_file = dc.env_file
+    if env_file:
+        ef = Path(str(env_file).strip())
+        ef_abs = str(ef.resolve()) if ef.is_absolute() else str((Path(root) / env_file).resolve())
+        if os.path.isfile(ef_abs):
+            tail.extend(["--env-file", str(path_for_docker_daemon(Path(ef_abs).resolve()))])
+    pn = dc.project_name
+    if pn:
+        tail.extend(["-p", str(pn)])
+    for prof in dc.profiles or []:
+        if prof:
+            tail.extend(["--profile", str(prof)])
+
+    name = m.name
+    slug = _slug(str(name)) if name else _slug(Path(manifest_path).parent.name)
+
+    return {
+        "manifest_path": manifest_path,
+        "root": root_for_compose,
+        "compose_tail": tail,
+        "slug": slug,
+    }
+
+
+def _compose_meta_worker_only(manifest_path: str) -> dict[str, Any] | None:
+    """Registry row with no ``dockerCompose`` (Wrangler-only): still list in dashboard / Control."""
+    mp = Path(manifest_path)
+    try:
+        from leco_app.schema import load_effective_manifest
+
+        m = load_effective_manifest(mp)
+    except Exception:
+        try:
+            data = yaml.safe_load(mp.read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError, UnicodeDecodeError):
+            return None
+        if not isinstance(data, dict):
+            return None
+        root_rel = _pick(data, "root") or "."
+        manifest_dir = os.path.dirname(os.path.realpath(manifest_path))
+        root = os.path.realpath(os.path.join(manifest_dir, str(root_rel)))
+        if not _allowed_path(root):
+            return None
+        root_for = str(path_for_docker_daemon(Path(root).resolve()))
+        name = _pick(data, "name")
+        slug = _slug(str(name)) if name else _slug(Path(manifest_path).parent.name)
+        return {
+            "manifest_path": manifest_path,
+            "root": root_for,
+            "compose_tail": [],
+            "slug": slug,
+        }
+
+    root = m.resolved_root(mp)
+    root_s = str(root.resolve())
+    if not _allowed_path(root_s):
+        return None
+    root_for = str(path_for_docker_daemon(Path(root_s).resolve()))
+    name = m.name
+    slug = _slug(str(name)) if name else _slug(mp.parent.name)
+    return {
+        "manifest_path": manifest_path,
+        "root": root_for,
+        "compose_tail": [],
         "slug": slug,
     }
 
@@ -194,7 +331,11 @@ def leco_meta_for_slug(slug: str) -> dict[str, Any] | None:
         mp = resolve_manifest_path(str(entry["manifest"]).strip())
         if not mp:
             return None
-        parsed = parse_leco_manifest_for_compose(mp)
+        parsed = (
+            parse_leco_manifest_for_compose(mp)
+            or parse_leco_effective_manifest_for_compose(mp)
+            or _compose_meta_worker_only(mp)
+        )
         if not parsed:
             return None
         return {
@@ -286,9 +427,13 @@ def compose_ps_result(meta: dict[str, Any]) -> tuple[list[dict[str, Any]], int]:
     """Run compose ps -a --format json. Returns (rows, returncode). returncode -1 on exception."""
     import subprocess
 
+    tail = meta.get("compose_tail") or []
+    if not tail:
+        return [], 0
+
     try:
         p = subprocess.run(
-            ["docker", "compose", *meta["compose_tail"], "ps", "-a", "--format", "json"],
+            ["docker", "compose", *tail, "ps", "-a", "--format", "json"],
             cwd=meta["root"],
             capture_output=True,
             text=True,
@@ -309,6 +454,13 @@ def compose_ps_rows(meta: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def leco_stack_runtime(meta: dict[str, Any]) -> dict[str, Any]:
+    if not meta.get("compose_tail"):
+        return {
+            "kind": "stack",
+            "status": "no_compose",
+            "label": "No Docker Compose (Wrangler-only or compose only in leco.yaml)",
+            "running": None,
+        }
     rows, code = compose_ps_result(meta)
     if code == -1:
         return {

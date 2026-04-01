@@ -3,7 +3,7 @@ import os
 
 from flask import Flask, Response, abort, jsonify, render_template, request, stream_with_context
 
-from control import check_control_token, list_targets, run_action, run_action_streaming
+from control import CONTROL_TOKEN, check_control_token, list_targets, run_action, run_action_streaming
 from ollama_models import build_models_payload, handle_inspect, handle_models_action, list_manifest_backups
 from docs_catalog import get_doc_catalog, get_doc_content
 from monitor import (
@@ -16,6 +16,28 @@ from monitor import (
 from service_hub import get_hub_detail, list_hub_slugs
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
+
+
+def _dashboard_boot_dict() -> dict:
+    """Client boot: whether Control token is enforced, optional same-origin prefill (opt-in)."""
+    inject_ui = os.getenv("DASHBOARD_INJECT_CONTROL_TOKEN_UI", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    prefill = CONTROL_TOKEN if (inject_ui and CONTROL_TOKEN) else None
+    wsp_host = (
+        os.getenv("DASHBOARD_WORKSPACE_PARENT_HOST") or os.getenv("LECO_WORKSPACE_PARENT_HOST") or ""
+    ).strip()
+    proj_host = (
+        os.getenv("DASHBOARD_PROJECT_ROOT_HOST") or os.getenv("LECO_PROJECT_ROOT_HOST") or ""
+    ).strip()
+    return {
+        "token_required": bool(CONTROL_TOKEN),
+        "prefill_control_token": prefill,
+        "workspace_parent_host": wsp_host or None,
+        "project_root_host": proj_host or None,
+    }
 
 
 @app.get("/api/overview")
@@ -190,6 +212,234 @@ def api_traefik_routes():
     return jsonify(traefik_routes_with_hosted_hints())
 
 
+@app.get("/api/leco/browse")
+def api_leco_browse():
+    """List subdirectories under project or workspace-parent (safe path)."""
+    from leco_detect import browse_leco_directories
+
+    root_kind = (request.args.get("root") or "project").strip().lower()
+    if root_kind not in ("project", "wsp"):
+        return jsonify({"ok": False, "error": "root must be project or wsp"}), 400
+    sub = (request.args.get("path") or "").strip()
+    return jsonify(browse_leco_directories(root_kind, sub))
+
+
+@app.get("/api/leco/register-samples")
+def api_leco_register_samples():
+    """Preset manifest + sidecar profile YAML for the registration wizard."""
+    from leco_detect import register_yaml_samples
+
+    return jsonify({"ok": True, "samples": register_yaml_samples()})
+
+
+@app.post("/api/leco/detect")
+def api_leco_detect():
+    """Scan an allowed app directory (compose / wrangler / archetype hints)."""
+    from leco_detect import (
+        preview_registration_yaml,
+        read_existing_registration_yaml,
+        registration_path_field_for_ui,
+        resolve_registration_path,
+        scan_app_directory,
+        slugify_app_id,
+    )
+    from leco_materialize import registration_yaml_status
+
+    data = request.get_json(silent=True) or {}
+    p = (data.get("path") or "").strip()
+    if not p:
+        return jsonify({"ok": False, "error": "path required"}), 400
+    try:
+        root = resolve_registration_path(p)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    out = dict(scan_app_directory(root))
+    out["path_field"] = registration_path_field_for_ui(root)
+    em, el = read_existing_registration_yaml(root)
+    out["existing_manifest_yaml"] = em
+    out["existing_localhost_yaml"] = el
+    preview_id = (data.get("app_id") or "").strip() or root.name
+    preview_id = slugify_app_id(preview_id)
+    my, ly = preview_registration_yaml(root, preview_id)
+    out["manifest_yaml_preview"] = my
+    out["localhost_yaml_preview"] = ly
+    out["registration_yaml_status"] = registration_yaml_status(p, preview_id)
+    return jsonify({"ok": True, **out})
+
+
+@app.post("/api/leco/validate-yaml")
+def api_leco_validate_yaml():
+    """Parse and validate wizard YAML against LEco ApplicationManifest / LocalhostProfile (no token)."""
+    from leco_validate import validate_registration_yaml
+
+    data = request.get_json(silent=True) or {}
+    my = data.get("manifest_yaml")
+    ly = data.get("localhost_yaml")
+    if not isinstance(my, str):
+        my = None
+    if not isinstance(ly, str):
+        ly = None
+    payload = validate_registration_yaml(my, ly)
+    return jsonify({"ok": True, **payload})
+
+
+@app.post("/api/leco/yaml-status")
+def api_leco_yaml_status():
+    """Whether ``leco.app.yaml`` + localhost profile exist (no token)."""
+    from leco_detect import resolve_registration_path
+    from leco_materialize import registration_yaml_status
+
+    data = request.get_json(silent=True) or {}
+    p = (data.get("path") or "").strip()
+    app_id = (data.get("app_id") or data.get("id") or "").strip()
+    if not p:
+        return jsonify({"ok": False, "error": "path required"}), 400
+    try:
+        resolve_registration_path(p)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    st = registration_yaml_status(p, app_id or None)
+    return jsonify({"ok": True, **st})
+
+
+@app.post("/api/leco/generate-yaml")
+def api_leco_generate_yaml():
+    """Scan app root and write ``leco.app.yaml`` + localhost profile (control token)."""
+    from leco_materialize import materialize_registration_yaml
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    path_rel = (data.get("path") or "").strip()
+    app_id = (data.get("app_id") or data.get("id") or "").strip()
+    if not path_rel or not app_id:
+        return jsonify({"ok": False, "error": "path and app_id required"}), 400
+    try:
+        result = materialize_registration_yaml(path_rel, app_id)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except OSError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    return jsonify({"ok": True, **result})
+
+
+@app.post("/api/leco/save-yaml")
+def api_leco_save_yaml():
+    """Validate and write manifest + localhost YAML from the editor (control token)."""
+    from leco_materialize import save_registration_yaml
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    path_rel = (data.get("path") or "").strip()
+    app_id = (data.get("app_id") or data.get("id") or "").strip()
+    my = data.get("manifest_yaml")
+    ly = data.get("localhost_yaml")
+    if not isinstance(my, str) or not isinstance(ly, str):
+        return jsonify({"ok": False, "error": "manifest_yaml and localhost_yaml strings required"}), 400
+    if not path_rel or not app_id:
+        return jsonify({"ok": False, "error": "path and app_id required"}), 400
+    try:
+        result = save_registration_yaml(path_rel, app_id, my, ly)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except OSError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    return jsonify({"ok": True, **result})
+
+
+@app.post("/api/leco/register")
+def api_leco_register():
+    """Run ``leco-app ecosystem-register`` using YAML already on disk (control token)."""
+    from leco_registration import register_app_wizard
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    path_rel = (data.get("path") or "").strip()
+    app_id = (data.get("app_id") or data.get("id") or "").strip()
+    label = (data.get("label") or "").strip()
+    if not path_rel or not app_id:
+        return jsonify({"ok": False, "error": "path and app_id required"}), 400
+    deploy_stack = bool(data.get("deploy_stack"))
+    try:
+        result = register_app_wizard(
+            path_rel,
+            app_id,
+            label,
+            deploy_stack=deploy_stack,
+        )
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except OSError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    return jsonify(result)
+
+
+@app.post("/api/leco/register/stream")
+def api_leco_register_stream():
+    """NDJSON stream: log lines from register + ecosystem-register, then `{type:done,result:{...}}`."""
+    from leco_registration import iterate_register_app_wizard
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    path_rel = (data.get("path") or "").strip()
+    app_id = (data.get("app_id") or data.get("id") or "").strip()
+    label = (data.get("label") or "").strip()
+    if not path_rel or not app_id:
+        return jsonify({"ok": False, "error": "path and app_id required"}), 400
+    deploy_stack = bool(data.get("deploy_stack"))
+
+    @stream_with_context
+    def ndjson():
+        try:
+            for ev in iterate_register_app_wizard(
+                path_rel,
+                app_id,
+                label,
+                deploy_stack=deploy_stack,
+            ):
+                yield json.dumps(ev, ensure_ascii=False) + "\n"
+        except GeneratorExit:
+            raise
+        except Exception as exc:
+            yield json.dumps(
+                {"type": "done", "result": {"ok": False, "error": str(exc)}},
+                ensure_ascii=False,
+            ) + "\n"
+
+    return Response(
+        ndjson(),
+        mimetype="text/plain; charset=utf-8",
+        headers={
+            "Cache-Control": "no-store, no-transform",
+            "X-Accel-Buffering": "no",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@app.post("/api/hosted/upload-zip")
+def api_hosted_upload_zip():
+    """Extract zip into hosting/app-available/<slug>/; delete archive after extract (control token)."""
+    from pathlib import Path
+
+    from hosted_zip_upload import host_zip_upload
+    from leco_subprocess import PROJECT_ROOT
+
+    form = request.form.to_dict(flat=True)
+    if not check_control_token(request, form):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    app_id = (form.get("app_id") or form.get("slug") or "").strip()
+    upload = request.files.get("file")
+    try:
+        result = host_zip_upload(Path(PROJECT_ROOT).resolve(), app_id, upload)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    return jsonify(result)
+
+
 @app.post("/api/hosted-apps/<slug>/offboard")
 def api_hosted_offboard(slug: str):
     from hosted_offboard import offboard_hosted_app
@@ -218,6 +468,42 @@ def api_traefik_merge_fragment():
         return jsonify({"ok": False, "error": "yaml / fragment required"}), 400
     ok, msg = merge_http_fragment(frag)
     return jsonify({"ok": ok, "message": msg}), (200 if ok else 400)
+
+
+@app.post("/api/traefik/fragment-from-manifest")
+def api_traefik_fragment_from_manifest():
+    """Run LEco DevOps traefik-fragment for a registry app manifest (stdout YAML)."""
+    from pathlib import Path
+
+    from leco_control import load_leco_registry_entries, resolve_manifest_path
+    from leco_subprocess import run_traefik_fragment
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    slug = (data.get("slug") or "").strip()
+    if not slug:
+        return jsonify({"ok": False, "error": "slug required"}), 400
+    manifest_rel = None
+    for entry in load_leco_registry_entries():
+        if not isinstance(entry, dict):
+            continue
+        if str(entry.get("id") or "").strip() != slug:
+            continue
+        manifest_rel = (entry.get("manifest") or "").strip()
+        break
+    if not manifest_rel:
+        return jsonify({"ok": False, "error": f"no registry entry for {slug!r}"}), 404
+    abs_m = resolve_manifest_path(manifest_rel)
+    if not abs_m or not Path(abs_m).is_file():
+        return jsonify({"ok": False, "error": "manifest not found"}), 400
+    code, stdout, combined = run_traefik_fragment(Path(abs_m))
+    if code != 0:
+        return (
+            jsonify({"ok": False, "error": combined[-4000:] if combined else f"exit {code}"}),
+            400,
+        )
+    return jsonify({"ok": True, "yaml": stdout, "manifest": manifest_rel})
 
 
 @app.post("/api/traefik/strip-keys")
@@ -322,7 +608,7 @@ def api_control_stream():
 
 @app.get("/")
 def home():
-    return render_template("index.html")
+    return render_template("index.html", dashboard_boot=_dashboard_boot_dict())
 
 
 @app.get("/hub")

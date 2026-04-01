@@ -12,7 +12,7 @@ This guide covers **starting, updating, stopping, and debugging** the stack afte
 | CLI | `./ai-stack/ai-stack.sh <action> [service]` | Scripts and CI |
 | Per-service script | `./ai-stack/services/<name>.sh <action>` | Direct control of one unit |
 | Dashboard **Control** tab | http://localhost.lh | Platform targets (AI stack, infra, CF-local) with optional token |
-| Dashboard **Hosted apps** tab | http://localhost.lh | Per registered leco app: metrics, charts, logs, insights, compose controls (`leco-stack-<id>`) |
+| Dashboard **Hosted apps** tab | http://localhost.lh | Per registered LEco DevOps app: metrics, charts, logs, insights, compose controls (`leco-stack-<id>`) |
 
 Always run commands from the **repository root** (or pass absolute paths). The variable **`PROJECT_ROOT`** is inferred from each service script’s location.
 
@@ -35,6 +35,14 @@ Most **`ai-stack/services/*.sh`** scripts support:
 | `logs` | Follow logs |
 
 **Dashboard (`dashboard.sh`):** **`start` / `deploy`** rebuild the Docker image from **`dashboard/`** and recreate **`service-dashboard`**. On **macOS**, **`stop`** and **`remove`** also **uninstall** the host CPU metrics LaunchAgent (see SETUP.md).
+
+**Dashboard control token:** If **`DASHBOARD_CONTROL_TOKEN`** is **unset**, the Control API and Hosted apps / Routes mutations do not require a token, and the UI does not block those actions for a missing browser token. If **`DASHBOARD_CONTROL_TOKEN`** is **set**, the browser must send that value (Control tab **Save** persists it in `localStorage`). For **trusted local / single-user** setups only, **`DASHBOARD_INJECT_CONTROL_TOKEN_UI=1`** (or `true` / `yes`) embeds the same token in the main dashboard HTML and seeds `localStorage` on each load so you do not type it manually — **do not enable on internet-exposed dashboards** (the token is visible in page source and DevTools). Example extras on `docker run`: `-e DASHBOARD_CONTROL_TOKEN=…` and `-e DASHBOARD_INJECT_CONTROL_TOKEN_UI=1`. See comments in **`ai-stack/services/dashboard.sh`**.
+
+**Docker Compose from the dashboard (Docker Desktop):** Hosted **Deploy** runs `docker compose` inside `service-dashboard` with the host socket. Bind-mount sources must be paths the **daemon** knows (host file sharing). The dashboard image mounts the workspace parent at **`/workspace-parent`** and again at its **host absolute path**, and sets **`LECO_WORKSPACE_PARENT_HOST`** / **`LECO_PROJECT_ROOT_HOST`**. **LEco DevOps** remaps compose `-f`, `--env-file`, and **cwd** so volume paths resolve on the host. Redeploy the dashboard after changing `dashboard.sh`.
+
+**Hosted apps / read-only `wsp:` paths:** Sibling repos are mounted read-only at **`/workspace-parent`**. **Register** cannot write `leco.app.yaml` there. The dashboard **materializes** under **`hosting/app-available/<slug>/`** (writable `/project`), adds a **`source`** symlink to the real app tree so compose/wrangler paths keep working, links **`hosting/app-enabled/<slug>`** → **`../app-available/<slug>`**, and registers **`hosting/app-enabled/<slug>/leco.app.yaml`** in **`config/leco-registry.yaml`**. See **`hosting/README.md`** and **`docs/LECO_APP_BLUEPRINT.md`**. **Zip upload:** `POST /api/hosted/upload-zip` (multipart **`file`**, form **`app_id`** or **`slug`**, control token in header or form) extracts into **`hosting/app-available/<slug>/`** with zip-slip checks, max **200 MiB**, then **deletes the uploaded zip**. Use **Detect** / **Register** with path **`hosting/app-enabled/<slug>`** (or materialize flow) after uploading.
+
+**Hosted apps — Remove / Reset:** the dashboard runs **`leco-app ecosystem-unregister`**, which performs **`docker compose down`** first ( **`down -v`** on **Reset** ) when the manifest has compose and the compose file exists, then unregister, Traefik cleanup when applicable, optional local CF teardown, and removal of **`hosting/app-enabled`** / **`hosting/app-available`** when the manifest was under hosting. If **`down`** fails, unregister still proceeds. Extra compose files: **`infrastructure.dockerCompose.additionalComposeFiles`** in **`leco.yaml`** — see **`docs/DEPLOY_CLI.md`**.
 
 **Cloudflare-local (`cloudflare-local.sh`):** wraps **`docker compose`**; see script for **`recreate`**, **`backup`**, etc.
 
@@ -99,6 +107,8 @@ Bulk Control actions intentionally avoid tearing down **Traefik** (routing), **P
 | Dashboard — rebuild image + recreate | `./ai-stack/ai-stack.sh deploy dashboard` or `./ai-stack/services/dashboard.sh deploy` |
 | Dashboard — restart (same rebuild path as deploy) | `./ai-stack/ai-stack.sh restart dashboard` |
 | Dashboard — stop | `./ai-stack/ai-stack.sh stop dashboard` |
+
+All scripts under **`ai-stack/services/*.sh`** are tracked **executable** (`100755`) and start with **`#!/usr/bin/env bash`** so direct paths such as **`./ai-stack/services/dashboard.sh deploy`**, **`./ai-stack/services/traefik.sh restart`**, and **`./ai-stack/services/cloudflare-local.sh start`** work on a fresh clone. (`ai-stack.sh` still **`source`**s them — the shebang line is a comment when sourced.) If you see **permission denied**, run **`bash ai-stack/services/<name>.sh …`** or **`chmod +x ai-stack/services/<name>.sh`**.
 
 **Ops dashboard + Traefik on Docker Desktop (macOS):** The dashboard container mounts the repo at `/project` and talks to the host Docker daemon via the socket. `docker run -v …` bind sources must be **host** paths (e.g. `/Users/you/.../local-ecosystem`), not `/project/...`. `dashboard.sh` sets `DASHBOARD_DOCKER_BIND_ROOT` automatically; Traefik’s script uses it for `/traefik` and `/certs` mounts. If Traefik was created **before** this (or the env is missing), remove the old container (`docker rm -f traefik`) and start again from the host or **Control** — do not only “Start” the broken container in Docker Desktop. Ensure **Docker Desktop → Settings → Resources → File sharing** includes your repo directory if it lives outside the default allowed paths.
 

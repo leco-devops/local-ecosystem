@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import re
 import subprocess
@@ -41,49 +43,313 @@ def _read_manifest_raw(manifest_path: str) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
+def _empty_manifest_ui() -> dict[str, Any]:
+    return {
+        "routes": [],
+        "health_urls": [],
+        "local_host_profile": None,
+        "localhost_archetype": None,
+        "localhost_urls": [],
+        "localhost_lifecycle": {},
+        "application_version": None,
+        "deploy_fingerprint": None,
+        "local_cf": {"present": False},
+        "wrangler_expected": {},
+        "local_cf_public_prefix": None,
+        "local_cf_adapter_hosts": None,
+    }
+
+
+def _merge_localhost_yaml(file_data: dict[str, Any], inline: dict[str, Any]) -> dict[str, Any]:
+    out = dict(file_data) if file_data else {}
+    if not inline:
+        return out
+    if inline.get("archetype"):
+        out["archetype"] = inline["archetype"]
+    elif not out.get("archetype"):
+        out["archetype"] = "generic"
+    u_f = out.get("urls") if isinstance(out.get("urls"), list) else []
+    u_i = inline.get("urls") if isinstance(inline.get("urls"), list) else []
+    out["urls"] = u_f + u_i
+    lc_f = out.get("lifecycle") if isinstance(out.get("lifecycle"), dict) else {}
+    lc_i = inline.get("lifecycle") if isinstance(inline.get("lifecycle"), dict) else {}
+    merged_lc: dict[str, Any] = {}
+    for k in ("prepare", "build", "preStart"):
+        a = lc_f.get(k) if isinstance(lc_f.get(k), list) else []
+        b = lc_i.get(k) if isinstance(lc_i.get(k), list) else []
+        merged_lc[k] = list(a) + list(b)
+    if merged_lc:
+        out["lifecycle"] = merged_lc
+    n1 = (out.get("notes") or "").strip()
+    n2 = (inline.get("notes") or "").strip()
+    if n1 and n2:
+        out["notes"] = f"{n1}\n\n{n2}"
+    elif n2:
+        out["notes"] = n2
+    return out
+
+
+def _manifest_deploy_fingerprint(manifest_path: str) -> dict[str, Any] | None:
+    p = Path(manifest_path)
+    try:
+        st = p.stat()
+        raw = p.read_bytes()
+        if len(raw) > 524_288:
+            raw = raw[:524_288]
+        short = hashlib.sha256(raw).hexdigest()[:12]
+        return {
+            "short_hash": short,
+            "mtime_iso": datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat(),
+            "size_bytes": st.st_size,
+        }
+    except OSError:
+        return None
+
+
+def _application_version_from_manifest(data: dict[str, Any], manifest_path: str) -> str | None:
+    for key in (
+        "applicationVersion",
+        "application_version",
+        "appVersion",
+        "app_version",
+        "version",
+    ):
+        v = data.get(key)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    try:
+        from leco_app.schema import load_manifest
+
+        m = load_manifest(Path(manifest_path))
+        if m.application_version and str(m.application_version).strip():
+            return str(m.application_version).strip()
+    except Exception:
+        pass
+    try:
+        root_rel = str(data.get("root") or ".").strip() or "."
+        mp = Path(manifest_path)
+        root = Path(root_rel).resolve() if Path(root_rel).is_absolute() else (mp.parent / root_rel).resolve()
+        pj = root / "package.json"
+        if pj.is_file():
+            pkg = json.loads(pj.read_text(encoding="utf-8"))
+            pv = pkg.get("version")
+            if isinstance(pv, str) and pv.strip():
+                return f"package.json:{pv.strip()}"
+    except Exception:
+        pass
+    return None
+
+
+def _read_local_cf_ui(manifest_path: str) -> dict[str, Any]:
+    p = Path(manifest_path).resolve().parent / "leco.local-cf.yaml"
+    base: dict[str, Any] = {"present": False, "path": str(p)}
+    if not p.is_file():
+        return base
+    try:
+        doc = yaml.safe_load(p.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError, UnicodeDecodeError) as e:
+        return {**base, "present": True, "error": str(e)[:200]}
+    if not isinstance(doc, dict):
+        return {**base, "present": True, "error": "not a mapping"}
+    kv_rows = doc.get("kv") if isinstance(doc.get("kv"), list) else []
+    r2_rows = doc.get("r2") if isinstance(doc.get("r2"), list) else []
+    d1_rows = doc.get("d1") if isinstance(doc.get("d1"), list) else []
+    return {
+        "present": True,
+        "path": str(p),
+        "app": doc.get("app"),
+        "wrangler_env": doc.get("wranglerEnv"),
+        "adapters": doc.get("adapters"),
+        "kv": [
+            {
+                "binding": (r.get("binding") if isinstance(r, dict) else None),
+                "local_namespace": (r.get("localNamespace") if isinstance(r, dict) else None),
+            }
+            for r in kv_rows
+            if isinstance(r, dict)
+        ],
+        "r2": [
+            {
+                "binding": (r.get("binding") if isinstance(r, dict) else None),
+                "bucket": (r.get("bucketName") if isinstance(r, dict) else None),
+            }
+            for r in r2_rows
+            if isinstance(r, dict)
+        ],
+        "d1": [
+            {
+                "binding": (r.get("binding") if isinstance(r, dict) else None),
+                "database": (r.get("databaseName") if isinstance(r, dict) else None),
+            }
+            for r in d1_rows
+            if isinstance(r, dict)
+        ],
+    }
+
+
+def _wrangler_resource_expectations(manifest_path: str) -> dict[str, Any]:
+    try:
+        from leco_app.schema import load_effective_manifest
+        from leco_app.wrangler_cf_resources import parse_wrangler_cf_resources
+    except ImportError:
+        return {
+            "available": False,
+            "note": "leco_app (deploy-cli) not installed in this environment.",
+        }
+    mp = Path(manifest_path)
+    if not mp.is_file():
+        return {"available": False, "note": "manifest file not found"}
+    try:
+        m = load_effective_manifest(mp)
+    except Exception as e:
+        return {"available": False, "note": str(e)[:200]}
+    if not m.cloudflare or not (m.cloudflare.wrangler_config or "").strip():
+        return {
+            "available": True,
+            "wrangler_configured": False,
+            "note": "No cloudflare.wranglerConfig (leco.yaml infrastructure or leco.app.yaml) — KV/R2/D1 local map is N/A.",
+        }
+    root = m.resolved_root(mp)
+    wp = (root / m.cloudflare.wrangler_config).resolve()
+    env = m.cloudflare.wrangler_env
+    out: dict[str, Any] = {
+        "available": True,
+        "wrangler_configured": True,
+        "wrangler_path": str(wp),
+        "wrangler_env": env,
+        "provision_local_resources": m.cloudflare.provision_local_resources,
+        "expected_kv": [],
+        "expected_r2": [],
+        "expected_d1": [],
+        "browser_binding": None,
+    }
+    if not wp.is_file():
+        out["note"] = f"Wrangler file missing at {wp}"
+        return out
+    plan = parse_wrangler_cf_resources(wp, env)
+    out["expected_kv"] = [{"binding": r.binding, "cf_id": r.cf_id} for r in plan.kv]
+    out["expected_r2"] = [{"binding": r.binding, "bucket_name": r.bucket_name} for r in plan.r2]
+    out["expected_d1"] = [{"binding": r.binding, "database_name": r.database_name} for r in plan.d1]
+    try:
+        import tomllib
+
+        td = tomllib.loads(wp.read_text(encoding="utf-8"))
+        br = td.get("browser")
+        if isinstance(br, dict):
+            b = br.get("binding")
+            if isinstance(b, str) and b.strip():
+                out["browser_binding"] = b.strip()
+    except Exception:
+        pass
+    return out
+
+
+def _routing_entries_to_rows(entries: Any) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    if not isinstance(entries, list):
+        return out
+    for e in entries:
+        if not isinstance(e, dict):
+            continue
+        hn = _pick(e, "hostname", "hostName")
+        if hn:
+            row: dict[str, Any] = {"hostname": str(hn)}
+            ap = _pick(e, "apiPathPrefix", "api_path_prefix")
+            if ap:
+                row["api_path_prefix"] = str(ap)
+            fe = _pick(e, "frontend", "Frontend")
+            if isinstance(fe, dict):
+                row["frontend"] = {
+                    "host": str(_pick(fe, "host", "Host") or ""),
+                    "port": _pick(fe, "port", "Port"),
+                }
+            be = _pick(e, "apiBackend", "api_backend", "ApiBackend")
+            if isinstance(be, dict):
+                row["api_backend"] = {
+                    "host": str(_pick(be, "host", "Host") or ""),
+                    "port": _pick(be, "port", "Port"),
+                }
+            bh = _pick(e, "backendHost", "backend_host")
+            bp = _pick(e, "backendPort", "backend_port")
+            if bh:
+                row["backend"] = {"host": str(bh), "port": bp}
+            out.append(row)
+    return out
+
+
 def manifest_ui_fields(manifest_path: str) -> dict[str, Any]:
     """Safe manifest excerpts for the UI (no secrets)."""
     data = _read_manifest_raw(manifest_path)
     if not data:
-        return {"routes": [], "health_urls": []}
+        return _empty_manifest_ui()
     routes: list[dict[str, Any]] = []
     routing = _pick(data, "routing", "Routing")
     if isinstance(routing, dict):
-        entries = routing.get("entries") or []
-        if isinstance(entries, list):
-            for e in entries:
-                if not isinstance(e, dict):
-                    continue
-                hn = _pick(e, "hostname", "hostName")
-                if hn:
-                    row: dict[str, Any] = {"hostname": str(hn)}
-                    ap = _pick(e, "apiPathPrefix", "api_path_prefix")
-                    if ap:
-                        row["api_path_prefix"] = str(ap)
-                    fe = _pick(e, "frontend", "Frontend")
-                    if isinstance(fe, dict):
-                        row["frontend"] = {
-                            "host": str(_pick(fe, "host", "Host") or ""),
-                            "port": _pick(fe, "port", "Port"),
-                        }
-                    be = _pick(e, "apiBackend", "api_backend", "ApiBackend")
-                    if isinstance(be, dict):
-                        row["api_backend"] = {
-                            "host": str(_pick(be, "host", "Host") or ""),
-                            "port": _pick(be, "port", "Port"),
-                        }
-                    bh = _pick(e, "backendHost", "backend_host")
-                    bp = _pick(e, "backendPort", "backend_port")
-                    if bh:
-                        row["backend"] = {"host": str(bh), "port": bp}
-                    routes.append(row)
+        routes.extend(_routing_entries_to_rows(routing.get("entries")))
     health_urls: list[str] = []
     hu = data.get("healthcheckUrls") or data.get("healthcheck_urls")
     if isinstance(hu, list):
         for x in hu:
             if isinstance(x, str) and x.strip():
                 health_urls.append(x.strip())
-    return {"routes": routes, "health_urls": health_urls}
+
+    lhp = _pick(data, "localHostProfile", "local_host_profile")
+    local_host_profile = str(lhp).strip() if lhp else None
+    mp = Path(manifest_path)
+    file_loc: dict[str, Any] = {}
+    if local_host_profile:
+        lp = mp.parent / local_host_profile
+        if lp.is_file():
+            try:
+                raw_l = yaml.safe_load(lp.read_text(encoding="utf-8"))
+                file_loc = raw_l if isinstance(raw_l, dict) else {}
+            except (OSError, yaml.YAMLError, UnicodeDecodeError):
+                file_loc = {}
+    inline_loc = data.get("localhost")
+    if not isinstance(inline_loc, dict):
+        inline_loc = {}
+    merged_loc = _merge_localhost_yaml(file_loc, inline_loc)
+    infra_prof = file_loc.get("infrastructure") if isinstance(file_loc.get("infrastructure"), dict) else {}
+    rt_prof = infra_prof.get("routing") if isinstance(infra_prof.get("routing"), dict) else {}
+    if rt_prof:
+        routes.extend(_routing_entries_to_rows(rt_prof.get("entries")))
+    lc = merged_loc.get("lifecycle") if isinstance(merged_loc.get("lifecycle"), dict) else {}
+    urls_out = merged_loc.get("urls") if isinstance(merged_loc.get("urls"), list) else []
+
+    app_ver = _application_version_from_manifest(data, manifest_path)
+    fp = _manifest_deploy_fingerprint(manifest_path)
+
+    cf_block = data.get("cloudflare") or data.get("Cloudflare")
+    if not isinstance(cf_block, dict):
+        cf_block = {}
+    cf_infra = infra_prof.get("cloudflare") if isinstance(infra_prof.get("cloudflare"), dict) else {}
+    lcp: str | None = None
+    adapter_hosts: dict[str, str] | None = None
+    for blk in (cf_block, cf_infra):
+        raw_p = blk.get("localCfPublicPrefix") or blk.get("local_cf_public_prefix")
+        if isinstance(raw_p, str) and raw_p.strip():
+            lcp = raw_p.strip().lower()
+            adapter_hosts = {
+                "kv": f"https://{lcp}-kv.lh",
+                "r2": f"https://{lcp}-r2.lh",
+                "d1": f"https://{lcp}-d1.lh",
+            }
+            break
+
+    return {
+        "routes": routes,
+        "health_urls": health_urls,
+        "local_host_profile": local_host_profile,
+        "localhost_archetype": merged_loc.get("archetype"),
+        "localhost_urls": urls_out,
+        "localhost_lifecycle": lc,
+        "application_version": app_ver,
+        "deploy_fingerprint": fp,
+        "local_cf": _read_local_cf_ui(manifest_path),
+        "wrangler_expected": _wrangler_resource_expectations(manifest_path),
+        "local_cf_public_prefix": lcp,
+        "local_cf_adapter_hosts": adapter_hosts,
+    }
 
 
 def _container_name_from_ps_row(row: dict[str, Any]) -> str:
@@ -224,6 +490,10 @@ def list_hosted_apps() -> dict[str, Any]:
                 "runtime": rt,
                 "routes": mf["routes"],
                 "health_urls": mf["health_urls"],
+                "local_host_profile": mf.get("local_host_profile"),
+                "localhost_archetype": mf.get("localhost_archetype"),
+                "localhost_urls": mf.get("localhost_urls") or [],
+                "application_version": mf.get("application_version"),
             }
         )
     return {
@@ -249,6 +519,7 @@ def snapshot_for_slug(slug: str) -> dict[str, Any]:
         "compose_ps_ok": code == 0,
         "services": services,
         "aggregate": agg,
+        "manifest_ui": manifest_ui_fields(meta["manifest_path"]),
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
 

@@ -1089,7 +1089,8 @@ button.ctrl-bulk--unpause {
 .control-action-overlay {
   position: fixed;
   inset: 0;
-  z-index: 10000;
+  /* Above hosted Browse (12000), chart expand (10045), app confirm (10050) */
+  z-index: 32000;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2525,6 +2526,358 @@ button.dev-open-doc:hover {
   margin-top: 12px;
 }
 
+.hosted-register-panel {
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(100, 116, 139, 0.35);
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.hosted-register-panel__summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.hosted-register-panel__body {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hosted-register-path-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.hosted-register-path-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.hosted-register-field--grow {
+  flex: 1 1 220px;
+  min-width: 200px;
+}
+
+.hosted-register-sample-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.hosted-register-sample-row select {
+  flex: 1 1 180px;
+  min-width: 160px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(100, 116, 139, 0.45);
+  background: rgba(15, 23, 42, 0.8);
+  color: inherit;
+  font-size: 13px;
+}
+
+.hosted-register-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+
+.hosted-register-check input {
+  margin-top: 3px;
+}
+
+.hosted-browse-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.hosted-browse-modal.is-hidden {
+  display: none;
+}
+
+.hosted-browse-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.hosted-browse-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(520px, 100%);
+  max-height: min(80vh, 640px);
+  display: flex;
+  flex-direction: column;
+  padding: 18px 20px;
+  border-radius: 12px;
+  border: 1px solid rgba(100, 116, 139, 0.45);
+  background: rgba(15, 23, 42, 0.98);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+
+.hosted-browse-title {
+  margin: 0 0 8px;
+  font-size: 1.1rem;
+}
+
+.hosted-browse-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.hosted-browse-root-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.hosted-browse-root-label select {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(100, 116, 139, 0.45);
+  background: rgba(15, 23, 42, 0.8);
+  color: inherit;
+}
+
+.hosted-browse-crumb {
+  margin: 0 0 8px;
+  word-break: break-all;
+}
+
+.hosted-browse-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 120px;
+  max-height: 40vh;
+  border: 1px solid rgba(100, 116, 139, 0.35);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.hosted-browse-list li {
+  margin: 0;
+  border-bottom: 1px solid rgba(100, 116, 139, 0.2);
+}
+
+.hosted-browse-list button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  color: #e2e8f0;
+  font-size: 14px;
+  cursor: pointer;
+  font-family: ui-monospace, monospace;
+}
+
+.hosted-browse-list button:hover {
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.hosted-browse-err {
+  color: #fca5a5;
+  margin: 0 0 8px;
+}
+
+.hosted-browse-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.hosted-register-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.hosted-register-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.hosted-register-field--full {
+  grid-column: 1 / -1;
+}
+
+.hosted-register-field input,
+.hosted-register-field textarea {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(100, 116, 139, 0.45);
+  background: rgba(15, 23, 42, 0.8);
+  color: inherit;
+}
+
+.hosted-register-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.hosted-reg-busy {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(129, 140, 248, 0.45);
+  background: rgba(79, 70, 229, 0.18);
+  font-size: 14px;
+  color: #e0e7ff;
+}
+
+.hosted-reg-busy.is-hidden {
+  display: none !important;
+}
+
+.hosted-reg-busy__spin {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: 2px solid rgba(167, 139, 250, 0.25);
+  border-top-color: var(--violet);
+  border-radius: 50%;
+  animation: control-action-spin 0.85s linear infinite;
+}
+
+.hosted-yaml-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 4px;
+}
+
+.hosted-yaml-toolbar .ctrl-act {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
+.hosted-reg-pre {
+  margin: 0;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  font-size: 11px;
+  max-height: 200px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.hosted-reg-yaml-report {
+  max-height: 280px;
+  margin-top: 8px;
+  border: 1px solid rgba(100, 116, 139, 0.35);
+}
+
+.hosted-reg-yaml-report--pass {
+  border-color: rgba(34, 197, 94, 0.45);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.hosted-reg-yaml-report--fail {
+  border-color: rgba(248, 113, 113, 0.5);
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.hosted-reg-msg--error {
+  color: #fca5a5;
+}
+
+.hosted-lifecycle-phase {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.hosted-lifecycle-phase ul {
+  margin: 4px 0 0;
+  padding-left: 1.2rem;
+}
+
+.hosted-local-profile {
+  margin-bottom: 14px;
+  font-size: 13px;
+}
+
+.hosted-local-profile__title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.hosted-local-profile table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.hosted-local-profile th,
+.hosted-local-profile td {
+  border: 1px solid rgba(100, 116, 139, 0.35);
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.hosted-cf-resources {
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+.hosted-cf-resources__title {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.hosted-cf-resources__why {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(100, 116, 139, 0.45);
+  background: rgba(15, 23, 42, 0.55);
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(226, 232, 240, 0.92);
+}
+
+.hosted-cf-resources__table {
+  margin-top: 8px;
+}
+
+.hosted-cf-resources__warn {
+  color: #fca5a5;
+  margin-top: 8px;
+}
+
 .hosted-apps-kpi {
   display: flex;
   flex-wrap: wrap;
@@ -2689,6 +3042,32 @@ button.dev-open-doc:hover {
   font-size: 12px;
   line-height: 1.45;
   margin-bottom: 8px;
+}
+
+.routes-fragment-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-bottom: 10px;
+}
+
+.routes-fragment-slug-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.routes-fragment-slug-input {
+  min-width: 140px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(100, 116, 139, 0.45);
+  background: rgba(15, 23, 42, 0.85);
+  color: inherit;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
 }
 
 .routes-hosted-hints {

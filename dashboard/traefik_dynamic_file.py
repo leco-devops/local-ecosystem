@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,41 @@ TRAEFIK_DYNAMIC = os.path.join(PROJECT_ROOT, "traefik", "dynamic.yml")
 
 def traefik_dynamic_path() -> str:
     return TRAEFIK_DYNAMIC
+
+
+def _atomic_write_dynamic_yaml(p: Path, data: dict[str, Any]) -> tuple[bool, str | None]:
+    """
+    Serialize data to dynamic.yml via a temp file in the same directory + os.replace,
+    so Traefik's file watcher never reads a half-written file. Backs up the previous file to .bak.
+    """
+    text = yaml.safe_dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    bak = p.with_suffix(p.suffix + ".bak")
+    if p.is_file():
+        shutil.copy2(p, bak)
+    tmp_path = ""
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            suffix=".tmp.yml",
+            prefix="dynamic.",
+            dir=str(p.parent),
+            delete=False,
+        ) as fh:
+            fh.write(text)
+            tmp_path = fh.name
+        os.replace(tmp_path, p)
+        tmp_path = ""
+        return True, None
+    except OSError as exc:
+        return False, str(exc)
+    finally:
+        if tmp_path and os.path.isfile(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
 
 def read_dynamic() -> dict[str, Any] | None:
@@ -114,12 +150,9 @@ def strip_router_service_keys(router_keys: list[str], service_keys: list[str]) -
     http["services"] = services
     data["http"] = http
 
-    bak = p.with_suffix(p.suffix + ".bak")
-    shutil.copy2(p, bak)
-    p.write_text(
-        yaml.safe_dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True),
-        encoding="utf-8",
-    )
+    ok, err = _atomic_write_dynamic_yaml(p, data)
+    if not ok:
+        return len(to_r), len(to_s), err or "atomic write failed"
     return len(to_r), len(to_s), None
 
 
@@ -161,10 +194,7 @@ def merge_http_fragment(fragment_yaml: str) -> tuple[bool, str]:
     http["services"] = services
     base["http"] = http
 
-    bak = p.with_suffix(p.suffix + ".bak")
-    shutil.copy2(p, bak)
-    p.write_text(
-        yaml.safe_dump(base, default_flow_style=False, sort_keys=False, allow_unicode=True),
-        encoding="utf-8",
-    )
-    return True, f"merged; backup {bak.name}"
+    ok, err = _atomic_write_dynamic_yaml(p, base)
+    if not ok:
+        return False, err or "atomic write failed"
+    return True, "merged; backup dynamic.yml.bak (Traefik reloads via file watch; no container restart)"

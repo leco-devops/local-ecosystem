@@ -20,6 +20,7 @@ You access services by name (**`https://n8n.lh`**, **`https://ai.lh`**, …) ins
 | **[docs/SETUP.md](docs/SETUP.md)** | **Complete first-time setup** — DNS, Docker, TLS, stack start, macOS host CPU metrics, optional Cloudflare-local |
 | **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** | **Deployment and operations** — start/stop, updates, bulk vs Control API behavior, troubleshooting |
 | **[docs/DEVELOPMENT_PLAYBOOK.md](docs/DEVELOPMENT_PLAYBOOK.md)** | Extending services, dashboard APIs, Traefik routes |
+| **[docs/LECO_APP_BLUEPRINT.md](docs/LECO_APP_BLUEPRINT.md)** | LEco apps: bridge vs profile (v3), hosting symlinks, compose extras, teardown semantics |
 | **[cloudflare-local/README.md](cloudflare-local/README.md)** | CF-local stack entry + links to architecture and user manual |
 
 ---

@@ -1,0 +1,34 @@
+# What gets built locally: leco-app parses wrangler.toml and creates ONE adapter resource per row
+# in wranglerBindingPreview (KV namespace / R2 bucket / D1 database). Rows match wrangler.toml.
+schemaVersion: 2
+archetype: node
+infrastructure:
+  cloudflare:
+    wranglerConfig: wrangler.toml
+    provisionLocalResources: true
+  wranglerBindingPreview:
+    note: >-
+      Informational mirror of wrangler.toml. Provision still reads wranglerConfig; each kv[] row →
+      one KV namespace on the local adapter, each r2[] → one bucket, each d1[] → one database.
+    wranglerEnv: ''
+    kv:
+      - binding: KV_CACHE
+        cfId: sample-kv-cache-local
+      - binding: KV_SESSIONS
+        cfId: sample-kv-sessions-local
+      - binding: KV_CONFIG
+        cfId: sample-kv-config-local
+    r2:
+      - binding: R2_ASSETS
+        bucketName: sample-wrangler-assets
+    d1:
+      - binding: D1_MAIN
+        databaseName: sample-wrangler-db
+urls: []
+lifecycle:
+  prepare: []
+  build: []
+  preStart: []
+notes: >-
+  After `ecosystem-register` / provision-local-cf, see concrete names in leco.local-cf.yaml next
+  to the manifest.

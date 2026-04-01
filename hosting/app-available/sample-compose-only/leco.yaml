@@ -1,0 +1,9 @@
+# Compose-only: infrastructure.dockerCompose drives leco-app deploy.
+schemaVersion: 2
+archetype: generic
+infrastructure:
+  dockerCompose:
+    composeFile: docker-compose.yml
+notes: >-
+  Replace composeFile with a path relative to your app root. No wranglerBindingPreview here —
+  local Cloudflare adapters are not used for this sample.

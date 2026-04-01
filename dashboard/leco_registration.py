@@ -1,0 +1,225 @@
+"""Register via LEco DevOps (leco-app ecosystem-register); YAML is materialized separately."""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+from hosting_layout import (
+    HOSTING_SOURCE_LINK_NAME,
+    ensure_hosting_enabled_symlink,
+    hosting_manifest_logical_path,
+    hosting_staging_dir,
+    is_dir_writable,
+    registry_manifest_relpath,
+    refresh_symlink,
+)
+from leco_detect import compute_hosting_source_symlink_target, resolve_registration_path, slugify_app_id
+from leco_materialize import registration_yaml_status
+from leco_subprocess import (
+    PROJECT_ROOT,
+    iter_ecosystem_register,
+    iter_leco_deploy,
+    run_ecosystem_register,
+    run_leco_deploy,
+)
+
+
+@dataclass(frozen=True)
+class RegisterPrepared:
+    """Paths and ids ready for ecosystem-register."""
+
+    manifest_abs: Path
+    app_id: str
+    display: str
+    registry_manifest_relpath: str | None
+    materialized: bool
+    app_root: str
+    manifest_path_str: str
+    localhost_path_str: str
+    hosting_staging: str | None = None
+    source_symlink_target: str | None = None
+
+
+def _register_result_dict(
+    prep: RegisterPrepared,
+    log: str,
+    *,
+    deploy_code: int | None = None,
+    deploy_log: str | None = None,
+) -> dict[str, Any]:
+    out: dict[str, Any] = {
+        "ok": True,
+        "app_root": prep.app_root,
+        "manifest_path": prep.manifest_path_str,
+        "localhost_path": prep.localhost_path_str,
+        "registry_entry": {"id": prep.app_id, "label": prep.display},
+        "leco_register_log": log[-8000:] if log else "",
+        "materialized": prep.materialized,
+        "deploy_stack_ran": deploy_code is not None,
+    }
+    if prep.materialized:
+        out["hosting_staging"] = prep.hosting_staging or ""
+        out["registry_manifest_relpath"] = prep.registry_manifest_relpath or ""
+        out["source_symlink_target"] = prep.source_symlink_target or ""
+    if deploy_code is not None:
+        out["deploy_exit_code"] = deploy_code
+        out["deploy_ok"] = deploy_code == 0
+        out["deploy_log"] = (deploy_log or "")[-12000:]
+    return out
+
+
+def prepare_register_from_disk(path_rel: str, app_id: str, label: str) -> RegisterPrepared:
+    """Require leco.app.yaml + localhost profile on disk (or under hosting staging when read-only)."""
+    orig_root = resolve_registration_path(path_rel)
+    aid = slugify_app_id(app_id)
+    if not aid:
+        raise ValueError("app_id required")
+    display = (label or "").strip() or aid
+    eco = Path(PROJECT_ROOT).resolve()
+
+    st = registration_yaml_status(path_rel, app_id)
+    if not st.get("registration_ready"):
+        raise ValueError(
+            "Registration YAML is not ready — click **Generate YAML** (or **Save YAML**) so "
+            "`leco.app.yaml` and the localhost profile file (e.g. `leco.yaml`) exist."
+        )
+
+    writable = is_dir_writable(orig_root)
+    if writable:
+        man_path = Path(st["manifest_path"])
+        loc_path = Path(st["localhost_path"])
+        return RegisterPrepared(
+            manifest_abs=man_path,
+            app_id=aid,
+            display=display,
+            registry_manifest_relpath=None,
+            materialized=False,
+            app_root=str(orig_root.resolve()),
+            manifest_path_str=str(man_path.resolve()),
+            localhost_path_str=str(loc_path.resolve()),
+        )
+
+    staging = hosting_staging_dir(eco, aid)
+    man_st = staging / "leco.app.yaml"
+    raw = man_st.read_text(encoding="utf-8")
+    parsed = yaml.safe_load(raw)
+    if not isinstance(parsed, dict):
+        raise ValueError("Materialized leco.app.yaml must be a YAML mapping")
+    tree_root = compute_hosting_source_symlink_target(orig_root, parsed)
+    refresh_symlink(staging / HOSTING_SOURCE_LINK_NAME, tree_root, target_is_dir=True)
+    ensure_hosting_enabled_symlink(eco, aid)
+    logical_man = hosting_manifest_logical_path(eco, aid)
+    reg_rel = registry_manifest_relpath(aid)
+    return RegisterPrepared(
+        manifest_abs=logical_man,
+        app_id=aid,
+        display=display,
+        registry_manifest_relpath=reg_rel,
+        materialized=True,
+        app_root=str(staging.resolve()),
+        manifest_path_str=str(logical_man.resolve()),
+        localhost_path_str=str(st["localhost_path"]),
+        hosting_staging=str(staging.resolve()),
+        source_symlink_target=str(tree_root),
+    )
+
+
+def register_app_wizard(
+    path_rel: str,
+    app_id: str,
+    label: str,
+    *,
+    deploy_stack: bool = False,
+) -> dict[str, Any]:
+    """
+    Run ``leco-app ecosystem-register`` using YAML already on disk.
+    Use :mod:`leco_materialize` to generate or save files first.
+    """
+    prep = prepare_register_from_disk(path_rel, app_id, label)
+    code, log = run_ecosystem_register(
+        prep.manifest_abs,
+        app_id=prep.app_id,
+        label=prep.display,
+        timeout=300,
+        registry_manifest_relpath=prep.registry_manifest_relpath,
+    )
+    if code != 0:
+        raise OSError(log[-4000:] if log else f"leco-app ecosystem-register failed (exit {code})")
+
+    if deploy_stack:
+        dcode, dlog = run_leco_deploy(prep.manifest_abs)
+        return _register_result_dict(prep, log, deploy_code=dcode, deploy_log=dlog)
+
+    return _register_result_dict(prep, log)
+
+
+def iterate_register_app_wizard(
+    path_rel: str,
+    app_id: str,
+    label: str,
+    *,
+    deploy_stack: bool = False,
+) -> Iterator[dict[str, Any]]:
+    """NDJSON-style events for the dashboard."""
+    yield {"type": "log", "text": "Checking leco.app.yaml + localhost profile on disk…\n"}
+    try:
+        prep = prepare_register_from_disk(path_rel, app_id, label)
+    except (ValueError, OSError, yaml.YAMLError) as exc:
+        yield {"type": "done", "result": {"ok": False, "error": str(exc)}}
+        return
+
+    yield {"type": "log", "text": "Running leco-app ecosystem-register (merge Traefik, local CF if enabled)…\n"}
+
+    combined: list[str] = []
+    exit_code = 0
+    try:
+        for kind, payload in iter_ecosystem_register(
+            prep.manifest_abs,
+            app_id=prep.app_id,
+            label=prep.display,
+            timeout=300,
+            registry_manifest_relpath=prep.registry_manifest_relpath,
+        ):
+            if kind == "line":
+                combined.append(str(payload))
+                yield {"type": "log", "text": str(payload)}
+            elif kind == "end":
+                exit_code = int(payload)
+    except OSError as exc:
+        yield {"type": "done", "result": {"ok": False, "error": str(exc)}}
+        return
+
+    log = "".join(combined)
+    if exit_code != 0:
+        err = log[-4000:] if log else f"leco-app ecosystem-register failed (exit {exit_code})"
+        yield {"type": "done", "result": {"ok": False, "error": err}}
+        return
+
+    if not deploy_stack:
+        yield {"type": "done", "result": _register_result_dict(prep, log)}
+        return
+
+    yield {"type": "log", "text": "\n--- leco-app deploy (docker compose up) ---\n"}
+    dcombined: list[str] = []
+    dcode = 0
+    try:
+        for kind, payload in iter_leco_deploy(prep.manifest_abs):
+            if kind == "line":
+                dcombined.append(str(payload))
+                yield {"type": "log", "text": str(payload)}
+            elif kind == "end":
+                dcode = int(payload)
+    except OSError as exc:
+        yield {"type": "done", "result": {"ok": False, "error": str(exc)}}
+        return
+
+    dlog = "".join(dcombined)
+    yield {
+        "type": "done",
+        "result": _register_result_dict(prep, log, deploy_code=dcode, deploy_log=dlog),
+    }

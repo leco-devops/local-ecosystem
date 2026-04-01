@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "leco-app"
-version = "0.1.5"
-description = "Plug-and-play multi-app deploy CLI for Docker Compose and Cloudflare Wrangler (local-ecosystem)"
+version = "0.1.10"
+description = "LEco DevOps — multi-app deploy CLI for Docker Compose and Cloudflare Wrangler (local-ecosystem)"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -16,6 +16,7 @@ dependencies = [
 
 [project.scripts]
 leco-app = "leco_app.cli:app"
+leco-devops = "leco_app.cli:app"
 
 [tool.setuptools.packages.find]
 where = ["."]

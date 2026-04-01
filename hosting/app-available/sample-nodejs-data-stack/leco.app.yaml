@@ -1,0 +1,48 @@
+# =============================================================================
+# LEco ↔ APPLICATION BRIDGE  (leco.app.yaml) — Node.js + data tier
+# =============================================================================
+# BRIDGE ROLE
+#   Pins the Node/API project root for LEco (registry id, version, profile path).
+#   The multi-service topology (Redis, MySQL, MongoDB, NGINX, Varnish, API) is
+#   defined in docker-compose.yml and referenced from leco.yaml → infrastructure.
+#
+# SPLIT TRAFFIC
+#   Profile routing can send browser traffic to NGINX while /api hits the Node
+#   service (see leco.yaml infrastructure.routing: frontend + apiBackend). LEco
+#   generates Traefik fragments from those entries; container DNS names must match
+#   compose service names on lh-network.
+#
+# LIFECYCLE
+#   lifecycle.prepare/build/preStart in leco.yaml run relative to resolved_root
+#   (e.g. npm ci before compose build). containerImage hints Dockerfile/context
+#   for the app image build (future automation / documentation).
+#
+# REGISTRY & DEPLOY
+#   leco-app deploy runs compose from merged manifest; name groups state and
+#   registry rows. Bump applicationVersion when you tag a release the dashboard
+#   should display.
+#
+# CONFIG REFS
+#   Typical paths for this stack; adjust to match your repo layout.
+# =============================================================================
+lecoAppVersion: '3'
+applicationVersion: '0.1.0-sample'
+name: sample-nodejs-data-stack
+root: .
+localHostProfile: leco.yaml
+configRefs:
+  dockerComposeFile: docker-compose.yml
+  envFile: .env
+  dockerfile: Dockerfile
+  packageJson: package.json
+  nginxConfig: docker/nginx/default.conf
+  varnishVcl: docker/varnish/default.vcl
+  redisConfig: docker/redis/redis.conf
+  mysqlInit: docker/mysql/init
+  mongoInit: docker/mongo/init
+localhost:
+  notes: |
+    [BRIDGE — Node + Redis / MySQL / Mongo / NGINX / Varnish]
+    Service names in notes and routing (nginx, api, varnish, redis, mysql, mongo)
+    must match docker-compose.yml. This file does not list ports or images — only
+    leco.yaml + compose do.

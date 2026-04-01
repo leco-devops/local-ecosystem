@@ -117,6 +117,33 @@ def _split_fragment(manifest_name: str, entry: dict[str, Any]) -> dict[str, Any]
     }
 
 
+def _local_cf_alias_fragment(manifest_name: str, prefix: str) -> dict[str, Any]:
+    """Match deploy-cli traefik_fragment.local_cf_adapter_host_aliases_fragment router keys."""
+    name = _safe_id(manifest_name)
+    p = prefix.strip().lower()
+    if not p:
+        return {"http": {"routers": {}, "services": {}}}
+    routers: dict[str, Any] = {}
+    for kind, host, svc in (
+        ("kv", f"{p}-kv.lh", "kv-service"),
+        ("r2", f"{p}-r2.lh", "r2-service"),
+        ("d1", f"{p}-d1.lh", "d1-service"),
+    ):
+        base = f"{name}-cf-{kind}"
+        routers[f"{base}-http"] = {
+            "rule": f"Host(`{host}`)",
+            "service": svc,
+            "entryPoints": ["web"],
+        }
+        routers[f"{base}-https"] = {
+            "rule": f"Host(`{host}`)",
+            "service": svc,
+            "entryPoints": ["websecure"],
+            "tls": True,
+        }
+    return {"http": {"routers": routers, "services": {}}}
+
+
 def _entry_fragment(manifest_name: str, entry: dict[str, Any]) -> dict[str, Any]:
     fe = _pick(entry, "frontend", "Frontend")
     api = _pick(entry, "apiBackend", "api_backend", "ApiBackend")
@@ -138,15 +165,21 @@ def manifest_traefik_keys_dict(manifest: dict[str, Any]) -> tuple[list[str], lis
             return [str(x) for x in r if x], [str(x) for x in s if x]
 
     name = str(manifest.get("name") or "app")
+    frags: list[dict[str, Any]] = []
     routing = manifest.get("routing") or {}
     entries = routing.get("entries") if isinstance(routing, dict) else None
-    if not isinstance(entries, list) or not entries:
+    if isinstance(entries, list):
+        for e in entries:
+            if isinstance(e, dict):
+                frags.append(_entry_fragment(name, e))
+    cf = manifest.get("cloudflare") or {}
+    if isinstance(cf, dict):
+        pfx = cf.get("localCfPublicPrefix") or cf.get("local_cf_public_prefix")
+        if isinstance(pfx, str) and pfx.strip():
+            frags.append(_local_cf_alias_fragment(name, pfx))
+    if not frags:
         return [], []
 
-    frags: list[dict[str, Any]] = []
-    for e in entries:
-        if isinstance(e, dict):
-            frags.append(_entry_fragment(name, e))
     merged = _merge_fragments(frags)
     http = merged.get("http") or {}
     r = list((http.get("routers") or {}).keys())

@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+# Safe to `source` from ai-stack/core.sh; also runnable as ./ai-stack/services/ollama.sh …
 NAME="ollama"
 VOLUME="ollama"
 
