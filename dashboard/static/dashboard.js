@@ -1284,9 +1284,21 @@ function externalNavigationAttrs(href) {
   }
 }
 
-function hostedRuntimeBadge(runtime) {
+function hostedMainUrlProbeSummary(app) {
+  const probe = app?.main_url_probe;
+  if (!probe || probe.checked !== true || probe.ok !== false) return "";
+  const code = Number(probe.status_code);
+  if (Number.isFinite(code)) return `main URL ${code}`;
+  return "main URL unreachable";
+}
+
+function hostedRuntimeBadge(runtime, app) {
   const status = String(runtime?.status || "").toLowerCase();
-  if (status === "running") return { cls: "overview-hosted-urls__dot--green", label: "running" };
+  if (status === "running") {
+    const probeLabel = hostedMainUrlProbeSummary(app);
+    if (probeLabel) return { cls: "overview-hosted-urls__dot--yellow", label: probeLabel };
+    return { cls: "overview-hosted-urls__dot--green", label: "running" };
+  }
   if (status === "partial") return { cls: "overview-hosted-urls__dot--yellow", label: "partial" };
   if (status === "stopped" || status === "compose") return { cls: "overview-hosted-urls__dot--red", label: "down" };
   return { cls: "overview-hosted-urls__dot--gray", label: status || "unknown" };
@@ -1319,7 +1331,7 @@ function renderOverviewHostedAppsCard(payload) {
   const rows = [...apps]
     .sort((a, b) => String(a?.label || a?.id || "").localeCompare(String(b?.label || b?.id || "")))
     .map((app) => {
-      const dot = hostedRuntimeBadge(app?.runtime || {});
+      const dot = hostedRuntimeBadge(app?.runtime || {}, app);
       const label = String(app?.label || app?.id || "App");
       const url = hostedOverviewPrimaryUrl(app);
       const urlHtml = url
@@ -4409,7 +4421,18 @@ function renderHostedResourceLedger(manifestUi, snap) {
   el.innerHTML = html;
 }
 
-function renderHostedLocalProfile(manifestUi) {
+function hostedUrlProbeStatusLabel(url, probes) {
+  const u = String(url || "").trim();
+  if (!u || !probes || typeof probes !== "object") return "—";
+  const p = probes[u];
+  if (!p || p.checked !== true) return "Not checked";
+  const code = Number(p.status_code);
+  if (p.ok === true) return Number.isFinite(code) ? `OK (${code})` : "OK";
+  if (Number.isFinite(code)) return `HTTP ${code}`;
+  return "Unreachable";
+}
+
+function renderHostedLocalProfile(manifestUi, snapshot) {
   const el = document.getElementById("hostedAppsLocalProfile");
   if (!el) return;
   if (!manifestUi) {
@@ -4419,6 +4442,7 @@ function renderHostedLocalProfile(manifestUi) {
   const arch = manifestUi.localhost_archetype;
   const lhp = manifestUi.local_host_profile;
   const urls = manifestUi.localhost_urls || [];
+  const probes = snapshot && typeof snapshot === "object" ? snapshot.url_probes || {} : {};
   const lc = manifestUi.localhost_lifecycle || {};
   const phases = ["prepare", "build", "preStart"];
   const hasLifecycle = phases.some((p) => Array.isArray(lc[p]) && lc[p].length);
@@ -4430,12 +4454,13 @@ function renderHostedLocalProfile(manifestUi) {
   html += `<p class="muted small">Archetype <strong>${escapeHtml(String(arch || "—"))}</strong> · Sidecar <code>${escapeHtml(String(lhp || "—"))}</code></p>`;
   if (urls.length) {
     html +=
-      "<table><thead><tr><th>Role</th><th>Label</th><th>Public URL</th></tr></thead><tbody>";
+      "<table><thead><tr><th>Role</th><th>Label</th><th>Public URL</th><th>Status</th></tr></thead><tbody>";
     urls.forEach((u) => {
       const role = u.role || "—";
       const lab = u.label || "—";
       const pub = u.publicUrl != null ? u.publicUrl : u.public_url != null ? u.public_url : "—";
-      html += `<tr><td>${escapeHtml(String(role))}</td><td>${escapeHtml(String(lab))}</td><td><code>${escapeHtml(String(pub))}</code></td></tr>`;
+      const status = hostedUrlProbeStatusLabel(pub, probes);
+      html += `<tr><td>${escapeHtml(String(role))}</td><td>${escapeHtml(String(lab))}</td><td><code>${escapeHtml(String(pub))}</code></td><td>${escapeHtml(String(status))}</td></tr>`;
     });
     html += "</tbody></table>";
   }
@@ -4643,9 +4668,11 @@ async function refreshHostedAppsPanel() {
   }
 
   const rt = snap.runtime || (app && app.runtime) || {};
-  const rtLabel = escapeHtml(rt.label || "—");
-  const rtClass =
-    rt.running === true
+  const probeLabel = hostedMainUrlProbeSummary(app);
+  const rtLabel = escapeHtml(probeLabel || rt.label || "—");
+  const rtClass = probeLabel
+    ? "control-runtime--down"
+    : rt.running === true
       ? "control-runtime--up"
       : rt.running === false
         ? "control-runtime--down"
@@ -4771,7 +4798,7 @@ async function refreshHostedAppsPanel() {
   }
 
   renderHostedResourceLedger(snap.manifest_ui, snap);
-  renderHostedLocalProfile(snap.manifest_ui);
+  renderHostedLocalProfile(snap.manifest_ui, snap);
   renderHostedCfResources(snap.manifest_ui);
 
   if (tbody) {
@@ -6052,7 +6079,7 @@ async function routeBuilderDeleteKeys(routerKeys, serviceKeys, label) {
   }
   const ok = await showAppConfirm({
     title: `Delete ${label}`,
-    message: "This removes keys from hosting/traefik/dynamic.yml (with atomic write + backup). Continue?",
+    message: "This removes keys from hosting/traefik/dynamic.yml (atomic write). Continue?",
     confirmText: "Delete",
   });
   if (!ok) return;

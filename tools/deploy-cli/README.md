@@ -76,7 +76,7 @@ leco-app status
 leco-app logs -f
 leco-app down              # compose down only
 
-# Remove app + Traefik routes (writes dynamic.yml.bak, then docker compose down)
+# Remove app + Traefik routes (atomic write, then docker compose down)
 leco-app offload --traefik-dynamic /path/to/local-ecosystem/traefik/dynamic.yml
 
 leco-app traefik-fragment  # print YAML to paste into traefik/dynamic.yml

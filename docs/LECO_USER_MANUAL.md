@@ -117,7 +117,7 @@ leco-app run-hooks --phase preStart
 
 ### 5. Traefik (`*.lh`)
 
-**`leco-app onboard`**, **`init --onboard`**, and **`ecosystem-register --merge-traefik`** merge **`routing.entries`** from the **effective** manifest into **`traefik/dynamic.yml`** (atomic write; previous file copied to **`dynamic.yml.bak`**). In **v3**, **`infrastructure.routing`** normally lives in **`leco.yaml`**.
+**`leco-app onboard`**, **`init --onboard`**, and **`ecosystem-register --merge-traefik`** merge **`routing.entries`** from the **effective** manifest into **`traefik/dynamic.yml`** (atomic write). In **v3**, **`infrastructure.routing`** normally lives in **`leco.yaml`**.
 
 For a preview or manual merge only:
 

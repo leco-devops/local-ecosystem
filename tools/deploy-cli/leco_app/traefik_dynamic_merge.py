@@ -1,4 +1,4 @@
-"""Merge manifest routing into local-ecosystem hosting/traefik/dynamic.yml (atomic write + .bak)."""
+"""Merge manifest routing into local-ecosystem hosting/traefik/dynamic.yml (atomic write)."""
 
 from __future__ import annotations
 
@@ -18,13 +18,26 @@ from leco_app.traefik_fragment import (
 )
 
 
+def ensure_dynamic_yaml_file(p: Path) -> tuple[bool, str | None]:
+    """Create recoverable writable dynamic YAML file when missing."""
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        if p.is_file():
+            return True, None
+        bak = p.with_suffix(p.suffix + ".bak")
+        if bak.is_file():
+            shutil.copy2(bak, p)
+            return True, None
+        p.write_text("http:\n  routers: {}\n  services: {}\n", encoding="utf-8")
+        return True, None
+    except OSError as exc:
+        return False, str(exc)
+
+
 def atomic_write_dynamic_yaml(p: Path, data: dict[str, Any]) -> tuple[bool, str | None]:
-    """Write YAML via temp file + os.replace; copy previous file to .bak."""
+    """Write YAML via temp file + os.replace."""
     text = yaml.safe_dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True)
     p.parent.mkdir(parents=True, exist_ok=True)
-    bak = p.with_suffix(p.suffix + ".bak")
-    if p.is_file():
-        shutil.copy2(p, bak)
     tmp_path = ""
     try:
         with tempfile.NamedTemporaryFile(
@@ -64,8 +77,9 @@ def merge_manifest_routing_into_dynamic_yml(
     if not frags:
         return True, "No routing.entries and no cloudflare.localCfPublicPrefix — Traefik merge skipped."
     dp = dynamic_yml.resolve()
-    if not dp.is_file():
-        return False, f"Traefik dynamic file not found: {dp}"
+    ok_ensure, ensure_err = ensure_dynamic_yaml_file(dp)
+    if not ok_ensure:
+        return False, f"Traefik dynamic file create failed: {ensure_err}"
 
     piece = merge_fragments(frags)
     f_http = piece.get("http") or {}
@@ -104,5 +118,5 @@ def merge_manifest_routing_into_dynamic_yml(
     return (
         True,
         f"Traefik: merged {len(fr)} router(s) and {len(fs)} service(s) into {dp.name} "
-        "(backup dynamic.yml.bak; reloads via file watch).",
+        "(reloads via file watch).",
     )

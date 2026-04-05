@@ -120,7 +120,14 @@ start() {
 
 # Alias: full image rebuild + container recreate (same as start).
 deploy() {
-  start
+  start || return 1
+  local traefik_script="$PROJECT_ROOT/ecosystem-stack/services/traefik.sh"
+  if [ -f "$traefik_script" ]; then
+    echo "🔄 Reloading Traefik to pick up route/mount changes from dashboard deploy…"
+    bash "$traefik_script" restart || return 1
+  else
+    echo "⚠️  Traefik service script not found at $traefik_script — skipped Traefik reload."
+  fi
 }
 
 # Recreate container without `docker build` (uses existing image). OK when only bind-mounted code changed.
@@ -147,7 +154,8 @@ if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
   act="${1:-start}"
   shift || true
   case "$act" in
-    start | deploy) deploy ;;
+    start) start ;;
+    deploy) deploy ;;
     quick) quick ;;
     stop) stop ;;
     restart) restart ;;

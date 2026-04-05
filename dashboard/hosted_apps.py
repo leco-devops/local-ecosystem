@@ -604,6 +604,10 @@ def list_hosted_apps() -> dict[str, Any]:
             continue
         mf = manifest_ui_fields(meta["manifest_path"])
         rt = leco_stack_runtime(meta)
+        probe = {"checked": False}
+        rt_status = str((rt or {}).get("status") or "").strip().lower() if isinstance(rt, dict) else ""
+        if rt_status in ("running", "partial"):
+            probe = _probe_main_url(str(mf.get("main_url") or ""))
         apps.append(
             {
                 "id": slug,
@@ -614,6 +618,7 @@ def list_hosted_apps() -> dict[str, Any]:
                 "health_urls": mf["health_urls"],
                 "main_url": mf.get("main_url") or "",
                 "main_urls": mf.get("main_urls") or {},
+                "main_url_probe": probe,
                 "local_host_profile": mf.get("local_host_profile"),
                 "localhost_archetype": mf.get("localhost_archetype"),
                 "localhost_urls": mf.get("localhost_urls") or [],
@@ -636,6 +641,18 @@ def snapshot_for_slug(slug: str) -> dict[str, Any]:
     rows, code = compose_ps_result(meta)
     services = build_service_rows(meta, client) if code == 0 else []
     agg = compute_snapshot_aggregate(meta, client)
+    mf = manifest_ui_fields(meta["manifest_path"])
+    url_rows = mf.get("localhost_urls") or []
+    urls_for_probe: list[str] = []
+    for row in url_rows:
+        if not isinstance(row, dict):
+            continue
+        candidate = row.get("public_url")
+        if not candidate:
+            candidate = row.get("publicUrl")
+        if isinstance(candidate, str) and candidate.strip():
+            urls_for_probe.append(candidate.strip())
+    url_probes = _probe_url_map(urls_for_probe[:16])
     return {
         "ok": True,
         "slug": slug.strip(),
@@ -643,7 +660,8 @@ def snapshot_for_slug(slug: str) -> dict[str, Any]:
         "compose_ps_ok": code == 0,
         "services": services,
         "aggregate": agg,
-        "manifest_ui": manifest_ui_fields(meta["manifest_path"]),
+        "manifest_ui": mf,
+        "url_probes": url_probes,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -742,6 +760,68 @@ def logs_stream_for_slug(
 
 def _health_probes_enabled() -> bool:
     return os.getenv(HEALTH_PROBES_ENV, "1").strip().lower() not in ("0", "false", "no")
+
+
+def _probe_main_url(url: str) -> dict[str, Any]:
+    candidate = str(url or "").strip()
+    if not candidate:
+        return {"checked": False}
+    headers = {"User-Agent": "local-ecosystem-dashboard-main-url-probe/1"}
+    request_url = candidate
+    # Dashboard container usually cannot resolve *.lh via host DNS; probe through the
+    # in-network Traefik service while preserving Host-based routing behavior.
+    try:
+        parts = urlsplit(candidate)
+        host = (parts.hostname or "").strip().lower()
+        if host.endswith(".lh"):
+            probe_host = os.getenv("DASHBOARD_TRAEFIK_INTERNAL_HOST", "traefik").strip() or "traefik"
+            netloc = probe_host
+            if parts.port:
+                netloc = f"{probe_host}:{parts.port}"
+            request_url = urlunsplit((parts.scheme or "http", netloc, parts.path or "/", parts.query, parts.fragment))
+            headers["Host"] = parts.netloc
+    except Exception:
+        request_url = candidate
+    t0 = time.perf_counter()
+    try:
+        r = requests.get(
+            request_url,
+            timeout=4,
+            verify=False,
+            allow_redirects=True,
+            headers=headers,
+        )
+        ms = int((time.perf_counter() - t0) * 1000)
+        code = int(r.status_code)
+        return {
+            "checked": True,
+            "url": candidate,
+            "ok": 200 <= code < 400,
+            "status_code": code,
+            "ms": ms,
+        }
+    except Exception as exc:
+        ms = int((time.perf_counter() - t0) * 1000)
+        return {
+            "checked": True,
+            "url": candidate,
+            "ok": False,
+            "status_code": None,
+            "ms": ms,
+            "error": str(exc)[:160],
+        }
+
+
+def _probe_url_map(urls: list[str]) -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = {}
+    seen: set[str] = set()
+    for raw in urls:
+        u = str(raw or "").strip()
+        if not u or u in seen:
+            continue
+        seen.add(u)
+        out[u] = _probe_main_url(u)
+    return out
 
 
 def insights_for_slug(slug: str) -> dict[str, Any]:

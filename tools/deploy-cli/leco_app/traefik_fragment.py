@@ -152,7 +152,7 @@ def manifest_to_traefik_yaml(manifest: ApplicationManifest) -> str:
     merged = merge_fragments(frags)
     return (
         "# Paste under hosting/traefik/dynamic.yml → http.routers / http.services (merge keys manually).\n"
-        "# Traefik watches the file; backup dynamic.yml first.\n"
+        "# Traefik watches the file and reloads it automatically.\n"
         "# Split routes (frontend + apiBackend): PathPrefix → API (priority 20), Host → UI (priority 10).\n"
         "# localCfPublicPrefix adds Host rules for {prefix}-kv.lh → kv-service (shared adapter).\n"
         "# Compose: attach those containers to external network lh-network (see local-ecosystem docs).\n\n"

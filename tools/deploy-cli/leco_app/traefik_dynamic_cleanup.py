@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -44,10 +43,7 @@ def strip_traefik_dynamic_yml(
     *,
     dry_run: bool,
 ) -> tuple[int, int, Path | None]:
-    """Remove listed routers/services. Returns (routers_removed, services_removed, backup_path).
-
-    Writes a ``.yml.bak`` copy beside ``path`` when anything is removed (not in dry-run).
-    """
+    """Remove listed routers/services. Returns (routers_removed, services_removed, backup_path)."""
     raw = path.read_text(encoding="utf-8")
     data: Any = yaml.safe_load(raw)
     if not isinstance(data, dict):
@@ -79,10 +75,8 @@ def strip_traefik_dynamic_yml(
     http["services"] = services
     data["http"] = http
 
-    bak = path.with_suffix(path.suffix + ".bak")
-    shutil.copy2(path, bak)
     path.write_text(
         yaml.safe_dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True),
         encoding="utf-8",
     )
-    return rr, ss, bak
+    return rr, ss, None

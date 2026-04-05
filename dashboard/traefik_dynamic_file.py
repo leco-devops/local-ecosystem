@@ -43,13 +43,10 @@ def traefik_dynamic_path() -> str:
 def _atomic_write_dynamic_yaml(p: Path, data: dict[str, Any]) -> tuple[bool, str | None]:
     """
     Serialize data to dynamic.yml via a temp file in the same directory + os.replace,
-    so Traefik's file watcher never reads a half-written file. Backs up the previous file to .bak.
+    so Traefik's file watcher never reads a half-written file.
     """
     text = yaml.safe_dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True)
     p.parent.mkdir(parents=True, exist_ok=True)
-    bak = p.with_suffix(p.suffix + ".bak")
-    if p.is_file():
-        shutil.copy2(p, bak)
     tmp_path = ""
     try:
         with tempfile.NamedTemporaryFile(
@@ -138,7 +135,7 @@ def list_routers_services_summary() -> dict[str, Any]:
 
 
 def strip_router_service_keys(router_keys: list[str], service_keys: list[str]) -> tuple[int, int, str | None]:
-    """Remove keys; backup .bak; returns (n_routers, n_services, error)."""
+    """Remove keys; returns (n_routers, n_services, error)."""
     p = _ensure_dynamic_file_path()
     if not p.is_file():
         return 0, 0, f"not found: {p}"
@@ -217,4 +214,4 @@ def merge_http_fragment(fragment_yaml: str) -> tuple[bool, str]:
     ok, err = _atomic_write_dynamic_yaml(p, base)
     if not ok:
         return False, err or "atomic write failed"
-    return True, "merged; backup dynamic.yml.bak (Traefik reloads via file watch; no container restart)"
+    return True, "merged (Traefik reloads via file watch; no container restart)"
