@@ -323,7 +323,7 @@ def cmd_init(
         bool,
         typer.Option(
             "--onboard",
-            help="After deploy: ecosystem-register + merge routing into traefik/dynamic.yml (needs -E or LECO_ECOSYSTEM_ROOT)",
+            help="After deploy: ecosystem-register + merge routing into hosting/traefik/dynamic.yml (needs -E or LECO_ECOSYSTEM_ROOT)",
         ),
     ] = False,
     register_id: Annotated[
@@ -346,7 +346,7 @@ def cmd_init(
     optional profile for URLs and lifecycle hooks (see README).
 
     Use ``--onboard`` with ``-E`` (or ``LECO_ECOSYSTEM_ROOT``) to register the app for Hosted apps and
-    merge ``routing.entries`` into ``traefik/dynamic.yml`` (same as ``leco-app onboard``).
+    merge ``routing.entries`` into ``hosting/traefik/dynamic.yml`` (same as ``leco-app onboard``).
     """
     start = path.resolve()
     mp_existing = _try_find_manifest(start, manifest)
@@ -664,13 +664,13 @@ def cmd_onboard(
     no_register: Annotated[bool, typer.Option("--no-register", help="Skip leco-registry.yaml")] = False,
     no_traefik_merge: Annotated[
         bool,
-        typer.Option("--no-traefik-merge", help="Skip merging routing into traefik/dynamic.yml"),
+        typer.Option("--no-traefik-merge", help="Skip merging routing into hosting/traefik/dynamic.yml"),
     ] = False,
     traefik_dynamic: Annotated[
         Optional[Path],
         typer.Option(
             "--traefik-dynamic",
-            help="Path to dynamic.yml (default: <ecosystem-root>/traefik/dynamic.yml)",
+            help="Path to dynamic.yml (default: <ecosystem-root>/hosting/traefik/dynamic.yml)",
         ),
     ] = None,
     wrangler_env: Annotated[
@@ -779,7 +779,7 @@ def cmd_offload(
         Optional[Path],
         typer.Option(
             "--traefik-dynamic",
-            help="Remove this app's routers/services from Traefik file-provider YAML (e.g. ../local-ecosystem/traefik/dynamic.yml)",
+            help="Remove this app's routers/services from Traefik file-provider YAML (e.g. ../local-ecosystem/hosting/traefik/dynamic.yml)",
         ),
     ] = None,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Print plan only; no compose or file changes")] = False,
@@ -950,7 +950,7 @@ def cmd_ecosystem_register(
         bool,
         typer.Option(
             "--merge-traefik/--no-merge-traefik",
-            help="Merge routing.entries into traefik/dynamic.yml (atomic write + .bak)",
+            help="Merge routing.entries into hosting/traefik/dynamic.yml (atomic write + .bak)",
         ),
     ] = False,
     registry_manifest_relpath: Annotated[
@@ -1061,7 +1061,7 @@ def cmd_ecosystem_unregister(
         bool,
         typer.Option(
             "--strip-traefik/--no-strip-traefik",
-            help="Remove routers/services derived from manifest (traefik/dynamic.yml)",
+            help="Remove routers/services derived from manifest (hosting/traefik/dynamic.yml)",
         ),
     ] = True,
     clean_local_cf: Annotated[
@@ -1075,7 +1075,7 @@ def cmd_ecosystem_unregister(
         Optional[Path],
         typer.Option(
             "--traefik-dynamic",
-            help="Traefik file-provider YAML (default: <ecosystem-root>/traefik/dynamic.yml)",
+            help="Traefik file-provider YAML (default: <ecosystem-root>/hosting/traefik/dynamic.yml)",
         ),
     ] = None,
 ) -> None:
@@ -1096,7 +1096,7 @@ def cmd_ecosystem_unregister(
             err=True,
         )
 
-    tf = traefik_dynamic.resolve() if traefik_dynamic else (eco / "traefik" / "dynamic.yml")
+    tf = traefik_dynamic.resolve() if traefik_dynamic else (eco / "hosting" / "traefik" / "dynamic.yml")
 
     # Tear down KV/R2/D1 on adapters while the stack is still up. Dedicated adapters
     # (leco-local-*) live in the compose project; compose down first makes DELETEs fail (HTTP -1).

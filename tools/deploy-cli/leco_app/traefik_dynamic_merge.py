@@ -1,4 +1,4 @@
-"""Merge manifest routing into local-ecosystem traefik/dynamic.yml (atomic write + .bak)."""
+"""Merge manifest routing into local-ecosystem hosting/traefik/dynamic.yml (atomic write + .bak)."""
 
 from __future__ import annotations
 

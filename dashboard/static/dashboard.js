@@ -1732,7 +1732,7 @@ function renderDevelopCards() {
     <div class="card dev-card">
       <strong>New <code>*.lh</code> route</strong>
       <ul>
-        <li>Add router + service in <code>traefik/dynamic.yml</code></li>
+        <li>Add router + service in <code>hosting/traefik/dynamic.yml</code></li>
         <li>Put the container on <code>lh-network</code></li>
         <li>Optional: extend <code>monitor.py</code> <code>SERVICE_MAP</code> for probes</li>
       </ul>
@@ -4229,6 +4229,33 @@ function resetHostedAppsDetailForLoading(slug) {
   if (cfEl) cfEl.innerHTML = '<p class="muted small">Loading Cloudflare bindings…</p>';
 }
 
+function resetHostedAppsRightPanelForMutation(message = "Refreshing hosted apps…") {
+  if (activeTab !== "hostedAppsTab") return;
+  const empty = document.getElementById("hostedAppsEmpty");
+  const detail = document.getElementById("hostedAppsDetail");
+  if (empty) {
+    empty.classList.remove("is-hidden");
+    empty.textContent = message;
+  }
+  if (detail) detail.classList.add("is-hidden");
+  hostedLogStreamLiveKey = "";
+  stopHostedLogStream();
+  destroyHostedAppCharts();
+}
+
+async function syncHostedAppsAfterRegistryMutation(opts = {}) {
+  const removedSlug = String(opts.removedSlug || "").trim();
+  const message = String(opts.message || "").trim();
+  hostedPanelRequestSeq += 1;
+  if (removedSlug && hostedSelectedSlug === removedSlug) {
+    hostedSelectedSlug = "";
+  }
+  resetHostedAppsRightPanelForMutation(
+    message || (removedSlug ? `Removed ${removedSlug}. Refreshing hosted apps…` : "Refreshing hosted apps…"),
+  );
+  await loadHostedAppsList();
+}
+
 async function loadHostedAppsList() {
   const empty = document.getElementById("hostedAppsEmpty");
   const detail = document.getElementById("hostedAppsDetail");
@@ -4716,7 +4743,7 @@ async function refreshHostedAppsPanel() {
         Traefik may still have routes to old service names, which often shows as <strong>Bad Gateway</strong>.
         Use <strong>Remove from ecosystem</strong> (Control token) to unregister and strip manifest-derived Traefik keys, or run
         <code>leco-app ecosystem-unregister ${escapeHtml(slug)} --ecosystem-root …</code>.
-        If routes were added manually to <code>traefik/dynamic.yml</code>, edit that file (Traefik reloads it via file watch; restart Traefik only if you changed <code>traefik-static.yaml</code> or mounts).
+        If routes were added manually to <code>hosting/traefik/dynamic.yml</code>, edit that file (Traefik reloads it via file watch; restart Traefik only if you changed <code>traefik-static.yaml</code> or mounts).
         <div class="hosted-apps-unregister-hint__actions">
           <button type="button" class="ctrl-act ctrl-act--ops" data-hosted-offboard="${escapeAttr(slug)}">Remove from ecosystem…</button>
         </div>
@@ -5683,8 +5710,9 @@ function initHostedRegisterWizard() {
         title: `Register · ${app_id}`,
         actionVerb: "register",
         async onFinally() {
-          await loadHostedAppsList();
-          await refreshHostedAppsPanel().catch(() => {});
+          await syncHostedAppsAfterRegistryMutation({
+            message: "Registered app. Refreshing hosted apps…",
+          });
           loadOverview().catch(() => {});
         },
       });
@@ -6024,7 +6052,7 @@ async function routeBuilderDeleteKeys(routerKeys, serviceKeys, label) {
   }
   const ok = await showAppConfirm({
     title: `Delete ${label}`,
-    message: "This removes keys from traefik/dynamic.yml (with atomic write + backup). Continue?",
+    message: "This removes keys from hosting/traefik/dynamic.yml (with atomic write + backup). Continue?",
     confirmText: "Delete",
   });
   if (!ok) return;
@@ -6215,7 +6243,7 @@ async function runHostedOffboard(slug, stripTraefik, cleanLocalCf) {
   const ok = await showAppConfirm({
     title: `Remove hosted app ${slug}`,
     message:
-      "Runs leco-app ecosystem-unregister: removes this id from config/leco-registry.yaml, optionally strips Traefik routers/services from traefik/dynamic.yml, and deletes local KV/R2/D1 resources listed in leco.local-cf.yaml. Traefik picks up dynamic.yml changes via file watch (no Traefik restart).",
+      "Runs leco-app ecosystem-unregister: removes this id from config/leco-registry.yaml, optionally strips Traefik routers/services from hosting/traefik/dynamic.yml, and deletes local KV/R2/D1 resources listed in leco.local-cf.yaml. Traefik picks up dynamic.yml changes via file watch (no Traefik restart).",
     confirmText: "Remove",
   });
   if (!ok) return;
@@ -6247,7 +6275,10 @@ async function runHostedOffboard(slug, stripTraefik, cleanLocalCf) {
       msg.textContent = `Removed ${slug}. registry_removed=${data.registry_removed}. See browser console for details.`;
     console.info("offboard result", data);
     await loadTraefikRoutesPanel();
-    if (activeTab === "hostedAppsTab") loadHostedAppsList();
+    await syncHostedAppsAfterRegistryMutation({
+      removedSlug: slug,
+      message: `Removed ${slug}. Refreshing hosted apps…`,
+    });
   } catch (e) {
     if (msg) msg.textContent = String(e.message || e);
   }

@@ -158,7 +158,7 @@ class RoutingSpec(BaseModel):
 
 
 class TraefikCleanupSpec(BaseModel):
-    """Explicit router/service keys in traefik/dynamic.yml to remove on offload (optional).
+    """Explicit router/service keys in hosting/traefik/dynamic.yml to remove on offload (optional).
 
     Use when you renamed keys while merging (leco defaults use ``{name}-{hostslug}-…``).
     If omitted, keys are derived from ``routing`` the same way as ``traefik-fragment``.

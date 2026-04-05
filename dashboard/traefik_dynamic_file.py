@@ -1,4 +1,4 @@
-"""Read / write Traefik file-provider dynamic.yml under PROJECT_ROOT."""
+"""Read/write writable Traefik dynamic fragment under PROJECT_ROOT/hosting."""
 
 from __future__ import annotations
 
@@ -11,11 +11,33 @@ from typing import Any
 import yaml
 
 PROJECT_ROOT = os.getenv("DASHBOARD_PROJECT_ROOT", "/project")
-TRAEFIK_DYNAMIC = os.path.join(PROJECT_ROOT, "traefik", "dynamic.yml")
+TRAEFIK_DYNAMIC = os.getenv(
+    "DASHBOARD_TRAEFIK_DYNAMIC_FILE",
+    os.path.join(PROJECT_ROOT, "hosting", "traefik", "dynamic.yml"),
+)
+
+
+def _ensure_dynamic_file_path() -> Path:
+    """Ensure writable hosting dynamic file exists; recover from .bak when possible."""
+    p = Path(TRAEFIK_DYNAMIC)
+    if p.is_file():
+        return p
+    p.parent.mkdir(parents=True, exist_ok=True)
+    bak = p.with_suffix(p.suffix + ".bak")
+    if bak.is_file():
+        try:
+            shutil.copy2(bak, p)
+            return p
+        except OSError:
+            # Fall back to creating a minimal writable dynamic file below.
+            pass
+    if not p.exists():
+        p.write_text("http:\n  routers: {}\n  services: {}\n", encoding="utf-8")
+    return p
 
 
 def traefik_dynamic_path() -> str:
-    return TRAEFIK_DYNAMIC
+    return str(_ensure_dynamic_file_path())
 
 
 def _atomic_write_dynamic_yaml(p: Path, data: dict[str, Any]) -> tuple[bool, str | None]:
@@ -54,7 +76,7 @@ def _atomic_write_dynamic_yaml(p: Path, data: dict[str, Any]) -> tuple[bool, str
 
 
 def read_dynamic() -> dict[str, Any] | None:
-    p = Path(TRAEFIK_DYNAMIC)
+    p = _ensure_dynamic_file_path()
     if not p.is_file():
         return None
     try:
@@ -117,7 +139,7 @@ def list_routers_services_summary() -> dict[str, Any]:
 
 def strip_router_service_keys(router_keys: list[str], service_keys: list[str]) -> tuple[int, int, str | None]:
     """Remove keys; backup .bak; returns (n_routers, n_services, error)."""
-    p = Path(TRAEFIK_DYNAMIC)
+    p = _ensure_dynamic_file_path()
     if not p.is_file():
         return 0, 0, f"not found: {p}"
     try:
@@ -158,9 +180,7 @@ def strip_router_service_keys(router_keys: list[str], service_keys: list[str]) -
 
 def merge_http_fragment(fragment_yaml: str) -> tuple[bool, str]:
     """Merge http.routers and http.services from fragment into dynamic.yml (by key)."""
-    p = Path(TRAEFIK_DYNAMIC)
-    if not p.is_file():
-        return False, f"not found: {p}"
+    p = _ensure_dynamic_file_path()
     try:
         frag = yaml.safe_load(fragment_yaml)
     except yaml.YAMLError as e:

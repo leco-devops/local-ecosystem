@@ -8,12 +8,32 @@ fi
 # dashboard container PROJECT_ROOT is /project, which does not exist on the host — set
 # DASHBOARD_DOCKER_BIND_ROOT to the real repo path (dashboard.sh does this automatically).
 DOCKER_BIND="${DASHBOARD_DOCKER_BIND_ROOT:-$PROJECT_ROOT}"
+HOSTING_TRAEFIK_DIR="$DOCKER_BIND/hosting/traefik"
+HOSTING_DYNAMIC="$HOSTING_TRAEFIK_DIR/dynamic.yml"
+CORE_DYNAMIC="$DOCKER_BIND/traefik/dynamic.yml"
 
 NAME="traefik"
 
 start() {
   docker network inspect lh-network >/dev/null 2>&1 || docker network create lh-network >/dev/null
   docker rm -f "$NAME" 2>/dev/null
+
+  if [ ! -f "$CORE_DYNAMIC" ]; then
+    echo "❌ Missing required persistent Traefik base file: $CORE_DYNAMIC"
+    echo "   Restore it from git before starting Traefik."
+    return 1
+  fi
+
+  mkdir -p "$HOSTING_TRAEFIK_DIR"
+  if [ ! -f "$HOSTING_DYNAMIC" ]; then
+    cat >"$HOSTING_DYNAMIC" <<'EOF'
+http:
+  routers: {}
+  services: {}
+
+EOF
+    echo "ℹ️ Created recoverable writable file hosting/traefik/dynamic.yml"
+  fi
 
   docker run -d \
     --name "$NAME" \
@@ -23,6 +43,8 @@ start() {
     -p 443:443 \
     -p 8080:8080 \
     -v "$DOCKER_BIND/traefik:/etc/traefik" \
+    -v "$CORE_DYNAMIC:/etc/traefik-dynamic/00-core.yml:ro" \
+    -v "$HOSTING_DYNAMIC:/etc/traefik-dynamic/90-hosting.yml" \
     -v "$DOCKER_BIND/certs:/certs" \
     traefik:v3.3 \
     --configFile=/etc/traefik/traefik-static.yaml

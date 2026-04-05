@@ -202,7 +202,7 @@ def run_ecosystem_unregister(
     timeout: int = 300,
 ) -> tuple[int, str]:
     eco = Path(PROJECT_ROOT).resolve()
-    tf = eco / "traefik" / "dynamic.yml"
+    tf = eco / "hosting" / "traefik" / "dynamic.yml"
     args = [
         "ecosystem-unregister",
         slug,

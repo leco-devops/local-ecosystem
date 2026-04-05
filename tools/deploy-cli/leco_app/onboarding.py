@@ -67,6 +67,10 @@ def run_registry_and_provision(
     return entry
 
 
+def default_traefik_dynamic_path(ecosystem_root: Path) -> Path:
+    return (ecosystem_root / "hosting" / "traefik" / "dynamic.yml").resolve()
+
+
 def run_traefik_merge_for_manifest(
     manifest: ApplicationManifest,
     *,
@@ -74,11 +78,11 @@ def run_traefik_merge_for_manifest(
     traefik_dynamic: Path | None,
     echo: Echo,
 ) -> None:
-    """Merge routing into traefik/dynamic.yml if path resolves."""
+    """Merge routing into hosting/traefik/dynamic.yml if path resolves."""
     if traefik_dynamic is not None:
         tf = traefik_dynamic.expanduser().resolve()
     elif ecosystem_root is not None:
-        tf = (ecosystem_root / "traefik" / "dynamic.yml").resolve()
+        tf = default_traefik_dynamic_path(ecosystem_root)
     else:
         echo("Traefik merge skipped (no --traefik-dynamic and no ecosystem root).", fg=typer.colors.YELLOW, err=True)
         return

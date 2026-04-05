@@ -13,7 +13,7 @@
 #
 # TRAEFIK & OPS
 #   Routing hostnames and backend service:port targets are in leco.yaml →
-#   infrastructure.routing; leco-app merges them into traefik/dynamic.yml when
+#   infrastructure.routing; leco-app merges them into hosting/traefik/dynamic.yml when
 #   configured. healthcheckUrls in the profile drive status probes.
 #
 # REGISTRY
