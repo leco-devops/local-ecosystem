@@ -10,3 +10,6 @@ config/leco-registry.yaml
 certs/*.pem
 certs/*.key
 certs/*-key.pem
+
+# Writable runtime Traefik dynamic fragment
+hosting/traefik/dynamic.yml
