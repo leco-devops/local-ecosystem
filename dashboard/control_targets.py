@@ -19,14 +19,14 @@ CF_TARGETS = [
     {"id": "cf-autoscaler", "label": "Autoscaler", "compose_service": "autoscaler", "container": "autoscaler"},
 ]
 
-# AI stack: script basename (without .sh) and container name
+# Ecosystem stack: script basename (without .sh) and container name
 AI_TARGETS = [
     {"id": "ai-traefik", "label": "Traefik", "script": "traefik", "container": "traefik"},
     {"id": "ai-open-webui", "label": "Open WebUI", "script": "webui", "container": "open-webui"},
     {"id": "ai-ollama", "label": "Ollama", "script": "ollama", "container": "ollama"},
     {"id": "ai-n8n", "label": "n8n", "script": "n8n", "container": "n8n"},
     {"id": "ai-postgres", "label": "PostgreSQL (n8n)", "script": "postgres", "container": "n8n_postgres", "reset_volume": "n8n_postgres_data"},
-    {"id": "ai-dashboard", "label": "Ops dashboard", "script": "dashboard", "container": "service-dashboard"},
+    {"id": "ai-dashboard", "label": "LEco DevOps", "script": "dashboard", "container": "service-dashboard"},
     {"id": "ai-cloudflare-local", "label": "Cloudflare local (compose)", "script": "cloudflare-local", "container": None},
     {"id": "ai-infra", "label": "Infra stack (MySQL, Redis, Mailpit, …)", "script": "infra", "container": None},
 ]

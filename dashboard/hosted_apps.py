@@ -11,10 +11,12 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import requests
 import yaml
 
+from leco_detect import host_slug_from_app_id
 from leco_control import (
     compose_ps_result,
     leco_meta_for_slug,
@@ -58,8 +60,16 @@ def _empty_manifest_ui() -> dict[str, Any]:
         "local_cf_public_prefix": None,
         "local_cf_adapter_hosts": None,
         "dedicated_local_adapters": False,
+        "effective_has_docker_compose": False,
         "profile_docker_compose": None,
         "profile_cloudflare": None,
+        "main_url": "",
+        "main_url_source": "",
+        "derived_main_url": "",
+        "main_urls": {},
+        "derived_main_urls": {},
+        "endpoint_urls": [],
+        "source_location": "",
     }
 
 
@@ -346,6 +356,20 @@ def manifest_ui_fields(manifest_path: str) -> dict[str, Any]:
         routes.extend(_routing_entries_to_rows(rt_prof.get("entries")))
     lc = merged_loc.get("lifecycle") if isinstance(merged_loc.get("lifecycle"), dict) else {}
     urls_out = merged_loc.get("urls") if isinstance(merged_loc.get("urls"), list) else []
+    explicit_urls: list[dict[str, str]] = []
+    for u in urls_out:
+        if not isinstance(u, dict):
+            continue
+        pu = str(u.get("publicUrl") or u.get("public_url") or "").strip()
+        if not pu:
+            continue
+        explicit_urls.append(
+            {
+                "role": str(u.get("role") or "other"),
+                "label": str(u.get("label") or "").strip(),
+                "public_url": pu,
+            }
+        )
 
     app_ver = _application_version_from_manifest(data, manifest_path)
     fp = _manifest_deploy_fingerprint(manifest_path)
@@ -368,12 +392,58 @@ def manifest_ui_fields(manifest_path: str) -> dict[str, Any]:
             break
 
     dedicated_local_adapters = False
+    effective_has_docker_compose = False
+    route_hosts = [str(x.get("hostname") or "").strip() for x in routes if isinstance(x, dict)]
+    route_hosts = [x for x in route_hosts if x]
+    main_url = ""
+    main_url_source = ""
+    derived_main_url = ""
+    main_urls: dict[str, str] = {}
+    derived_main_urls: dict[str, str] = {}
+    endpoint_urls: list[dict[str, str]] = []
+    source_location = ""
+    def _dual_scheme_urls(url: str) -> dict[str, str]:
+        u = (url or "").strip()
+        if not u:
+            return {}
+        try:
+            p = urlsplit(u)
+        except Exception:
+            return {}
+        if not p.netloc:
+            return {}
+        https_u = urlunsplit(("https", p.netloc, p.path, p.query, p.fragment))
+        http_u = urlunsplit(("http", p.netloc, p.path, p.query, p.fragment))
+        return {"https": https_u, "http": http_u}
+    frontend_url = next((u["public_url"] for u in explicit_urls if u.get("role") == "frontend"), "")
+    if frontend_url:
+        main_url = frontend_url
+        main_url_source = "localhost.urls.frontend"
+    elif explicit_urls:
+        main_url = explicit_urls[0]["public_url"]
+        main_url_source = "localhost.urls"
+    elif route_hosts:
+        main_url = f"https://{route_hosts[0]}"
+        main_url_source = "routing.entries"
+    try:
+        host_slug = host_slug_from_app_id(str(_pick(data, "name") or mp.parent.name))
+        derived_main_url = f"https://{host_slug}.lh"
+        derived_main_urls = {"https": f"https://{host_slug}.lh", "http": f"http://{host_slug}.lh"}
+        if not main_url:
+            main_url = derived_main_url
+            main_url_source = "derived_slug"
+    except ValueError:
+        derived_main_url = ""
+    endpoint_urls = explicit_urls
+    main_urls = _dual_scheme_urls(main_url)
     try:
         from leco_app.schema import load_effective_manifest
 
         em = load_effective_manifest(mp)
         if em.cloudflare:
             dedicated_local_adapters = bool(em.cloudflare.dedicated_local_adapters)
+        effective_has_docker_compose = em.docker_compose is not None
+        source_location = str(em.resolved_root(mp).resolve())
     except Exception:
         pass
 
@@ -391,8 +461,16 @@ def manifest_ui_fields(manifest_path: str) -> dict[str, Any]:
         "local_cf_public_prefix": lcp,
         "local_cf_adapter_hosts": adapter_hosts,
         "dedicated_local_adapters": dedicated_local_adapters,
+        "effective_has_docker_compose": effective_has_docker_compose,
         "profile_docker_compose": _profile_docker_compose_ui(infra_prof),
         "profile_cloudflare": _profile_cloudflare_ui(infra_prof),
+        "main_url": main_url,
+        "main_url_source": main_url_source,
+        "derived_main_url": derived_main_url,
+        "main_urls": main_urls,
+        "derived_main_urls": derived_main_urls,
+        "endpoint_urls": endpoint_urls,
+        "source_location": source_location,
     }
 
 
@@ -534,6 +612,8 @@ def list_hosted_apps() -> dict[str, Any]:
                 "runtime": rt,
                 "routes": mf["routes"],
                 "health_urls": mf["health_urls"],
+                "main_url": mf.get("main_url") or "",
+                "main_urls": mf.get("main_urls") or {},
                 "local_host_profile": mf.get("local_host_profile"),
                 "localhost_archetype": mf.get("localhost_archetype"),
                 "localhost_urls": mf.get("localhost_urls") or [],

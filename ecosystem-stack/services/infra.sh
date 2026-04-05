@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Safe to `source` from ai-stack/core.sh; also runnable as ./ai-stack/services/infra.sh …
+# Safe to `source` from ecosystem-stack/core.sh; also runnable as ./ecosystem-stack/services/infra.sh …
 if [ -z "${PROJECT_ROOT:-}" ]; then
   PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 fi

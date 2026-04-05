@@ -17,7 +17,7 @@ REFERENCE_CATEGORIES = [
             },
             {
                 "id": "localhost-dash",
-                "label": "Ops dashboard (this UI)",
+                "label": "LEco DevOps (this UI)",
                 "urls": ["http://localhost.lh"],
                 "notes": "Monitoring, metrics, control, docs. Service hubs: /hub for credentials & DB GUIs.",
             },

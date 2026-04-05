@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# Rebuild and run the ops dashboard (`service-dashboard`). Safe to `source` from ai-stack/core.sh.
+# Rebuild and run LEco DevOps (`service-dashboard`). Safe to `source` from ecosystem-stack/core.sh.
 #
 # Speed: full `deploy` always runs `docker build` (slow when Dockerfile/layers change or cache cold).
 # For day-to-day work, app code is read from the /project bind mount — use:
-#   DASHBOARD_SKIP_BUILD=1 ./ai-stack/services/dashboard.sh start
-#   or: ./ai-stack/services/dashboard.sh quick
+#   DASHBOARD_SKIP_BUILD=1 ./ecosystem-stack/services/dashboard.sh start
+#   or: ./ecosystem-stack/services/dashboard.sh quick
 # Rebuild when you change Dockerfile, requirements.txt, or tools/deploy-cli baked into the image.
 if [ -z "${PROJECT_ROOT:-}" ]; then
   PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 fi
 
-SCHED_SCRIPT="$PROJECT_ROOT/ai-stack/scripts/macos-host-metrics-scheduler.sh"
+SCHED_SCRIPT="$PROJECT_ROOT/ecosystem-stack/scripts/macos-host-metrics-scheduler.sh"
 
 _darwin_host_metrics_sched() {
   [ "$(uname -s)" = "Darwin" ] || return 0
@@ -37,7 +37,7 @@ if [ "$(uname -s)" = "Linux" ] && [ -d /sys/class/thermal ]; then
 fi
 
 # macOS + Docker Desktop: Linux container cannot read Apple SMC. Mount a small host dir and read
-# cpu_temp_c.txt (float °C) updated by ai-stack/scripts/macos-write-cpu-temp.sh or your own job.
+# cpu_temp_c.txt (float °C) updated by ecosystem-stack/scripts/macos-write-cpu-temp.sh or your own job.
 HOST_MAC_TEMP_MOUNT=""
 if [ "$(uname -s)" = "Darwin" ]; then
   HOST_METRICS_DIR="${HOME}/.local-eco-host-metrics"

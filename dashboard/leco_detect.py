@@ -13,11 +13,64 @@ import yaml
 from hosting_layout import HOSTING_SOURCE_LINK_NAME, compute_source_target
 
 _SLUG_RE = re.compile(r"[^a-zA-Z0-9._-]+")
+_HOST_LABEL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 
 
 def slugify_app_id(s: str) -> str:
-    t = _SLUG_RE.sub("-", (s or "").strip().lower()).strip("-")
-    return t or "app"
+    """Registry / hosting slug. Never returns ``.`` or ``..`` — those would resolve to parent dirs under ``hosting/app-*``."""
+    raw = (s or "").strip().lower()
+    t = _SLUG_RE.sub("-", raw).strip("-")
+    if not t or t in (".", "..") or set(t) <= {"."}:
+        return "app"
+    return t
+
+
+def require_registration_app_id(app_id: str) -> str:
+    """Validate operator-supplied id before Generate/Save/Register; then :func:`slugify_app_id`."""
+    raw = (app_id or "").strip()
+    if not raw or raw in (".", "..") or set(raw) <= {"."}:
+        raise ValueError(
+            "app_id must be a non-empty slug (e.g. my-app or 1note). "
+            "The values '.' and '..' are not allowed — they break hosting/app-available paths."
+        )
+    if not re.search(r"[A-Za-z0-9]", raw):
+        raise ValueError("app_id must contain at least one letter or number.")
+    aid = slugify_app_id(app_id)
+    if not aid:
+        raise ValueError("app_id required")
+    # Enforce that app id can always derive a host-safe main URL default.
+    host_slug_from_app_id(aid)
+    return aid
+
+
+def host_slug_from_app_id(app_id: str) -> str:
+    """
+    Host-safe slug for default main URL (`https://<slug>.lh`).
+
+    Normalizes app id to lowercase DNS-label characters and validates label length/shape.
+    """
+    raw = slugify_app_id(app_id).replace(".", "-").replace("_", "-").lower()
+    s = re.sub(r"[^a-z0-9-]+", "-", raw).strip("-")
+    s = re.sub(r"-{2,}", "-", s)
+    if not s:
+        raise ValueError("app_id cannot derive a host-safe URL label.")
+    if len(s) > 63:
+        raise ValueError("app_id is too long for host labels (max 63 chars after normalization).")
+    if not _HOST_LABEL_RE.match(s):
+        raise ValueError("app_id cannot derive a valid host label; use letters, numbers, dots, dashes or underscores.")
+    return s
+
+
+def main_url_from_app_id(app_id: str) -> str:
+    return main_urls_from_app_id(app_id)["https"]
+
+
+def main_urls_from_app_id(app_id: str) -> dict[str, str]:
+    host = host_slug_from_app_id(app_id)
+    return {
+        "https": f"https://{host}.lh",
+        "http": f"http://{host}.lh",
+    }
 
 COMPOSE_NAMES = (
     "docker-compose.yml",
@@ -38,6 +91,21 @@ WRANGLER_JSON_HINT_PATHS = (
     Path("cloudflare") / "wrangler.json",
     Path("cloudflare") / "wrangler.jsonc",
 )
+
+_SCAN_PRUNE_DIRS = {
+    ".git",
+    ".hg",
+    ".svn",
+    "node_modules",
+    ".next",
+    ".nuxt",
+    "dist",
+    "build",
+    "coverage",
+    ".venv",
+    "venv",
+    "__pycache__",
+}
 
 
 def _parse_ports(ports_val: Any) -> list[int]:
@@ -100,11 +168,31 @@ def _pick_primary_compose(files: list[Path]) -> Path | None:
     return files[0] if files else None
 
 
-def _detect_wrangler(root: Path) -> Path | None:
+def _detect_wrangler_shallow(root: Path) -> Path | None:
     r = root.resolve()
     for rel in WRANGLER_PATHS:
         if (r / rel).is_file():
             return rel
+    return None
+
+
+def _detect_wrangler(root: Path) -> Path | None:
+    r = root.resolve()
+    shallow = _detect_wrangler_shallow(r)
+    if shallow is not None:
+        return shallow
+    for dirpath, dirs, files in os.walk(r):
+        rp = Path(dirpath)
+        try:
+            depth = len(rp.relative_to(r).parts)
+        except ValueError:
+            continue
+        dirs[:] = [d for d in dirs if d not in _SCAN_PRUNE_DIRS]
+        if depth > 6:
+            dirs[:] = []
+            continue
+        if "wrangler.toml" in files:
+            return (rp / "wrangler.toml").relative_to(r)
     return None
 
 
@@ -131,7 +219,7 @@ def compute_hosting_source_symlink_target(orig_root: Path, manifest_dict: dict[s
     if not parent.is_dir() or parent == base:
         return base
     wr_here = _detect_wrangler(base) is not None
-    wr_parent = _detect_wrangler(parent) is not None
+    wr_parent = _detect_wrangler_shallow(parent) is not None
     compose_here = bool(_list_compose_files(base))
     compose_parent = bool(_list_compose_files(parent))
     if wr_parent and not wr_here:
@@ -141,6 +229,32 @@ def compute_hosting_source_symlink_target(orig_root: Path, manifest_dict: dict[s
     return base
 
 
+def registration_scan_root(root: Path) -> Path:
+    """
+    Best-effort app tree for Detect/Generate when path points at hosting materialization.
+
+    When operators pass ``hosting/app-available/<id>`` (which often contains ``root: source``),
+    scan the manifest-resolved root instead of the staging directory itself.
+    """
+    r = root.resolve()
+    man = r / "leco.app.yaml"
+    if not man.is_file():
+        return r
+    try:
+        parsed = yaml.safe_load(man.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+        return r
+    if not isinstance(parsed, dict):
+        return r
+    try:
+        target = compute_source_target(r, parsed).resolve()
+    except OSError:
+        return r
+    if not target.is_dir():
+        return r
+    return target if target != r else r
+
+
 def _detect_wrangler_relpath_from_base(base: Path, max_up: int = 6) -> str | None:
     """Return path relative to ``base`` (may use ``..``) to the nearest wrangler file walking up."""
     b = base.resolve()
@@ -148,7 +262,7 @@ def _detect_wrangler_relpath_from_base(base: Path, max_up: int = 6) -> str | Non
     for _ in range(max_up):
         if try_root is None or not try_root.is_dir():
             break
-        wrel = _detect_wrangler(try_root)
+        wrel = _detect_wrangler(try_root) if try_root == b else _detect_wrangler_shallow(try_root)
         if wrel is not None:
             abs_p = (try_root / wrel).resolve()
             try:
@@ -167,7 +281,27 @@ def _detect_wrangler_json_hint(root: Path) -> str | None:
     for rel in WRANGLER_JSON_HINT_PATHS:
         if (r / rel).is_file():
             return rel.as_posix()
+    for dirpath, dirs, files in os.walk(r):
+        rp = Path(dirpath)
+        try:
+            depth = len(rp.relative_to(r).parts)
+        except ValueError:
+            continue
+        dirs[:] = [d for d in dirs if d not in _SCAN_PRUNE_DIRS]
+        if depth > 6:
+            dirs[:] = []
+            continue
+        for name in ("wrangler.json", "wrangler.jsonc"):
+            if name in files:
+                return (rp / name).relative_to(r).as_posix()
     return None
+
+
+def _suggest_local_cf_public_prefix(app_id: str) -> str | None:
+    try:
+        return host_slug_from_app_id(app_id)
+    except ValueError:
+        return None
 
 
 def _has_file(root: Path, rel: Path) -> bool:
@@ -450,7 +584,8 @@ def resolve_registration_path(user_path: str) -> Path:
             raise ValueError("Workspace parent is not mounted (DASHBOARD_WORKSPACE_PARENT)")
         wsp_base = bases[1].resolve()
         rest = raw[4:].strip().strip("/")
-        if not rest:
+        # ``wsp:.`` / ``wsp:./`` must mean workspace root, not a segment named ``.`` (invalid for _safe_rel_segments).
+        if not rest or rest == "." or rest == "./":
             cand = wsp_base
         else:
             segs = _safe_rel_segments(rest)
@@ -690,6 +825,199 @@ def ensure_docker_compose_in_profile_infrastructure(
         try_root = try_root.parent
 
 
+def _compose_service_internal_port(spec: dict[str, Any]) -> int | None:
+    """Best-effort container port from compose service (prefer expose, then ports target)."""
+    expose = spec.get("expose")
+    if isinstance(expose, list):
+        for item in expose:
+            s = str(item).strip()
+            if s.isdigit():
+                v = int(s)
+                if 1 <= v <= 65535:
+                    return v
+    ports = spec.get("ports")
+    if isinstance(ports, list):
+        for p in ports:
+            s = str(p).strip()
+            if not s:
+                continue
+            # Examples: "3000:3000", "127.0.0.1:8001:8001", "3000"
+            if "/" in s:
+                s = s.split("/", 1)[0]
+            parts = [x for x in s.split(":") if x]
+            cand = parts[-1] if parts else s
+            if cand.isdigit():
+                v = int(cand)
+                if 1 <= v <= 65535:
+                    return v
+    return None
+
+
+def _compose_project_name(dc: dict[str, Any], host_slug: str) -> str:
+    raw = (dc.get("projectName") or dc.get("project_name") or "").strip()
+    if raw:
+        return raw
+    return host_slug
+
+
+def _compose_service_backend_host(
+    service_name: str,
+    spec: dict[str, Any],
+    project_name: str,
+) -> str:
+    """Resolve a stable backend host on lh-network for a compose service."""
+    cn = (spec.get("container_name") or "").strip()
+    if cn:
+        return cn
+    nets = spec.get("networks")
+    if isinstance(nets, dict):
+        for net_name, net_cfg in nets.items():
+            if str(net_name).strip() != "lh-network":
+                continue
+            if isinstance(net_cfg, dict):
+                aliases = net_cfg.get("aliases")
+                if isinstance(aliases, list):
+                    for a in aliases:
+                        sa = str(a).strip()
+                        if sa:
+                            return sa
+    return f"{project_name}-{service_name}-1"
+
+
+def _load_compose_services_for_localhost(
+    localhost: dict[str, Any],
+    root: Path,
+    manifest: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]] | None:
+    base = compute_source_target(root, manifest).resolve()
+    infra = localhost.get("infrastructure")
+    if not isinstance(infra, dict):
+        return None
+    dc = infra.get("dockerCompose")
+    if not isinstance(dc, dict):
+        return None
+    cf = (dc.get("composeFile") or dc.get("compose_file") or "").strip()
+    if not cf:
+        return None
+    compose_abs = (base / cf).resolve()
+    if not compose_abs.is_file():
+        return None
+    try:
+        raw = yaml.safe_load(compose_abs.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return None
+    services = raw.get("services")
+    if not isinstance(services, dict):
+        return None
+    return services, dc, infra
+
+
+def _infer_compose_routing_entries(
+    localhost: dict[str, Any], root: Path, manifest: dict[str, Any], host_slug: str
+) -> list[dict[str, Any]]:
+    """
+    Mixed routing default for compose apps:
+      - https://<slug>.lh -> frontend-ish service
+      - https://api.<slug>.lh -> backend-ish service
+    """
+    loaded = _load_compose_services_for_localhost(localhost, root, manifest)
+    if not loaded:
+        return []
+    services, dc, _infra = loaded
+    project_name = _compose_project_name(dc, host_slug)
+
+    def _pick_service(candidates: tuple[str, ...]) -> tuple[str, int, str] | None:
+        keys = {str(k).lower(): str(k) for k in services.keys()}
+        for c in candidates:
+            k = keys.get(c.lower())
+            if not k:
+                continue
+            spec = services.get(k)
+            if not isinstance(spec, dict):
+                continue
+            port = _compose_service_internal_port(spec)
+            if port is None:
+                continue
+            return k, port, _compose_service_backend_host(k, spec, project_name)
+        return None
+
+    frontend = _pick_service(("frontend", "web", "ui", "app", "nginx"))
+    backend = _pick_service(("backend", "api", "server", "app"))
+    if not frontend or not backend:
+        return []
+    return [
+        {"hostname": f"{host_slug}.lh", "backendHost": frontend[2], "backendPort": frontend[1]},
+        {"hostname": f"api.{host_slug}.lh", "backendHost": backend[2], "backendPort": backend[1]},
+    ]
+
+
+def _normalize_compose_routing_backend_hosts(
+    localhost: dict[str, Any],
+    root: Path,
+    manifest: dict[str, Any],
+    host_slug: str,
+) -> int:
+    """
+    Replace ambiguous backend hosts like ``frontend``/``backend`` with app-scoped compose hosts.
+    Returns number of routing entries updated.
+    """
+    loaded = _load_compose_services_for_localhost(localhost, root, manifest)
+    if not loaded:
+        return 0
+    services, dc, infra = loaded
+    routing = infra.get("routing")
+    if not isinstance(routing, dict):
+        return 0
+    entries = routing.get("entries")
+    if not isinstance(entries, list) or not entries:
+        return 0
+    project_name = _compose_project_name(dc, host_slug)
+    meta_changed = False
+    if not (dc.get("projectName") or dc.get("project_name")):
+        dc["projectName"] = host_slug
+        meta_changed = True
+    updated = 0
+    service_keys = {str(k) for k in services.keys()}
+    for row in entries:
+        if not isinstance(row, dict):
+            continue
+        bh = str(row.get("backendHost") or "").strip()
+        if not bh or bh not in service_keys:
+            continue
+        spec = services.get(bh)
+        if not isinstance(spec, dict):
+            continue
+        resolved = _compose_service_backend_host(bh, spec, project_name)
+        if resolved and resolved != bh:
+            row["backendHost"] = resolved
+            updated += 1
+    return updated + (1 if meta_changed else 0)
+
+
+def _apply_default_routing(localhost: dict[str, Any], root: Path, manifest: dict[str, Any], host_slug: str, *, has_wrangler: bool) -> None:
+    """Set routing defaults only when profile has no explicit routing."""
+    infra = localhost.get("infrastructure")
+    if not isinstance(infra, dict):
+        return
+    existing = infra.get("routing")
+    if isinstance(existing, dict):
+        entries = existing.get("entries")
+        if isinstance(entries, list) and entries:
+            return
+
+    compose_entries = _infer_compose_routing_entries(localhost, root, manifest, host_slug)
+    if compose_entries:
+        infra["routing"] = {"entries": compose_entries}
+        return
+    if has_wrangler:
+        infra["routing"] = {
+            "entries": [
+                {"hostname": f"{host_slug}.lh", "backendHost": "workers-runtime", "backendPort": 8787},
+                {"hostname": f"api.{host_slug}.lh", "backendHost": "workers-runtime", "backendPort": 8787},
+            ]
+        }
+
+
 def ensure_wrangler_in_manifest(manifest: dict[str, Any], app_root: Path) -> None:
     """
     If ``wrangler.toml`` (or ``cloudflare/wrangler.toml``) exists under app_root but the manifest
@@ -744,9 +1072,20 @@ def build_default_manifest_and_localhost(
     app_id: str,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Generate bridge manifest (v3) + ``leco.yaml`` dict with ``infrastructure`` as source of truth."""
+    host_slug = host_slug_from_app_id(app_id)
+    main_urls = main_urls_from_app_id(app_id)
+    api_urls = {
+        "https": f"https://api.{host_slug}.lh",
+        "http": f"http://api.{host_slug}.lh",
+    }
     scan = scan_app_directory(root)
     compose_files = scan.get("compose_files") or []
     compose_file = compose_files[0] if compose_files else None
+    compose_file_str = ""
+    if isinstance(compose_file, Path):
+        compose_file_str = compose_file.as_posix()
+    elif isinstance(compose_file, str):
+        compose_file_str = compose_file.strip()
     env_file = None
     r = root.resolve()
     if (r / "docker" / ".env").is_file() or (r / "docker" / "env.example").is_file():
@@ -762,8 +1101,8 @@ def build_default_manifest_and_localhost(
     config_refs: dict[str, str] = {}
     if scan.get("wrangler_config"):
         config_refs["wranglerConfig"] = str(scan["wrangler_config"])
-    if compose_file:
-        config_refs["dockerComposeFile"] = compose_file.as_posix()
+    if compose_file_str:
+        config_refs["dockerComposeFile"] = compose_file_str
     if (r / ".env").is_file():
         config_refs["envFile"] = ".env"
     elif env_file:
@@ -800,19 +1139,30 @@ def build_default_manifest_and_localhost(
         manifest["configRefs"] = config_refs
 
     infrastructure: dict[str, Any] = {}
-    if compose_file:
-        dc: dict[str, Any] = {"composeFile": compose_file.as_posix()}
+    if compose_file_str:
+        dc: dict[str, Any] = {"composeFile": compose_file_str}
+        dc["projectName"] = host_slug
         if env_file:
             dc["envFile"] = env_file
         infrastructure["dockerCompose"] = dc
-    if scan.get("has_wrangler") and scan.get("wrangler_config"):
-        infrastructure["cloudflare"] = {"wranglerConfig": scan["wrangler_config"]}
+    has_wrangler = bool(scan.get("has_wrangler") and scan.get("wrangler_config"))
+    if has_wrangler:
+        cf: dict[str, Any] = {"wranglerConfig": scan["wrangler_config"]}
+        pfx = _suggest_local_cf_public_prefix(app_id)
+        if pfx:
+            cf["localCfPublicPrefix"] = pfx
+        infrastructure["cloudflare"] = cf
 
     localhost: dict[str, Any] = {
         "schemaVersion": 2,
         "archetype": scan.get("suggested_archetype") or "generic",
         "infrastructure": infrastructure,
-        "urls": [],
+        "urls": [
+            {"role": "frontend", "label": "Main app (HTTPS)", "publicUrl": main_urls["https"]},
+            {"role": "frontend", "label": "Main app (HTTP)", "publicUrl": main_urls["http"]},
+            {"role": "api", "label": "API (HTTPS)", "publicUrl": api_urls["https"]},
+            {"role": "api", "label": "API (HTTP)", "publicUrl": api_urls["http"]},
+        ],
         "lifecycle": {"prepare": [], "build": [], "preStart": []},
         "notes": "",
     }
@@ -821,6 +1171,8 @@ def build_default_manifest_and_localhost(
         localhost, root, manifest, allow_compose_discovery=True
     )
     ensure_wrangler_in_profile_infrastructure(localhost, root, manifest)
+    _apply_default_routing(localhost, root, manifest, host_slug, has_wrangler=has_wrangler)
+    _normalize_compose_routing_backend_hosts(localhost, root, manifest, host_slug)
     enrich_infrastructure_wrangler_binding_preview(localhost.get("infrastructure") or {}, root)
 
     return manifest, localhost
@@ -871,6 +1223,40 @@ def preview_registration_yaml(root: Path, app_id: str) -> tuple[str, str]:
         "allow_unicode": True,
     }
     return yaml.safe_dump(m, **dump_kw), yaml.safe_dump(lo, **dump_kw)
+
+
+def normalize_profile_compose_backend_hosts(manifest_abs: Path) -> dict[str, Any]:
+    """
+    Auto-heal routing host collisions for multi-app setups.
+    Rewrites localhost.routing.entries backendHost values when they point to ambiguous compose service names.
+    """
+    mp = manifest_abs.resolve()
+    try:
+        manifest = yaml.safe_load(mp.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return {"ok": False, "updated": 0}
+    if not isinstance(manifest, dict):
+        return {"ok": False, "updated": 0}
+    prof = (manifest.get("localHostProfile") or "leco.yaml").strip() or "leco.yaml"
+    prof_path = (mp.parent / prof).resolve()
+    try:
+        localhost = yaml.safe_load(prof_path.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return {"ok": False, "updated": 0}
+    if not isinstance(localhost, dict):
+        return {"ok": False, "updated": 0}
+    host_slug = host_slug_from_app_id(str(manifest.get("name") or mp.parent.name))
+    updated = _normalize_compose_routing_backend_hosts(localhost, mp.parent, manifest, host_slug)
+    if updated <= 0:
+        return {"ok": True, "updated": 0, "profile_path": str(prof_path)}
+    try:
+        prof_path.write_text(
+            yaml.safe_dump(localhost, default_flow_style=False, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+    except OSError:
+        return {"ok": False, "updated": 0}
+    return {"ok": True, "updated": updated, "profile_path": str(prof_path)}
 
 
 def register_yaml_samples() -> list[dict[str, Any]]:

@@ -3,7 +3,7 @@ __pycache__/
 *.pyc
 *.egg-info/
 
-# Per-machine leco apps registered for Ops Dashboard Control
+# Per-machine leco apps registered for LEco DevOps
 config/leco-registry.yaml
 
 # Local TLS material

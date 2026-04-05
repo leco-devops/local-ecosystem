@@ -6,19 +6,26 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import yaml
 
 from hosting_layout import (
     HOSTING_SOURCE_LINK_NAME,
-    ensure_hosting_enabled_symlink,
     hosting_manifest_logical_path,
     hosting_staging_dir,
     is_dir_writable,
     registry_manifest_relpath,
     refresh_symlink,
 )
-from leco_detect import compute_hosting_source_symlink_target, resolve_registration_path, slugify_app_id
+from leco_detect import (
+    compute_hosting_source_symlink_target,
+    host_slug_from_app_id,
+    normalize_profile_compose_backend_hosts,
+    require_registration_app_id,
+    resolve_registration_path,
+    slugify_app_id,
+)
 from leco_materialize import registration_yaml_status
 from leco_subprocess import (
     PROJECT_ROOT,
@@ -45,6 +52,122 @@ class RegisterPrepared:
     source_symlink_target: str | None = None
 
 
+def effective_manifest_has_docker_compose(manifest_abs: Path) -> bool:
+    """Whether ``leco-app deploy`` would run compose (merged bridge + localhost profile)."""
+    try:
+        from leco_app.schema import load_effective_manifest
+
+        m = load_effective_manifest(manifest_abs.resolve())
+        return m.docker_compose is not None
+    except Exception:
+        return False
+
+
+def effective_manifest_has_traefik_sources(manifest_abs: Path) -> bool:
+    """Whether ecosystem-register would merge Traefik fragments (routing.entries or local CF prefix)."""
+    try:
+        from leco_app.schema import load_effective_manifest
+
+        m = load_effective_manifest(manifest_abs.resolve())
+        if m.routing and m.routing.entries:
+            return True
+        cf = m.cloudflare
+        if cf and cf.local_cf_public_prefix and str(cf.local_cf_public_prefix).strip():
+            return True
+        return False
+    except Exception:
+        return False
+
+
+def register_infrastructure_gaps(manifest_abs: Path) -> list[str]:
+    """Human-readable gaps when registry succeeds but no compose / Traefik inputs exist."""
+    gaps: list[str] = []
+    if not effective_manifest_has_docker_compose(manifest_abs):
+        gaps.append(
+            "No infrastructure.dockerCompose in leco.yaml — no compose project for this app "
+            "(hosted-apps services list and post-register deploy stay empty)."
+        )
+    if not effective_manifest_has_traefik_sources(manifest_abs):
+        gaps.append(
+            "No infrastructure.routing.entries and no cloudflare.localCfPublicPrefix — "
+            "Traefik merge skipped (no *.lh routes added)."
+        )
+    return gaps
+
+
+def effective_manifest_url_summary(manifest_abs: Path) -> dict[str, Any]:
+    """Main URL + source metadata from merged manifest/profile with derived fallback."""
+    out: dict[str, Any] = {
+        "main_url": "",
+        "main_url_source": "",
+        "derived_main_url": "",
+        "main_urls": {},
+        "derived_main_urls": {},
+        "explicit_urls": [],
+        "route_hosts": [],
+    }
+    def _dual_scheme_urls(url: str) -> dict[str, str]:
+        u = (url or "").strip()
+        if not u:
+            return {}
+        try:
+            p = urlsplit(u)
+        except Exception:
+            return {}
+        if not p.netloc:
+            return {}
+        https_u = urlunsplit(("https", p.netloc, p.path, p.query, p.fragment))
+        http_u = urlunsplit(("http", p.netloc, p.path, p.query, p.fragment))
+        return {"https": https_u, "http": http_u}
+    try:
+        from leco_app.schema import load_merged_manifest
+
+        merged = load_merged_manifest(manifest_abs.resolve())
+        m = merged.manifest
+        host_slug = host_slug_from_app_id(m.name or "app")
+        derived_main = f"https://{host_slug}.lh"
+        out["derived_main_url"] = derived_main
+        out["derived_main_urls"] = {"https": f"https://{host_slug}.lh", "http": f"http://{host_slug}.lh"}
+
+        explicit_urls: list[dict[str, str]] = []
+        frontend_url = ""
+        for u in merged.localhost.urls or []:
+            pu = (u.public_url or "").strip()
+            if not pu:
+                continue
+            role = str(u.role or "other")
+            label = (u.label or "").strip()
+            explicit_urls.append({"role": role, "label": label, "public_url": pu})
+            if not frontend_url and role == "frontend":
+                frontend_url = pu
+        out["explicit_urls"] = explicit_urls
+
+        route_hosts: list[str] = []
+        if m.routing and m.routing.entries:
+            for e in m.routing.entries:
+                h = str(e.hostname or "").strip()
+                if h:
+                    route_hosts.append(h)
+        out["route_hosts"] = route_hosts
+
+        if frontend_url:
+            out["main_url"] = frontend_url
+            out["main_url_source"] = "localhost.urls.frontend"
+        elif explicit_urls:
+            out["main_url"] = explicit_urls[0]["public_url"]
+            out["main_url_source"] = "localhost.urls"
+        elif route_hosts:
+            out["main_url"] = f"https://{route_hosts[0]}"
+            out["main_url_source"] = "routing.entries"
+        else:
+            out["main_url"] = derived_main
+            out["main_url_source"] = "derived_slug"
+        out["main_urls"] = _dual_scheme_urls(out["main_url"])
+    except Exception:
+        pass
+    return out
+
+
 def _register_result_dict(
     prep: RegisterPrepared,
     log: str,
@@ -66,6 +189,13 @@ def _register_result_dict(
         out["hosting_staging"] = prep.hosting_staging or ""
         out["registry_manifest_relpath"] = prep.registry_manifest_relpath or ""
         out["source_symlink_target"] = prep.source_symlink_target or ""
+    out["effective_has_docker_compose"] = effective_manifest_has_docker_compose(prep.manifest_abs)
+    out["effective_has_traefik_sources"] = effective_manifest_has_traefik_sources(prep.manifest_abs)
+    ig = register_infrastructure_gaps(prep.manifest_abs)
+    if ig:
+        out["register_infrastructure_gaps"] = ig
+    out["url_sources"] = effective_manifest_url_summary(prep.manifest_abs)
+    out["main_url"] = str((out["url_sources"] or {}).get("main_url") or "")
     if deploy_code is not None:
         out["deploy_exit_code"] = deploy_code
         out["deploy_ok"] = deploy_code == 0
@@ -76,13 +206,11 @@ def _register_result_dict(
 def prepare_register_from_disk(path_rel: str, app_id: str, label: str) -> RegisterPrepared:
     """Require leco.app.yaml + localhost profile on disk (or under hosting staging when read-only)."""
     orig_root = resolve_registration_path(path_rel)
-    aid = slugify_app_id(app_id)
-    if not aid:
-        raise ValueError("app_id required")
+    aid = require_registration_app_id(app_id)
     display = (label or "").strip() or aid
     eco = Path(PROJECT_ROOT).resolve()
 
-    st = registration_yaml_status(path_rel, app_id)
+    st = registration_yaml_status(path_rel, aid)
     if not st.get("registration_ready"):
         raise ValueError(
             "Registration YAML is not ready — click **Generate YAML** (or **Save YAML**) so "
@@ -112,7 +240,6 @@ def prepare_register_from_disk(path_rel: str, app_id: str, label: str) -> Regist
         raise ValueError("Materialized leco.app.yaml must be a YAML mapping")
     tree_root = compute_hosting_source_symlink_target(orig_root, parsed)
     refresh_symlink(staging / HOSTING_SOURCE_LINK_NAME, tree_root, target_is_dir=True)
-    ensure_hosting_enabled_symlink(eco, aid)
     logical_man = hosting_manifest_logical_path(eco, aid)
     reg_rel = registry_manifest_relpath(aid)
     return RegisterPrepared(
@@ -141,6 +268,7 @@ def register_app_wizard(
     Use :mod:`leco_materialize` to generate or save files first.
     """
     prep = prepare_register_from_disk(path_rel, app_id, label)
+    normalize_profile_compose_backend_hosts(prep.manifest_abs)
     code, log = run_ecosystem_register(
         prep.manifest_abs,
         app_id=prep.app_id,
@@ -152,6 +280,15 @@ def register_app_wizard(
         raise OSError(log[-4000:] if log else f"leco-app ecosystem-register failed (exit {code})")
 
     if deploy_stack:
+        if not effective_manifest_has_docker_compose(prep.manifest_abs):
+            skip = (
+                "\n--- post-register deploy ---\n"
+                "Skipped: effective manifest has no dockerCompose section "
+                "(Workers-only / Wrangler apps have no compose to run). "
+                "Use `wrangler dev` / `wrangler deploy` for this stack, or add "
+                "`infrastructure.dockerCompose` in leco.yaml if you add sidecar containers.\n"
+            )
+            return _register_result_dict(prep, (log or "") + skip)
         dcode, dlog = run_leco_deploy(prep.manifest_abs)
         return _register_result_dict(prep, log, deploy_code=dcode, deploy_log=dlog)
 
@@ -169,6 +306,12 @@ def iterate_register_app_wizard(
     yield {"type": "log", "text": "Checking leco.app.yaml + localhost profile on disk…\n"}
     try:
         prep = prepare_register_from_disk(path_rel, app_id, label)
+        fix = normalize_profile_compose_backend_hosts(prep.manifest_abs)
+        if (fix.get("updated") or 0) > 0:
+            yield {
+                "type": "log",
+                "text": f"Normalized routing backend hosts for isolation ({fix.get('updated')} entry/entries).\n",
+            }
     except (ValueError, OSError, yaml.YAMLError) as exc:
         yield {"type": "done", "result": {"ok": False, "error": str(exc)}}
         return
@@ -202,6 +345,15 @@ def iterate_register_app_wizard(
 
     if not deploy_stack:
         yield {"type": "done", "result": _register_result_dict(prep, log)}
+        return
+
+    if not effective_manifest_has_docker_compose(prep.manifest_abs):
+        skip = (
+            "\n--- post-register deploy ---\n"
+            "Skipped: no dockerCompose in effective manifest (Workers-only — no `leco-app deploy`).\n"
+        )
+        yield {"type": "log", "text": skip}
+        yield {"type": "done", "result": _register_result_dict(prep, log + skip)}
         return
 
     yield {"type": "log", "text": "\n--- leco-app deploy (docker compose up) ---\n"}

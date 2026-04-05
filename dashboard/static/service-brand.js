@@ -65,7 +65,7 @@
     "Open WebUI": "open-webui",
     n8n: "n8n",
     Ollama: "ollama",
-    "Service Dashboard": "dashboard",
+    "LEco DevOps": "dashboard",
     PostgreSQL: "postgres",
     "R2 (Cloudflare local)": "r2",
     "KV (Cloudflare local)": "kv",

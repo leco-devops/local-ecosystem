@@ -1,7 +1,7 @@
 import json
 import os
 
-from flask import Flask, Response, abort, jsonify, redirect, render_template, request, stream_with_context, url_for
+from flask import Flask, Response, abort, jsonify, make_response, redirect, render_template, request, stream_with_context, url_for
 
 from control import CONTROL_TOKEN, check_control_token, list_targets, run_action, run_action_streaming
 from ollama_models import build_models_payload, handle_inspect, handle_models_action, list_manifest_backups
@@ -16,6 +16,19 @@ from monitor import (
 from service_hub import get_hub_detail, list_hub_slugs
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
+
+_HTML_NO_CACHE = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "Pragma": "no-cache",
+}
+
+
+def _html_response(template: str, **context):
+    """Serve HTML without browser caching so template edits are visible immediately."""
+    resp = make_response(render_template(template, **context))
+    for k, v in _HTML_NO_CACHE.items():
+        resp.headers[k] = v
+    return resp
 
 
 @app.get("/favicon.ico")
@@ -242,9 +255,14 @@ def api_leco_register_samples():
 def api_leco_detect():
     """Scan an allowed app directory (compose / wrangler / archetype hints)."""
     from leco_detect import (
+        host_slug_from_app_id,
+        main_urls_from_app_id,
+        main_url_from_app_id,
         preview_registration_yaml,
         read_existing_registration_yaml,
+        registration_scan_root,
         registration_path_field_for_ui,
+        require_registration_app_id,
         resolve_registration_path,
         scan_app_directory,
         slugify_app_id,
@@ -259,14 +277,41 @@ def api_leco_detect():
         root = resolve_registration_path(p)
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
-    out = dict(scan_app_directory(root))
+    scan_root = registration_scan_root(root)
+    out = dict(scan_app_directory(scan_root))
     out["path_field"] = registration_path_field_for_ui(root)
+    out["scan_root_path_field"] = registration_path_field_for_ui(scan_root)
     em, el = read_existing_registration_yaml(root)
     out["existing_manifest_yaml"] = em
     out["existing_localhost_yaml"] = el
-    preview_id = (data.get("app_id") or "").strip() or root.name
-    preview_id = slugify_app_id(preview_id)
-    my, ly = preview_registration_yaml(root, preview_id)
+    preview_raw = (data.get("app_id") or "").strip()
+    if preview_raw and (preview_raw in (".", "..") or set(preview_raw) <= {"."}):
+        return jsonify(
+            {"ok": False, "error": "app_id cannot be '.' or '..' — use a slug such as my-app or 1note."}
+        ), 400
+    if preview_raw:
+        try:
+            preview_id = require_registration_app_id(preview_raw)
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+    else:
+        preview_id = slugify_app_id(root.name)
+    try:
+        host_slug = host_slug_from_app_id(preview_id)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    preview_urls = main_urls_from_app_id(preview_id)
+    out["main_url_preview"] = main_url_from_app_id(preview_id)
+    out["main_url_preview_https"] = preview_urls["https"]
+    out["main_url_preview_http"] = preview_urls["http"]
+    out["main_url_host_slug"] = host_slug
+    warnings: list[str] = []
+    if not out.get("compose_files") and not out.get("has_wrangler"):
+        warnings.append(
+            "No compose or wrangler signals detected. Main URL preview is derived from app id but may not route until you configure infrastructure."
+        )
+    out["main_url_warnings"] = warnings
+    my, ly = preview_registration_yaml(scan_root, preview_id)
     out["manifest_yaml_preview"] = my
     out["localhost_yaml_preview"] = ly
     out["registration_yaml_status"] = registration_yaml_status(p, preview_id)
@@ -614,12 +659,12 @@ def api_control_stream():
 
 @app.get("/")
 def home():
-    return render_template("index.html", dashboard_boot=_dashboard_boot_dict())
+    return _html_response("index.html", dashboard_boot=_dashboard_boot_dict())
 
 
 @app.get("/hub")
 def hub_index():
-    return render_template("hub_index.html", hubs=list_hub_slugs())
+    return _html_response("hub_index.html", hubs=list_hub_slugs(), dashboard_boot=_dashboard_boot_dict())
 
 
 @app.get("/hub/<slug>")
@@ -627,7 +672,7 @@ def hub_detail(slug: str):
     hub = get_hub_detail(slug)
     if not hub:
         abort(404)
-    return render_template("service_hub.html", hub=hub)
+    return _html_response("service_hub.html", hub=hub, dashboard_boot=_dashboard_boot_dict())
 
 
 if __name__ == "__main__":

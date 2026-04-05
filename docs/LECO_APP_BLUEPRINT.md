@@ -2,7 +2,7 @@
 
 **Audience:** operators, dashboard users, and contributors extending hosting, registration, or `leco-app`.
 
-This document is the **canonical map** of how a third-party app is represented in local-ecosystem: files on disk, merge rules, hosting materialization, Docker Compose, Cloudflare-local, Traefik, and teardown. For day-to-day commands see **[LECO_USER_MANUAL.md](LECO_USER_MANUAL.md)** and **[DEPLOY_CLI.md](DEPLOY_CLI.md)**.
+This document is the **canonical map** of how a third-party app is represented in local-ecosystem: files on disk, merge rules, hosting materialization, Docker Compose, Cloudflare-local, Traefik, and teardown. For day-to-day commands see **[LECO_USER_MANUAL.md](LECO_USER_MANUAL.md)** and **[DEPLOY_CLI.md](DEPLOY_CLI.md)**. For platform-wide architecture context, see **[ARCHITECTURE.md](ARCHITECTURE.md)**, **[HLD.md](HLD.md)**, and **[LLD.md](LLD.md)**.
 
 ---
 
@@ -35,8 +35,8 @@ This document is the **canonical map** of how a third-party app is represented i
 ## 3. Registry and hosting indirection
 
 - **`config/leco-registry.yaml`** stores `id`, `label`, and **`manifest`** path relative to the ecosystem repo root.
-- Materialized apps use paths like **`hosting/app-enabled/<slug>/leco.app.yaml`** (symlink → `../app-available/<slug>`).
-- **`ecosystem-unregister`** removes the registry row and, when the manifest path is under **`hosting/`**, deletes **`hosting/app-enabled/<slug>`** and **`hosting/app-available/<slug>`** (`tools/deploy-cli/leco_app/ecosystem_registry.py`).
+- Materialized apps use paths like **`hosting/app-available/<slug>/leco.app.yaml`**.
+- **`ecosystem-unregister`** removes the registry row and, when the manifest path is under **`hosting/`**, deletes **`hosting/app-available/<slug>`** (`tools/deploy-cli/leco_app/ecosystem_registry.py`).
 
 ---
 

@@ -1,27 +1,27 @@
 #!/bin/bash
 
 BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-source "$BASE_DIR/ai-stack/core.sh"
+source "$BASE_DIR/ecosystem-stack/core.sh"
 
 ACTION=$1
 SERVICE=$2
 
 print_usage() {
   echo "Usage:"
-  echo "./ai-stack.sh menu"
-  echo "./ai-stack.sh start [service]"
-  echo "./ai-stack.sh stop [service]"
-  echo "./ai-stack.sh restart [service]"
-  echo "./ai-stack.sh deploy              # full stack: bulk_ecosystem (stop all except dashboard, then start all)"
-  echo "./ai-stack.sh deploy [service]    # service deploy() if defined, else restart"
-  echo "./ai-stack.sh pause [service]"
-  echo "./ai-stack.sh unpause [service]"
-  echo "./ai-stack.sh status [service]"
-  echo "./ai-stack.sh logs [service]"
-  echo "./ai-stack.sh remove [service]"
-  echo "./ai-stack.sh reset [service]"
-  echo "./ai-stack.sh repair-network"
-  echo "./ai-stack.sh ollama-pull-models   # pull pinned models into running ollama"
+  echo "./ecosystem-stack.sh menu"
+  echo "./ecosystem-stack.sh start [service]"
+  echo "./ecosystem-stack.sh stop [service]"
+  echo "./ecosystem-stack.sh restart [service]"
+  echo "./ecosystem-stack.sh deploy              # full stack: bulk_ecosystem (stop all except dashboard, then start all)"
+  echo "./ecosystem-stack.sh deploy [service]    # service deploy() if defined, else restart"
+  echo "./ecosystem-stack.sh pause [service]"
+  echo "./ecosystem-stack.sh unpause [service]"
+  echo "./ecosystem-stack.sh status [service]"
+  echo "./ecosystem-stack.sh logs [service]"
+  echo "./ecosystem-stack.sh remove [service]"
+  echo "./ecosystem-stack.sh reset [service]"
+  echo "./ecosystem-stack.sh repair-network"
+  echo "./ecosystem-stack.sh ollama-pull-models   # pull pinned models into running ollama"
 }
 
 pause_prompt() {
@@ -176,7 +176,7 @@ all_services_menu() {
 interactive_menu() {
   while true; do
     clear
-    echo "AI Stack Service Manager"
+    echo "Ecosystem Stack Service Manager"
     echo "========================"
     echo "1) Manage one service"
     echo "2) Manage all services"
@@ -203,12 +203,12 @@ case "$ACTION" in
   deploy)
     if [ -z "$SERVICE" ]; then
       bulk_ecosystem deploy
-    elif [ ! -f "$BASE_DIR/ai-stack/services/$SERVICE.sh" ]; then
+    elif [ ! -f "$BASE_DIR/ecosystem-stack/services/$SERVICE.sh" ]; then
       echo "❌ Unknown service: $SERVICE"
       exit 1
     else
       # shellcheck source=/dev/null
-      source "$BASE_DIR/ai-stack/services/$SERVICE.sh"
+      source "$BASE_DIR/ecosystem-stack/services/$SERVICE.sh"
       if declare -F deploy >/dev/null 2>&1; then
         deploy
       else
@@ -224,7 +224,7 @@ case "$ACTION" in
     repair_network_links
     ;;
   ollama-pull-models)
-    source "$BASE_DIR/ai-stack/services/ollama.sh"
+    source "$BASE_DIR/ecosystem-stack/services/ollama.sh"
     pull_pinned_models
     ;;
   reset)

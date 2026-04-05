@@ -12,23 +12,636 @@ let hostedLogStreamAbort = null;
 let hostedLogStreamStarted = false;
 /** Slug|tail|service — restart stream when this changes while live. */
 let hostedLogStreamLiveKey = "";
+let hostedPanelRequestSeq = 0;
 let hostedExpandChart = null;
+const routePanelState = {
+  routersByKey: new Map(),
+  servicesByKey: new Map(),
+};
 const trendHistory = { labels: [], cpu: [], memory: [], errors: [] };
 const MAX_POINTS = 25;
 const METRICS_MAX = 60;
 let lastOverviewData = null;
 let lastCloudflareData = null;
 let lastMetricsData = null;
+let overviewHostedAppsPayload = { apps: [], generated_at: null };
+let overviewHostedAppsCachedAtMs = 0;
+let overviewHostedAppsInFlight = null;
 
 const LS_OVERVIEW_CACHE_KEY = "local_ecosystem_dashboard_overview_v1";
 const LS_OVERVIEW_MAX_AGE_MS = 1000 * 60 * 60 * 48;
 const LS_METRICS_CACHE_KEY = "local_ecosystem_dashboard_metrics_v1";
-/** Deep metrics history can stay useful longer than overview snapshots (separate key + TTL). */
-const LS_METRICS_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7;
+/** Persist a rolling 24h metrics window for historical overview / deep-metrics seed. */
+const LS_METRICS_MAX_AGE_MS = 1000 * 60 * 60 * 24;
+const METRICS_LOCAL_RETENTION_MS = 1000 * 60 * 60 * 24;
+const METRICS_LOCAL_MAX_POINTS = 5000;
+const METRICS_CACHE_MAX_BYTES = 4_500_000;
 const LS_TREND_CACHE_KEY = "local_ecosystem_dashboard_infra_trend_v1";
 const LS_ACTIVE_TAB_KEY = "dashboard_active_tab";
 /** Bump when cache shape changes so stale / corrupted entries are dropped. */
-const CACHE_SCHEMA_VERSION = 5;
+const CACHE_SCHEMA_VERSION = 6;
+const LS_PRELOADER_COLLAPSED_KEY = "dashboard_preloader_collapsed";
+const GLOBAL_PRELOADER_MIN_VISIBLE_MS = 220;
+const OVERVIEW_HOSTED_APPS_CACHE_MS = 90 * 1000;
+const TAB_LABELS = {
+  overviewTab: "Overview",
+  referenceTab: "Reference",
+  infrastructureTab: "Infrastructure",
+  metricsTab: "Metrics",
+  controlTab: "Control",
+  hostedAppsTab: "Hosted apps",
+  routesTab: "Routes",
+  docsTab: "Docs",
+  developTab: "Develop",
+  logsTab: "Logs",
+};
+const globalPreloaderState = {
+  root: null,
+  summary: null,
+  list: null,
+  toggle: null,
+  seq: 0,
+  active: new Map(),
+  sharedGetRequests: new Map(),
+  nativeFetch: null,
+  preloaderWired: false,
+};
+
+function globalPreloaderCollapsedTitle() {
+  if (!globalPreloaderState.active.size) return "";
+  return Array.from(globalPreloaderState.active.values())
+    .map((r) => {
+      const d = r.detail ? ` — ${r.detail}` : "";
+      const p = r.path ? ` · ${r.path}` : "";
+      return `${r.label}${d}${p}`;
+    })
+    .join(" · ");
+}
+
+function syncGlobalPreloaderCollapsedUi() {
+  const root = globalPreloaderState.root;
+  const toggle = globalPreloaderState.toggle;
+  if (!root) return;
+  const collapsed = root.classList.contains("dashboard-global-preloader--collapsed");
+  if (toggle) {
+    toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    toggle.textContent = collapsed ? "▼" : "▲";
+    toggle.title = collapsed ? "Expand status" : "Collapse to thin progress bar";
+  }
+  if (collapsed) {
+    const t = globalPreloaderCollapsedTitle();
+    if (t) root.title = t;
+    else root.removeAttribute("title");
+  } else {
+    root.removeAttribute("title");
+  }
+}
+
+function initGlobalPreloader() {
+  if (globalPreloaderState.root) return;
+  globalPreloaderState.root = document.getElementById("dashboardGlobalPreloader");
+  globalPreloaderState.summary = document.getElementById("dashboardGlobalPreloaderSummary");
+  globalPreloaderState.list = document.getElementById("dashboardGlobalPreloaderList");
+  globalPreloaderState.toggle = document.getElementById("dashboardGlobalPreloaderToggle");
+  const root = globalPreloaderState.root;
+  if (root) {
+    try {
+      if (localStorage.getItem(LS_PRELOADER_COLLAPSED_KEY) === "1") {
+        root.classList.add("dashboard-global-preloader--collapsed");
+      }
+    } catch (_) {
+      /* ignore */
+    }
+    syncGlobalPreloaderCollapsedUi();
+  }
+  if (globalPreloaderState.toggle && !globalPreloaderState.preloaderWired) {
+    globalPreloaderState.preloaderWired = true;
+    globalPreloaderState.toggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const r = globalPreloaderState.root;
+      if (!r) return;
+      r.classList.toggle("dashboard-global-preloader--collapsed");
+      const on = r.classList.contains("dashboard-global-preloader--collapsed");
+      try {
+        localStorage.setItem(LS_PRELOADER_COLLAPSED_KEY, on ? "1" : "0");
+      } catch (_) {
+        /* ignore */
+      }
+      syncGlobalPreloaderCollapsedUi();
+    });
+  }
+}
+
+function syncTabInlineProgress() {
+  const byTab = new Map();
+  for (const rec of globalPreloaderState.active.values()) {
+    const tid = (rec.tabId || "").trim();
+    if (!tid) continue;
+    byTab.set(tid, (byTab.get(tid) || 0) + 1);
+  }
+  document.querySelectorAll(".tabs .tab-btn").forEach((btn) => {
+    const tid = btn.dataset.tab || "";
+    const n = byTab.get(tid) || 0;
+    const on = n > 0;
+    btn.classList.toggle("tab-btn--loading", on);
+    btn.setAttribute("aria-busy", on ? "true" : "false");
+    if (on) btn.title = `${n} backend request(s) for this tab`;
+    else btn.removeAttribute("title");
+  });
+}
+
+function normalizeHostedSidebarSlug(s) {
+  const raw = String(s || "").trim();
+  if (!raw) return "";
+  try {
+    return decodeURIComponent(raw);
+  } catch (_) {
+    return raw;
+  }
+}
+
+function syncHostedAppSidebarProgress() {
+  const nav = document.getElementById("hostedAppsSidebar");
+  if (!nav) return;
+  const bySlug = new Map();
+  const tipsBySlug = new Map();
+  for (const rec of globalPreloaderState.active.values()) {
+    const key = normalizeHostedSidebarSlug(rec.hostedSlug);
+    if (!key) continue;
+    bySlug.set(key, (bySlug.get(key) || 0) + 1);
+    if (rec.label) {
+      const arr = tipsBySlug.get(key) || [];
+      if (arr.length < 4) arr.push(rec.label);
+      tipsBySlug.set(key, arr);
+    }
+  }
+  nav.querySelectorAll("[data-hosted-slug]").forEach((btn) => {
+    const slug = normalizeHostedSidebarSlug(btn.getAttribute("data-hosted-slug"));
+    const n = bySlug.get(slug) || 0;
+    const on = n > 0;
+    btn.classList.toggle("hosted-app-sidebar-btn--loading", on);
+    btn.setAttribute("aria-busy", on ? "true" : "false");
+    if (on) {
+      const tips = tipsBySlug.get(slug) || [];
+      btn.title =
+        tips.length > 0
+          ? tips.join(" · ") + (n > tips.length ? ` (+${n - tips.length} more)` : "")
+          : `${n} backend request(s) for this app`;
+    } else {
+      btn.removeAttribute("title");
+    }
+  });
+}
+
+function renderGlobalPreloader() {
+  const root = globalPreloaderState.root;
+  if (!root) return;
+  const hasActive = globalPreloaderState.active.size > 0;
+  root.classList.toggle("is-hidden", !hasActive);
+  const n = globalPreloaderState.active.size;
+  const summaryEl = globalPreloaderState.summary;
+  const listEl = globalPreloaderState.list;
+  if (hasActive && summaryEl) {
+    summaryEl.textContent = n === 1 ? "1 request in progress" : `${n} requests in progress`;
+  }
+  if (listEl) {
+    if (!hasActive) {
+      listEl.innerHTML = "";
+    } else {
+      const rows = Array.from(globalPreloaderState.active.entries())
+        .map(([reqId, rec]) => {
+          const path = rec.path ? `<span class="dashboard-global-preloader__path">${escapeHtml(rec.path)}</span>` : "";
+          const detail = rec.detail
+            ? `<span class="dashboard-global-preloader__item-detail">${escapeHtml(rec.detail)}</span>`
+            : "";
+          return `<li><span class="dashboard-global-preloader__item-label">${escapeHtml(rec.label)}</span>${detail}${path}</li>`;
+        })
+        .join("");
+      listEl.innerHTML = rows;
+    }
+  }
+  syncGlobalPreloaderCollapsedUi();
+  syncTabInlineProgress();
+  syncHostedAppSidebarProgress();
+}
+
+/** @param {string | { label?: string, path?: string, detail?: string, tabId?: string, hostedSlug?: string }} labelOrOpts */
+function beginGlobalPreloader(labelOrOpts) {
+  initGlobalPreloader();
+  let label = "Working…";
+  let path = "";
+  let detail = "";
+  let tabId = "";
+  let hostedSlug = "";
+  if (typeof labelOrOpts === "string") {
+    label = labelOrOpts.trim() || "Working…";
+    tabId = typeof activeTab === "string" ? activeTab : "";
+  } else if (labelOrOpts && typeof labelOrOpts === "object") {
+    label = String(labelOrOpts.label || "").trim() || "Working…";
+    path = String(labelOrOpts.path || "").trim();
+    detail = String(labelOrOpts.detail || "").trim();
+    tabId = String(labelOrOpts.tabId || "").trim();
+    hostedSlug = String(labelOrOpts.hostedSlug || "").trim();
+  }
+  const id = ++globalPreloaderState.seq;
+  globalPreloaderState.active.set(id, {
+    label,
+    path,
+    detail,
+    tabId,
+    hostedSlug,
+    startedAt: Date.now(),
+  });
+  renderGlobalPreloader();
+  return id;
+}
+
+function endGlobalPreloader(id) {
+  const rec = globalPreloaderState.active.get(id);
+  if (!rec) return;
+  const elapsed = Date.now() - (rec.startedAt || Date.now());
+  const delay = Math.max(0, GLOBAL_PRELOADER_MIN_VISIBLE_MS - elapsed);
+  window.setTimeout(() => {
+    if (!globalPreloaderState.active.has(id)) return;
+    globalPreloaderState.active.delete(id);
+    renderGlobalPreloader();
+  }, delay);
+}
+
+function tabLabel(tabId) {
+  return TAB_LABELS[tabId] || "tab";
+}
+
+function toFetchUrl(input) {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.toString();
+  if (input && typeof input.url === "string") return input.url;
+  return "";
+}
+
+function isBackendApiUrl(rawUrl) {
+  if (!rawUrl) return false;
+  if (rawUrl.startsWith("/api/")) return true;
+  try {
+    const u = new URL(rawUrl, window.location.origin);
+    return u.origin === window.location.origin && u.pathname.startsWith("/api/");
+  } catch (_) {
+    return false;
+  }
+}
+
+function backendAreaLabel(pathname) {
+  const key = (pathname.replace(/^\/api\//, "").split("/")[0] || "").toLowerCase();
+  const names = {
+    overview: "overview",
+    metrics: "metrics",
+    logs: "logs",
+    control: "control",
+    hosted: "hosted apps",
+    "hosted-apps": "hosted apps",
+    traefik: "routes",
+    docs: "docs",
+    reference: "reference",
+    leco: "registration",
+    ollama: "ollama",
+    "cloudflare-local": "cloudflare local",
+  };
+  return names[key] || "LEco DevOps data";
+}
+
+function prettyRegistrySlug(slug) {
+  try {
+    const s = decodeURIComponent(String(slug || "").trim());
+    if (!s) return "—";
+    return s.replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  } catch (_) {
+    return String(slug || "");
+  }
+}
+
+function inferDashboardTab(pathname, search) {
+  const q = new URLSearchParams(search || "");
+  if (
+    pathname.startsWith("/api/hosted-apps/") ||
+    pathname === "/api/hosted-apps" ||
+    pathname.startsWith("/api/leco/") ||
+    pathname.startsWith("/api/hosted/")
+  ) {
+    return "hostedAppsTab";
+  }
+  if (pathname.startsWith("/api/traefik")) return "routesTab";
+  if (pathname.startsWith("/api/docs/")) return "docsTab";
+  if (pathname === "/api/reference") return "referenceTab";
+  if (pathname === "/api/logs") return "logsTab";
+  if (pathname.startsWith("/api/control")) return "controlTab";
+  if (pathname.startsWith("/api/ollama/")) return "infrastructureTab";
+  if (pathname === "/api/services") return "infrastructureTab";
+  if (pathname === "/api/host-metrics/injected") return "metricsTab";
+  if (pathname === "/api/metrics/history") {
+    const lim = q.get("limit");
+    const n = lim != null ? parseInt(lim, 10) : NaN;
+    if (!Number.isNaN(n) && n <= 80) return "overviewTab";
+    return "metricsTab";
+  }
+  if (pathname === "/api/overview" || pathname === "/api/cloudflare-local") return "overviewTab";
+  return typeof activeTab === "string" ? activeTab : "overviewTab";
+}
+
+function resolveFetchPreloaderMeta(input, init) {
+  const rawUrl = toFetchUrl(input);
+  let pathname = "/api";
+  let search = "";
+  try {
+    const u = new URL(rawUrl, window.location.origin);
+    pathname = u.pathname || "/api";
+    search = u.search || "";
+  } catch (_) {
+    const s = typeof rawUrl === "string" ? rawUrl : "";
+    const cut = s.indexOf("?");
+    pathname = (cut >= 0 ? s.slice(0, cut) : s).split("#")[0] || "/api";
+    search = cut >= 0 ? s.slice(cut) : "";
+  }
+  const fullPath = pathname + (search || "");
+  if (init && typeof init.dashboardStatus === "string" && init.dashboardStatus.trim()) {
+    const tabId = (init.dashboardTab && String(init.dashboardTab).trim()) || inferDashboardTab(pathname, search);
+    return {
+      label: init.dashboardStatus.trim(),
+      detail: String(init.dashboardDetail || "").trim() || `HTTP ${String((init && init.method) || "GET").toUpperCase()} · LEco DevOps API`,
+      path: fullPath,
+      tabId,
+      hostedSlug: String(init.dashboardHostedSlug || "").trim(),
+    };
+  }
+  const methodFromReq = input instanceof Request ? input.method : "";
+  const method = String((init && init.method) || methodFromReq || "GET").toUpperCase();
+  const tabId = inferDashboardTab(pathname, search);
+  const httpLine = `HTTP ${method} · LEco DevOps backend`;
+
+  const hostedSub = pathname.match(
+    /^\/api\/hosted-apps\/([^/]+)\/(snapshot|metrics\/history|insights|logs\/stream|logs|offboard)(?:\/.*)?$/
+  );
+  if (hostedSub) {
+    const slug = hostedSub[1];
+    const op = hostedSub[2];
+    const opTitles = {
+      snapshot: "Compose snapshot · ps / stats",
+      "metrics/history": "Metrics history · CPU / RAM / net",
+      insights: "Insights · capacity & gaps",
+      logs: "Compose logs · tail",
+      "logs/stream": "Compose logs · live stream",
+      offboard: "Offboard · remove from ecosystem",
+    };
+    const opTitle = opTitles[op] || op;
+    return {
+      label: `Hosted app · ${prettyRegistrySlug(slug)} · ${opTitle}`,
+      detail: `Registry id: ${slug} · Docker compose project containers · ${httpLine}`,
+      path: fullPath,
+      tabId: "hostedAppsTab",
+      hostedSlug: normalizeHostedSidebarSlug(slug),
+    };
+  }
+  if (pathname === "/api/hosted-apps" || pathname === "/api/hosted-apps/") {
+    return {
+      label: "Hosted apps · registry list",
+      detail: `LEco DevOps registry · ${httpLine}`,
+      path: fullPath,
+      tabId: "hostedAppsTab",
+      hostedSlug: "",
+    };
+  }
+
+  if (pathname === "/api/logs") {
+    const svc = new URLSearchParams(search).get("service") || "—";
+    return {
+      label: `Service logs · container “${svc}”`,
+      detail: `Docker logs API · container name: ${svc} · ${httpLine}`,
+      path: fullPath,
+      tabId: "logsTab",
+    };
+  }
+
+  if (pathname === "/api/overview") {
+    return {
+      label: "Overview · services, probes, reference",
+      detail: "Docker API + Traefik HTTP probes + URL encyclopedia · single refresh",
+      path: fullPath,
+      tabId: "overviewTab",
+    };
+  }
+  if (pathname === "/api/cloudflare-local") {
+    return {
+      label: "Cloudflare local · adapter status",
+      detail: "R2 / KV / D1 / Workers / browser adapters on lh-network · HTTP",
+      path: fullPath,
+      tabId: "overviewTab",
+    };
+  }
+  if (pathname === "/api/services") {
+    return {
+      label: "Infrastructure · managed service map",
+      detail: "SERVICE_MAP + hub links · Docker container names",
+      path: fullPath,
+      tabId: "infrastructureTab",
+    };
+  }
+  if (pathname === "/api/reference") {
+    return {
+      label: "Reference · URL encyclopedia probes",
+      detail: "Static catalog + *.lh health checks · parallel probes",
+      path: fullPath,
+      tabId: "referenceTab",
+    };
+  }
+  if (pathname === "/api/metrics/history") {
+    const lim = new URLSearchParams(search).get("limit") || "";
+    const where = tabId === "overviewTab" ? "Overview charts" : "Deep metrics tab";
+    return {
+      label: `Metrics history · ${where}${lim ? ` · last ${lim} points` : ""}`,
+      detail: `Time-series snapshot · Docker + host /proc · ${httpLine}`,
+      path: fullPath,
+      tabId,
+    };
+  }
+  if (pathname === "/api/host-metrics/injected") {
+    return {
+      label: "Host metrics · macOS temp file / LaunchAgent",
+      detail: `Injected CPU temperature file status · ${httpLine}`,
+      path: fullPath,
+      tabId: "metricsTab",
+    };
+  }
+
+  if (pathname === "/api/control/targets") {
+    return {
+      label: "Control · stack & service targets",
+      detail: "Ecosystem-stack scripts + compose + LEco DevOps stacks · catalog",
+      path: fullPath,
+      tabId: "controlTab",
+    };
+  }
+  if (pathname === "/api/control" || pathname.startsWith("/api/control/")) {
+    return {
+      label: "Control · docker / shell action",
+      detail: "Subprocess: compose or ecosystem-stack script · streaming optional",
+      path: fullPath,
+      tabId: "controlTab",
+    };
+  }
+
+  if (pathname === "/api/traefik/routes") {
+    return {
+      label: "Traefik · routers & services",
+      detail: "dynamic.yml file provider · merge keys",
+      path: fullPath,
+      tabId: "routesTab",
+    };
+  }
+  if (pathname.startsWith("/api/traefik/")) {
+    return {
+      label: "Traefik · route maintenance",
+      detail: `Fragment merge / strip keys · ${httpLine}`,
+      path: fullPath,
+      tabId: "routesTab",
+    };
+  }
+
+  if (pathname.startsWith("/api/docs/catalog")) {
+    return {
+      label: "Docs · module catalog",
+      detail: "Markdown index · repo docs tree",
+      path: fullPath,
+      tabId: "docsTab",
+    };
+  }
+  if (pathname.startsWith("/api/docs/content")) {
+    return {
+      label: "Docs · markdown body",
+      detail: "Single doc render · marked + sanitize",
+      path: fullPath,
+      tabId: "docsTab",
+    };
+  }
+
+  if (pathname.startsWith("/api/ollama/")) {
+    const tail = pathname.replace(/^\/api\/ollama\/?/, "") || "api";
+    return {
+      label: `Ollama · ${tail.replace(/\//g, " · ")}`,
+      detail: `Docker service: ollama · gateway http://ollama.lh · ${httpLine}`,
+      path: fullPath,
+      tabId: "infrastructureTab",
+    };
+  }
+
+  if (pathname.startsWith("/api/leco/")) {
+    const tail = pathname.replace(/^\/api\/leco\/?/, "") || "api";
+    const lecoTitles = {
+      detect: "LEco DevOps · detect project (compose / wrangler)",
+      "generate-yaml": "LEco DevOps · generate manifest + profile",
+      "save-yaml": "LEco DevOps · save YAML to hosting layout",
+      "validate-yaml": "LEco DevOps · validate YAML",
+      "yaml-status": "LEco DevOps · YAML on-disk status",
+      register: "LEco DevOps · ecosystem-register",
+      "register/stream": "LEco DevOps · register (stream)",
+      browse: "LEco DevOps · browse directories",
+      "register-samples": "LEco DevOps · sample templates",
+    };
+    let key = tail.split("/")[0] || tail;
+    if (tail.startsWith("register/stream")) key = "register/stream";
+    const title = lecoTitles[key] || `LEco DevOps · ${key}`;
+    return {
+      label: title,
+      detail: `CLI: leco-app · materialize under hosting/app-available · ${httpLine}`,
+      path: fullPath,
+      tabId: "hostedAppsTab",
+    };
+  }
+
+  if (pathname.startsWith("/api/hosted/")) {
+    return {
+      label: "Hosted apps · upload / auxiliary API",
+      detail: `Hosting layout under hosting/app-available · ${httpLine}`,
+      path: fullPath,
+      tabId: "hostedAppsTab",
+    };
+  }
+
+  const area = backendAreaLabel(pathname);
+  let label;
+  if (method === "GET") label = `Loading ${area}…`;
+  else if (method === "DELETE") label = `Removing ${area}…`;
+  else if (method === "POST" || method === "PUT" || method === "PATCH") label = `Updating ${area}…`;
+  else label = `Calling backend (${method})…`;
+  return { label, detail: httpLine, path: fullPath, tabId };
+}
+
+function resolveFetchStatus(input, init) {
+  return resolveFetchPreloaderMeta(input, init).label;
+}
+
+function instrumentBackendFetchPreloader() {
+  if (globalPreloaderState.nativeFetch || typeof window.fetch !== "function") return;
+  const nativeFetch = window.fetch.bind(window);
+  globalPreloaderState.nativeFetch = nativeFetch;
+  const requestMethod = (input, init) => {
+    const fromReq = input instanceof Request ? input.method : "";
+    return String((init && init.method) || fromReq || "GET").toUpperCase();
+  };
+  const sharedGetKey = (input, init) => {
+    if (requestMethod(input, init) !== "GET") return "";
+    if (init && init.signal) return "";
+    if (input instanceof Request && input.signal) return "";
+    const raw = toFetchUrl(input);
+    if (!isBackendApiUrl(raw)) return "";
+    try {
+      const u = new URL(raw, window.location.origin);
+      return `GET:${u.pathname}${u.search}`;
+    } catch (_) {
+      return "";
+    }
+  };
+  window.fetch = async (input, init) => {
+    const rawUrl = toFetchUrl(input);
+    const track = isBackendApiUrl(rawUrl);
+    const dedupeKey = sharedGetKey(input, init || {});
+    if (dedupeKey) {
+      const shared = globalPreloaderState.sharedGetRequests.get(dedupeKey);
+      if (shared) {
+        const sharedRes = await shared;
+        return sharedRes.clone();
+      }
+    }
+    const meta = resolveFetchPreloaderMeta(input, init || {});
+    if (track && !String(meta.hostedSlug || "").trim()) {
+      try {
+        const u = new URL(rawUrl, window.location.origin);
+        const m = u.pathname.match(/^\/api\/hosted-apps\/([^/]+)\//);
+        if (m) meta.hostedSlug = normalizeHostedSidebarSlug(m[1]);
+      } catch (_) {
+        /* ignore */
+      }
+    }
+    const token = track ? beginGlobalPreloader(meta) : null;
+    const run = (async () => {
+      try {
+        return await nativeFetch(input, init);
+      } finally {
+        if (token) endGlobalPreloader(token);
+      }
+    })();
+    if (dedupeKey) {
+      globalPreloaderState.sharedGetRequests.set(dedupeKey, run);
+      try {
+        const sharedRes = await run;
+        return sharedRes.clone();
+      } finally {
+        if (globalPreloaderState.sharedGetRequests.get(dedupeKey) === run) {
+          globalPreloaderState.sharedGetRequests.delete(dedupeKey);
+        }
+      }
+    }
+    return await run;
+  };
+}
 
 /** Server-rendered in index.html: token_required, optional prefill_control_token. */
 (function initDashboardBoot() {
@@ -143,9 +756,74 @@ function hydrateOverviewFromCache() {
 function saveMetricsCache(metricsData) {
   try {
     if (!metricsData || typeof metricsData !== "object" || !Array.isArray(metricsData.points)) return;
-    const payload = { schemaVersion: CACHE_SCHEMA_VERSION, savedAt: Date.now(), metrics: metricsData };
-    const s = JSON.stringify(payload);
-    if (s.length > 4_500_000) return;
+    const now = Date.now();
+    const horizon = now - METRICS_LOCAL_RETENTION_MS;
+    const prev = hydrateMetricsFromCache();
+    const mergedByTs = new Map();
+    const pushPoint = (p) => {
+      if (!p || typeof p !== "object") return;
+      const tsRaw = typeof p.ts === "string" ? p.ts : "";
+      if (!tsRaw) return;
+      const tsMs = Date.parse(tsRaw);
+      if (!Number.isFinite(tsMs) || tsMs < horizon || tsMs > now + 1000 * 60 * 30) return;
+      const docker = p.docker && typeof p.docker === "object" ? p.docker : {};
+      const system = p.system && typeof p.system === "object" ? p.system : {};
+      mergedByTs.set(tsRaw, {
+        ts: tsRaw,
+        docker: {
+          cpu_percent: docker.cpu_percent ?? null,
+          memory_percent: docker.memory_percent ?? null,
+          memory_percent_of_host: docker.memory_percent_of_host ?? null,
+          memory_percent_of_limits: docker.memory_percent_of_limits ?? null,
+          memory_usage: docker.memory_usage ?? null,
+          memory_limit_sum: docker.memory_limit_sum ?? null,
+          net_total_mbps: docker.net_total_mbps ?? null,
+          iops_total_est: docker.iops_total_est ?? null,
+          blk_total_mbps: docker.blk_total_mbps ?? null,
+        },
+        system: {
+          cpu_percent: system.cpu_percent ?? null,
+          cpu_temp_c_max: system.cpu_temp_c_max ?? null,
+          net_total_mbps: system.net_total_mbps ?? null,
+          iops_total_est: system.iops_total_est ?? null,
+          memory_percent_available: system.memory_percent_available ?? null,
+          memory_percent: system.memory_percent ?? null,
+          host_memory_total_bytes_effective: system.host_memory_total_bytes_effective ?? null,
+        },
+      });
+    };
+    (prev?.points || []).forEach(pushPoint);
+    (metricsData.points || []).forEach(pushPoint);
+    let points = Array.from(mergedByTs.values()).sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts));
+    if (points.length > METRICS_LOCAL_MAX_POINTS) {
+      points = points.slice(points.length - METRICS_LOCAL_MAX_POINTS);
+    }
+    let payload = {
+      schemaVersion: CACHE_SCHEMA_VERSION,
+      savedAt: now,
+      metrics: {
+        points,
+        generated_at: metricsData.generated_at || null,
+        max_points: points.length,
+        notes: "local rolling cache (24h)",
+      },
+    };
+    let s = JSON.stringify(payload);
+    while (s.length > METRICS_CACHE_MAX_BYTES && points.length > 1200) {
+      points = points.filter((_, idx) => idx % 2 === 0 || idx === points.length - 1);
+      payload = {
+        schemaVersion: CACHE_SCHEMA_VERSION,
+        savedAt: now,
+        metrics: {
+          points,
+          generated_at: metricsData.generated_at || null,
+          max_points: points.length,
+          notes: "local rolling cache (24h, compacted)",
+        },
+      };
+      s = JSON.stringify(payload);
+    }
+    if (s.length > METRICS_CACHE_MAX_BYTES) return;
     localStorage.setItem(LS_METRICS_CACHE_KEY, s);
   } catch (_) {
     /* ignore */
@@ -606,6 +1284,79 @@ function externalNavigationAttrs(href) {
   }
 }
 
+function hostedRuntimeBadge(runtime) {
+  const status = String(runtime?.status || "").toLowerCase();
+  if (status === "running") return { cls: "overview-hosted-urls__dot--green", label: "running" };
+  if (status === "partial") return { cls: "overview-hosted-urls__dot--yellow", label: "partial" };
+  if (status === "stopped" || status === "compose") return { cls: "overview-hosted-urls__dot--red", label: "down" };
+  return { cls: "overview-hosted-urls__dot--gray", label: status || "unknown" };
+}
+
+function hostedOverviewPrimaryUrl(app) {
+  const mainUrls = app?.main_urls || {};
+  const preferred =
+    (typeof mainUrls.https === "string" && mainUrls.https.trim()) ||
+    (typeof mainUrls.http === "string" && mainUrls.http.trim()) ||
+    (typeof app?.main_url === "string" && app.main_url.trim()) ||
+    "";
+  if (preferred) return preferred;
+  const firstPublic = (app?.localhost_urls || []).find((u) => {
+    const candidate = (u && (u.public_url || u.publicUrl)) || "";
+    return typeof candidate === "string" && candidate.trim();
+  });
+  return firstPublic ? String(firstPublic.public_url || firstPublic.publicUrl || "").trim() : "";
+}
+
+function renderOverviewHostedAppsCard(payload) {
+  const el = document.getElementById("overviewHostedUrls");
+  if (!el) return;
+  const apps = Array.isArray(payload?.apps) ? payload.apps : [];
+  if (!apps.length) {
+    el.innerHTML =
+      '<p class="muted small overview-hosted-urls__empty">No hosted apps registered yet. Add entries via <code>leco-app ecosystem-register</code>.</p>';
+    return;
+  }
+  const rows = [...apps]
+    .sort((a, b) => String(a?.label || a?.id || "").localeCompare(String(b?.label || b?.id || "")))
+    .map((app) => {
+      const dot = hostedRuntimeBadge(app?.runtime || {});
+      const label = String(app?.label || app?.id || "App");
+      const url = hostedOverviewPrimaryUrl(app);
+      const urlHtml = url
+        ? `<a class="overview-hosted-urls__link" href="${escapeAttr(url)}"${externalNavigationAttrs(url)}>${escapeHtml(url)}</a>`
+        : '<span class="muted small">No main URL in manifest</span>';
+      const runtimeLabel = escapeHtml(String(app?.runtime?.label || dot.label));
+      return `<li class="overview-hosted-urls__item">
+        <div class="overview-hosted-urls__row">
+          <span class="overview-hosted-urls__dot ${dot.cls}" aria-hidden="true"></span>
+          <span class="overview-hosted-urls__app">${escapeHtml(label)}</span>
+        </div>
+        <p class="overview-hosted-urls__meta small muted">${urlHtml}<span class="header-sep">·</span>${runtimeLabel}</p>
+      </li>`;
+    });
+  el.innerHTML = `<ul class="overview-hosted-urls__list">${rows.join("")}</ul>`;
+}
+
+async function loadOverviewHostedApps(opts = {}) {
+  const force = opts?.force === true;
+  const fresh = Date.now() - overviewHostedAppsCachedAtMs < OVERVIEW_HOSTED_APPS_CACHE_MS;
+  if (!force && fresh && Array.isArray(overviewHostedAppsPayload?.apps)) return overviewHostedAppsPayload;
+  if (overviewHostedAppsInFlight) return overviewHostedAppsInFlight;
+  overviewHostedAppsInFlight = (async () => {
+    const res = await fetch("/api/hosted-apps");
+    if (!res.ok) throw new Error(`hosted apps request failed (${res.status})`);
+    const data = await res.json();
+    overviewHostedAppsPayload = data && typeof data === "object" ? data : { apps: [] };
+    overviewHostedAppsCachedAtMs = Date.now();
+    return overviewHostedAppsPayload;
+  })();
+  try {
+    return await overviewHostedAppsInFlight;
+  } finally {
+    overviewHostedAppsInFlight = null;
+  }
+}
+
 /** Markdown doc links: open in a new tab when leaving the dashboard origin. */
 function docLinkShouldOpenNewTab(href) {
   return externalNavigationAttrs(href).length > 0;
@@ -833,7 +1584,7 @@ function renderUrlEncyclopedia(ref, mountId, filterText) {
   const mount = document.getElementById(mountId);
   if (!mount) return;
   if (!ref || !ref.categories) {
-    mount.innerHTML = "<div class='card'>URL directory unavailable (rebuild dashboard or check API).</div>";
+    mount.innerHTML = "<div class='card'>URL directory unavailable (redeploy LEco DevOps or check API).</div>";
     return;
   }
   const filtered = filterText ? filterReferencePayload(ref, filterText) : ref;
@@ -973,9 +1724,9 @@ function renderDevelopCards() {
     <div class="card dev-card">
       <strong>Rebuild &amp; run</strong>
       <ul>
-        <li><code>./ai-stack/ai-stack.sh restart dashboard</code> — after editing <code>dashboard/</code></li>
-        <li><code>./ai-stack/services/cloudflare-local.sh recreate workers-runtime</code> — after editing Workers</li>
-        <li><code>./ai-stack/ai-stack.sh repair-network</code> — if a container lost <code>lh-network</code></li>
+        <li><code>./ecosystem-stack/ecosystem-stack.sh restart dashboard</code> — after editing <code>dashboard/</code></li>
+        <li><code>./ecosystem-stack/services/cloudflare-local.sh recreate workers-runtime</code> — after editing Workers</li>
+        <li><code>./ecosystem-stack/ecosystem-stack.sh repair-network</code> — if a container lost <code>lh-network</code></li>
       </ul>
     </div>
     <div class="card dev-card">
@@ -987,7 +1738,7 @@ function renderDevelopCards() {
       </ul>
     </div>
     <div class="card dev-card">
-      <strong>Dashboard APIs</strong>
+      <strong>LEco DevOps APIs</strong>
       <ul>
         <li><code>GET /api/reference</code> — URL encyclopedia + probes</li>
         <li><code>GET /api/docs/catalog</code> — doc modules</li>
@@ -1657,7 +2408,7 @@ async function loadOllamaModelsPanel() {
     if (sum) {
       sum.textContent = reach
         ? `API ${data.ollama_base || "—"} · ${data.installed_count ?? 0} on disk · ${runningN} in RAM · ${pinnedList.length} pinned`
-        : `Ollama unreachable from dashboard (check <code>ollama</code> on lh-network): ${data.ollama_base || "http://ollama:11434"}`;
+        : `Ollama unreachable from LEco DevOps (check <code>ollama</code> on lh-network): ${data.ollama_base || "http://ollama:11434"}`;
     }
     if (ins) {
       ins.textContent = reach
@@ -1909,7 +2660,7 @@ function initOllamaModelsPanel() {
     }
     const ok = await showAppConfirm({
       title: "Restore pinned list",
-      message: `Overwrite ai-stack/config/ollama-pinned-models.txt with pinned names from ${fn}? Models on disk are not deleted.`,
+      message: `Overwrite ecosystem-stack/config/ollama-pinned-models.txt with pinned names from ${fn}? Models on disk are not deleted.`,
       confirmText: "Restore pinned",
       danger: true,
     });
@@ -2248,65 +2999,74 @@ function initHostedChartExpandModal() {
 }
 
 function activateTab(tabId, opts = {}) {
+  const switchToken = beginGlobalPreloader({
+    label: `Switching to ${tabLabel(tabId)}…`,
+    detail: `UI tab · loading ${tabLabel(tabId)} data`,
+    tabId,
+  });
   if (activeTab === "hostedAppsTab" && tabId !== "hostedAppsTab") {
     hostedLogStreamLiveKey = "";
     stopHostedLogStream();
   }
-  activeTab = tabId;
   try {
-    localStorage.setItem(LS_ACTIVE_TAB_KEY, tabId);
-  } catch (_) {
-    /* ignore */
-  }
-  if (metricsTimer) {
-    clearInterval(metricsTimer);
-    metricsTimer = null;
-  }
-  document.querySelectorAll(".tab-btn").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.tab === tabId);
-  });
-  document.querySelectorAll(".tab-content").forEach((tab) => {
-    tab.classList.toggle("active", tab.id === tabId);
-  });
-  if (tabId === "logsTab") {
-    loadLogs();
-  }
-  if (tabId === "metricsTab") {
-    loadMetricsCharts();
-    metricsTimer = setInterval(loadMetricsCharts, 5000);
-  }
-  if (tabId === "controlTab") {
-    loadControlTargets();
-  }
-  if (tabId === "hostedAppsTab") {
-    loadHostedAppsList();
-  }
-  if (tabId === "routesTab") {
-    loadTraefikRoutesPanel();
-  }
-  if (tabId === "referenceTab") {
-    loadReferenceTab();
-  }
-  if (tabId === "docsTab") {
-    loadDocsCatalog(opts.preferredDocId ?? null);
-  }
-  if (tabId === "developTab") {
-    renderDevelopCards();
-  }
-  if (tabId === "overviewTab" && lastOverviewData) {
-    updateOverviewDashboard(lastOverviewData, lastCloudflareData, lastMetricsData || { points: [] });
-  }
-  if (tabId === "infrastructureTab") {
-    if (lastOverviewData) {
-      renderInfrastructurePanel(lastOverviewData, lastCloudflareData);
-    } else {
-      loadOllamaModelsPanel();
+    activeTab = tabId;
+    try {
+      localStorage.setItem(LS_ACTIVE_TAB_KEY, tabId);
+    } catch (_) {
+      /* ignore */
     }
+    if (metricsTimer) {
+      clearInterval(metricsTimer);
+      metricsTimer = null;
+    }
+    document.querySelectorAll(".tab-btn").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.tab === tabId);
+    });
+    document.querySelectorAll(".tab-content").forEach((tab) => {
+      tab.classList.toggle("active", tab.id === tabId);
+    });
+    if (tabId === "logsTab") {
+      loadLogs();
+    }
+    if (tabId === "metricsTab") {
+      loadMetricsCharts();
+      metricsTimer = setInterval(loadMetricsCharts, 5000);
+    }
+    if (tabId === "controlTab") {
+      loadControlTargets();
+    }
+    if (tabId === "hostedAppsTab") {
+      loadHostedAppsList();
+    }
+    if (tabId === "routesTab") {
+      loadTraefikRoutesPanel();
+    }
+    if (tabId === "referenceTab") {
+      loadReferenceTab();
+    }
+    if (tabId === "docsTab") {
+      loadDocsCatalog(opts.preferredDocId ?? null);
+    }
+    if (tabId === "developTab") {
+      renderDevelopCards();
+    }
+    if (tabId === "overviewTab" && lastOverviewData) {
+      updateOverviewDashboard(lastOverviewData, lastCloudflareData, lastMetricsData || { points: [] });
+    }
+    if (tabId === "infrastructureTab") {
+      if (lastOverviewData) {
+        renderInfrastructurePanel(lastOverviewData, lastCloudflareData);
+      } else {
+        loadOllamaModelsPanel();
+      }
+    }
+  } finally {
+    endGlobalPreloader(switchToken);
   }
 }
 
 function initTabs() {
-  document.querySelectorAll(".tab-btn").forEach((btn) => {
+  document.querySelectorAll(".tab-btn[data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => activateTab(btn.dataset.tab));
   });
 }
@@ -2893,14 +3653,14 @@ function renderMetricsChartsFromPayload(data, sum, hint, cacheNote) {
     if (hasTemp) {
       if (pts.some((p) => p.system?.cpu_temp_source === "host_file_thermal_proxy"))
         parts.push(
-          "CPU chart value is a thermal-pressure + loadavg proxy from macOS (not die °C); see ai-stack/scripts/macos-write-cpu-temp.sh.",
+          "CPU chart value is a thermal-pressure + loadavg proxy from macOS (not die °C); see ecosystem-stack/scripts/macos-write-cpu-temp.sh.",
         );
       else if (pts.some((p) => p.system?.cpu_temp_source === "host_file"))
         parts.push("CPU temp from macOS host file (~/.local-eco-host-metrics/cpu_temp_c.txt).");
       else parts.push("CPU temp from /sys thermal zones.");
     } else {
       parts.push(
-        "No CPU temp: macOS — start dashboard via ai-stack/services/dashboard.sh (installs host temp LaunchAgent) or run ai-stack/scripts/macos-write-cpu-temp.sh; Linux — mount host /sys (see dashboard.sh).",
+        "No CPU temp: macOS — start LEco DevOps via ecosystem-stack/services/dashboard.sh (installs host temp LaunchAgent) or run ecosystem-stack/scripts/macos-write-cpu-temp.sh; Linux — mount host /sys (see dashboard.sh).",
       );
     }
     parts.push("IOPS often 0 without blkio; use right axis block Mb/s.");
@@ -2944,7 +3704,7 @@ function renderHostInjectedMetricsPanel(payload) {
 
   if (!payload || !payload.configured) {
     body.innerHTML =
-      "<p><strong>Host temp file not configured.</strong> This panel appears when <code>DASHBOARD_HOST_CPU_TEMP_FILE</code> is set (macOS dashboard deploy).</p>";
+      "<p><strong>Host temp file not configured.</strong> This panel appears when <code>DASHBOARD_HOST_CPU_TEMP_FILE</code> is set (macOS LEco DevOps deploy).</p>";
     ul.innerHTML = "";
     return;
   }
@@ -2969,7 +3729,7 @@ function renderHostInjectedMetricsPanel(payload) {
           : "<span class='muted'>No scheduler_meta.json — run <code>dashboard.sh deploy</code> on macOS or install <code>macos-host-metrics-scheduler.sh</code>.</span>"
       }</div>
     </div>
-    <p class="muted small" style="margin-top:0.75rem"><strong>Manual host run (Mac terminal):</strong> <code>bash /path/to/repo/ai-stack/scripts/macos-write-cpu-temp.sh</code> — the container cannot execute macOS <code>powermetrics</code> for you.</p>
+    <p class="muted small" style="margin-top:0.75rem"><strong>Manual host run (Mac terminal):</strong> <code>bash /path/to/repo/ecosystem-stack/scripts/macos-write-cpu-temp.sh</code> — the container cannot execute macOS <code>powermetrics</code> for you.</p>
   `;
 
   ul.innerHTML = (payload.insights || [])
@@ -3034,10 +3794,10 @@ async function loadMetricsCharts(opts = {}) {
   if (interactive) {
     logMount.innerHTML = "";
     logLine("Mac host (not run from container) — update the temp file with:");
-    logLine("  bash /project/ai-stack/scripts/macos-write-cpu-temp.sh");
+    logLine("  bash /project/ecosystem-stack/scripts/macos-write-cpu-temp.sh");
     logLine("  # optional kick: launchctl kickstart -k gui/$(id -u)/com.local-ecosystem.host-cpu-temp");
     logLine("—");
-    logLine("Dashboard APIs (this browser → dashboard container):");
+    logLine("LEco DevOps APIs (this browser → LEco DevOps container):");
   }
 
   setBusy(true);
@@ -3118,7 +3878,7 @@ function controlToken() {
   return localStorage.getItem("dashboard_control_token") || "";
 }
 
-const CONTROL_GROUP_ORDER = ["ecosystem", "ai-stack", "infra", "cloudflare-local"];
+const CONTROL_GROUP_ORDER = ["ecosystem", "ecosystem-stack", "infra", "cloudflare-local"];
 
 const CONTROL_GROUP_META = {
   ecosystem: {
@@ -3126,9 +3886,9 @@ const CONTROL_GROUP_META = {
     lead: "Same full-stack actions as the toolbar above, exposed as a control target for the API.",
     sectionClass: "",
   },
-  "ai-stack": {
-    title: "AI stack & Traefik",
-    lead: "Edge proxy, apps, Ollama, n8n, Postgres, and this dashboard.",
+  "ecosystem-stack": {
+    title: "Ecosystem stack & Traefik",
+    lead: "Edge proxy, apps, Ollama, n8n, Postgres, and LEco DevOps (this UI).",
     sectionClass: "",
   },
   "cloudflare-local": {
@@ -3423,9 +4183,50 @@ function renderHostedAppsSidebar() {
     btn.addEventListener("click", () => {
       hostedSelectedSlug = btn.getAttribute("data-hosted-slug") || "";
       renderHostedAppsSidebar();
+      resetHostedAppsDetailForLoading(hostedSelectedSlug);
       refreshHostedAppsPanel();
     });
   });
+}
+
+function resetHostedAppsDetailForLoading(slug) {
+  const app = hostedAppsList.find((x) => x.id === slug);
+  const titleEl = document.getElementById("hostedAppsTitle");
+  const metaEl = document.getElementById("hostedAppsMeta");
+  const rtEl = document.getElementById("hostedAppsRuntime");
+  const linksEl = document.getElementById("hostedAppsLinks");
+  const kpiEl = document.getElementById("hostedAppsKpi");
+  const tbody = document.getElementById("hostedAppsServicesBody");
+  const insightsEl = document.getElementById("hostedAppsInsights");
+  const logPre = document.getElementById("hostedAppsLogPre");
+  const controlsEl = document.getElementById("hostedAppsControls");
+  const svcSel = document.getElementById("hostedLogService");
+  const unregisterHintEl = document.getElementById("hostedAppsUnregisterHint");
+  const ledgerEl = document.getElementById("hostedAppsResourceLedger");
+  const localEl = document.getElementById("hostedAppsLocalProfile");
+  const cfEl = document.getElementById("hostedAppsCfResources");
+  if (titleEl) titleEl.textContent = app?.label || slug || "—";
+  if (metaEl) metaEl.textContent = `Registry id: ${slug || "—"} · Loading app details…`;
+  if (rtEl) {
+    rtEl.className = "control-card__runtime control-runtime--na";
+    rtEl.title = "Loading";
+    rtEl.innerHTML =
+      '<span class="control-runtime-dot" aria-hidden="true"></span><span class="control-runtime-text">Loading…</span>';
+  }
+  if (linksEl) linksEl.innerHTML = '<span class="muted">Loading links…</span>';
+  if (kpiEl) kpiEl.innerHTML = '<span class="muted">Loading runtime metrics…</span>';
+  if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="muted">Loading services…</td></tr>';
+  if (insightsEl) insightsEl.innerHTML = '<li class="muted">Loading insights…</li>';
+  if (logPre) logPre.textContent = "Loading logs…";
+  if (controlsEl) controlsEl.innerHTML = '<p class="muted small">Loading controls…</p>';
+  if (svcSel) svcSel.innerHTML = '<option value="">(loading)</option>';
+  if (unregisterHintEl) {
+    unregisterHintEl.classList.add("is-hidden");
+    unregisterHintEl.innerHTML = "";
+  }
+  if (ledgerEl) ledgerEl.innerHTML = '<p class="muted small">Loading resource ledger…</p>';
+  if (localEl) localEl.innerHTML = '<p class="muted small">Loading local profile…</p>';
+  if (cfEl) cfEl.innerHTML = '<p class="muted small">Loading Cloudflare bindings…</p>';
 }
 
 async function loadHostedAppsList() {
@@ -3445,6 +4246,9 @@ async function loadHostedAppsList() {
       }
     }
     hostedAppsList = data.apps || [];
+    overviewHostedAppsPayload = data && typeof data === "object" ? data : { apps: hostedAppsList };
+    overviewHostedAppsCachedAtMs = Date.now();
+    renderOverviewHostedAppsCard(overviewHostedAppsPayload);
     if (!hostedAppsList.length) {
       if (empty) {
         empty.classList.remove("is-hidden");
@@ -3529,7 +4333,7 @@ function renderHostedResourceLedger(manifestUi, snap) {
   const expTotal = expKv + expR2 + expD1;
 
   let html = '<div class="hosted-resource-ledger__title">Resources for this app (from <code>leco.yaml</code> + bridge)</div>';
-  html += `<p class="hosted-resource-ledger__lead muted small">The dashboard uses your <strong>effective manifest</strong>: <code>leco.app.yaml</code> plus the profile file (<code>${escapeHtml(String(lhp))}</code>). Nothing here is inferred from disk outside those files.</p>`;
+  html += `<p class="hosted-resource-ledger__lead muted small">LEco DevOps uses your <strong>effective manifest</strong>: <code>leco.app.yaml</code> plus the profile file (<code>${escapeHtml(String(lhp))}</code>). Nothing here is inferred from disk outside those files.</p>`;
   html += '<div class="hosted-resource-ledger__grid">';
 
   html += '<div class="hosted-resource-ledger__card">';
@@ -3731,6 +4535,7 @@ function renderHostedCfResources(manifestUi) {
 async function refreshHostedAppsPanel() {
   if (activeTab !== "hostedAppsTab" || !hostedSelectedSlug) return;
   const slug = hostedSelectedSlug;
+  const reqSeq = ++hostedPanelRequestSeq;
   const titleEl = document.getElementById("hostedAppsTitle");
   const metaEl = document.getElementById("hostedAppsMeta");
   const rtEl = document.getElementById("hostedAppsRuntime");
@@ -3777,7 +4582,9 @@ async function refreshHostedAppsPanel() {
     if (!liveLogs && results[3]) {
       logs = await results[3].json();
     }
+    if (reqSeq !== hostedPanelRequestSeq || hostedSelectedSlug !== slug) return;
   } catch (e) {
+    if (reqSeq !== hostedPanelRequestSeq || hostedSelectedSlug !== slug) return;
     if (logPre && !liveLogs) {
       logPre.textContent = String(e.message || e);
       hostedLogsScrollToBottomIfFollow();
@@ -3796,12 +4603,14 @@ async function refreshHostedAppsPanel() {
     const v = mu.application_version;
     const fp = mu.deploy_fingerprint;
     const snapAt = snap.generated_at ? ` · snapshot ${snap.generated_at}` : "";
+    const src = typeof mu.source_location === "string" ? mu.source_location.trim() : "";
     let bits = `Registry id: ${slug} · Target: ${app.target_id || "—"}`;
     if (v) bits += ` · App version: ${String(v)}`;
     if (fp && fp.short_hash) {
       bits += ` · Manifest fingerprint ${String(fp.short_hash)}`;
       if (fp.mtime_iso) bits += ` (mtime ${String(fp.mtime_iso)})`;
     }
+    if (src) bits += ` · Source: ${src}`;
     bits += snapAt;
     metaEl.textContent = bits;
   }
@@ -3823,7 +4632,48 @@ async function refreshHostedAppsPanel() {
   }
 
   if (linksEl && app) {
+    const muLinks = snap.manifest_ui || {};
     const parts = [];
+    const mainUrl = typeof muLinks.main_url === "string" ? muLinks.main_url.trim() : "";
+    const mainUrls = muLinks.main_urls && typeof muLinks.main_urls === "object" ? muLinks.main_urls : {};
+    const mainSource = typeof muLinks.main_url_source === "string" ? muLinks.main_url_source.trim() : "";
+    const endpointUrls = Array.isArray(muLinks.endpoint_urls) ? muLinks.endpoint_urls : [];
+    if (mainUrl) {
+      const sourceTag =
+        mainSource === "derived_slug" ? " (derived from app id)" : mainSource ? ` (${mainSource})` : "";
+      const mainHttps = typeof mainUrls.https === "string" ? mainUrls.https.trim() : "";
+      const mainHttp = typeof mainUrls.http === "string" ? mainUrls.http.trim() : "";
+      if (mainHttps || mainHttp) {
+        if (mainHttps) {
+          parts.push(
+            `<a href="${escapeAttr(mainHttps)}" target="_blank" rel="noopener"><strong>Main URL (HTTPS)</strong> · ${escapeHtml(mainHttps)}${escapeHtml(sourceTag)}</a>`,
+          );
+        }
+        if (mainHttp) {
+          parts.push(
+            `<a href="${escapeAttr(mainHttp)}" target="_blank" rel="noopener"><strong>Main URL (HTTP)</strong> · ${escapeHtml(mainHttp)}${escapeHtml(sourceTag)}</a>`,
+          );
+        }
+      } else {
+        parts.push(
+          `<a href="${escapeAttr(mainUrl)}" target="_blank" rel="noopener"><strong>Main URL</strong> · ${escapeHtml(mainUrl)}${escapeHtml(sourceTag)}</a>`,
+        );
+      }
+    }
+    endpointUrls
+      .filter((u) => {
+        const publicUrl = typeof u.public_url === "string" ? u.public_url.trim() : "";
+        return !!publicUrl && publicUrl !== mainUrl;
+      })
+      .forEach((u) => {
+        const publicUrl = u.public_url.trim();
+        const role = typeof u.role === "string" ? u.role.trim() : "";
+        const label = typeof u.label === "string" ? u.label.trim() : "";
+        const text = label || role || "Endpoint";
+        parts.push(
+          `<a href="${escapeAttr(publicUrl)}" target="_blank" rel="noopener">${escapeHtml(text)} · ${escapeHtml(publicUrl)}</a>`,
+        );
+      });
     (app.health_urls || []).forEach((u) => {
       parts.push(`<a href="${escapeAttr(u)}" target="_blank" rel="noopener">Health · ${escapeHtml(u)}</a>`);
     });
@@ -3831,13 +4681,32 @@ async function refreshHostedAppsPanel() {
       const h = r.hostname || "";
       if (h) parts.push(`<span><strong>${escapeHtml(h)}</strong>${r.api_path_prefix ? ` API ${escapeHtml(r.api_path_prefix)}` : ""}</span>`);
     });
-    linksEl.innerHTML = parts.length ? parts.join(" · ") : '<span class="muted">No routes or health URLs in manifest.</span>';
+    if (!parts.length) {
+      const hosts = muLinks.local_cf_adapter_hosts || {};
+      const kv = typeof hosts.kv === "string" ? hosts.kv : "";
+      const r2 = typeof hosts.r2 === "string" ? hosts.r2 : "";
+      const d1 = typeof hosts.d1 === "string" ? hosts.d1 : "";
+      if (kv || r2 || d1) {
+        linksEl.innerHTML = `<span class="muted">No main app URL is configured in this manifest yet. Adapter APIs only: ${escapeHtml(
+          [kv, r2, d1].filter(Boolean).join(" · "),
+        )}. Add <code>urls</code> and/or <code>infrastructure.routing.entries</code> in <code>leco.yaml</code> to expose a browse URL.</span>`;
+      } else {
+        linksEl.innerHTML = '<span class="muted">No routes or health URLs in manifest.</span>';
+      }
+    } else {
+      linksEl.innerHTML = parts.join(" · ");
+    }
   }
 
   const agg = snap.aggregate;
   const unregisterHintEl = document.getElementById("hostedAppsUnregisterHint");
   const rs = agg != null && snap.ok ? Number(agg.running_services) : NaN;
-  const stackLooksDown = app && (rt.running === false || (Number.isFinite(rs) && rs === 0));
+  const muUnreg = snap.manifest_ui || {};
+  const expectsComposeStack = muUnreg.effective_has_docker_compose === true;
+  const stackLooksDown =
+    app &&
+    expectsComposeStack &&
+    (rt.running === false || (Number.isFinite(rs) && rs === 0));
   if (unregisterHintEl) {
     if (stackLooksDown) {
       unregisterHintEl.classList.remove("is-hidden");
@@ -3948,24 +4817,33 @@ async function refreshHostedAppsPanel() {
     }
   }
 
-  if (controlsEl && app) {
+  if (controlsEl) {
     const SB = serviceBrandUi();
-    const target = {
-      id: app.target_id,
-      label: app.label || slug,
-      actions: HOSTED_APP_ACTIONS,
-      runtime: snap.runtime || app.runtime,
-    };
-    controlsEl.innerHTML = hostedComposeControlActionsHtml(SB, target);
-    controlsEl.querySelectorAll("button.ctrl-act").forEach((btn) => {
-      btn.addEventListener("click", () =>
-        runControlAction(
-          btn.getAttribute("data-control-target") || "",
-          btn.getAttribute("data-action") || "",
-          btn.getAttribute("data-label") || "",
-        ),
-      );
-    });
+    if (!app || !slug) {
+      controlsEl.innerHTML =
+        '<p class="muted small">No app selected or registry list is out of date — use <strong>Refresh</strong> in the sidebar.</p>';
+    } else {
+      const stackTargetId =
+        typeof app.target_id === "string" && app.target_id.startsWith("leco-stack-")
+          ? app.target_id
+          : `leco-stack-${slug}`;
+      const target = {
+        id: stackTargetId,
+        label: app.label || slug,
+        actions: HOSTED_APP_ACTIONS,
+        runtime: snap.runtime || app.runtime,
+      };
+      controlsEl.innerHTML = hostedComposeControlActionsHtml(SB, target);
+      controlsEl.querySelectorAll("button.ctrl-act").forEach((btn) => {
+        btn.addEventListener("click", () =>
+          runControlAction(
+            btn.getAttribute("data-control-target") || "",
+            btn.getAttribute("data-action") || "",
+            btn.getAttribute("data-label") || "",
+          ),
+        );
+      });
+    }
   }
 }
 
@@ -4402,7 +5280,19 @@ function initHostedRegisterWizard() {
         body: JSON.stringify(body),
         cache: "no-store",
       });
-      const data = await res.json();
+      let data = {};
+      try {
+        data = await res.json();
+      } catch (_) {
+        const raw = await res.text().catch(() => "");
+        data = {
+          ok: false,
+          error:
+            raw && raw.trim().startsWith("<!doctype")
+              ? "Detect returned HTML instead of JSON (likely backend error or wrong host). Open LEco DevOps on port 8090 and retry."
+              : raw || `HTTP ${res.status}`,
+        };
+      }
       if (!data.ok) {
         hostedRegDetectOkForPath = "";
         if (pre) {
@@ -4877,6 +5767,292 @@ function initRoutesTab() {
   document.getElementById("traefikMergeBtn")?.addEventListener("click", () => traefikMergeFragment());
   document.getElementById("traefikLoadFragmentBtn")?.addEventListener("click", () => traefikFetchManifestFragment(false));
   document.getElementById("traefikLoadMergeBtn")?.addEventListener("click", () => traefikFetchManifestFragment(true));
+  document.getElementById("routeBuilderBuildBtn")?.addEventListener("click", () => routeBuilderBuildYaml(false));
+  document.getElementById("routeBuilderMergeBtn")?.addEventListener("click", () => routeBuilderBuildYaml(true));
+  document.getElementById("routeBuilderResetBtn")?.addEventListener("click", () => routeBuilderResetForm());
+  document.getElementById("routeBuilderMode")?.addEventListener("change", () => routeBuilderSyncModeUi());
+  routeBuilderSyncModeUi();
+}
+
+function routeBuilderMsg(text) {
+  const msg = document.getElementById("traefikRoutesMsg");
+  if (msg) msg.textContent = text || "";
+}
+
+function routeBuilderInput(id) {
+  return document.getElementById(id);
+}
+
+function routeBuilderNormalizeHost(raw) {
+  let s = String(raw || "").trim();
+  if (!s) return "";
+  s = s.replace(/^https?:\/\//i, "");
+  const slash = s.indexOf("/");
+  if (slash >= 0) s = s.slice(0, slash);
+  return s.trim();
+}
+
+function routeBuilderNormalizePathPrefix(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return "";
+  if (s === "/") return "/";
+  return s.startsWith("/") ? s : `/${s}`;
+}
+
+function routeBuilderSyncModeUi() {
+  const mode = routeBuilderInput("routeBuilderMode")?.value || "proxy";
+  const proxyDisabled = mode !== "proxy";
+  const redirectDisabled = mode !== "redirect";
+  const proxyFields = ["routeBuilderServiceKey", "routeBuilderEndpointUrl"];
+  const redirectFields = ["routeBuilderRedirectUrl", "routeBuilderRedirectStatus"];
+  proxyFields.forEach((id) => {
+    const el = routeBuilderInput(id);
+    if (el) el.disabled = proxyDisabled;
+  });
+  redirectFields.forEach((id) => {
+    const el = routeBuilderInput(id);
+    if (el) el.disabled = redirectDisabled;
+  });
+}
+
+function routeBuilderResetForm() {
+  const defaults = {
+    routeBuilderMode: "proxy",
+    routeBuilderRouterKey: "",
+    routeBuilderHost: "",
+    routeBuilderPathPrefix: "",
+    routeBuilderServiceKey: "",
+    routeBuilderEndpointUrl: "",
+    routeBuilderRedirectUrl: "",
+    routeBuilderRedirectStatus: "301",
+    routeBuilderPriority: "",
+  };
+  Object.entries(defaults).forEach(([id, v]) => {
+    const el = routeBuilderInput(id);
+    if (el) el.value = v;
+  });
+  const web = routeBuilderInput("routeBuilderEntryWeb");
+  const websecure = routeBuilderInput("routeBuilderEntryWebsecure");
+  const tls = routeBuilderInput("routeBuilderTls");
+  if (web) web.checked = true;
+  if (websecure) websecure.checked = true;
+  if (tls) tls.checked = true;
+  routeBuilderSyncModeUi();
+  routeBuilderMsg("Route builder form reset.");
+}
+
+function routeBuilderParseRule(ruleText) {
+  const out = { host: "", pathPrefix: "" };
+  const rule = String(ruleText || "");
+  const hostM = rule.match(/Host\(`([^`]+)`\)/);
+  const pathM = rule.match(/PathPrefix\(`([^`]+)`\)/);
+  if (hostM) out.host = hostM[1] || "";
+  if (pathM) out.pathPrefix = pathM[1] || "";
+  return out;
+}
+
+function routeBuilderToYamlText(opts) {
+  const mode = opts.mode;
+  const routerKey = opts.routerKey;
+  const host = opts.host;
+  const pathPrefix = opts.pathPrefix;
+  const serviceKey = opts.serviceKey;
+  const endpointUrl = opts.endpointUrl;
+  const redirectUrl = opts.redirectUrl;
+  const redirectStatus = opts.redirectStatus;
+  const entryPoints = opts.entryPoints;
+  const tlsOn = !!opts.tlsOn;
+  const priority = opts.priority;
+
+  const lines = [];
+  lines.push("http:");
+  lines.push("  routers:");
+  lines.push(`    ${routerKey}:`);
+  const rule = pathPrefix
+    ? `Host(\`${host}\`) && PathPrefix(\`${pathPrefix}\`)`
+    : `Host(\`${host}\`)`;
+  lines.push(`      rule: "${rule}"`);
+  if (mode === "redirect") {
+    lines.push("      service: noop@internal");
+    const mwKey = `${routerKey}-redirect`;
+    lines.push("      middlewares:");
+    lines.push(`        - ${mwKey}`);
+  } else {
+    lines.push(`      service: ${serviceKey}`);
+  }
+  lines.push("      entryPoints:");
+  entryPoints.forEach((ep) => lines.push(`        - ${ep}`));
+  if (tlsOn) lines.push("      tls: true");
+  if (priority != null) lines.push(`      priority: ${priority}`);
+  if (mode === "redirect") {
+    const mwKey = `${routerKey}-redirect`;
+    const permanent = String(redirectStatus || "301") === "301";
+    const regexHost = host.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    lines.push("  middlewares:");
+    lines.push(`    ${mwKey}:`);
+    lines.push("      redirectRegex:");
+    lines.push(`        regex: "^https?://${regexHost}(?:/.*)?$"`);
+    lines.push(`        replacement: "${redirectUrl}"`);
+    lines.push(`        permanent: ${permanent ? "true" : "false"}`);
+  } else {
+    lines.push("  services:");
+    lines.push(`    ${serviceKey}:`);
+    lines.push("      loadBalancer:");
+    lines.push("        servers:");
+    lines.push(`          - url: "${endpointUrl}"`);
+  }
+  return lines.join("\n");
+}
+
+function routeBuilderCollectForm() {
+  const mode = routeBuilderInput("routeBuilderMode")?.value || "proxy";
+  const routerKey = String(routeBuilderInput("routeBuilderRouterKey")?.value || "").trim();
+  const host = routeBuilderNormalizeHost(routeBuilderInput("routeBuilderHost")?.value || "");
+  const pathPrefix = routeBuilderNormalizePathPrefix(routeBuilderInput("routeBuilderPathPrefix")?.value || "");
+  const serviceKey = String(routeBuilderInput("routeBuilderServiceKey")?.value || "").trim();
+  const endpointUrl = String(routeBuilderInput("routeBuilderEndpointUrl")?.value || "").trim();
+  const redirectUrl = String(routeBuilderInput("routeBuilderRedirectUrl")?.value || "").trim();
+  const redirectStatus = String(routeBuilderInput("routeBuilderRedirectStatus")?.value || "301");
+  const priorityRaw = String(routeBuilderInput("routeBuilderPriority")?.value || "").trim();
+  const priority = priorityRaw ? parseInt(priorityRaw, 10) : null;
+  const entryPoints = [];
+  if (routeBuilderInput("routeBuilderEntryWeb")?.checked) entryPoints.push("web");
+  if (routeBuilderInput("routeBuilderEntryWebsecure")?.checked) entryPoints.push("websecure");
+  const tlsOn = !!routeBuilderInput("routeBuilderTls")?.checked;
+  return {
+    mode,
+    routerKey,
+    host,
+    pathPrefix,
+    serviceKey,
+    endpointUrl,
+    redirectUrl,
+    redirectStatus,
+    priority,
+    entryPoints,
+    tlsOn,
+  };
+}
+
+function routeBuilderValidateForm(d) {
+  if (!d.routerKey) return "Router key is required.";
+  if (!d.host) return "Public host is required.";
+  if (!d.entryPoints.length) return "Select at least one entryPoint.";
+  if (d.mode === "proxy") {
+    if (!d.serviceKey) return "Service key is required in proxy mode.";
+    if (!d.endpointUrl) return "Endpoint URL is required in proxy mode.";
+  } else if (!d.redirectUrl) {
+    return "Redirect URL is required in redirect mode.";
+  }
+  return "";
+}
+
+async function routeBuilderBuildYaml(alsoMerge) {
+  const ta = document.getElementById("traefikMergeYaml");
+  if (!ta) return;
+  const d = routeBuilderCollectForm();
+  const err = routeBuilderValidateForm(d);
+  if (err) {
+    routeBuilderMsg(err);
+    return;
+  }
+  const yamlText = routeBuilderToYamlText(d);
+  ta.value = yamlText;
+  if (!alsoMerge) {
+    routeBuilderMsg("YAML fragment built from form. Review and merge when ready.");
+    return;
+  }
+  routeBuilderMsg("Built YAML from form; merging into dynamic.yml…");
+  await traefikMergeFragment();
+}
+
+function routeBuilderEditRouter(routerKey) {
+  const r = routePanelState.routersByKey.get(routerKey);
+  if (!r) {
+    routeBuilderMsg(`Router not found: ${routerKey}`);
+    return;
+  }
+  const parsed = routeBuilderParseRule(r.rule);
+  const modeIn = routeBuilderInput("routeBuilderMode");
+  if (modeIn) modeIn.value = "proxy";
+  const routerIn = routeBuilderInput("routeBuilderRouterKey");
+  const hostIn = routeBuilderInput("routeBuilderHost");
+  const pathIn = routeBuilderInput("routeBuilderPathPrefix");
+  const svcIn = routeBuilderInput("routeBuilderServiceKey");
+  const epIn = routeBuilderInput("routeBuilderEndpointUrl");
+  const priIn = routeBuilderInput("routeBuilderPriority");
+  const tlsIn = routeBuilderInput("routeBuilderTls");
+  if (routerIn) routerIn.value = r.key || "";
+  if (hostIn) hostIn.value = parsed.host || "";
+  if (pathIn) pathIn.value = parsed.pathPrefix || "";
+  if (svcIn) svcIn.value = r.service || "";
+  const svc = routePanelState.servicesByKey.get(r.service || "");
+  if (epIn) epIn.value = (svc?.urls && svc.urls[0]) || "";
+  if (priIn) priIn.value = r.priority != null ? String(r.priority) : "";
+  if (tlsIn) tlsIn.checked = !!r.tls;
+  const eps = Array.isArray(r.entryPoints) ? r.entryPoints : [];
+  const web = routeBuilderInput("routeBuilderEntryWeb");
+  const websecure = routeBuilderInput("routeBuilderEntryWebsecure");
+  if (web) web.checked = eps.includes("web");
+  if (websecure) websecure.checked = eps.includes("websecure");
+  routeBuilderSyncModeUi();
+  routeBuilderMsg(`Loaded router ${r.key} into route builder. Adjust values and merge.`);
+}
+
+function routeBuilderEditService(serviceKey) {
+  const s = routePanelState.servicesByKey.get(serviceKey);
+  if (!s) {
+    routeBuilderMsg(`Service not found: ${serviceKey}`);
+    return;
+  }
+  const modeIn = routeBuilderInput("routeBuilderMode");
+  if (modeIn) modeIn.value = "proxy";
+  const svcIn = routeBuilderInput("routeBuilderServiceKey");
+  const epIn = routeBuilderInput("routeBuilderEndpointUrl");
+  if (svcIn) svcIn.value = s.key || "";
+  if (epIn) epIn.value = (s.urls && s.urls[0]) || "";
+  routeBuilderSyncModeUi();
+  routeBuilderMsg(`Loaded service ${s.key}. Select a host/router key to complete the route.`);
+}
+
+async function routeBuilderDeleteKeys(routerKeys, serviceKeys, label) {
+  const msg = document.getElementById("traefikRoutesMsg");
+  const tok = controlToken();
+  if (dashboardTokenRequired() && !tok) {
+    if (msg) msg.textContent = "Set the control token on the Control tab.";
+    return;
+  }
+  const ok = await showAppConfirm({
+    title: `Delete ${label}`,
+    message: "This removes keys from traefik/dynamic.yml (with atomic write + backup). Continue?",
+    confirmText: "Delete",
+  });
+  if (!ok) return;
+  try {
+    const res = await fetch("/api/traefik/strip-keys", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Control-Token": tok,
+      },
+      body: JSON.stringify({
+        routers: routerKeys || [],
+        services: serviceKeys || [],
+        token: tok,
+      }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      if (msg) msg.textContent = data.error || `HTTP ${res.status}`;
+      return;
+    }
+    if (msg) {
+      msg.textContent = `Deleted ${label}: routers ${data.routers_removed || 0}, services ${data.services_removed || 0}.`;
+    }
+    await loadTraefikRoutesPanel();
+  } catch (e) {
+    if (msg) msg.textContent = String(e.message || e);
+  }
 }
 
 async function traefikFetchManifestFragment(alsoMerge) {
@@ -4953,23 +6129,50 @@ async function loadTraefikRoutesPanel() {
     }
     if (pathEl) pathEl.textContent = data.path || "—";
     const routers = data.routers || [];
+    routePanelState.routersByKey.clear();
+    routePanelState.servicesByKey.clear();
+    routers.forEach((r) => {
+      if (r && r.key) routePanelState.routersByKey.set(r.key, r);
+    });
     rb.innerHTML = routers.length
       ? routers
           .map(
             (r) =>
-              `<tr><td><code>${escapeHtml(r.key)}</code></td><td>${escapeHtml(String(r.rule || "—"))}</td><td><code>${escapeHtml(String(r.service || "—"))}</code></td><td>${escapeHtml((r.entryPoints || []).join(", ") || "—")}</td><td>${r.tls ? "yes" : "—"}</td></tr>`,
+              `<tr><td><code>${escapeHtml(r.key)}</code></td><td>${escapeHtml(String(r.rule || "—"))}</td><td><code>${escapeHtml(String(r.service || "—"))}</code></td><td>${escapeHtml((r.entryPoints || []).join(", ") || "—")}</td><td>${r.tls ? "yes" : "—"}</td><td><div class="routes-actions"><button type="button" class="ctrl-act ctrl-act--ops" data-route-edit="${escapeAttr(r.key)}">Edit</button><button type="button" class="ctrl-act danger ctrl-act--destructive" data-route-del="${escapeAttr(r.key)}">Delete</button></div></td></tr>`,
           )
           .join("")
-      : `<tr><td colspan="5" class="muted">No routers</td></tr>`;
+      : `<tr><td colspan="6" class="muted">No routers</td></tr>`;
     const services = data.services || [];
+    services.forEach((s) => {
+      if (s && s.key) routePanelState.servicesByKey.set(s.key, s);
+    });
     sb.innerHTML = services.length
       ? services
           .map((s) => {
             const urls = (s.urls || []).join(", ") || "—";
-            return `<tr><td><code>${escapeHtml(s.key)}</code></td><td>${escapeHtml(urls)}</td></tr>`;
+            return `<tr><td><code>${escapeHtml(s.key)}</code></td><td>${escapeHtml(urls)}</td><td><div class="routes-actions"><button type="button" class="ctrl-act ctrl-act--ops" data-route-svc-edit="${escapeAttr(s.key)}">Edit</button><button type="button" class="ctrl-act danger ctrl-act--destructive" data-route-svc-del="${escapeAttr(s.key)}">Delete</button></div></td></tr>`;
           })
           .join("")
-      : `<tr><td colspan="2" class="muted">No services</td></tr>`;
+      : `<tr><td colspan="3" class="muted">No services</td></tr>`;
+
+    rb.querySelectorAll("[data-route-edit]").forEach((btn) => {
+      btn.addEventListener("click", () => routeBuilderEditRouter(btn.getAttribute("data-route-edit") || ""));
+    });
+    rb.querySelectorAll("[data-route-del]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const key = btn.getAttribute("data-route-del") || "";
+        if (key) routeBuilderDeleteKeys([key], [], `router ${key}`);
+      });
+    });
+    sb.querySelectorAll("[data-route-svc-edit]").forEach((btn) => {
+      btn.addEventListener("click", () => routeBuilderEditService(btn.getAttribute("data-route-svc-edit") || ""));
+    });
+    sb.querySelectorAll("[data-route-svc-del]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const key = btn.getAttribute("data-route-svc-del") || "";
+        if (key) routeBuilderDeleteKeys([], [key], `service ${key}`);
+      });
+    });
 
     if (hh) {
       const hints = data.hosted_hints || [];
@@ -5004,7 +6207,7 @@ async function loadTraefikRoutesPanel() {
     }
     if (msg) msg.textContent = "";
   } catch (e) {
-    rb.innerHTML = `<tr><td colspan="5">${escapeHtml(e.message || String(e))}</td></tr>`;
+    rb.innerHTML = `<tr><td colspan="6">${escapeHtml(e.message || String(e))}</td></tr>`;
   }
 }
 
@@ -5346,7 +6549,7 @@ async function runDashboardStreamOverlay(opts) {
   if (summaryEl) {
     summaryEl.classList.add("is-hidden");
     summaryEl.textContent = "";
-    summaryEl.classList.remove("control-action-summary--ok", "control-action-summary--bad");
+    summaryEl.classList.remove("control-action-summary--ok", "control-action-summary--bad", "control-action-summary--warn");
   }
   if (snippetEl) {
     snippetEl.classList.remove("is-hidden");
@@ -5444,9 +6647,19 @@ async function runDashboardStreamOverlay(opts) {
       lastControlActionResultText = text;
       if (out) out.textContent = text;
       const details = document.querySelector(".control-response-details");
-      if (details && data?.ok === false) details.open = true;
 
       const ok = data && data.ok === true;
+      const infraGapsStream = Array.isArray(data.register_infrastructure_gaps)
+        ? data.register_infrastructure_gaps
+        : [];
+      const composeGapStream =
+        data?.effective_has_docker_compose === false || infraGapsStream.some((x) => String(x).includes("dockerCompose"));
+      const routingGapStream =
+        data?.effective_has_traefik_sources === false ||
+        infraGapsStream.some((x) => String(x).includes("routing.entries") || String(x).includes("localCfPublicPrefix"));
+      const infraIncompleteStream = ok && infraGapsStream.length > 0;
+      if (details && (data?.ok === false || infraIncompleteStream)) details.open = true;
+
       outcome.ok = ok;
       outcome.result = data;
       if (!ok) outcome.error = data?.error ? String(data.error) : "stream failed";
@@ -5454,15 +6667,43 @@ async function runDashboardStreamOverlay(opts) {
       if (liveEl) {
         const sec = Math.max(0, Math.round((Date.now() - t0) / 1000));
         const lines = fullLog ? fullLog.split("\n").length : 0;
-        liveEl.textContent = ok
-          ? `Succeeded in ${sec}s · ${lines} line(s) of output`
-          : `Completed in ${sec}s (check log below)`;
+        if (!ok) liveEl.textContent = `Completed in ${sec}s (check log below)`;
+        else if (infraIncompleteStream) {
+          if (composeGapStream && !routingGapStream) {
+            liveEl.textContent = `Registry updated in ${sec}s (${lines} lines) — routes exist, but no compose stack configured`;
+          } else if (!composeGapStream && routingGapStream) {
+            liveEl.textContent = `Registry updated in ${sec}s (${lines} lines) — compose is configured, but no app routes are defined`;
+          } else {
+            liveEl.textContent = `Registry updated in ${sec}s (${lines} lines) — add compose/routing in leco.yaml`;
+          }
+        }
+        else liveEl.textContent = `Succeeded in ${sec}s · ${lines} line(s) of output`;
       }
       if (summaryEl) {
         summaryEl.classList.remove("is-hidden");
-        summaryEl.classList.toggle("control-action-summary--ok", ok);
-        summaryEl.classList.toggle("control-action-summary--bad", !ok);
-        summaryEl.textContent = ok ? "Action succeeded." : data.error || "Action reported failure.";
+        summaryEl.classList.remove("control-action-summary--ok", "control-action-summary--bad", "control-action-summary--warn");
+        if (!ok) {
+          summaryEl.classList.add("control-action-summary--bad");
+          summaryEl.textContent = data.error || "Action reported failure.";
+        } else if (infraIncompleteStream) {
+          summaryEl.classList.add("control-action-summary--warn");
+          if (composeGapStream && !routingGapStream) {
+            summaryEl.textContent =
+              "App is registered and routing is configured. No dockerCompose stack is configured in leco.yaml, so hosted compose controls/logs remain empty (Worker-only is fine).";
+          } else if (!composeGapStream && routingGapStream) {
+            summaryEl.textContent =
+              "App is registered and compose is configured, but no app routes are defined (routing.entries/localCfPublicPrefix missing). Add routes in leco.yaml.";
+          } else {
+            summaryEl.textContent =
+              "App is in the registry, but leco.yaml has no compose or routing yet — see register_infrastructure_gaps in JSON below.";
+          }
+        } else {
+          summaryEl.classList.add("control-action-summary--ok");
+          summaryEl.textContent = "Action succeeded.";
+        }
+      }
+      if (snippetEl && !ok && data.error && !String(fullLog || "").trim()) {
+        snippetEl.textContent = String(data.error);
       }
     }
   } catch (e) {
@@ -5562,7 +6803,7 @@ async function runDashboardSyncRegisterOverlay(opts) {
   if (summaryEl) {
     summaryEl.classList.add("is-hidden");
     summaryEl.textContent = "";
-    summaryEl.classList.remove("control-action-summary--ok", "control-action-summary--bad");
+    summaryEl.classList.remove("control-action-summary--ok", "control-action-summary--bad", "control-action-summary--warn");
   }
   if (snippetEl) {
     snippetEl.classList.remove("is-hidden");
@@ -5614,6 +6855,13 @@ async function runDashboardSyncRegisterOverlay(opts) {
     const registerOk = res.ok && data.ok === true;
     const deployFine = data.deploy_stack_ran !== true || data.deploy_ok === true;
     const ok = registerOk && deployFine;
+    const infraGaps = Array.isArray(data.register_infrastructure_gaps) ? data.register_infrastructure_gaps : [];
+    const composeGap =
+      data.effective_has_docker_compose === false || infraGaps.some((x) => String(x).includes("dockerCompose"));
+    const routingGap =
+      data.effective_has_traefik_sources === false ||
+      infraGaps.some((x) => String(x).includes("routing.entries") || String(x).includes("localCfPublicPrefix"));
+    const infraIncomplete = ok && infraGaps.length > 0;
     outcome.ok = ok;
     outcome.result = data;
     if (!ok) {
@@ -5628,19 +6876,40 @@ async function runDashboardSyncRegisterOverlay(opts) {
     lastControlActionResultText = text;
     if (out) out.textContent = text;
     const details = document.querySelector(".control-response-details");
-    if (details && !ok) details.open = true;
+    if (details && (!ok || infraIncomplete)) details.open = true;
     if (titleEl) titleEl.textContent = ok ? `Done · ${actionVerb}` : `Finished · ${actionVerb}`;
     if (liveEl) {
       const sec = Math.max(0, Math.round((Date.now() - t0) / 1000));
-      liveEl.textContent = ok ? `Succeeded in ${sec}s` : `Completed in ${sec}s (see log)`;
+      if (!ok) liveEl.textContent = `Completed in ${sec}s (see log)`;
+      else if (infraIncomplete) {
+        if (composeGap && !routingGap) liveEl.textContent = `Registry updated in ${sec}s — routes are ready, compose stack not configured`;
+        else if (!composeGap && routingGap) liveEl.textContent = `Registry updated in ${sec}s — compose ready, app routes missing`;
+        else liveEl.textContent = `Registry updated in ${sec}s — infrastructure still empty`;
+      }
+      else liveEl.textContent = `Succeeded in ${sec}s`;
     }
     if (summaryEl) {
       summaryEl.classList.remove("is-hidden");
-      summaryEl.classList.toggle("control-action-summary--ok", ok);
-      summaryEl.classList.toggle("control-action-summary--bad", !ok);
-      summaryEl.textContent = ok
-        ? "Registered and deploy finished (or skipped if unchecked)."
-        : outcome.error || "Request failed.";
+      summaryEl.classList.remove("control-action-summary--ok", "control-action-summary--bad", "control-action-summary--warn");
+      if (!ok) {
+        summaryEl.classList.add("control-action-summary--bad");
+        summaryEl.textContent = outcome.error || "Request failed.";
+      } else if (infraIncomplete) {
+        summaryEl.classList.add("control-action-summary--warn");
+        if (composeGap && !routingGap) {
+          summaryEl.textContent =
+            "App is registered and routes/local CF are configured. No dockerCompose stack is configured in leco.yaml, so compose services/logs are empty (expected for Worker-only apps).";
+        } else if (!composeGap && routingGap) {
+          summaryEl.textContent =
+            "App is registered and compose is configured, but no app routes are defined yet. Add infrastructure.routing.entries (or cloudflare.localCfPublicPrefix) in leco.yaml.";
+        } else {
+          summaryEl.textContent =
+            "App is in the registry, but leco.yaml has no compose or routing yet — no containers or Traefik routes were created. Expand JSON below for register_infrastructure_gaps, or edit hosting/app-available/…/leco.yaml.";
+        }
+      } else {
+        summaryEl.classList.add("control-action-summary--ok");
+        summaryEl.textContent = "Registered and deploy finished (or skipped if unchecked).";
+      }
     }
   } catch (e) {
     const aborted = e && (e.name === "AbortError" || e.code === 20);
@@ -5929,9 +7198,10 @@ function renderContainers(data) {
 }
 
 async function initLogsPanel() {
+  const sel = document.getElementById("logService");
+  if (!sel) return;
   const res = await fetch("/api/services");
   const data = await res.json();
-  const sel = document.getElementById("logService");
   sel.innerHTML = (data.services || [])
     .map((svc) => `<option value="${svc.container}">${svc.service} (${svc.container})</option>`)
     .join("");
@@ -5988,14 +7258,20 @@ function initLogEvents() {
 }
 
 function scheduleRefresh() {
-  const ms = Number(document.getElementById("refreshRate").value || "0");
+  const rateEl = document.getElementById("refreshRate");
+  const nextEl = document.getElementById("nextRefresh");
+  if (!rateEl || !nextEl) return;
+  const ms = Number(rateEl.value || "0");
   if (refreshTimer) clearInterval(refreshTimer);
   if (tickTimer) clearInterval(tickTimer);
 
   if (ms > 0) {
     nextRefreshEpoch = Date.now() + ms;
+    const hubChromeOnly = !document.getElementById("overviewTab");
     refreshTimer = setInterval(() => {
-      if (activeTab === "overviewTab" || activeTab === "infrastructureTab") {
+      if (hubChromeOnly) {
+        loadOverview();
+      } else if (activeTab === "overviewTab" || activeTab === "infrastructureTab") {
         loadOverview();
       } else if (activeTab === "logsTab") {
         loadLogs();
@@ -6013,14 +7289,15 @@ function scheduleRefresh() {
 
     tickTimer = setInterval(() => {
       const left = Math.max(0, Math.round((nextRefreshEpoch - Date.now()) / 1000));
-      document.getElementById("nextRefresh").textContent = `Next refresh in ${left}s`;
+      nextEl.textContent = `Next refresh in ${left}s`;
     }, 250);
   } else {
-    document.getElementById("nextRefresh").textContent = "Manual refresh only";
+    nextEl.textContent = "Manual refresh only";
   }
 }
 
 async function loadOverview() {
+  const hostedAppsPromise = loadOverviewHostedApps();
   try {
     const [overviewRes, cfRes, metricsRes] = await Promise.all([
       fetch("/api/overview"),
@@ -6048,11 +7325,19 @@ async function loadOverview() {
     setCompactHeaderSummary(data);
     updateOverviewDashboard(data, cloudflareData, metricsData);
     renderInfrastructurePanel(data, cloudflareData);
+    renderOverviewHostedAppsCard(overviewHostedAppsPayload);
     saveOverviewCache(data, cloudflareData, metricsData);
-    /* Do not saveMetricsCache here: overview uses a shorter history limit and would overwrite the Deep metrics tab cache. */
+    saveMetricsCache(metricsData);
   } catch (e) {
     console.warn("loadOverview failed", e);
   }
+  hostedAppsPromise
+    .then((payload) => {
+      renderOverviewHostedAppsCard(payload);
+    })
+    .catch((e) => {
+      console.warn("loadOverview hosted apps failed", e);
+    });
 }
 
 function initControlInfraBulkBar() {
@@ -6095,7 +7380,7 @@ function initControlBulkBar() {
           const ok = await showAppConfirm({
             title: lbl,
             message:
-              "Runs scripts under ai-stack/services (may take several minutes). Stop, restart, and redeploy skip this dashboard container so the UI can show the result.",
+              "Runs scripts under ecosystem-stack/services (may take several minutes). Stop, restart, and redeploy skip the LEco DevOps container so the UI can show the result.",
             confirmText: "Continue",
           });
           if (!ok) return;
@@ -6107,7 +7392,22 @@ function initControlBulkBar() {
   initControlInfraBulkBar();
 }
 
+async function bootstrapHubChrome() {
+  document.getElementById("refreshNow")?.addEventListener("click", () => {
+    loadOverview();
+  });
+  document.getElementById("refreshRate")?.addEventListener("change", scheduleRefresh);
+  await loadOverview();
+  scheduleRefresh();
+}
+
 async function bootstrap() {
+  initGlobalPreloader();
+  instrumentBackendFetchPreloader();
+  if (!document.getElementById("overviewTab")) {
+    await bootstrapHubChrome();
+    return;
+  }
   initAppModal();
   initTabs();
   initHostMetricsPanelRefresh();
@@ -6167,14 +7467,33 @@ async function bootstrap() {
     });
   });
 
+  document.body.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-doc-open]");
+    if (!btn) return;
+    const docId = String(btn.getAttribute("data-doc-open") || "").trim();
+    if (!docId) return;
+    openDocumentationDoc(docId);
+  });
+
   document.getElementById("referenceFilter")?.addEventListener("input", applyReferenceFilter);
 
   await loadOverview();
-  try {
-    const savedTab = localStorage.getItem(LS_ACTIVE_TAB_KEY);
-    if (savedTab && document.getElementById(savedTab)) activateTab(savedTab);
-  } catch (_) {
-    /* ignore */
+  const qs = new URLSearchParams(window.location.search || "");
+  const requestedTab = String(qs.get("tab") || "").trim();
+  const requestedDoc = String(qs.get("doc") || "").trim();
+  if (requestedTab && document.getElementById(requestedTab)) {
+    activateTab(requestedTab, {
+      preferredDocId: requestedTab === "docsTab" ? requestedDoc || null : null,
+    });
+  } else if (requestedDoc) {
+    activateTab("docsTab", { preferredDocId: requestedDoc });
+  } else {
+    try {
+      const savedTab = localStorage.getItem(LS_ACTIVE_TAB_KEY);
+      if (savedTab && document.getElementById(savedTab)) activateTab(savedTab);
+    } catch (_) {
+      /* ignore */
+    }
   }
   scheduleRefresh();
 }

@@ -18,7 +18,7 @@ from leco_subprocess import run_leco_app
 PROJECT_ROOT = os.getenv("DASHBOARD_PROJECT_ROOT", "/project")
 COMPOSE_FILE = os.path.join(PROJECT_ROOT, COMPOSE_REL)
 INFRA_COMPOSE_FILE = os.path.join(PROJECT_ROOT, INFRA_COMPOSE_REL)
-SERVICES_DIR = os.path.join(PROJECT_ROOT, "ai-stack", "services")
+SERVICES_DIR = os.path.join(PROJECT_ROOT, "ecosystem-stack", "services")
 CONTROL_TOKEN = os.getenv("DASHBOARD_CONTROL_TOKEN", "").strip()
 
 D1_BASE = os.getenv("DASHBOARD_D1_URL", "http://d1-adapter:8083").rstrip("/")
@@ -99,14 +99,14 @@ def list_targets():
     out = [
         {
             "id": "stack-ecosystem-all",
-            "label": "All AI-stack services (bulk)",
+            "label": "All ecosystem-stack services (bulk)",
             "group": "ecosystem",
             "container": None,
             "actions": sorted(ALLOWED_ACTIONS),
             "runtime": {
                 "kind": "stack",
                 "status": "bulk",
-                "label": "Full action set via ai-stack/core.sh (stop/pause/remove/reset/recreate skip this dashboard so the API can finish)",
+                "label": "Full action set via ecosystem-stack/core.sh (stop/pause/remove/reset/recreate skip this dashboard so the API can finish)",
                 "running": None,
             },
         }
@@ -115,7 +115,7 @@ def list_targets():
         entry = {
             "id": t["id"],
             "label": t["label"],
-            "group": "ai-stack",
+            "group": "ecosystem-stack",
             "container": t.get("container"),
             "actions": sorted(ALLOWED_ACTIONS),
             "runtime": _container_runtime(dc, t.get("container")),
@@ -297,7 +297,7 @@ def _ai_script(script, action, timeout=600):
         return 1, f"script missing: {path}"
     if action not in _AI_SCRIPT_FN_ACTIONS:
         return 1, f"action not invokable as service function: {action}"
-    # Service scripts define bash functions; ai-stack/core.sh uses `source` + call.
+    # Service scripts define bash functions; ecosystem-stack/core.sh uses `source` + call.
     # A bare `bash script.sh stop` only defines functions and exits 0 without running them.
     root_q = shlex.quote(PROJECT_ROOT)
     path_q = shlex.quote(path)
@@ -358,22 +358,35 @@ def run_action(target_id: str, action: str):
     if action not in ALLOWED_ACTIONS:
         return {"ok": False, "error": f"unsupported action: {action}"}
 
-    if target_id == "stack-cf-all":
+    tid = (target_id or "").strip()
+    if not tid:
+        return {
+            "ok": False,
+            "error": "missing target_id — UI sent an empty control target; refresh the page or re-open the Hosted apps tab.",
+        }
+
+    if tid == "stack-cf-all":
         return _stack_cf_all(action)
 
-    if target_id == "stack-infra-all":
+    if tid == "stack-infra-all":
         return _stack_infra_all(action)
 
-    if target_id == "stack-ecosystem-all":
+    if tid == "stack-ecosystem-all":
         return _stack_ecosystem_all(action)
 
-    leco_m = resolve_leco_target(target_id)
+    leco_m = resolve_leco_target(tid)
     if leco_m:
         return _leco_stack_action(leco_m, action)
 
-    meta = _BY_ID.get(target_id)
+    meta = _BY_ID.get(tid)
     if not meta:
-        return {"ok": False, "error": "unknown target"}
+        return {
+            "ok": False,
+            "error": (
+                f"unknown target {tid!r} — not a LEco stack (expected leco-stack-<registry id>), "
+                "infra/cf bulk target, or dashboard service id. Refresh the UI if controls look stale."
+            ),
+        }
 
     if "compose_service" in meta:
         if meta.get("compose_project") == "infra":
@@ -407,7 +420,7 @@ def _stack_ecosystem_all(action: str):
         return body
     if action not in _ECOSYSTEM_BULK_BASH_ACTIONS:
         return {"ok": False, "error": f"action {action} not supported for ecosystem bulk"}
-    core_sh = os.path.join(PROJECT_ROOT, "ai-stack", "core.sh")
+    core_sh = os.path.join(PROJECT_ROOT, "ecosystem-stack", "core.sh")
     if not os.path.isfile(core_sh):
         return {"ok": False, "error": f"missing {core_sh}"}
     src = f"source {shlex.quote(core_sh)} && bulk_ecosystem {shlex.quote(action)}"
@@ -897,24 +910,38 @@ def run_action_streaming(target_id: str, action: str) -> Iterator[dict[str, Any]
         yield _emit_done(False, error=f"unsupported action: {action}")
         return
 
-    if target_id == "stack-cf-all":
+    tid = (target_id or "").strip()
+    if not tid:
+        yield _emit_done(
+            False,
+            error="missing target_id — UI sent an empty control target; refresh the page or re-open the Hosted apps tab.",
+        )
+        return
+
+    if tid == "stack-cf-all":
         yield from _stream_stack_cf_all_stream(action)
         return
-    if target_id == "stack-infra-all":
+    if tid == "stack-infra-all":
         yield from _stream_stack_infra_all_stream(action)
         return
-    if target_id == "stack-ecosystem-all":
+    if tid == "stack-ecosystem-all":
         yield from _stream_stack_ecosystem_all_stream(action)
         return
 
-    leco_m = resolve_leco_target(target_id)
+    leco_m = resolve_leco_target(tid)
     if leco_m:
         yield from _stream_leco_stack_action(leco_m, action)
         return
 
-    meta = _BY_ID.get(target_id)
+    meta = _BY_ID.get(tid)
     if not meta:
-        yield _emit_done(False, error="unknown target")
+        yield _emit_done(
+            False,
+            error=(
+                f"unknown target {tid!r} — not a LEco stack (expected leco-stack-<registry id>), "
+                "infra/cf bulk target, or dashboard service id. Refresh the UI if controls look stale."
+            ),
+        )
         return
 
     if "compose_service" in meta:
@@ -942,7 +969,7 @@ def _stream_stack_ecosystem_all_stream(action: str) -> Iterator[dict[str, Any]]:
     if action not in _ECOSYSTEM_BULK_BASH_ACTIONS:
         yield _emit_done(False, error=f"action {action} not supported for ecosystem bulk")
         return
-    core_sh = os.path.join(PROJECT_ROOT, "ai-stack", "core.sh")
+    core_sh = os.path.join(PROJECT_ROOT, "ecosystem-stack", "core.sh")
     if not os.path.isfile(core_sh):
         yield _emit_done(False, error=f"missing {core_sh}")
         return

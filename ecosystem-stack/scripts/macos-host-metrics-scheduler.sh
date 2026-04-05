@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Install or remove a LaunchAgent that runs macos-write-cpu-temp.sh on an interval while the
-# dashboard stack is in use. Called from ai-stack/services/dashboard.sh on macOS (start → install,
+# dashboard stack is in use. Called from ecosystem-stack/services/dashboard.sh on macOS (start → install,
 # stop/remove → uninstall).
 #
 # macOS user crontab is limited to 1-minute granularity; launchd supports StartInterval (e.g. 30s).

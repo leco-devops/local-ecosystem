@@ -1,8 +1,8 @@
 # LEco DevOps — deploy CLI reference
 
-**LEco DevOps** is the product name for this tooling. The CLI is installed as **`leco-app`** and **`leco-devops`** (same program). It lives under `tools/deploy-cli/` and helps you deploy **third-party** applications: one manifest per app, Docker Compose lifecycle, optional Cloudflare Wrangler deploy, and optional Traefik YAML fragments — without folding each app into the local-ecosystem `ai-stack` or `core.sh`.
+**LEco DevOps** is the product name for this tooling. The CLI is installed as **`leco-app`** and **`leco-devops`** (same program). It lives under `tools/deploy-cli/` and helps you deploy **third-party** applications: one manifest per app, Docker Compose lifecycle, optional Cloudflare Wrangler deploy, and optional Traefik YAML fragments — without folding each app into the local-ecosystem `ecosystem-stack` or `core.sh`.
 
-For a task-oriented guide (dashboard wizard, workflows, troubleshooting), see **[LECO_USER_MANUAL.md](LECO_USER_MANUAL.md)** — it is also available in the Ops Dashboard **Docs** tab. For how bridge + profile merge, **`hosting/`** symlinks, and teardown fit together, see **[LECO_APP_BLUEPRINT.md](LECO_APP_BLUEPRINT.md)**.
+For a task-oriented guide (registration wizard, workflows, troubleshooting), see **[LECO_USER_MANUAL.md](LECO_USER_MANUAL.md)** — it is also available in the LEco DevOps **Docs** tab. For how bridge + profile merge, **`hosting/`** symlinks, and teardown fit together, see **[LECO_APP_BLUEPRINT.md](LECO_APP_BLUEPRINT.md)**. For system context and component-level architecture, see **[ARCHITECTURE.md](ARCHITECTURE.md)**, **[HLD.md](HLD.md)**, **[LLD.md](LLD.md)**, and **[LECO_TOOLING.md](LECO_TOOLING.md)**.
 
 ## Install
 
@@ -34,11 +34,11 @@ leco-app onboard       # deploy + ecosystem-register + merge routing → traefik
 leco-app init          # wizard: detects docker-compose + wrangler.toml; writes leco.yaml stub
 leco-app init --onboard -E /path/to/local-ecosystem   # after deploy: register + Traefik merge
 leco-app init --manifest-only   # minimal manifest + leco.yaml when you have no compose yet (confirm in TTY)
-leco-app detect        # print JSON: compose files, wrangler, suggested archetype (for tooling / dashboard)
+leco-app detect        # print JSON: compose files, wrangler, suggested archetype (for tooling / LEco DevOps)
 leco-app run-hooks --phase prepare   # run lifecycle.prepare from merged sidecar profile
 leco-app deploy
 leco-app ecosystem-register --merge-traefik   # register only + Traefik merge (if already deployed)
-# Optional logical registry path (same inode as --manifest): --registry-manifest-relpath hosting/app-enabled/myapp/leco.app.yaml
+# Optional logical registry path (same inode as --manifest): --registry-manifest-relpath hosting/app-available/myapp/leco.app.yaml
 leco-app status
 leco-app logs -f
 leco-app down
@@ -80,10 +80,10 @@ localHostProfile: leco.yaml
 
 ### Manifest v3 (`lecoAppVersion: "3"`)
 
-Recommended for new apps: keep **`leco.app.yaml`** as a **bridge** (`name`, `root`, `localHostProfile`, optional `configRefs`, `applicationVersion`, `localhost.notes`) and put **`infrastructure`** in **`leco.yaml`** — **`dockerCompose`** (including **`additionalComposeFiles`**), **`cloudflare`**, **`routing`**, health URLs, etc. The CLI and dashboard load an **effective manifest** by merging profile `infrastructure` over the bridge (`tools/deploy-cli/leco_app/schema.py`).
+Recommended for new apps: keep **`leco.app.yaml`** as a **bridge** (`name`, `root`, `localHostProfile`, optional `configRefs`, `applicationVersion`, `localhost.notes`) and put **`infrastructure`** in **`leco.yaml`** — **`dockerCompose`** (including **`additionalComposeFiles`**), **`cloudflare`**, **`routing`**, health URLs, etc. The CLI and LEco DevOps load an **effective manifest** by merging profile `infrastructure` over the bridge (`tools/deploy-cli/leco_app/schema.py`).
 
 - **`additionalComposeFiles`** — optional list of extra compose files; `docker compose` is run as **`-f` primary `-f` …** in list order. Paths are relative to the **resolved app root**; files must exist next to the primary compose file in the real checkout (not only under `hosting/` unless you symlink or copy them there).
-- **`leco-app down`** exits **0** with a warning if the primary compose file is missing (treats the stack as already removed). The Ops Dashboard **Remove** still runs **full offboard** afterward.
+- **`leco-app down`** exits **0** with a warning if the primary compose file is missing (treats the stack as already removed). LEco DevOps **Remove** still runs **full offboard** afterward.
 
 Full diagram and maintainer pointers: **[LECO_APP_BLUEPRINT.md](LECO_APP_BLUEPRINT.md)**.
 
@@ -155,7 +155,7 @@ lifecycle:
 notes: ""
 ```
 
-**Security:** `lifecycle` runs arbitrary commands — same trust model as `docker compose`; only use in repos you control. The Ops Dashboard can **register** apps (writes manifests + registry) only with the **control token**; paths must stay under the mounted project or `workspace-parent`.
+**Security:** `lifecycle` runs arbitrary commands — same trust model as `docker compose`; only use in repos you control. LEco DevOps can **register** apps (writes manifests + registry) only with the **control token**; paths must stay under the mounted project or `workspace-parent`.
 
 ## Cloudflare
 
@@ -175,9 +175,9 @@ Production deploys require **`--confirm-production`** to reduce accidents.
 leco-app traefik-fragment -o /tmp/myapp-traefik.yml
 ```
 
-Merge the output into `traefik/dynamic.yml` manually (a `.bak` copy is made; the Ops Dashboard uses an atomic replace). Traefik’s file provider **`watch: true`** reloads **`dynamic.yml` without restarting Traefik**; restart only if you change static config or mounts. See [DEPLOY_CUSTOM_APPS.md](DEPLOY_CUSTOM_APPS.md).
+Merge the output into `traefik/dynamic.yml` manually (a `.bak` copy is made; LEco DevOps uses an atomic replace). Traefik’s file provider **`watch: true`** reloads **`dynamic.yml` without restarting Traefik**; restart only if you change static config or mounts. See [DEPLOY_CUSTOM_APPS.md](DEPLOY_CUSTOM_APPS.md).
 
-The **Ops Dashboard** (image built from the repo root) bundles **LEco DevOps** (`leco-app` / `leco-devops`): **Hosted apps** control actions and **Register** use it; **Routes** can load **`traefik-fragment`** output by registry id and merge into **`dynamic.yml`**.
+The **LEco DevOps** web UI (container image built from the repo root) ships the **`leco-app`** / **`leco-devops`** CLI: **Hosted apps** control actions and **Register** use it; **Routes** can load **`traefik-fragment`** output by registry id and merge into **`dynamic.yml`**.
 
 **Manifest — single backend (legacy):**
 
@@ -206,15 +206,15 @@ routing:
 
 `leco-app traefik-fragment` turns that into four routers (HTTP/HTTPS × API/UI) with **priority 20** on the API path and **10** on the UI catch-all.
 
-## Ops dashboard vs LEco DevOps apps
+## LEco DevOps web UI vs registered apps
 
-The **Ops Dashboard** **Control** tab lists **core** targets from `dashboard/control_targets.py` (AI stack, infra, Cloudflare-local, bulk actions). **Registered leco compose apps are not listed there** — use the **Hosted apps** tab instead.
+The **LEco DevOps** **Control** tab lists **core** targets from `dashboard/control_targets.py` (ecosystem stack, infra, Cloudflare-local, bulk actions). **Registered leco compose apps are not listed there** — use the **Hosted apps** tab instead.
 
-**Hosted apps tab:** after you register an app (below), open **Hosted apps** in the dashboard for that stack’s **per-service metrics**, **CPU/memory/net history** (scoped to the compose project), **compose logs**, **insights** (restarts, simple CPU trend vs recent samples, optional HTTP probes to manifest `healthcheckUrls`), **local profile** (archetype, **`leco.yaml`** URLs and lifecycle summary), and the same **lifecycle controls** as before (`POST /api/control` with `target_id` **`leco-stack-<id>`**). APIs: `GET /api/hosted-apps`, `GET /api/hosted-apps/<slug>/snapshot`, `…/metrics/history`, `…/logs`, `…/insights`.
+**Hosted apps tab:** after you register an app (below), open **Hosted apps** in LEco DevOps for that stack’s **per-service metrics**, **CPU/memory/net history** (scoped to the compose project), **compose logs**, **insights** (restarts, simple CPU trend vs recent samples, optional HTTP probes to manifest `healthcheckUrls`), **local profile** (archetype, **`leco.yaml`** URLs and lifecycle summary), and the same **lifecycle controls** as before (`POST /api/control` with `target_id` **`leco-stack-<id>`**). APIs: `GET /api/hosted-apps`, `GET /api/hosted-apps/<slug>/snapshot`, `…/metrics/history`, `…/logs`, `…/insights`.
 
-**Register from the dashboard:** expand **Register application** on the Hosted apps tab — **Detect** calls `POST /api/leco/detect` (path under `/project` or workspace-parent; optional `app_id` returns YAML previews). **Register** calls `POST /api/leco/register` with the **control token** and writes `leco.app.yaml`, **`leco.yaml`**, and updates `config/leco-registry.yaml`. Read-only **`wsp:`** paths are **materialized** under **`hosting/app-available/`** with a **`source`** symlink and **`hosting/app-enabled/<slug>`** (see **`hosting/README.md`** and **`docs/DEPLOYMENT.md`**). **`POST /api/hosted/upload-zip`** extracts a zip into **`hosting/app-available/<slug>/`** and removes the archive.
+**Register from LEco DevOps:** expand **Register application** on the Hosted apps tab — **Detect** calls `POST /api/leco/detect` (path under `/project` or workspace-parent; optional `app_id` returns YAML previews). **Register** calls `POST /api/leco/register` with the **control token** and writes `leco.app.yaml`, **`leco.yaml`**, and updates `config/leco-registry.yaml`. Read-only **`wsp:`** paths are **materialized** under **`hosting/app-available/`** with a **`source`** symlink; the registry points to **`hosting/app-available/<slug>/leco.app.yaml`** (see **`hosting/README.md`** and **`docs/DEPLOYMENT.md`**). **`POST /api/hosted/upload-zip`** extracts a zip into **`hosting/app-available/<slug>/`** and removes the archive.
 
-**Disable health URL probes** from the dashboard container (default on): set **`DASHBOARD_HOSTED_APP_HEALTH_PROBES=0`**.
+**Disable health URL probes** from the LEco DevOps container (default on): set **`DASHBOARD_HOSTED_APP_HEALTH_PROBES=0`**.
 
 **Register** third-party compose apps:
 
@@ -229,9 +229,9 @@ The **Ops Dashboard** **Control** tab lists **core** targets from `dashboard/con
 
 2. This creates/updates **`local-ecosystem/config/leco-registry.yaml`** with a manifest path **relative to the ecosystem repo** (e.g. `../CrawlerVision/cloudflare/leco.app.yaml` for a sibling checkout).
 
-3. **`dashboard.sh`** mounts the ecosystem repo at **`/project`** and its **parent directory** at **`/workspace-parent`** (read-only) so those `../…` manifest paths work inside **`service-dashboard`**. If you start the dashboard some other way, set the same bind mount and **`DASHBOARD_WORKSPACE_PARENT=/workspace-parent`**, or keep manifests under the repo (e.g. symlink the app into `local-ecosystem/`).
+3. **`dashboard.sh`** mounts the ecosystem repo at **`/project`** and its **parent directory** at **`/workspace-parent`** (read-only) so those `../…` manifest paths work inside **`service-dashboard`**. If you start LEco DevOps some other way, set the same bind mount and **`DASHBOARD_WORKSPACE_PARENT=/workspace-parent`**, or keep manifests under the repo (e.g. symlink the app into `local-ecosystem/`).
 
-4. **Rebuild/restart the dashboard** after code changes (`./ai-stack/ai-stack.sh deploy dashboard` or equivalent).
+4. **Rebuild/restart LEco DevOps** after code changes (`./ecosystem-stack/ecosystem-stack.sh deploy dashboard` or equivalent).
 
 5. **Unregister:** `leco-app ecosystem-unregister <registry-id> --ecosystem-root …`
 
@@ -268,13 +268,13 @@ traefikCleanup:
 
 Compose-only offload (no Traefik file): `leco-app down` or `leco-app offload` without `--traefik-dynamic`.
 
-**Dashboard Hosted apps:** **Remove** / **Reset** and **`leco-app ecosystem-unregister`** (default) run **local CF cleanup** first (when enabled), then **`docker compose down`** when the manifest defines compose and the compose file exists, then Traefik strip and registry/hosting removal. Use **`--no-compose-down`** only if you must unregister without touching containers; **`--compose-volumes`** matches **`leco-app down -v`** (used by dashboard **Reset**).
+**LEco DevOps — Hosted apps:** **Remove** / **Reset** and **`leco-app ecosystem-unregister`** (default) run **local CF cleanup** first (when enabled), then **`docker compose down`** when the manifest defines compose and the compose file exists, then Traefik strip and registry/hosting removal. Use **`--no-compose-down`** only if you must unregister without touching containers; **`--compose-volumes`** matches **`leco-app down -v`** (used by LEco DevOps **Reset**).
 
 ## Relationship to local-ecosystem
 
 | Component | Role |
 |---------|------|
-| `ai-stack`, Dashboard Control | **First-party** stacks only |
+| `ecosystem-stack`, LEco DevOps Control | **First-party** stacks only |
 | **LEco DevOps** (`leco-app`) | **External** repos: compose + wrangler + optional routing hints |
 
 Full design notes and the **per-app vs shared platform** model: [tools/deploy-cli/README.md](../tools/deploy-cli/README.md).

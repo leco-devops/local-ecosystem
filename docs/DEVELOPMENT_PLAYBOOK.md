@@ -1,34 +1,42 @@
 # Development playbook — Local Ecosystem
 
-This guide helps you **extend**, **debug**, and **ship** changes across the AI stack, Traefik, Cloudflare-local adapters, and the ops dashboard.
+This guide helps you **extend**, **debug**, and **ship** changes across the ecosystem stack, Traefik, Cloudflare-local adapters, and LEco DevOps.
 
 **First-time setup:** [SETUP.md](SETUP.md) · **Deploy / stop / troubleshoot:** [DEPLOYMENT.md](DEPLOYMENT.md) · **Project hub:** [../README.md](../README.md)
+
+## Architecture documentation map
+
+- System overview: [ARCHITECTURE.md](ARCHITECTURE.md)
+- High-level design: [HLD.md](HLD.md)
+- Low-level design: [LLD.md](LLD.md)
+- LEco toolchain details: [LECO_TOOLING.md](LECO_TOOLING.md)
+- Agent context and guardrails: [../AGENTS.md](../AGENTS.md)
 
 ## 1. Repository map (where things live)
 
 | Area | Path | Purpose |
 |------|------|---------|
-| AI stack orchestration | `ai-stack/core.sh`, `ai-stack/ai-stack.sh` | Start order, network repair, service scripts |
-| Per-service Docker scripts | `ai-stack/services/*.sh` | `start` / `stop` / `build` for each container |
-| Traefik dynamic routes | `traefik/dynamic.yml` | `*.lh` host rules (duplicate in `ai-stack/config/dynamic.yml` if you use that tree) |
+| Ecosystem stack orchestration | `ecosystem-stack/core.sh`, `ecosystem-stack/ecosystem-stack.sh` | Start order, network repair, service scripts |
+| Per-service Docker scripts | `ecosystem-stack/services/*.sh` | `start` / `stop` / `build` for each container |
+| Traefik dynamic routes | `traefik/dynamic.yml` | `*.lh` host rules (duplicate in `ecosystem-stack/config/dynamic.yml` if you use that tree) |
 | Cloudflare local | `cloudflare-local/docker-compose.yml`, `cloudflare-local/adapters/*` | R2, KV, D1, Workers, autoscaler |
-| Ops dashboard | `dashboard/` | Flask app, metrics, control API, UI |
+| LEco DevOps | `dashboard/` | Flask app, metrics, control API, UI |
 | TLS | `certs/` | mkcert wildcard for `*.lh` |
 
 ## 2. Daily commands
 
 ```bash
 # Full stack (interactive menu)
-./ai-stack/ai-stack.sh menu
+./ecosystem-stack/ecosystem-stack.sh menu
 
 # One service
-./ai-stack/ai-stack.sh restart dashboard
-./ai-stack/ai-stack.sh logs cloudflare-local
+./ecosystem-stack/ecosystem-stack.sh restart dashboard
+./ecosystem-stack/ecosystem-stack.sh logs cloudflare-local
 
 # Cloudflare stack only (from repo root)
-./ai-stack/services/cloudflare-local.sh start
-./ai-stack/services/cloudflare-local.sh recreate r2-adapter
-./ai-stack/services/cloudflare-local.sh backup
+./ecosystem-stack/services/cloudflare-local.sh start
+./ecosystem-stack/services/cloudflare-local.sh recreate r2-adapter
+./ecosystem-stack/services/cloudflare-local.sh backup
 ```
 
 ## 3. After changing dashboard code
@@ -36,7 +44,7 @@ This guide helps you **extend**, **debug**, and **ship** changes across the AI s
 The dashboard runs in Docker. Rebuild the image:
 
 ```bash
-./ai-stack/ai-stack.sh restart dashboard
+./ecosystem-stack/ecosystem-stack.sh restart dashboard
 # Manual image build (context must be repo root — includes tools/deploy-cli for LEco DevOps):
 # docker build -t local/service-dashboard:latest -f dashboard/Dockerfile . && docker rm -f service-dashboard && …
 ```
@@ -47,7 +55,7 @@ The **Docs** tab includes a generated module **Service management commands** (`s
 
 ## 4. Adding a new `*.lh` service
 
-1. **Container**: create or extend a `ai-stack/services/<name>.sh` script (or add a compose service on `lh-network`).
+1. **Container**: create or extend a `ecosystem-stack/services/<name>.sh` script (or add a compose service on `lh-network`).
 2. **Traefik**: add `routers` + `services` in `traefik/dynamic.yml` pointing at `http://<container>:<port>`.
 3. **DNS**: ensure `something.lh` resolves (dnsmasq / etc.) to the host running Traefik.
 4. **Dashboard** (optional): add URLs to `monitor.py` `SERVICE_MAP` for probes and to the static URL catalog in `dashboard/reference_data.py` (or rely on SERVICE_MAP-driven encyclopedia).
@@ -58,7 +66,7 @@ The **Docs** tab includes a generated module **Service management commands** (`s
 2. Register service in `cloudflare-local/docker-compose.yml` on `lh-network`.
 3. Traefik route + `CLOUDFLARE_ENDPOINTS` / `collect_cloudflare_local_status()` in `dashboard/monitor.py` if you want health tiles.
 4. `dashboard/control.py` `CF_TARGETS` if you want Control actions.
-5. `ai-stack/core.sh` `NETWORK_CONTAINERS` for network repair.
+5. `ecosystem-stack/core.sh` `NETWORK_CONTAINERS` for network repair.
 
 ## 6. Workers runtime
 
@@ -73,7 +81,7 @@ The **Docs** tab includes a generated module **Service management commands** (`s
 | `/api/cloudflare-local` | GET | CF adapter health + counts |
 | `/api/metrics/history` | GET | Time series (also appends a sample) |
 | `/api/control/targets` | GET | Controllable units |
-| `/api/control` | POST | `{ "target_id", "action", "token"? }` — includes `stack-ecosystem-all` (`bulk_ecosystem` in `ai-stack/core.sh`; bulk teardown skips dashboard + default platform `traefik`/`postgres`; see **DEPLOYMENT.md**) |
+| `/api/control` | POST | `{ "target_id", "action", "token"? }` — includes `stack-ecosystem-all` (`bulk_ecosystem` in `ecosystem-stack/core.sh`; bulk teardown skips dashboard + default platform `traefik`/`postgres`; see **DEPLOYMENT.md**) |
 | `/api/reference` | GET | Full URL catalog + probe results |
 | `/api/docs/catalog` | GET | Documentation modules |
 | `/api/docs/content` | GET | `?id=<module>` Markdown body |

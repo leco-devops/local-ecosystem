@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Build from local-ecosystem repository root:
 #   docker build -t local/service-dashboard:latest -f dashboard/Dockerfile .
-# Repo-root `.dockerignore` trims the build context (see ai-stack/services/dashboard.sh).
+# Repo-root `.dockerignore` trims the build context (see ecosystem-stack/services/dashboard.sh).
 
 FROM python:3.12-slim
 

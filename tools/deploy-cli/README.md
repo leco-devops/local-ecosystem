@@ -1,5 +1,7 @@
 # LEco DevOps — multi-app deploy CLI
 
+This CLI is part of the **LEco DevOps Open Project** and is released under the **MIT License** (see [../../LICENSE](../../LICENSE)).
+
 **LEco DevOps** is the product name for this tooling. The command-line programs are **`leco-app`** and **`leco-devops`** (same tool). They inspect an application repository, write a small manifest (`leco.app.yaml`), and run **Docker Compose** and optionally **Wrangler** lifecycle commands. The CLI is **orthogonal** to the local-ecosystem core: third-party apps stay in their own repos and compose files.
 
 ## Resource model (one package per app)
@@ -22,6 +24,7 @@ Precedence toward **skipping** local KV/R2/D1 creation:
 Otherwise, when a wrangler config path is set, hooks run by default. Internal plan types live in **`leco_app.resource_plan`**; **wrangler.toml** is mapped in **`leco_app.wrangler_cf_resources`** only—add new binding kinds or backends there and in **`local_cf_provision`** without app-specific logic.
 
 **Not provisioned locally** (use real Cloudflare or other local-ecosystem services): Wrangler **browser**, **queues**, **Durable Objects**, **Hyperdrive**, **Vectorize**, **assets** hosting, etc.—only **KV / R2 / D1** tables in wrangler are mirrored to kv.lh / r2.lh / d1.lh today.
+
 - **Multiple Workers** locally = multiple **projects** (separate manifests / compose files), not one command spawning many Workers unless your compose defines that.
 
 ## Install
@@ -59,7 +62,7 @@ leco-app init -y           # defaults only (compose + wrangler detection)
 # minimal manifest without compose (TTY confirm):
 leco-app init --manifest-only
 
-leco-app detect            # JSON scan: compose, wrangler, archetype (for dashboard / scripts)
+leco-app detect            # JSON scan: compose, wrangler, archetype (for LEco DevOps / scripts)
 leco-app run-hooks --phase prepare   # run merged profile lifecycle.prepare commands
 
 # During init, if you add Traefik routes: press Enter on an empty hostname to stop adding routes.
@@ -140,6 +143,6 @@ Use **`onboard`** or **`init --onboard`** or **`ecosystem-register --merge-traef
 ## See also
 
 - [docs/LECO_APP_BLUEPRINT.md](../../docs/LECO_APP_BLUEPRINT.md) — v3 bridge vs profile, hosting materialization, **`additionalComposeFiles`**, offboard semantics, code map
-- [docs/LECO_USER_MANUAL.md](../../docs/LECO_USER_MANUAL.md) — user manual (workflows, dashboard, troubleshooting); listed in the Ops Dashboard **Docs** tab
+- [docs/LECO_USER_MANUAL.md](../../docs/LECO_USER_MANUAL.md) — user manual (workflows, LEco DevOps UI, troubleshooting); listed in the LEco DevOps **Docs** tab
 - [docs/DEPLOY_CLI.md](../../docs/DEPLOY_CLI.md) in the repo root
 - [docs/DEPLOY_CUSTOM_APPS.md](../../docs/DEPLOY_CUSTOM_APPS.md)

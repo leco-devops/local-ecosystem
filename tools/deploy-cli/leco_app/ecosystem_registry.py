@@ -134,21 +134,19 @@ def resolve_registered_manifest_path(ecosystem_root: Path, app_id: str) -> Path 
 
 def _manifest_rel_uses_hosting_layout(manifest_rel: str) -> bool:
     mr = (manifest_rel or "").strip().replace("\\", "/")
-    return mr.startswith("hosting/app-enabled/") or mr.startswith("hosting/app-available/")
+    return mr.startswith("hosting/app-available/")
 
 
 def _remove_hosting_for_slug(eco_root: Path, slug: str) -> None:
-    """Remove hosting/app-enabled/<slug> and hosting/app-available/<slug> when present."""
+    """Remove hosting/app-available/<slug> when present."""
     base = (eco_root / "hosting").resolve()
     if not base.is_dir():
         return
     sid = slug.strip()
     if not sid or ".." in sid or "/" in sid or "\\" in sid:
         return
-    enabled = (base / "app-enabled" / sid).resolve()
     available = (base / "app-available" / sid).resolve()
     try:
-        enabled.relative_to(base)
         available.relative_to(base)
     except ValueError:
         return
@@ -166,7 +164,6 @@ def _remove_hosting_for_slug(eco_root: Path, slug: str) -> None:
         except OSError as exc:
             print(f"leco-app: hosting cleanup ({label}): {exc}", file=sys.stderr)
 
-    _rm(enabled, "app-enabled")
     _rm(available, "app-available")
 
 

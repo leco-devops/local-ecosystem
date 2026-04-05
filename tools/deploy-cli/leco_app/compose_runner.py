@@ -16,13 +16,13 @@ def _compose_cmd() -> list[str]:
 
 def path_for_docker_daemon(container_path: Path) -> Path:
     """
-    Map a path inside the Ops Dashboard (or similar) container to the path the Docker daemon expects.
+    Map a path inside the LEco DevOps (or similar) container to the path the Docker daemon expects.
 
     When ``docker compose`` runs in a container with only the socket mounted, bind-mount sources in
     the API must be paths on the **Docker host** (e.g. macOS paths Docker Desktop has in File
     Sharing). Paths like ``/workspace-parent/...`` exist in the container but are unknown to the
     daemon; remap using ``LECO_WORKSPACE_PARENT_HOST`` / ``LECO_PROJECT_ROOT_HOST`` when the same
-    trees are also bind-mounted at those host paths (see ``ai-stack/services/dashboard.sh``).
+    trees are also bind-mounted at those host paths (see ``ecosystem-stack/services/dashboard.sh``).
     """
     try:
         rp = container_path.resolve()

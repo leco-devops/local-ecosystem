@@ -1,4 +1,4 @@
-"""Writable hosting/app-available + app-enabled symlinks for read-only register paths."""
+"""Writable hosting/app-available layout for read-only register paths."""
 
 from __future__ import annotations
 
@@ -161,36 +161,37 @@ def refresh_symlink(link_path: Path, target: Path, *, target_is_dir: bool) -> No
     link_path.symlink_to(target, target_is_directory=target_is_dir)
 
 
-def ensure_hosting_enabled_symlink(eco_root: Path, app_id: str) -> None:
-    """hosting/app-enabled/<id> -> ../app-available/<id>"""
-    enabled_parent = eco_root / "hosting" / "app-enabled"
-    enabled_parent.mkdir(parents=True, exist_ok=True)
-    link = enabled_parent / app_id
-    rel_target = Path("..") / "app-available" / app_id
-    refresh_symlink(link, rel_target, target_is_dir=True)
+def _hosting_app_id_segment(app_id: str) -> str:
+    """Reject invalid slug-like segments for hosting paths."""
+    s = (app_id or "").strip()
+    if not s or s in (".", "..") or "/" in s or "\\" in s:
+        raise ValueError(f"Invalid app id for hosting layout: {app_id!r}")
+    return s
 
 
 def hosting_staging_dir(eco_root: Path, app_id: str) -> Path:
-    return eco_root / "hosting" / "app-available" / app_id
+    sid = _hosting_app_id_segment(app_id)
+    return eco_root / "hosting" / "app-available" / sid
 
 
 def hosting_manifest_logical_path(eco_root: Path, app_id: str) -> Path:
-    return eco_root / "hosting" / "app-enabled" / app_id / "leco.app.yaml"
+    sid = _hosting_app_id_segment(app_id)
+    return eco_root / "hosting" / "app-available" / sid / "leco.app.yaml"
 
 
 def registry_manifest_relpath(app_id: str) -> str:
-    return f"hosting/app-enabled/{app_id}/leco.app.yaml"
+    return f"hosting/app-available/{app_id}/leco.app.yaml"
 
 
 def manifest_rel_uses_hosting_layout(manifest_rel: str) -> bool:
     """True if registry manifest path is under hosting/ (materialized app)."""
     mr = (manifest_rel or "").strip().replace("\\", "/")
-    return mr.startswith("hosting/app-enabled/") or mr.startswith("hosting/app-available/")
+    return mr.startswith("hosting/app-available/")
 
 
 def remove_hosting_for_slug(eco_root: Path, slug: str) -> dict[str, Any]:
     """
-    Remove ``hosting/app-enabled/<slug>`` (symlink or dir) and ``hosting/app-available/<slug>`` dir.
+    Remove ``hosting/app-available/<slug>`` dir.
     Paths are constrained under ``hosting/``; invalid slugs are rejected.
     """
     out: dict[str, Any] = {
@@ -202,13 +203,11 @@ def remove_hosting_for_slug(eco_root: Path, slug: str) -> dict[str, Any]:
     if not base.is_dir():
         return out
     sid = slug.strip()
-    if not sid or ".." in sid or "/" in sid or "\\" in sid:
+    if not sid or sid in (".", "..") or ".." in sid or "/" in sid or "\\" in sid:
         out["hosting_cleanup_errors"] = ["invalid slug"]
         return out
-    enabled = (base / "app-enabled" / sid).resolve()
     available = (base / "app-available" / sid).resolve()
     try:
-        enabled.relative_to(base)
         available.relative_to(base)
     except ValueError:
         out["hosting_cleanup_errors"] = ["path outside hosting/"]
@@ -231,7 +230,6 @@ def remove_hosting_for_slug(eco_root: Path, slug: str) -> dict[str, Any]:
         except OSError as exc:
             errs.append(f"{label}: {exc}")
 
-    _rm(enabled, "app-enabled")
     _rm(available, "app-available")
     out["hosting_paths_removed"] = removed
     if errs:

@@ -8,10 +8,11 @@ This guide covers **starting, updating, stopping, and debugging** the stack afte
 
 | Tool | Path | Use when |
 |------|------|----------|
-| Interactive menu | `./ai-stack/ai-stack.sh menu` | Exploring services |
-| CLI | `./ai-stack/ai-stack.sh <action> [service]` | Scripts and CI |
-| Per-service script | `./ai-stack/services/<name>.sh <action>` | Direct control of one unit |
-| Dashboard **Control** tab | http://localhost.lh | Platform targets (AI stack, infra, CF-local) with optional token |
+| Interactive menu | `./ecosystem-stack/ecosystem-stack.sh menu` | Exploring services |
+| CLI | `./ecosystem-stack/ecosystem-stack.sh <action> [service]` | Scripts and CI |
+| Foundation installer | `./ecosystem-stack/install-foundation.sh` | First run: dependency checks + guided service selection |
+| Per-service script | `./ecosystem-stack/services/<name>.sh <action>` | Direct control of one unit |
+| Dashboard **Control** tab | http://localhost.lh | Platform targets (ecosystem stack, infra, CF-local) with optional token |
 | Dashboard **Hosted apps** tab | http://localhost.lh | Per registered LEco DevOps app: metrics, charts, logs, insights, compose controls (`leco-stack-<id>`) |
 
 Always run commands from the **repository root** (or pass absolute paths). The variable **`PROJECT_ROOT`** is inferred from each service script’s location.
@@ -20,7 +21,7 @@ Always run commands from the **repository root** (or pass absolute paths). The v
 
 ## 2. Service actions
 
-Most **`ai-stack/services/*.sh`** scripts support:
+Most **`ecosystem-stack/services/*.sh`** scripts support:
 
 | Action | Typical effect |
 |--------|----------------|
@@ -36,13 +37,13 @@ Most **`ai-stack/services/*.sh`** scripts support:
 
 **Dashboard (`dashboard.sh`):** **`start` / `deploy`** rebuild the Docker image from **`dashboard/`** and recreate **`service-dashboard`**. On **macOS**, **`stop`** and **`remove`** also **uninstall** the host CPU metrics LaunchAgent (see SETUP.md).
 
-**Dashboard control token:** If **`DASHBOARD_CONTROL_TOKEN`** is **unset**, the Control API and Hosted apps / Routes mutations do not require a token, and the UI does not block those actions for a missing browser token. If **`DASHBOARD_CONTROL_TOKEN`** is **set**, the browser must send that value (Control tab **Save** persists it in `localStorage`). For **trusted local / single-user** setups only, **`DASHBOARD_INJECT_CONTROL_TOKEN_UI=1`** (or `true` / `yes`) embeds the same token in the main dashboard HTML and seeds `localStorage` on each load so you do not type it manually — **do not enable on internet-exposed dashboards** (the token is visible in page source and DevTools). Example extras on `docker run`: `-e DASHBOARD_CONTROL_TOKEN=…` and `-e DASHBOARD_INJECT_CONTROL_TOKEN_UI=1`. See comments in **`ai-stack/services/dashboard.sh`**.
+**Dashboard control token:** If **`DASHBOARD_CONTROL_TOKEN`** is **unset**, the Control API and Hosted apps / Routes mutations do not require a token, and the UI does not block those actions for a missing browser token. If **`DASHBOARD_CONTROL_TOKEN`** is **set**, the browser must send that value (Control tab **Save** persists it in `localStorage`). For **trusted local / single-user** setups only, **`DASHBOARD_INJECT_CONTROL_TOKEN_UI=1`** (or `true` / `yes`) embeds the same token in the main dashboard HTML and seeds `localStorage` on each load so you do not type it manually — **do not enable on internet-exposed dashboards** (the token is visible in page source and DevTools). Example extras on `docker run`: `-e DASHBOARD_CONTROL_TOKEN=…` and `-e DASHBOARD_INJECT_CONTROL_TOKEN_UI=1`. See comments in **`ecosystem-stack/services/dashboard.sh`**.
 
 **Docker Compose from the dashboard (Docker Desktop):** Hosted **Deploy** runs `docker compose` inside `service-dashboard` with the host socket. Bind-mount sources must be paths the **daemon** knows (host file sharing). The dashboard image mounts the workspace parent at **`/workspace-parent`** and again at its **host absolute path**, and sets **`LECO_WORKSPACE_PARENT_HOST`** / **`LECO_PROJECT_ROOT_HOST`**. **LEco DevOps** remaps compose `-f`, `--env-file`, and **cwd** so volume paths resolve on the host. Redeploy the dashboard after changing `dashboard.sh`.
 
-**Hosted apps / read-only `wsp:` paths:** Sibling repos are mounted read-only at **`/workspace-parent`**. **Register** cannot write `leco.app.yaml` there. The dashboard **materializes** under **`hosting/app-available/<slug>/`** (writable `/project`), adds a **`source`** symlink to the real app tree so compose/wrangler paths keep working, links **`hosting/app-enabled/<slug>`** → **`../app-available/<slug>`**, and registers **`hosting/app-enabled/<slug>/leco.app.yaml`** in **`config/leco-registry.yaml`**. See **`hosting/README.md`** and **`docs/LECO_APP_BLUEPRINT.md`**. **Zip upload:** `POST /api/hosted/upload-zip` (multipart **`file`**, form **`app_id`** or **`slug`**, control token in header or form) extracts into **`hosting/app-available/<slug>/`** with zip-slip checks, max **200 MiB**, then **deletes the uploaded zip**. Use **Detect** / **Register** with path **`hosting/app-enabled/<slug>`** (or materialize flow) after uploading.
+**Hosted apps / read-only `wsp:` paths:** Sibling repos are mounted read-only at **`/workspace-parent`**. **Register** cannot write `leco.app.yaml` there. The dashboard **materializes** under **`hosting/app-available/<slug>/`** (writable `/project`), adds a **`source`** symlink to the real app tree so compose/wrangler paths keep working, and registers **`hosting/app-available/<slug>/leco.app.yaml`** in **`config/leco-registry.yaml`**. See **`hosting/README.md`** and **`docs/LECO_APP_BLUEPRINT.md`**. **Zip upload:** `POST /api/hosted/upload-zip` (multipart **`file`**, form **`app_id`** or **`slug`**, control token in header or form) extracts into **`hosting/app-available/<slug>/`** with zip-slip checks, max **200 MiB**, then **deletes the uploaded zip**. Use **Detect** / **Register** with path **`hosting/app-available/<slug>`** (or materialize flow) after uploading.
 
-**Hosted apps — Remove / Reset:** the dashboard runs **`leco-app ecosystem-unregister`**, which runs **local CF teardown** first when enabled (so in-project **`leco-local-*`** adapters are still up), then **`docker compose down`** ( **`down -v`** on **Reset** ) when the manifest has compose and the compose file exists, then Traefik cleanup when applicable, registry removal, and removal of **`hosting/app-enabled`** / **`hosting/app-available`** when the manifest was under hosting. If **`down`** fails, unregister still proceeds. Extra compose files: **`infrastructure.dockerCompose.additionalComposeFiles`** in **`leco.yaml`** — see **`docs/DEPLOY_CLI.md`**.
+**Hosted apps — Remove / Reset:** the dashboard runs **`leco-app ecosystem-unregister`**, which runs **local CF teardown** first when enabled (so in-project **`leco-local-*`** adapters are still up), then **`docker compose down`** ( **`down -v`** on **Reset** ) when the manifest has compose and the compose file exists, then Traefik cleanup when applicable, registry removal, and removal of **`hosting/app-available`** when the manifest was under hosting. If **`down`** fails, unregister still proceeds. Extra compose files: **`infrastructure.dockerCompose.additionalComposeFiles`** in **`leco.yaml`** — see **`docs/DEPLOY_CLI.md`**.
 
 **Cloudflare-local (`cloudflare-local.sh`):** wraps **`docker compose`**; see script for **`recreate`**, **`backup`**, etc.
 
@@ -52,10 +53,10 @@ Most **`ai-stack/services/*.sh`** scripts support:
 
 ```bash
 cd /path/to/local-ecosystem
-./ai-stack/ai-stack.sh start
+./ecosystem-stack/ecosystem-stack.sh start
 ```
 
-Start order is defined in **`ai-stack/core.sh`** (`START_ORDER`). **`repair-network`** runs after bulk start/restart so listed containers join **`lh-network`** and get **`--restart unless-stopped`** where applicable.
+Start order is defined in **`ecosystem-stack/core.sh`** (`START_ORDER`). **`repair-network`** runs after bulk start/restart so listed containers join **`lh-network`** and get **`--restart unless-stopped`** where applicable.
 
 ---
 
@@ -64,17 +65,17 @@ Start order is defined in **`ai-stack/core.sh`** (`START_ORDER`). **`repair-netw
 ### 4.1 One service
 
 ```bash
-./ai-stack/ai-stack.sh stop traefik
-./ai-stack/ai-stack.sh stop dashboard
+./ecosystem-stack/ecosystem-stack.sh stop traefik
+./ecosystem-stack/ecosystem-stack.sh stop dashboard
 ```
 
 ### 4.2 All services (CLI: `run_all`)
 
 ```bash
-./ai-stack/ai-stack.sh stop
+./ecosystem-stack/ecosystem-stack.sh stop
 ```
 
-This runs **`stop`** on **every** service under **`ai-stack/services/*.sh`** (order follows the filesystem glob, not `START_ORDER`). **The dashboard is included**, so **`service-dashboard`** stops and, on **macOS**, **`dashboard.sh`** uninstalls the host CPU metrics LaunchAgent.
+This runs **`stop`** on **every** service under **`ecosystem-stack/services/*.sh`** (order follows the filesystem glob, not `START_ORDER`). **The dashboard is included**, so **`service-dashboard`** stops and, on **macOS**, **`dashboard.sh`** uninstalls the host CPU metrics LaunchAgent.
 
 ### 4.3 Dashboard Control API vs CLI
 
@@ -87,7 +88,7 @@ Set **`ECOSYSTEM_BULK_PLATFORM_SKIP`** to a space-separated list of service name
 To stop only the dashboard from the shell:
 
 ```bash
-./ai-stack/ai-stack.sh stop dashboard
+./ecosystem-stack/ecosystem-stack.sh stop dashboard
 ```
 
 ### 4.4 Core infra — shell when you need Traefik, Postgres, or dashboard
@@ -96,29 +97,29 @@ Bulk Control actions intentionally avoid tearing down **Traefik** (routing), **P
 
 | Goal | Command |
 |------|---------|
-| Traefik — status | `./ai-stack/ai-stack.sh status traefik` |
-| Traefik — restart | `./ai-stack/ai-stack.sh restart traefik` |
-| Traefik — stop / start | `./ai-stack/ai-stack.sh stop traefik` · `./ai-stack/ai-stack.sh start traefik` |
-| Traefik — direct script | `./ai-stack/services/traefik.sh restart` |
-| Postgres — status | `./ai-stack/ai-stack.sh status postgres` |
-| Postgres — restart | `./ai-stack/ai-stack.sh restart postgres` |
-| Postgres — stop / start | `./ai-stack/ai-stack.sh stop postgres` · `./ai-stack/ai-stack.sh start postgres` |
-| Postgres — reset (drops data volume) | `./ai-stack/ai-stack.sh reset postgres` |
-| Dashboard — rebuild image + recreate | `./ai-stack/ai-stack.sh deploy dashboard` or `./ai-stack/services/dashboard.sh deploy` |
-| Dashboard — restart (same rebuild path as deploy) | `./ai-stack/ai-stack.sh restart dashboard` |
-| Dashboard — stop | `./ai-stack/ai-stack.sh stop dashboard` |
+| Traefik — status | `./ecosystem-stack/ecosystem-stack.sh status traefik` |
+| Traefik — restart | `./ecosystem-stack/ecosystem-stack.sh restart traefik` |
+| Traefik — stop / start | `./ecosystem-stack/ecosystem-stack.sh stop traefik` · `./ecosystem-stack/ecosystem-stack.sh start traefik` |
+| Traefik — direct script | `./ecosystem-stack/services/traefik.sh restart` |
+| Postgres — status | `./ecosystem-stack/ecosystem-stack.sh status postgres` |
+| Postgres — restart | `./ecosystem-stack/ecosystem-stack.sh restart postgres` |
+| Postgres — stop / start | `./ecosystem-stack/ecosystem-stack.sh stop postgres` · `./ecosystem-stack/ecosystem-stack.sh start postgres` |
+| Postgres — reset (drops data volume) | `./ecosystem-stack/ecosystem-stack.sh reset postgres` |
+| Dashboard — rebuild image + recreate | `./ecosystem-stack/ecosystem-stack.sh deploy dashboard` or `./ecosystem-stack/services/dashboard.sh deploy` |
+| Dashboard — restart (same rebuild path as deploy) | `./ecosystem-stack/ecosystem-stack.sh restart dashboard` |
+| Dashboard — stop | `./ecosystem-stack/ecosystem-stack.sh stop dashboard` |
 
-All scripts under **`ai-stack/services/*.sh`** are tracked **executable** (`100755`) and start with **`#!/usr/bin/env bash`** so direct paths such as **`./ai-stack/services/dashboard.sh deploy`**, **`./ai-stack/services/traefik.sh restart`**, and **`./ai-stack/services/cloudflare-local.sh start`** work on a fresh clone. (`ai-stack.sh` still **`source`**s them — the shebang line is a comment when sourced.) If you see **permission denied**, run **`bash ai-stack/services/<name>.sh …`** or **`chmod +x ai-stack/services/<name>.sh`**.
+All scripts under **`ecosystem-stack/services/*.sh`** are tracked **executable** (`100755`) and start with **`#!/usr/bin/env bash`** so direct paths such as **`./ecosystem-stack/services/dashboard.sh deploy`**, **`./ecosystem-stack/services/traefik.sh restart`**, and **`./ecosystem-stack/services/cloudflare-local.sh start`** work on a fresh clone. (`ecosystem-stack.sh` still **`source`**s them — the shebang line is a comment when sourced.) If you see **permission denied**, run **`bash ecosystem-stack/services/<name>.sh …`** or **`chmod +x ecosystem-stack/services/<name>.sh`**.
 
-**Ops dashboard + Traefik on Docker Desktop (macOS):** The dashboard container mounts the repo at `/project` and talks to the host Docker daemon via the socket. `docker run -v …` bind sources must be **host** paths (e.g. `/Users/you/.../local-ecosystem`), not `/project/...`. `dashboard.sh` sets `DASHBOARD_DOCKER_BIND_ROOT` automatically; Traefik’s script uses it for `/traefik` and `/certs` mounts. If Traefik was created **before** this (or the env is missing), remove the old container (`docker rm -f traefik`) and start again from the host or **Control** — do not only “Start” the broken container in Docker Desktop. Ensure **Docker Desktop → Settings → Resources → File sharing** includes your repo directory if it lives outside the default allowed paths.
+**LEco DevOps + Traefik on Docker Desktop (macOS):** The LEco DevOps container mounts the repo at `/project` and talks to the host Docker daemon via the socket. `docker run -v …` bind sources must be **host** paths (e.g. `/Users/you/.../local-ecosystem`), not `/project/...`. `dashboard.sh` sets `DASHBOARD_DOCKER_BIND_ROOT` automatically; Traefik’s script uses it for `/traefik` and `/certs` mounts. If Traefik was created **before** this (or the env is missing), remove the old container (`docker rm -f traefik`) and start again from the host or **Control** — do not only “Start” the broken container in Docker Desktop. Ensure **Docker Desktop → Settings → Resources → File sharing** includes your repo directory if it lives outside the default allowed paths.
 
-**Full stack without bulk safeguards** (stops **every** service, including dashboard and Traefik): `./ai-stack/ai-stack.sh stop` with no service name (see § 4.2).
+**Full stack without bulk safeguards** (stops **every** service, including dashboard and Traefik): `./ecosystem-stack/ecosystem-stack.sh stop` with no service name (see § 4.2).
 
 ### 4.5 Pause / unpause
 
 ```bash
-./ai-stack/ai-stack.sh pause
-./ai-stack/ai-stack.sh unpause
+./ecosystem-stack/ecosystem-stack.sh pause
+./ecosystem-stack/ecosystem-stack.sh unpause
 ```
 
 **CLI** `pause` / `unpause` with **no service name** walks **all** `services/*.sh` (like **`stop`**), **including the dashboard**. The dashboard **Control** bulk **`pause`** path uses **`bulk_ecosystem`** (same skips as § 4.3). Bulk **`unpause`** still runs on **every** service in start order so anything paused individually is resumed.
@@ -128,9 +129,9 @@ All scripts under **`ai-stack/services/*.sh`** are tracked **executable** (`1007
 ## 5. Restart, deploy, recreate
 
 ```bash
-./ai-stack/ai-stack.sh restart              # each service in START_ORDER: that service's restart (includes dashboard)
-./ai-stack/ai-stack.sh restart dashboard    # dashboard only (rebuild + recreate)
-./ai-stack/ai-stack.sh deploy dashboard     # same as restart for dashboard
+./ecosystem-stack/ecosystem-stack.sh restart              # each service in START_ORDER: that service's restart (includes dashboard)
+./ecosystem-stack/ecosystem-stack.sh restart dashboard    # dashboard only (rebuild + recreate)
+./ecosystem-stack/ecosystem-stack.sh deploy dashboard     # same as restart for dashboard
 ```
 
 **`bulk_ecosystem`** (dashboard **Control** → **stack-ecosystem-all**):
@@ -145,7 +146,7 @@ All scripts under **`ai-stack/services/*.sh`** are tracked **executable** (`1007
 | `remove` / `reset` | Same reverse skips as `stop` |
 | `recreate` | Remove phase (same skips), then same conditional start as `restart` |
 
-CLI **`./ai-stack/ai-stack.sh stop`** (no service) does **not** use `bulk_ecosystem`; it stops **every** service. Per-service and core-infra commands are in **section 4.4**.
+CLI **`./ecosystem-stack/ecosystem-stack.sh stop`** (no service) does **not** use `bulk_ecosystem`; it stops **every** service. Per-service and core-infra commands are in **section 4.4**.
 
 ---
 
@@ -154,9 +155,9 @@ CLI **`./ai-stack/ai-stack.sh stop`** (no service) does **not** use `bulk_ecosys
 After editing Python, templates, or static assets under **`dashboard/`**:
 
 ```bash
-./ai-stack/services/dashboard.sh deploy
+./ecosystem-stack/services/dashboard.sh deploy
 # or
-./ai-stack/ai-stack.sh restart dashboard
+./ecosystem-stack/ecosystem-stack.sh restart dashboard
 ```
 
 The Dockerfile always rebuilds the image on **`start`/`deploy`**.
@@ -165,11 +166,11 @@ The Dockerfile always rebuilds the image on **`start`/`deploy`**.
 
 ## 7. Traefik and routing changes
 
-1. Edit **`traefik/dynamic.yml`** (keep **`ai-stack/config/dynamic.yml`** in sync if your workflow uses both).
+1. Edit **`traefik/dynamic.yml`** (keep **`ecosystem-stack/config/dynamic.yml`** in sync if your workflow uses both).
 2. Reload: restart Traefik or rely on file provider polling (Traefik v3 file provider watches the file).
 
 ```bash
-./ai-stack/ai-stack.sh restart traefik
+./ecosystem-stack/ecosystem-stack.sh restart traefik
 ```
 
 ---
@@ -177,14 +178,14 @@ The Dockerfile always rebuilds the image on **`start`/`deploy`**.
 ## 8. Cloudflare-local deployment
 
 ```bash
-./ai-stack/ai-stack.sh start cloudflare-local
-./ai-stack/ai-stack.sh logs cloudflare-local
+./ecosystem-stack/ecosystem-stack.sh start cloudflare-local
+./ecosystem-stack/ecosystem-stack.sh logs cloudflare-local
 ```
 
 Single-service recreate (example):
 
 ```bash
-./ai-stack/services/cloudflare-local.sh recreate r2-adapter
+./ecosystem-stack/services/cloudflare-local.sh recreate r2-adapter
 ```
 
 Full compose rebuild:
@@ -200,7 +201,7 @@ docker compose -f cloudflare-local/docker-compose.yml up -d --build
 If you see **502 Bad Gateway** or containers not reachable by Traefik host rules:
 
 ```bash
-./ai-stack/ai-stack.sh repair-network
+./ecosystem-stack/ecosystem-stack.sh repair-network
 ```
 
 This ensures **`lh-network`** exists, connects known containers (see **`NETWORK_CONTAINERS`** in **`core.sh`**), and applies **`docker update --restart unless-stopped`** on existing containers.
@@ -210,7 +211,7 @@ This ensures **`lh-network`** exists, connects known containers (see **`NETWORK_
 ## 10. Ollama model pulls
 
 ```bash
-./ai-stack/ai-stack.sh ollama-pull-models
+./ecosystem-stack/ecosystem-stack.sh ollama-pull-models
 ```
 
 Requires a running **`ollama`** container.
@@ -238,8 +239,8 @@ Optional environment variable **`DASHBOARD_CONTROL_TOKEN`** restricts **Control*
 **Logs:**
 
 ```bash
-./ai-stack/ai-stack.sh logs n8n
-./ai-stack/ai-stack.sh logs traefik
+./ecosystem-stack/ecosystem-stack.sh logs n8n
+./ecosystem-stack/ecosystem-stack.sh logs traefik
 docker logs service-dashboard
 ```
 

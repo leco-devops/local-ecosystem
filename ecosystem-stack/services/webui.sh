@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Safe to `source` from ai-stack/core.sh; also runnable as ./ai-stack/services/webui.sh …
+# Safe to `source` from ecosystem-stack/core.sh; also runnable as ./ecosystem-stack/services/webui.sh …
 NAME="open-webui"
 VOLUME="open-webui"
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Safe to `source` from ai-stack/core.sh; also runnable as ./ai-stack/services/ollama.sh …
+# Safe to `source` from ecosystem-stack/core.sh; also runnable as ./ecosystem-stack/services/ollama.sh …
 NAME="ollama"
 VOLUME="ollama"
 
-# ai-stack/services -> ai-stack
+# ecosystem-stack/services -> ecosystem-stack
 _STACK_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 PINNED_MODELS_FILE="${_STACK_ROOT}/config/ollama-pinned-models.txt"
 

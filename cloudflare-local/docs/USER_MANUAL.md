@@ -1,36 +1,36 @@
 # Cloudflare Local — User Manual
 
-Platform-wide install (DNS, TLS, Traefik, AI stack): **[../../docs/SETUP.md](../../docs/SETUP.md)**. Operations: **[../../docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md)**.
+Platform-wide install (DNS, TLS, Traefik, ecosystem stack): **[../../docs/SETUP.md](../../docs/SETUP.md)**. Operations: **[../../docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md)**.
 
 ## Prerequisites
 
 - Docker with Compose v2
-- Network `lh-network` — created automatically when you start any AI-stack service or Cloudflare-local; **`./ai-stack/ai-stack.sh repair-network`** also creates it, reconnects all known containers, and sets **`restart: unless-stopped`**-style policy on running containers (see `ai-stack/core.sh`).
-- Optional: Traefik routes in `traefik/dynamic.yml` (and mirror in `ai-stack/config/dynamic.yml` if you use that layout)
+- Network `lh-network` — created automatically when you start any ecosystem-stack service or Cloudflare-local; **`./ecosystem-stack/ecosystem-stack.sh repair-network`** also creates it, reconnects all known containers, and sets **`restart: unless-stopped`**-style policy on running containers (see `ecosystem-stack/core.sh`).
+- Optional: Traefik routes in `traefik/dynamic.yml` (and mirror in `ecosystem-stack/config/dynamic.yml` if you use that layout)
 
 ## Start and stop
 
-From the repo root, using the AI stack helper:
+From the repo root, using the ecosystem stack helper:
 
 ```bash
-./ai-stack/ai-stack.sh start cloudflare-local
-./ai-stack/ai-stack.sh stop cloudflare-local
-./ai-stack/ai-stack.sh logs cloudflare-local
+./ecosystem-stack/ecosystem-stack.sh start cloudflare-local
+./ecosystem-stack/ecosystem-stack.sh stop cloudflare-local
+./ecosystem-stack/ecosystem-stack.sh logs cloudflare-local
 ```
 
 Or run the service script directly (also works without sourcing `core.sh`):
 
 ```bash
-./ai-stack/services/cloudflare-local.sh start
-./ai-stack/services/cloudflare-local.sh stop
-./ai-stack/services/cloudflare-local.sh recreate r2-adapter
-./ai-stack/services/cloudflare-local.sh backup
+./ecosystem-stack/services/cloudflare-local.sh start
+./ecosystem-stack/services/cloudflare-local.sh stop
+./ecosystem-stack/services/cloudflare-local.sh recreate r2-adapter
+./ecosystem-stack/services/cloudflare-local.sh backup
 ```
 
 `backup` calls `http://d1.lh/databases` and issues `POST /databases/<name>/backup` for each database. Override the base URL if needed:
 
 ```bash
-D1_PUBLIC_URL=http://d1-adapter:8083 ./ai-stack/services/cloudflare-local.sh backup
+D1_PUBLIC_URL=http://d1-adapter:8083 ./ecosystem-stack/services/cloudflare-local.sh backup
 ```
 
 *(When run on the host, use `http://d1.lh`; from inside a container on `lh-network`, use the internal URL.)*
@@ -52,18 +52,18 @@ D1_PUBLIC_URL=http://d1-adapter:8083 ./ai-stack/services/cloudflare-local.sh bac
 - Rebuild after edits: `docker compose -f cloudflare-local/docker-compose.yml up -d --build workers-runtime`.
 - Health: `GET http://workers.lh/health` (or `/`).
 
-## Ops dashboard (localhost.lh)
+## LEco DevOps (localhost.lh)
 
 1. **Overview** — Managed services, Cloudflare Local status, quick charts.
-2. **Infrastructure** — Deeper layout including **Ollama models**: pinned list from `ai-stack/config/ollama-pinned-models.txt`, installed models, and actions (pull one, pull all pinned, delete, unload in-memory). Uses `GET /api/ollama/models` and `POST /api/ollama/models/action` when a control token is configured.
+2. **Infrastructure** — Deeper layout including **Ollama models**: pinned list from `ecosystem-stack/config/ollama-pinned-models.txt`, installed models, and actions (pull one, pull all pinned, delete, unload in-memory). Uses `GET /api/ollama/models` and `POST /api/ollama/models/action` when a control token is configured.
 3. **Metrics** — Line charts for all running containers (aggregated): CPU, memory %, network Mb/s, block Mb/s, estimated IOPS (assuming 4 KiB ops), Docker-tracked disk, and Docker RAM as % of engine-reported host memory. Recent history is cached in the browser (**localStorage**) and shown immediately on load or if the metrics API is temporarily unavailable.
-4. **Control** — Start, stop, restart, remove, pause, unpause, deploy, recreate, reset, and backup (where defined). Requires the dashboard container mount of **`$PROJECT_ROOT` → `/project`** (enabled in `ai-stack/services/dashboard.sh`). When an action finishes, the dashboard reloads targets and overview data in the background (no separate “refresh cards” control). At the top of the tab, **Start all / Stop all / Restart all / Redeploy all** runs every `ai-stack/services/*.sh` unit in bulk via `bulk_ecosystem` in `ai-stack/core.sh` (stop phases skip the dashboard container so the HTTP request can complete).
+4. **Control** — Start, stop, restart, remove, pause, unpause, deploy, recreate, reset, and backup (where defined). Requires the LEco DevOps container mount of **`$PROJECT_ROOT` → `/project`** (enabled in `ecosystem-stack/services/dashboard.sh`). When an action finishes, LEco DevOps reloads targets and overview data in the background (no separate “refresh cards” control). At the top of the tab, **Start all / Stop all / Restart all / Redeploy all** runs every `ecosystem-stack/services/*.sh` unit in bulk via `bulk_ecosystem` in `ecosystem-stack/core.sh` (stop phases skip the LEco DevOps container so the HTTP request can complete).
 
 **Browser persistence:** the last active tab and cached overview/metrics snapshots (up to ~48 hours) are restored on reload so the UI is usable before the next successful API round-trip.
 
 ### Optional control token
 
-Set on the dashboard container:
+Set on the LEco DevOps container:
 
 ```text
 DASHBOARD_CONTROL_TOKEN=your-secret

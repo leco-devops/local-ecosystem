@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Safe to `source` from ai-stack/core.sh; also runnable as ./ai-stack/services/n8n.sh …
+# Safe to `source` from ecosystem-stack/core.sh; also runnable as ./ecosystem-stack/services/n8n.sh …
 NAME="n8n"
 VOLUME="n8n_data"
 IMAGE="${N8N_IMAGE:-local/n8n-with-python:latest}"
@@ -7,7 +7,7 @@ IMAGE="${N8N_IMAGE:-local/n8n-with-python:latest}"
 if [ -z "${PROJECT_ROOT:-}" ]; then
   PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 fi
-N8N_DOCKER_DIR="$PROJECT_ROOT/ai-stack/docker/n8n-local"
+N8N_DOCKER_DIR="$PROJECT_ROOT/ecosystem-stack/docker/n8n-local"
 
 start() {
   echo "🚀 Starting n8n (HTTP + HTTPS compatible mode)..."

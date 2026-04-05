@@ -3,26 +3,56 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Service hubs — Local Ecosystem</title>
+    <title>Service hubs — LEco DevOps</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/static/dashboard.css" />
     <link rel="stylesheet" href="/static/service_hub.css" />
   </head>
-  <body class="hub-body">
-    <div class="hub-wrap">
-      <header class="hub-header">
-        <a class="hub-back" href="/">← Ops Dashboard</a>
-        <h1>Service hubs</h1>
-        <p class="muted">Credentials, connection strings, GUIs, and live container status for each managed service.</p>
+  <body>
+    <div class="wrap hub-shell">
+      {% set link_tabs = true %}
+      {% set nav_hub_active = true %}
+      {% include "_dashboard_top.html" %}
+
+      <header class="hub-page-heading">
+        <h2 class="hub-page-heading__title">Service hubs</h2>
+        <p class="hub-page-heading__lede muted">
+          Credentials, connection strings, GUIs, and live container status for each managed service.
+        </p>
       </header>
-      <ul class="hub-index-list">
-        {% for h in hubs %}
-          <li>
-            <a href="/hub/{{ h.slug }}">{{ h.service }}</a>
-            <code>{{ h.container }}</code>
-          </li>
-        {% endfor %}
-      </ul>
+
+      <section class="hub-panel">
+        <ul class="hub-index-list">
+          {% for h in hubs %}
+            <li>
+              <a href="/hub/{{ h.slug }}">{{ h.service }}</a>
+              <code>{{ h.container }}</code>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+
+      <footer class="project-footer" aria-label="Project links">
+        <p class="project-footer__brand">
+          <strong>LEco DevOps Open Project</strong> · Application: <strong>LEco DevOps</strong>
+        </p>
+        <p class="project-footer__copy muted small">
+          MIT License · Copyright (c) 2026 Rajneesh Maurya · Individual open-source maintainer
+        </p>
+        <div class="project-footer__links">
+          <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab&doc=ecosystem-readme">README</a>
+          <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab&doc=devops-setup">Setup</a>
+          <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab&doc=devops-deployment">Deployment</a>
+          <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab&doc=open-source-license">License</a>
+          <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab&doc=open-source-contributing">Contributing</a>
+          <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab&doc=open-source-security">Security</a>
+          <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab">Docs</a>
+          <a class="project-footer__link project-footer__link--anchor" href="/?tab=developTab">Develop</a>
+          <a class="project-footer__link project-footer__link--anchor" href="/hub">Service hubs</a>
+        </div>
+      </footer>
     </div>
+    <script type="application/json" id="dashboard-boot-config">{{ dashboard_boot | tojson }}</script>
+    <script src="/static/dashboard.js"></script>
   </body>
 </html>

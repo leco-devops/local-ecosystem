@@ -7,10 +7,66 @@ PROJECT_ROOT = os.getenv("DASHBOARD_PROJECT_ROOT", "/project")
 DOC_MODULES = [
     {
         "id": "ecosystem-readme",
-        "title": "Local Ecosystem — README",
+        "title": "Platform stack — README",
         "category": "Develop",
         "rel_path": "README.md",
-        "blurb": "Main project guide, URLs, CLI, structure.",
+        "blurb": "LEco DevOps Open Project guide: identity, URLs, CLI, and repository structure.",
+    },
+    {
+        "id": "architecture-overview",
+        "title": "Architecture overview",
+        "category": "Architecture",
+        "rel_path": "docs/ARCHITECTURE.md",
+        "blurb": "System context, topology, and reading order across architecture docs.",
+    },
+    {
+        "id": "architecture-hld",
+        "title": "Architecture — HLD",
+        "category": "Architecture",
+        "rel_path": "docs/HLD.md",
+        "blurb": "High-level design: layers, responsibilities, and core flows.",
+    },
+    {
+        "id": "architecture-lld",
+        "title": "Architecture — LLD",
+        "category": "Architecture",
+        "rel_path": "docs/LLD.md",
+        "blurb": "Low-level design: modules, APIs, data contracts, and sequence details.",
+    },
+    {
+        "id": "leco-tooling",
+        "title": "LEco tooling reference",
+        "category": "Architecture",
+        "rel_path": "docs/LECO_TOOLING.md",
+        "blurb": "CLI, manifest, registry, and dashboard integration map.",
+    },
+    {
+        "id": "agents-guide",
+        "title": "Agent guide (AGENTS.md)",
+        "category": "Architecture",
+        "rel_path": "AGENTS.md",
+        "blurb": "Automation context, guardrails, and validation checklist for agents.",
+    },
+    {
+        "id": "open-source-license",
+        "title": "Open source — MIT license",
+        "category": "Open source",
+        "rel_path": "LICENSE",
+        "blurb": "Project license terms for use, distribution, and contribution.",
+    },
+    {
+        "id": "open-source-contributing",
+        "title": "Open source — Contributing",
+        "category": "Open source",
+        "rel_path": "CONTRIBUTING.md",
+        "blurb": "How to contribute, local setup pointers, and safety notes.",
+    },
+    {
+        "id": "open-source-security",
+        "title": "Open source — Security policy",
+        "category": "Open source",
+        "rel_path": "SECURITY.md",
+        "blurb": "How to privately report vulnerabilities.",
     },
     {
         "id": "cf-readme",
@@ -116,7 +172,7 @@ DOC_MODULES = [
         "category": "Operations",
         "rel_path": "",
         "dynamic_content": True,
-        "blurb": "CLI per Control target: AI-stack scripts, compose, bulk — same units as the Control tab.",
+        "blurb": "CLI per Control target: ecosystem-stack scripts, compose, bulk — same units as the Control tab.",
     },
 ]
 
@@ -132,7 +188,9 @@ def build_service_management_markdown() -> str:
         "",
         "Run from the **repository root** on the host. These mirror the **Control** tab targets.",
         "",
-        "## AI stack (`ai-stack/services/*.sh`)",
+        "- **Foundation installer:** `./ecosystem-stack/install-foundation.sh` (checks dependencies, prompts service-by-service start selection).",
+        "",
+        "## Ecosystem stack (`ecosystem-stack/services/*.sh`)",
         "",
         "Replace `<action>` with `start`, `stop`, `restart`, `logs`, `status`, `remove`, `reset`, `pause`, `unpause`, … (see each script).",
         "",
@@ -144,19 +202,19 @@ def build_service_management_markdown() -> str:
         lines.append(f"### {label}")
         lines.append("")
         lines.append(f"- **Container:** `{container}`")
-        lines.append(f"- **Direct:** `./ai-stack/services/{script}.sh <action>`")
-        lines.append(f"- **Orchestrator:** `./ai-stack/ai-stack.sh <action> {script}`")
+        lines.append(f"- **Direct:** `./ecosystem-stack/services/{script}.sh <action>`")
+        lines.append(f"- **Orchestrator:** `./ecosystem-stack/ecosystem-stack.sh <action> {script}`")
         lines.append("")
 
     lines.extend(
         [
-            "### Bulk — all AI-stack services",
+            "### Bulk — all ecosystem stack services",
             "",
-            "- `./ai-stack/ai-stack.sh start` — full stack in `START_ORDER` (see `ai-stack/core.sh`)",
-            "- `./ai-stack/ai-stack.sh stop`",
-            "- `./ai-stack/ai-stack.sh restart`",
+            "- `./ecosystem-stack/ecosystem-stack.sh start` — full stack in `START_ORDER` (see `ecosystem-stack/core.sh`)",
+            "- `./ecosystem-stack/ecosystem-stack.sh stop`",
+            "- `./ecosystem-stack/ecosystem-stack.sh restart`",
             "",
-            "Dashboard **Control → All AI-stack services** uses `bulk_ecosystem` in `core.sh` plus a Python-only **backup** aggregate. Bulk **stop**, **restart**, **deploy**, **pause**, **remove**, **reset**, and **recreate** skip **dashboard** plus **traefik** and **postgres** by default (`ECOSYSTEM_BULK_PLATFORM_SKIP`; legacy `ECOSYSTEM_BULK_PAUSE_SKIP` if unset). **unpause** and **start** still touch every service. Full teardown of edge/DB/dashboard is via per-service CLI — see **DEPLOYMENT.md** (core infra).",
+            "Dashboard **Control → All ecosystem stack services** uses `bulk_ecosystem` in `core.sh` plus a Python-only **backup** aggregate. Bulk **stop**, **restart**, **deploy**, **pause**, **remove**, **reset**, and **recreate** skip **dashboard** plus **traefik** and **postgres** by default (`ECOSYSTEM_BULK_PLATFORM_SKIP`; legacy `ECOSYSTEM_BULK_PAUSE_SKIP` if unset). **unpause** and **start** still touch every service. Full teardown of edge/DB/dashboard is via per-service CLI — see **DEPLOYMENT.md** (core infra).",
             "",
             "### Control API (same actions from automation)",
             "",
@@ -216,7 +274,7 @@ def build_service_management_markdown() -> str:
             f"- **Stop:** `docker compose -f {INFRA_COMPOSE_REL} stop`",
             f"- **Down:** `docker compose -f {INFRA_COMPOSE_REL} down --remove-orphans`",
             "",
-            "- **Script:** `./ai-stack/services/infra.sh start|stop|restart|remove|reset|logs|status`",
+            "- **Script:** `./ecosystem-stack/services/infra.sh start|stop|restart|remove|reset|logs|status`",
             "",
             "### Entire Cloudflare-local stack",
             "",
@@ -224,7 +282,7 @@ def build_service_management_markdown() -> str:
             f"- **Stop:** `docker compose -f {COMPOSE_REL} stop`",
             f"- **Down:** `docker compose -f {COMPOSE_REL} down --remove-orphans`",
             "",
-            "- **Script:** `./ai-stack/services/cloudflare-local.sh start|stop|restart|remove|reset|logs|status`",
+            "- **Script:** `./ecosystem-stack/services/cloudflare-local.sh start|stop|restart|remove|reset|logs|status`",
             "",
             "### Whole stack (Control targets `stack-cf-all` · `stack-infra-all`)",
             "",
@@ -233,17 +291,17 @@ def build_service_management_markdown() -> str:
             "",
             "## Ollama pinned models",
             "",
-            "- List file: `ai-stack/config/ollama-pinned-models.txt`",
-            "- Pull pinned into a running Ollama: `./ai-stack/ai-stack.sh ollama-pull-models`",
-            "- Dashboard Infrastructure tab lists **all** models from Ollama `GET /api/tags`, RAM state from `/api/ps`, **Insights** = `POST /api/show`.",
+            "- List file: `ecosystem-stack/config/ollama-pinned-models.txt`",
+            "- Pull pinned into a running Ollama: `./ecosystem-stack/ecosystem-stack.sh ollama-pull-models`",
+            "- LEco DevOps **Infrastructure** tab lists **all** models from Ollama `GET /api/tags`, RAM state from `/api/ps`, **Insights** = `POST /api/show`.",
             "- Backups: JSON manifests under `.local-eco-backups/ollama-manifest-*.json` (restore updates the pinned file only).",
             "",
             "## Auto-start, network, repair",
             "",
-            "- **AI-stack containers** (Traefik, WebUI, Ollama, Postgres, n8n, dashboard): each `services/*.sh start` creates `lh-network` if missing and uses `--restart unless-stopped`.",
+            "- **Ecosystem stack containers** (Traefik, WebUI, Ollama, Postgres, n8n, LEco DevOps): each `services/*.sh start` creates `lh-network` if missing and uses `--restart unless-stopped`.",
             "- **Cloudflare-local:** `docker-compose.yml` sets `restart: unless-stopped` on every service.",
-            "- **One-shot fix:** `./ai-stack/ai-stack.sh repair-network` — creates `lh-network`, `docker network connect`s every name in `core.sh` `NETWORK_CONTAINERS`, and `docker update --restart unless-stopped` on each running container.",
-            "- **Dashboard image:** `./ai-stack/services/dashboard.sh start` (or `deploy`) rebuilds and runs the ops dashboard.",
+            "- **One-shot fix:** `./ecosystem-stack/ecosystem-stack.sh repair-network` — creates `lh-network`, `docker network connect`s every name in `core.sh` `NETWORK_CONTAINERS`, and `docker update --restart unless-stopped` on each running container.",
+            "- **LEco DevOps image:** `./ecosystem-stack/services/dashboard.sh start` (or `deploy`) rebuilds and runs the container.",
             "",
         ]
     )
@@ -314,7 +372,7 @@ def get_doc_content(doc_id: str):
                     "The source file is not available inside the dashboard container.\n\n"
                     f"- Expected path on the host: `{meta['rel_path']}` under the repo root.\n"
                     "- Ensure the dashboard container mounts the repo: `-v \"$PROJECT_ROOT:/project:rw\"` "
-                    "(see `ai-stack/services/dashboard.sh`).\n"
+                    "(see `ecosystem-stack/services/dashboard.sh`).\n"
                     "- Rebuild/restart the dashboard after changing compose or mount.\n"
                 ),
                 "synthetic": True,

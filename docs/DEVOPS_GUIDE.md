@@ -1,6 +1,6 @@
 # DevOps guide — deployment, Workers, KV, R2, and D1 (local ecosystem)
 
-This document is for **operators and DevOps engineers** deploying and using the **local-ecosystem** stack: Docker services, Traefik, the ops dashboard, and **Cloudflare-local** emulation (R2-, KV-, D1-, Workers-style APIs). It complements:
+This document is for **operators and DevOps engineers** deploying and using the **local-ecosystem** stack: Docker services, Traefik, **LEco DevOps**, and **Cloudflare-local** emulation (R2-, KV-, D1-, Workers-style APIs). It complements:
 
 | Document | Role |
 |----------|------|
@@ -21,7 +21,7 @@ This document is for **operators and DevOps engineers** deploying and using the 
 | Layer | Components |
 |-------|------------|
 | **Edge / routing** | Traefik (`*.lh`), TLS from `certs/` |
-| **AI stack** | Traefik, Open WebUI, Ollama, Postgres (n8n), n8n, dashboard |
+| **Ecosystem stack** | Traefik, Open WebUI, Ollama, Postgres (n8n), n8n, dashboard |
 | **Cloudflare-local** | MinIO, Valkey, `r2-adapter`, `kv-adapter`, `d1-adapter`, `workers-runtime`, autoscaler, browser-rendering, etc. |
 | **Infra** | MySQL, Redis, Mailpit, Adminer, cache lab, Telegram gateway (optional) |
 
@@ -47,24 +47,24 @@ Complete **DNS** (`*.lh` → loopback), **mkcert** TLS, and **Docker** as in [SE
 From the **repository root**:
 
 ```bash
-./ai-stack/ai-stack.sh start
+./ecosystem-stack/ecosystem-stack.sh start
 ```
 
-This follows **`START_ORDER`** in `ai-stack/core.sh` (Traefik → Postgres → Ollama → WebUI → n8n → dashboard → cloudflare-local → infra) and runs **`repair-network`** so containers attach to **`lh-network`**.
+This follows **`START_ORDER`** in `ecosystem-stack/core.sh` (Traefik → Postgres → Ollama → WebUI → n8n → dashboard → cloudflare-local → infra) and runs **`repair-network`** so containers attach to **`lh-network`**.
 
 ### 2.3 Redeploy after code changes
 
 | Goal | Command |
 |------|---------|
-| Rebuild **only** the dashboard | `./ai-stack/services/dashboard.sh deploy` |
-| Rebuild **only** Cloudflare-local images | `./ai-stack/services/cloudflare-local.sh start` (uses `compose up -d --build`) |
-| Recreate **one** compose service | `./ai-stack/services/cloudflare-local.sh recreate workers-runtime` |
-| **Everything** (stop phase skips dashboard for in-flight Control API) | `./ai-stack/ai-stack.sh deploy` |
+| Rebuild **only** the dashboard | `./ecosystem-stack/services/dashboard.sh deploy` |
+| Rebuild **only** Cloudflare-local images | `./ecosystem-stack/services/cloudflare-local.sh start` (uses `compose up -d --build`) |
+| Recreate **one** compose service | `./ecosystem-stack/services/cloudflare-local.sh recreate workers-runtime` |
+| **Everything** (stop phase skips dashboard for in-flight Control API) | `./ecosystem-stack/ecosystem-stack.sh deploy` |
 
 ### 2.4 CI / headless worker pattern
 
 1. Install Docker, create `lh-network` if missing: `docker network create lh-network`.
-2. Run `./ai-stack/ai-stack.sh start` (or compose files directly with the same network).
+2. Run `./ecosystem-stack/ecosystem-stack.sh start` (or compose files directly with the same network).
 3. Health gates (examples):
    - `curl -fsS http://localhost:8090/` (dashboard, if published)
    - `curl -fsS http://r2.lh/health` (after Traefik + CF-local up; requires `*.lh` or `curl --resolve`)
@@ -85,7 +85,7 @@ For hosts **without** `*.lh` DNS, use **`curl --resolve`**, **`Host` headers**, 
 ```bash
 docker compose -f cloudflare-local/docker-compose.yml up -d --build workers-runtime
 # or
-./ai-stack/services/cloudflare-local.sh recreate workers-runtime
+./ecosystem-stack/services/cloudflare-local.sh recreate workers-runtime
 ```
 
 ### 3.2 Verify
@@ -240,15 +240,15 @@ Data lives in the **`d1-adapter`** Docker volume; **`reset`** on the CF-local st
 - Each service is usually exposed on **HTTP (80)** and **HTTPS (443)** with mkcert wildcard `*.lh`.
 - Dashboard ops UI: **`http://localhost.lh`** (Traefik → `service-dashboard:8090`).
 
-If a route returns **502**, confirm the target container is on **`lh-network`** and healthy: `./ai-stack/ai-stack.sh repair-network`.
+If a route returns **502**, confirm the target container is on **`lh-network`** and healthy: `./ecosystem-stack/ecosystem-stack.sh repair-network`.
 
 ---
 
-## 9. Ops dashboard — Documentation tab
+## 9. LEco DevOps — Documentation tab
 
 The in-app **Documentation** tab reads Markdown from the repo mounted at **`DASHBOARD_PROJECT_ROOT`** (default **`/project`** in the container). This file appears when:
 
-- The dashboard container is started with **`-v "$REPO:/project:rw"`** (see `ai-stack/services/dashboard.sh`), and  
+- The LEco DevOps container is started with **`-v "$REPO:/project:rw"`** (see `ecosystem-stack/services/dashboard.sh`), and  
 - The module is listed in **`dashboard/docs_catalog.py`**.
 
 Use it for:
@@ -261,7 +261,7 @@ Use it for:
 ## 10. Checklist before production (if you reuse patterns elsewhere)
 
 - [ ] Replace default MinIO / DB passwords; restrict compose ports on shared hosts.  
-- [ ] Do **not** expose the D1 adapter or dashboard without auth on untrusted networks.  
+- [ ] Do **not** expose the D1 adapter or LEco DevOps without auth on untrusted networks.  
 - [ ] Use real Cloudflare R2/KV/D1/Workers in production — this stack is for **local parity**, not a production control plane.  
 - [ ] Back up volumes you care about (Postgres, D1, MinIO) per [DEPLOYMENT.md](DEPLOYMENT.md).
 
@@ -278,7 +278,7 @@ docker compose -f cloudflare-local/docker-compose.yml up -d --build
 docker compose -f infra/docker-compose.yml up -d --build
 
 # Dashboard rebuild
-./ai-stack/services/dashboard.sh deploy
+./ecosystem-stack/services/dashboard.sh deploy
 ```
 
 **Control API** (optional token): `POST /api/control` and `POST /api/control/stream` — same targets as the **Control** tab; see dynamic doc **Service management commands** in the Documentation tab.

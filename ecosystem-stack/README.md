@@ -1,11 +1,12 @@
-# AI stack orchestration
+# Ecosystem stack orchestration
 
 Shell entry points for Docker services on **`lh-network`**.
 
 | Entry | Purpose |
 |--------|---------|
-| **`ai-stack.sh`** | Interactive menu or `./ai-stack.sh <action> [service]` from repo root |
-| **`core.sh`** | Sourced by `ai-stack.sh` — start order, `repair-network`, `bulk_ecosystem` |
+| **`ecosystem-stack.sh`** | Interactive menu or `./ecosystem-stack.sh <action> [service]` from repo root |
+| **`install-foundation.sh`** | Guided foundation check/install + per-service start selection |
+| **`core.sh`** | Sourced by `ecosystem-stack.sh` — start order, `repair-network`, `bulk_ecosystem` |
 | **`services/*.sh`** | Per-container `start` / `stop` / `deploy` / … |
 
 **Documentation:** [../docs/SETUP.md](../docs/SETUP.md) (full setup) · [../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md) (operations) · [../README.md](../README.md) (overview).

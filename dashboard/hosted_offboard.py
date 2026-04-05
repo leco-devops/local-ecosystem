@@ -40,7 +40,7 @@ def offboard_hosted_app(
         ok = not errs
         log_txt = (
             f"No registry entry for {slug!r} — removed hosting materialization only "
-            f"(app-enabled/app-available when present).\n"
+            f"(app-available when present).\n"
             f"Paths touched: {hr.get('hosting_paths_removed') or []}\n"
         )
         return {
@@ -86,7 +86,7 @@ def offboard_hosted_app(
             if hr.get("hosting_removed") and not hr.get("hosting_cleanup_errors"):
                 result["leco_log"] = (
                     (result.get("leco_log") or "")
-                    + "\n--- hosting fallback: removed app-enabled/app-available after unregister failure ---\n"
+                    + "\n--- hosting fallback: removed app-available after unregister failure ---\n"
                     + str(hr.get("hosting_paths_removed") or [])
                 )
     return result

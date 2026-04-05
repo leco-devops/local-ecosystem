@@ -931,7 +931,7 @@ def cmd_ecosystem_register(
     manifest: ManifestPathOption = None,
     ecosystem_root: EcosystemRootOption = None,
     app_id: Annotated[Optional[str], typer.Option("--id", help="Registry slug (default: manifest name)")] = None,
-    label: Annotated[Optional[str], typer.Option("--label", "-l", help="Ops Dashboard card title")] = None,
+    label: Annotated[Optional[str], typer.Option("--label", "-l", help="LEco DevOps Hosted apps card title")] = None,
     wrangler_env: Annotated[
         Optional[str],
         typer.Option(
@@ -957,11 +957,11 @@ def cmd_ecosystem_register(
         Optional[str],
         typer.Option(
             "--registry-manifest-relpath",
-            help="Store this path in leco-registry.yaml (must be same inode as --manifest; e.g. hosting/app-enabled/slug/leco.app.yaml)",
+            help="Store this path in leco-registry.yaml (must be same inode as --manifest; e.g. hosting/app-available/slug/leco.app.yaml)",
         ),
     ] = None,
 ) -> None:
-    """Register this app in local-ecosystem config/leco-registry.yaml for the Ops Dashboard Control tab."""
+    """Register this app in local-ecosystem config/leco-registry.yaml for LEco DevOps (Hosted apps / Control)."""
     er = resolve_ecosystem_root(ecosystem_root)
     if er is None:
         typer.secho(

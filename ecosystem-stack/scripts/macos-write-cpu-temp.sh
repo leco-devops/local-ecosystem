@@ -13,7 +13,7 @@
 #   LOCAL_ECO_THERMAL_PROXY_LOAD_SCALE  max °C to add at saturated load ratio (default 18)
 #   LOCAL_ECO_CPU_TEMP_SILENCE_OSX_BOGUS=1  suppress stderr when osx-cpu-temp returns 0°C
 #
-# Scheduling: deploying the dashboard on macOS runs ai-stack/scripts/macos-host-metrics-scheduler.sh
+# Scheduling: deploying the dashboard on macOS runs ecosystem-stack/scripts/macos-host-metrics-scheduler.sh
 # install (LaunchAgent, default every 30s). Stopping/removing the dashboard uninstalls it.
 # Passwordless sudo for /usr/bin/powermetrics helps for (2)(3) when unattended, e.g.:
 #   youruser ALL=(root) NOPASSWD: /usr/bin/powermetrics
@@ -58,7 +58,7 @@ write_out_json() {
   mv "$tmp" "$OUT"
 }
 
-# Sidecar for the ops dashboard (read via /api/host-metrics/injected).
+# Sidecar for LEco DevOps (read via /api/host-metrics/injected).
 write_writer_status() {
   local success="$1" cpu="$2" src="$3" pressure="${4:-}" msg="${5:-}"
   export WTD_DIR="$DIR" WTD_SUCCESS="$success" WTD_CPU="$cpu" WTD_SRC="$src" WTD_PRESSURE="$pressure" WTD_MSG="$msg"

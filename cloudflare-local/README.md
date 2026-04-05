@@ -1,6 +1,6 @@
 # Cloudflare Local (Docker-only)
 
-Full platform setup (DNS, TLS, AI stack, optional Cloudflare-local) lives in the repo root: **[docs/SETUP.md](../docs/SETUP.md)**. Day-two operations: **[docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md)**.
+Full platform setup (DNS, TLS, ecosystem stack, optional Cloudflare-local) lives in the repo root: **[docs/SETUP.md](../docs/SETUP.md)**. Day-two operations: **[docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md)**.
 
 This stack emulates Cloudflare-like local services using only Docker:
 

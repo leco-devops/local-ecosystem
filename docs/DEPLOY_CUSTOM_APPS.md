@@ -19,7 +19,7 @@ It complements [DEVOPS_GUIDE.md](DEVOPS_GUIDE.md) (KV, R2, D1, compose operation
 - **`traefik/dynamic.yml`** defines a **router** (hostname) and **service** (backend URL).
 - The file provider uses **`watch: true`** (`traefik/traefik-static.yaml`), so saving `dynamic.yml` usually **reloads routes without restarting Traefik**.
 
-**Optional:** Add your container name to **`NETWORK_CONTAINERS`** in `ai-stack/core.sh` so `./ai-stack/ai-stack.sh repair-network` reconnects it after Docker restarts.
+**Optional:** Add your container name to **`NETWORK_CONTAINERS`** in `ecosystem-stack/core.sh` so `./ecosystem-stack/ecosystem-stack.sh repair-network` reconnects it after Docker restarts.
 
 ---
 
@@ -29,11 +29,11 @@ Use this table to see **what already exists**, **which hostname** to use, and **
 
 | Public host (`*.lh`) | Backend (Docker DNS) | Container | Port (internal) | Started via |
 |---------------------|----------------------|-----------|-----------------|-------------|
-| `ai.lh` | `http://open-webui:8080` | `open-webui` | 8080 | `ai-stack/services/webui.sh` |
-| `n8n.lh` | `http://n8n:5678` | `n8n` | 5678 | `ai-stack/services/n8n.sh` |
-| `ollama.lh` | `http://ollama:11434` | `ollama` | 11434 | `ai-stack/services/ollama.sh` |
-| `localhost.lh` | `http://service-dashboard:8090` | `service-dashboard` | 8090 | `ai-stack/services/dashboard.sh` |
-| `traefik.lh` | Traefik API (`api@internal`) | `traefik` | API on 8080 (published) | `ai-stack/services/traefik.sh` |
+| `ai.lh` | `http://open-webui:8080` | `open-webui` | 8080 | `ecosystem-stack/services/webui.sh` |
+| `n8n.lh` | `http://n8n:5678` | `n8n` | 5678 | `ecosystem-stack/services/n8n.sh` |
+| `ollama.lh` | `http://ollama:11434` | `ollama` | 11434 | `ecosystem-stack/services/ollama.sh` |
+| `localhost.lh` | `http://service-dashboard:8090` | `service-dashboard` | 8090 | `ecosystem-stack/services/dashboard.sh` |
+| `traefik.lh` | Traefik API (`api@internal`) | `traefik` | API on 8080 (published) | `ecosystem-stack/services/traefik.sh` |
 | `r2.lh` | `http://r2-adapter:8081` | `r2-adapter` | 8081 | `cloudflare-local/docker-compose.yml` |
 | `kv.lh` | `http://kv-adapter:8082` | `kv-adapter` | 8082 | same |
 | `d1.lh` | `http://d1-adapter:8083` | `d1-adapter` | 8083 | same |
@@ -54,16 +54,16 @@ Use this table to see **what already exists**, **which hostname** to use, and **
 |-----------|------|----------|
 | `valkey` | Redis-compatible backend for KV adapter | `valkey:6379` from containers; host `127.0.0.1:6380` (published) |
 | `autoscale-demo` | Nginx replicas scaled by autoscaler | Internal `http://autoscale-demo:80` (not individually exposed on Traefik) |
-| `open-webui`, `n8n`, `ollama`, etc. | AI stack | Only via Traefik rows above unless you publish extra ports in scripts |
+| `open-webui`, `n8n`, `ollama`, etc. | Ecosystem stack | Only via Traefik rows above unless you publish extra ports in scripts |
 
 **Compose / scripts (high level)**
 
 | Area | Path | Control / CLI |
 |------|------|----------------|
-| Traefik + TLS | `traefik/`, `certs/` | `./ai-stack/services/traefik.sh` |
-| AI stack (WebUI, Ollama, n8n, Postgres, dashboard) | `ai-stack/services/*.sh` | `./ai-stack/ai-stack.sh …` |
-| Cloudflare-local (MinIO, Valkey, adapters, Workers, browser, autoscaler) | `cloudflare-local/docker-compose.yml` | `./ai-stack/services/cloudflare-local.sh` |
-| Infra (MySQL, Redis, Mailpit, cache lab, Adminer, …) | `infra/docker-compose.yml` | `./ai-stack/services/infra.sh` |
+| Traefik + TLS | `traefik/`, `certs/` | `./ecosystem-stack/services/traefik.sh` |
+| Ecosystem stack (WebUI, Ollama, n8n, Postgres, dashboard) | `ecosystem-stack/services/*.sh` | `./ecosystem-stack/ecosystem-stack.sh …` |
+| Cloudflare-local (MinIO, Valkey, adapters, Workers, browser, autoscaler) | `cloudflare-local/docker-compose.yml` | `./ecosystem-stack/services/cloudflare-local.sh` |
+| Infra (MySQL, Redis, Mailpit, cache lab, Adminer, …) | `infra/docker-compose.yml` | `./ecosystem-stack/services/infra.sh` |
 
 **Databases (two different Postgres instances)**
 
@@ -212,7 +212,7 @@ Then:
 docker compose -f infra/docker-compose.yml up -d --build my-api
 ```
 
-Add **Traefik** routes (Pattern B) pointing to `http://my-api:3000`, and add **`my-api`** to `NETWORK_CONTAINERS` in `ai-stack/core.sh` if you want repair-network to include it.
+Add **Traefik** routes (Pattern B) pointing to `http://my-api:3000`, and add **`my-api`** to `NETWORK_CONTAINERS` in `ecosystem-stack/core.sh` if you want repair-network to include it.
 
 ---
 
@@ -267,7 +267,7 @@ Use `proxy_pass http://backend:PORT;` in a custom `nginx.conf`, mount it in the 
 | TLS | `*.lh` cert in `certs/`; Traefik mounts `certs` read-only. |
 | Route | Edit `traefik/dynamic.yml` (router + service + `tls: true` on websecure). |
 | DNS | `myapp.lh` → loopback (or your dev host IP). |
-| After Docker daemon restart | `./ai-stack/ai-stack.sh repair-network` |
+| After Docker daemon restart | `./ecosystem-stack/ecosystem-stack.sh repair-network` |
 | Logs | `docker logs -f <container>` or Dashboard **Control** tab |
 | Rebuild | `docker compose … up -d --build <service>` |
 
@@ -275,7 +275,7 @@ Use `proxy_pass http://backend:PORT;` in a custom `nginx.conf`, mount it in the 
 
 ## 10. **LEco DevOps** (`leco-app` / `leco-devops`)
 
-For **third-party** repos (many apps, no edits to `ai-stack` / `core.sh`), use **LEco DevOps** in `tools/deploy-cli/`: the **`leco-app`** and **`leco-devops`** commands write `leco.app.yaml`, run `docker compose` deploy/stop/logs/status, optional **`wrangler deploy`**, and print **Traefik** YAML fragments for manual paste.
+For **third-party** repos (many apps, no edits to `ecosystem-stack` / `core.sh`), use **LEco DevOps** in `tools/deploy-cli/`: the **`leco-app`** and **`leco-devops`** commands write `leco.app.yaml`, run `docker compose` deploy/stop/logs/status, optional **`wrangler deploy`**, and print **Traefik** YAML fragments for manual paste.
 
 **Install:** `cd tools/deploy-cli` (from repo root), then `pip install -e .` — not from `tools/` alone.
 

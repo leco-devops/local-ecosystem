@@ -3,55 +3,13 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Local Ecosystem Ops Dashboard</title>
+    <title>LEco DevOps</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/static/dashboard.css" />
   </head>
   <body>
     <div class="wrap">
-      <header class="page-header">
-        <div class="header-main">
-          <h1>Ops Dashboard</h1>
-          <div id="summary" class="header-status">Loading…</div>
-          <details class="header-more">
-            <summary>Deploy &amp; system metrics</summary>
-            <p class="small muted">
-              Rebuild:
-              <code>./ai-stack/ai-stack.sh restart dashboard</code>
-              ·
-              <code>bash ./ai-stack/services/dashboard.sh deploy</code>
-            </p>
-            <p class="small muted">
-              Linux: mount <code>/proc</code> for host CPU/RAM/net/IOPS. Temperature uses <code>/sys/class/thermal</code> (host via <code>DASHBOARD_HOST_SYS</code>, or the container’s own <code>/sys</code> when zones exist). Docker Desktop: thermal may still be empty; see the Metrics “Host CPU temperature” card for status.
-            </p>
-          </details>
-        </div>
-        <div class="toolbar">
-          <label class="sr-only" for="refreshRate">Auto refresh</label>
-          <select id="refreshRate" title="Auto refresh interval">
-            <option value="5000">5s</option>
-            <option value="10000" selected>10s</option>
-            <option value="30000">30s</option>
-            <option value="60000">60s</option>
-            <option value="0">Manual</option>
-          </select>
-          <button id="refreshNow">Refresh now</button>
-          <span id="nextRefresh" class="small"></span>
-        </div>
-      </header>
-
-      <div class="tabs">
-        <button class="tab-btn active" data-tab="overviewTab">Overview</button>
-        <button class="tab-btn" data-tab="referenceTab">Reference</button>
-        <button class="tab-btn" data-tab="infrastructureTab">Infrastructure</button>
-        <button class="tab-btn" data-tab="metricsTab">Metrics</button>
-        <button class="tab-btn" data-tab="controlTab">Control</button>
-        <button class="tab-btn" data-tab="hostedAppsTab">Hosted apps</button>
-        <button class="tab-btn" data-tab="routesTab">Routes</button>
-        <button class="tab-btn" data-tab="docsTab">Docs</button>
-        <button class="tab-btn" data-tab="developTab">Develop</button>
-        <button class="tab-btn" data-tab="logsTab">Logs</button>
-      </div>
+      {% include "_dashboard_top.html" %}
 
       <section id="overviewTab" class="tab-content active">
         <div class="overview-layout">
@@ -113,6 +71,12 @@
                 <canvas id="overviewChartServicesBar"></canvas>
               </div>
             </article>
+            <article class="dash-panel dash-panel--compact dash-panel--hosted-summary">
+              <header class="dash-panel__head"><span class="dash-panel__title">Hosted app URLs</span></header>
+              <div id="overviewHostedUrls" class="overview-hosted-urls">
+                <p class="muted small">Loading hosted app URLs…</p>
+              </div>
+            </article>
           </div>
 
           <div class="overview-chips" id="overviewChips"></div>
@@ -128,7 +92,7 @@
 
         <div class="infra-group">
           <h3 class="infra-group__title">1 · Platform health</h3>
-          <p class="infra-group__lead muted small">Cluster-level signals from the Docker API and the dashboard's own health model.</p>
+          <p class="infra-group__lead muted small">Cluster-level signals from the Docker API and LEco DevOps’s built-in health model.</p>
           <div class="infra-group__block">
             <h4 class="infra-subhead">System status</h4>
             <div id="systemStatus" class="grid-mini"></div>
@@ -192,7 +156,7 @@
             <p class="muted small" id="ollamaModelsSummary">Loading…</p>
             <p class="muted small" id="ollamaModelsInsights"> </p>
             <p class="muted small">
-              Pinned file: <code>ai-stack/config/ollama-pinned-models.txt</code> on the <code>/project</code> mount. Listed from <code>GET /api/tags</code>.
+              Pinned file: <code>ecosystem-stack/config/ollama-pinned-models.txt</code> on the <code>/project</code> mount. Listed from <code>GET /api/tags</code>.
             </p>
             <div class="ollama-models-toolbar">
               <button type="button" id="ollamaPullAllBtn" class="ollama-act ollama-act--ops">Pull all pinned</button>
@@ -274,7 +238,7 @@
             <strong>Host CPU temperature</strong>
             <p class="chart-sub">
               <strong>Linux:</strong> max of <code>/sys/class/thermal/*/temp</code> (optional host mount <code>DASHBOARD_HOST_SYS</code> in <code>dashboard.sh</code>).
-              <strong>macOS + Docker Desktop:</strong> optional <code>brew install osx-cpu-temp</code>. Starting the dashboard from <code>ai-stack/services/dashboard.sh</code> installs a LaunchAgent that runs <code>ai-stack/scripts/macos-write-cpu-temp.sh</code> every 30s; stopping/removing the dashboard removes it. On some Apple Silicon setups <code>osx-cpu-temp</code> reports <code>0°C</code>; the writer then uses <code>sudo powermetrics</code> and maps thermal pressure to a proxy °C, plus load average so the chart moves under CPU load even when pressure stays Nominal. For unattended runs, passwordless <code>sudo</code> for <code>/usr/bin/powermetrics</code> may be needed. Deploy from the Mac so <code>~/.local-eco-host-metrics</code> mounts into the container.
+              <strong>macOS + Docker Desktop:</strong> optional <code>brew install osx-cpu-temp</code>. Starting LEco DevOps from <code>ecosystem-stack/services/dashboard.sh</code> installs a LaunchAgent that runs <code>ecosystem-stack/scripts/macos-write-cpu-temp.sh</code> every 30s; stopping/removing LEco DevOps removes it. On some Apple Silicon setups <code>osx-cpu-temp</code> reports <code>0°C</code>; the writer then uses <code>sudo powermetrics</code> and maps thermal pressure to a proxy °C, plus load average so the chart moves under CPU load even when pressure stays Nominal. For unattended runs, passwordless <code>sudo</code> for <code>/usr/bin/powermetrics</code> may be needed. Deploy from the Mac so <code>~/.local-eco-host-metrics</code> mounts into the container.
             </p>
             <div id="metricsTempPlaceholder" class="metrics-temp-placeholder">
               No temperature samples yet — on Mac run the host temp script; on Linux ensure <code>/sys</code> thermal zones exist or mount host <code>/sys</code>.
@@ -297,7 +261,7 @@
           </div>
           <div id="hostMetricsReloadLog" class="host-metrics-reload-log is-hidden" aria-label="Reload log"></div>
           <p class="muted small host-metrics-panel__lead">
-            The dashboard container reads a file from your Mac (see <code>docs/SETUP.md</code> §8). LaunchAgent status below is from
+            The LEco DevOps container reads a file from your Mac (see <code>docs/SETUP.md</code> §8). LaunchAgent status below is from
             <code>scheduler_meta.json</code> on disk; live <code>launchctl</code> must be checked on the Mac.
           </p>
           <div id="hostInjectedMetricsBody" class="host-metrics-panel__body muted small">Loading…</div>
@@ -308,7 +272,7 @@
       <section id="controlTab" class="tab-content">
         <h2 class="tab-heading">Control</h2>
         <p class="tab-lead muted small">
-          Cards are grouped: <strong>AI-stack bulk</strong>, <strong>AI services</strong>, <strong>Infra add-ons</strong> (MySQL, Adminer, Redis Commander, cache lab, …), then <strong>Cloudflare local</strong>. Registered <strong>leco</strong> compose apps live under the <strong>Hosted apps</strong> tab. Each card is a stack or service — click an action. Destructive ops may wipe volumes; read the JSON response.
+          Cards are grouped: <strong>Ecosystem stack bulk</strong>, <strong>Ecosystem services</strong>, <strong>Infra add-ons</strong> (MySQL, Adminer, Redis Commander, cache lab, …), then <strong>Cloudflare local</strong>. Registered <strong>leco</strong> compose apps live under the <strong>Hosted apps</strong> tab. Each card is a stack or service — click an action. Destructive ops may wipe volumes; read the JSON response.
         </p>
 
         <div class="control-token-row" id="controlTokenRow" style="display: none">
@@ -322,8 +286,8 @@
 
         <div class="control-bulk-bar" id="controlBulkBar" aria-label="Bulk ecosystem actions">
           <div class="control-bulk-bar__head">
-            <strong>All AI-stack services</strong>
-            <span class="muted small">Uses <code>bulk_ecosystem</code> in <code>ai-stack/core.sh</code>. Bulk <strong>stop</strong>, <strong>restart</strong>, <strong>redeploy</strong>, <strong>pause</strong>, <strong>remove</strong>, <strong>reset</strong>, and <strong>recreate</strong> skip this dashboard and, by default, <strong>Traefik</strong> and <strong>Postgres</strong> so routing and the shared DB stay up. Override skips with <code>ECOSYSTEM_BULK_PLATFORM_SKIP</code> (space-separated names). To stop or redeploy Traefik, Postgres, or the dashboard itself, use the shell — see <strong>DEPLOYMENT.md</strong> (section <em>Core infra — shell</em>).</span>
+            <strong>All ecosystem stack services</strong>
+            <span class="muted small">Uses <code>bulk_ecosystem</code> in <code>ecosystem-stack/core.sh</code>. Bulk <strong>stop</strong>, <strong>restart</strong>, <strong>redeploy</strong>, <strong>pause</strong>, <strong>remove</strong>, <strong>reset</strong>, and <strong>recreate</strong> skip LEco DevOps and, by default, <strong>Traefik</strong> and <strong>Postgres</strong> so routing and the shared DB stay up. Override skips with <code>ECOSYSTEM_BULK_PLATFORM_SKIP</code> (space-separated names). To stop or redeploy Traefik, Postgres, or LEco DevOps itself, use the shell — see <strong>DEPLOYMENT.md</strong> (section <em>Core infra — shell</em>).</span>
           </div>
           <div class="control-bulk-bar__btns">
             <button type="button" class="ctrl-bulk ctrl-bulk--start" data-bulk-action="start" data-bulk-label="Start all">Start all</button>
@@ -371,7 +335,7 @@
               then <strong>Save YAML</strong> to persist. <strong>Register</strong> stays disabled until both files exist on disk;
               it only runs <code>leco-app ecosystem-register</code> (no silent overwrite). Generate/Save/Register require the
               <strong>control token</strong> when enabled. Read-only app roots materialize under <code>hosting/app-available/&lt;id&gt;/</code>
-              (app id required). Path: repo-relative, <code>wsp:…</code>, or a host path when the dashboard was started with path hints.
+              (app id required). Path: repo-relative, <code>wsp:…</code>, or a host path when LEco DevOps was started with path hints.
               <strong>Label</strong> after Detect is guessed from <code>package.json</code> / Wrangler <code>name</code> / Compose top-level <code>name</code> when present (not from the folder name).
               <strong>URLs in Traefik</strong> (e.g. <code>cv.lh</code>) come from <code>infrastructure.routing.entries[].hostname</code> in your profile (<code>leco.yaml</code>), not from the registry slug; <code>cloudflare.localCfPublicPrefix</code> only shapes KV/R2/D1 hosts (<code>cv-kv.lh</code>, …).
             </p>
@@ -426,7 +390,7 @@
             </label>
             <label class="hosted-register-check muted small">
               <input type="checkbox" id="hostedRegDeployAfter" checked />
-              After register, run <strong><code>leco-app deploy</code></strong> (<code>docker compose up -d --build</code>) so containers appear in Docker Desktop. Uncheck if you only want registry + Traefik without starting the stack.
+              After register, run <strong><code>leco-app deploy</code></strong> when the manifest has <code>dockerCompose</code> (<code>docker compose up -d --build</code>). Workers-only apps (no compose in <code>leco.yaml</code>) skip deploy automatically. Uncheck if you only want registry + Traefik.
             </label>
             <div class="hosted-reg-workflow" id="hostedRegWorkflow" aria-label="Registration workflow steps">
               <div class="hosted-reg-workflow__track" role="group" aria-describedby="hostedRegWorkflowHint">
@@ -655,6 +619,7 @@
                 <th>Service</th>
                 <th>Entry points</th>
                 <th>TLS</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody id="traefikRoutersBody"></tbody>
@@ -667,6 +632,7 @@
               <tr>
                 <th>Key</th>
                 <th>Upstream URLs</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody id="traefikServicesBody"></tbody>
@@ -677,6 +643,53 @@
           Router/service keys derived from each app’s <code>leco.app.yaml</code> (same rules as LEco DevOps <code>leco-app traefik-fragment</code>). <strong>Remove from registry</strong> runs <code>leco-app ecosystem-unregister</code>: strips Traefik keys, cleans <code>leco.local-cf.yaml</code> when checked, removes the registry row.
         </p>
         <div id="traefikHostedHints" class="routes-hosted-hints"></div>
+        <h3 class="routes-subhead">Quick route builder (URL / endpoint / masking / redirect)</h3>
+        <p class="muted small">
+          Create or edit routes without hand-writing YAML. <strong>Proxy (URL masking)</strong> keeps your public URL and forwards to an internal endpoint. <strong>Redirect</strong> sends clients to a different URL (301/302).
+        </p>
+        <div class="routes-builder-grid">
+          <label>Mode
+            <select id="routeBuilderMode">
+              <option value="proxy">Proxy (URL masking)</option>
+              <option value="redirect">Redirect</option>
+            </select>
+          </label>
+          <label>Router key
+            <input id="routeBuilderRouterKey" type="text" placeholder="myapp-main-http" />
+          </label>
+          <label>Public host
+            <input id="routeBuilderHost" type="text" placeholder="myapp.lh" />
+          </label>
+          <label>Path prefix (optional)
+            <input id="routeBuilderPathPrefix" type="text" placeholder="/api" />
+          </label>
+          <label>Service key (proxy mode)
+            <input id="routeBuilderServiceKey" type="text" placeholder="myapp-main-svc" />
+          </label>
+          <label>Endpoint URL (proxy mode)
+            <input id="routeBuilderEndpointUrl" type="text" placeholder="http://myapp:8080" />
+          </label>
+          <label>Redirect URL (redirect mode)
+            <input id="routeBuilderRedirectUrl" type="text" placeholder="https://www.example.com" />
+          </label>
+          <label>Redirect status
+            <select id="routeBuilderRedirectStatus">
+              <option value="301">301 (permanent)</option>
+              <option value="302">302 (temporary)</option>
+            </select>
+          </label>
+          <label>Priority (optional)
+            <input id="routeBuilderPriority" type="number" placeholder="20" />
+          </label>
+          <label><input id="routeBuilderEntryWeb" type="checkbox" checked /> entryPoint web</label>
+          <label><input id="routeBuilderEntryWebsecure" type="checkbox" checked /> entryPoint websecure</label>
+          <label><input id="routeBuilderTls" type="checkbox" checked /> TLS enabled (websecure)</label>
+        </div>
+        <p class="routes-fragment-toolbar">
+          <button type="button" id="routeBuilderBuildBtn" class="ctrl-act ctrl-act--ops">Build YAML from form</button>
+          <button type="button" id="routeBuilderMergeBtn" class="ctrl-act ctrl-act--safe">Build + merge into dynamic.yml</button>
+          <button type="button" id="routeBuilderResetBtn" class="ctrl-act ctrl-act--ops">Reset form</button>
+        </p>
         <h3 class="routes-subhead">Merge YAML fragment</h3>
         <p class="muted small">
           Load a fragment from a hosted app’s manifest via LEco DevOps <code>leco-app traefik-fragment</code>, or paste YAML manually. Top-level <code>http:</code> with <code>routers</code> / <code>services</code>; keys merge (overwrite on collision). Writes use an atomic replace; previous file is copied to <code>dynamic.yml.bak</code>.
@@ -707,7 +720,7 @@
         <h2>Documentation</h2>
         <p class="muted small">
           Markdown served from your repo at <code>DASHBOARD_PROJECT_ROOT</code> (usually <code>/project</code>). Modules marked unavailable need the host mount in
-          <code>ai-stack/services/dashboard.sh</code>. Under <strong>Operations</strong>, <em>Service management commands</em> lists copy-paste CLI for each Control target (AI-stack scripts, compose, bulk).
+          <code>ecosystem-stack/services/dashboard.sh</code>. Under <strong>Operations</strong>, <em>Service management commands</em> lists copy-paste CLI for each Control target (ecosystem stack scripts, compose, bulk).
         </p>
         <div class="doc-layout">
           <nav class="doc-sidebar" id="docSidebar"></nav>
@@ -768,6 +781,26 @@
           <tbody id="logsBody"></tbody>
         </table>
       </section>
+
+      <footer class="project-footer" aria-label="Project links">
+        <p class="project-footer__brand">
+          <strong>LEco DevOps Open Project</strong> · Application: <strong>LEco DevOps</strong>
+        </p>
+        <p class="project-footer__copy muted small">
+          MIT License · Copyright (c) 2026 Rajneesh Maurya · Individual open-source maintainer
+        </p>
+        <div class="project-footer__links">
+          <button type="button" class="project-footer__link" data-doc-open="ecosystem-readme">README</button>
+          <button type="button" class="project-footer__link" data-doc-open="devops-setup">Setup</button>
+          <button type="button" class="project-footer__link" data-doc-open="devops-deployment">Deployment</button>
+          <button type="button" class="project-footer__link" data-doc-open="open-source-license">License</button>
+          <button type="button" class="project-footer__link" data-doc-open="open-source-contributing">Contributing</button>
+          <button type="button" class="project-footer__link" data-doc-open="open-source-security">Security</button>
+          <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab">Docs</a>
+          <a class="project-footer__link project-footer__link--anchor" href="/?tab=developTab">Develop</a>
+          <a class="project-footer__link project-footer__link--anchor" href="/hub">Service hubs</a>
+        </div>
+      </footer>
     </div>
 
     <div id="hostedChartExpandOverlay" class="hosted-chart-expand-overlay" hidden>
@@ -802,7 +835,7 @@
           <h3 id="controlActionTitle" class="control-action-title">Running…</h3>
           <p id="controlActionLive" class="control-action-live">Starting…</p>
           <p class="muted small control-action-hint">
-            Live output streams as Docker, shell scripts, or <code>leco-app</code> print lines (Control actions, <strong>Register application</strong>, …). If this box stays empty for minutes behind <code>*.lh</code>, open the dashboard on
+            Live output streams as Docker, shell scripts, or <code>leco-app</code> print lines (Control actions, <strong>Register application</strong>, …). If this box stays empty for minutes behind <code>*.lh</code>, open LEco DevOps on
             <strong>port 8090</strong> (direct to the container) or check <code>docker logs service-dashboard</code>.
           </p>
           <p id="controlActionSummary" class="control-action-summary is-hidden"></p>
@@ -819,11 +852,56 @@
       </div>
     </div>
 
+    <div id="dashboardGlobalPreloader" class="dashboard-global-preloader is-hidden" role="status" aria-live="polite">
+      <div id="dashboardGlobalPreloaderPanel" class="dashboard-global-preloader__panel" role="region" aria-label="Loading status">
+        <div class="dashboard-global-preloader__status-row">
+          <span class="dashboard-global-preloader__label">IN FLIGHT</span>
+          <span id="dashboardGlobalPreloaderSummary" class="dashboard-global-preloader__summary">—</span>
+        </div>
+        <ul id="dashboardGlobalPreloaderList" class="dashboard-global-preloader__list" aria-label="Active backend requests"></ul>
+      </div>
+      <div class="dashboard-global-preloader__track-row">
+        <div class="dashboard-global-preloader__track" aria-hidden="true">
+          <span class="dashboard-global-preloader__fill"></span>
+        </div>
+        <button
+          type="button"
+          id="dashboardGlobalPreloaderToggle"
+          class="dashboard-global-preloader__toggle"
+          aria-expanded="true"
+          aria-controls="dashboardGlobalPreloaderPanel"
+          title="Collapse to thin progress bar"
+        >
+          ▲
+        </button>
+      </div>
+    </div>
+
+    <script>
+      (function applyRequestedTabBeforeBootstrap() {
+        try {
+          var qs = new URLSearchParams(window.location.search || "");
+          var requestedTab = String(qs.get("tab") || "").trim();
+          if (!requestedTab) return;
+          var requestedEl = document.getElementById(requestedTab);
+          if (!requestedEl || !requestedEl.classList.contains("tab-content")) return;
+          document.querySelectorAll(".tab-content").forEach(function (el) {
+            el.classList.remove("active");
+          });
+          requestedEl.classList.add("active");
+          document.querySelectorAll(".tab-btn[data-tab]").forEach(function (btn) {
+            btn.classList.toggle("active", btn.getAttribute("data-tab") === requestedTab);
+          });
+        } catch (_) {
+          /* no-op */
+        }
+      })();
+    </script>
     <script type="application/json" id="dashboard-boot-config">{{ dashboard_boot | tojson }}</script>
     <script src="/static/service-brand.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
-    <script src="/static/dashboard.js"></script>
+    <script src="/static/dashboard.js?v=20260406"></script>
   </body>
 </html>

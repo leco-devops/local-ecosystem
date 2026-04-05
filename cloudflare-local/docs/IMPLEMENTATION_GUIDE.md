@@ -2,13 +2,13 @@
 
 **Environment setup:** [../../docs/SETUP.md](../../docs/SETUP.md) · **Deploy / ops:** [../../docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md).
 
-End-to-end wiring from **Docker** → **Traefik** → **browser** and how the **ops dashboard** observes the stack.
+End-to-end wiring from **Docker** → **Traefik** → **browser** and how **LEco DevOps** observes the stack.
 
 ## 1. Network model
 
-- All user-facing containers join **`lh-network`** (external in compose, created by the AI stack).
+- All user-facing containers join **`lh-network`** (external in compose, created by the ecosystem stack).
 - Traefik runs on the same network and forwards `Host: *.lh` to upstream containers.
-- The dashboard container uses the **Docker socket** to inspect all containers and, when `/project` is mounted, runs **`docker compose`** against `cloudflare-local/docker-compose.yml`.
+- The LEco DevOps container uses the **Docker socket** to inspect all containers and, when `/project` is mounted, runs **`docker compose`** against `cloudflare-local/docker-compose.yml`.
 
 ## 2. Compose layout (`cloudflare-local/docker-compose.yml`)
 
@@ -27,7 +27,7 @@ Volumes: `minio_data`, `valkey_data`, `d1_data`, `d1_backups`; migrations bind-m
 
 ## 3. Traefik configuration
 
-File: **`traefik/dynamic.yml`** (and mirror **`ai-stack/config/dynamic.yml`** if Traefik loads that copy).
+File: **`traefik/dynamic.yml`** (and mirror **`ecosystem-stack/config/dynamic.yml`** if Traefik loads that copy).
 
 Each router uses `rule: Host(\`name.lh\`)` and an entryPoint (`web` for HTTP). TLS certificates reference `certs/wildcard.lh*.pem` where configured.
 
@@ -85,7 +85,7 @@ After editing, reload Traefik or restart the Traefik container.
 `dashboard/control.py` whitelists:
 
 - Compose services for Cloudflare stack
-- AI stack service scripts under `/project/ai-stack/services/*.sh`
+- Ecosystem stack service scripts under `/project/ecosystem-stack/services/*.sh`
 
 Requires **Docker CLI + compose plugin** in the dashboard image and **`/project`** mount.
 
@@ -96,7 +96,7 @@ Requires **Docker CLI + compose plugin** in the dashboard image and **`/project`
 | `cloudflare-local/scripts/bootstrap.sh` | Bring up stack |
 | `cloudflare-local/scripts/seed.sh` | Seed demo data |
 | `cloudflare-local/scripts/smoke.sh` | Curl checks through Traefik |
-| `ai-stack/services/cloudflare-local.sh` | `start`, `deploy`, `recreate`, `backup`, direct CLI |
+| `ecosystem-stack/services/cloudflare-local.sh` | `start`, `deploy`, `recreate`, `backup`, direct CLI |
 
 ## 7. Failure modes
 

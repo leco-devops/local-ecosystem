@@ -9,7 +9,7 @@ from typing import Any
 
 from werkzeug.datastructures import FileStorage
 
-from leco_detect import slugify_app_id
+from leco_detect import require_registration_app_id
 
 MAX_ZIP_BYTES = 200 * 1024 * 1024
 ZIP_TMP_NAME = ".leco-upload.zip.tmp"
@@ -40,9 +40,7 @@ def _extract_zip_safe(zf: zipfile.ZipFile, dest: Path) -> int:
 
 
 def host_zip_upload(eco_root: Path, app_id_raw: str, file_storage: FileStorage | None) -> dict[str, Any]:
-    aid = slugify_app_id((app_id_raw or "").strip())
-    if not aid:
-        raise ValueError("app_id required")
+    aid = require_registration_app_id(app_id_raw or "")
     if file_storage is None or not file_storage.filename:
         raise ValueError("zip file required")
 

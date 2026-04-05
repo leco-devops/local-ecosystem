@@ -1,12 +1,12 @@
 # Copy to leco-registry.yaml in this directory and edit.
-# Ops Dashboard Control tab loads config/leco-registry.yaml (gitignored by default).
+# LEco DevOps loads config/leco-registry.yaml (gitignored by default).
 #
 # Register from an app repo (LEco DevOps):
 #   leco-app ecosystem-register --ecosystem-root /path/to/local-ecosystem
 # Or set LECO_ECOSYSTEM_ROOT and run from the app directory.
 #
 # manifest: path relative to local-ecosystem repo root (sibling app: ../MyApp/leco.app.yaml).
-# The dashboard container mounts the repo at /project and its *parent* at /workspace-parent
+# The LEco DevOps container mounts the repo at /project and its *parent* at /workspace-parent
 # so ../MyApp/... resolves for Control actions.
 apps: []
 #  - id: leco

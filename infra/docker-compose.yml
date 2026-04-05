@@ -1,5 +1,5 @@
 # Infra add-ons: MySQL, Redis, Mailpit, Telegram gateway, Varnish + Nginx cache lab.
-# Start: bash ai-stack/services/infra.sh start
+# Start: bash ecosystem-stack/services/infra.sh start
 # Network must exist: docker network create lh-network
 
 services:
