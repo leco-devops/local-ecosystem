@@ -637,6 +637,206 @@ def api_traefik_strip_keys():
     )
 
 
+# ---------------------------------------------------------------------------
+# AI-assisted onboarding endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/ai/settings")
+def api_ai_settings():
+    """Return AI provider config safe for browser display (keys masked)."""
+    from ai_config import config_for_ui
+
+    return jsonify({"ok": True, **config_for_ui()})
+
+
+@app.post("/api/ai/settings")
+def api_ai_settings_update():
+    """Update AI provider settings (control token required)."""
+    from ai_config import update_from_ui
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    try:
+        safe = update_from_ui(data)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    return jsonify({"ok": True, **safe})
+
+
+@app.post("/api/ai/test")
+def api_ai_test():
+    """Test connectivity to the configured AI provider."""
+    from ai_config import get_provider_config
+    from ai_provider import create_provider
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    provider_name = (data.get("provider") or "").strip()
+    cfg = get_provider_config()
+    if provider_name:
+        cfg["provider"] = provider_name
+    provider = create_provider(cfg)
+    if provider is None:
+        return jsonify({"ok": False, "error": f"Provider '{cfg.get('provider', 'none')}' not configured or missing API key"})
+    status = provider.health_check()
+    return jsonify({
+        "ok": status.ok,
+        "provider": status.provider,
+        "message": status.message,
+        "models": [{"name": m.name, "context_window": m.context_window} for m in status.models],
+    })
+
+
+@app.get("/api/ai/models")
+def api_ai_models():
+    """List models available on the configured AI provider."""
+    from ai_config import get_provider_config
+    from ai_provider import create_provider
+
+    cfg = get_provider_config()
+    provider = create_provider(cfg)
+    if provider is None:
+        return jsonify({"ok": False, "models": [], "error": "No provider configured"})
+    try:
+        models = provider.list_models()
+    except Exception as exc:
+        return jsonify({"ok": False, "models": [], "error": str(exc)})
+    return jsonify({
+        "ok": True,
+        "provider": cfg.get("provider", "none"),
+        "models": [{"name": m.name, "context_window": m.context_window, "description": m.description} for m in models],
+    })
+
+
+@app.post("/api/leco/ai-analyze/stream")
+def api_leco_ai_analyze_stream():
+    """NDJSON stream: AI-assisted onboarding pipeline (collect → analyze → generate).
+
+    Request body:
+        path        — app directory (same as registration wizard)
+        slug        — app slug for container/hostname naming
+        source_path — relative path within hosting dir (default ".")
+        health_path — optional health check endpoint
+        provider    — optional provider override
+        model       — optional model override
+    """
+    from ai_orchestrator import stream_onboarding
+    from leco_detect import resolve_registration_path
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    path_rel = (data.get("path") or "").strip()
+    slug = (data.get("slug") or data.get("app_id") or "").strip()
+    source_path = (data.get("source_path") or ".").strip()
+    health_path = (data.get("health_path") or "").strip() or None
+    provider_override = (data.get("provider") or "").strip() or None
+    model_override = (data.get("model") or "").strip() or None
+
+    if not path_rel or not slug:
+        return jsonify({"ok": False, "error": "path and slug required"}), 400
+
+    try:
+        app_root = str(resolve_registration_path(path_rel))
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    @stream_with_context
+    def ndjson():
+        try:
+            for ev in stream_onboarding(
+                app_root,
+                slug,
+                source_path,
+                health_path=health_path,
+                provider_override=provider_override,
+                model_override=model_override,
+            ):
+                yield json.dumps(ev.to_dict(), ensure_ascii=False) + "\n"
+        except GeneratorExit:
+            raise
+        except Exception as exc:
+            yield json.dumps(
+                {"type": "error", "text": str(exc)}, ensure_ascii=False,
+            ) + "\n"
+            yield json.dumps(
+                {"type": "done", "data": {"ok": False, "error": str(exc)}},
+                ensure_ascii=False,
+            ) + "\n"
+
+    return Response(
+        ndjson(),
+        mimetype="text/plain; charset=utf-8",
+        headers={
+            "Cache-Control": "no-store, no-transform",
+            "X-Accel-Buffering": "no",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@app.post("/api/leco/ai-analyze/write")
+def api_leco_ai_analyze_write():
+    """Write previously generated AI config files to hosting/app-available/{slug}/.
+
+    Follows the same layout as the registration flow: generated configs
+    live in the ecosystem's hosting/app-available/<slug>/ directory, not in
+    the (possibly read-only) app source tree.  If the app source dir is
+    writable (project-local app), files go there instead.
+    """
+    from ai_orchestrator import write_generated_files
+    from hosting_layout import hosting_staging_dir, is_dir_writable
+    from leco_detect import resolve_registration_path
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    path_rel = (data.get("path") or "").strip()
+    slug = (data.get("slug") or data.get("app_id") or "").strip()
+    files = data.get("files")
+    dry_run = bool(data.get("dry_run", False))
+
+    if not path_rel:
+        return jsonify({"ok": False, "error": "path required"}), 400
+    if not slug:
+        return jsonify({"ok": False, "error": "slug/app_id required"}), 400
+    if not isinstance(files, dict) or not files:
+        return jsonify({"ok": False, "error": "files dict required"}), 400
+
+    try:
+        app_root = resolve_registration_path(path_rel)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    # Use the hosting staging directory (same as registration flow).
+    # Fall back to app root only if it is writable (project-local app).
+    eco_root = Path(os.getenv("DASHBOARD_PROJECT_ROOT", "/project"))
+    if is_dir_writable(app_root):
+        target = str(app_root)
+    else:
+        staging = hosting_staging_dir(eco_root, slug)
+        staging.mkdir(parents=True, exist_ok=True)
+        target = str(staging)
+
+    try:
+        written = write_generated_files(files, target, dry_run=dry_run)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    return jsonify({"ok": True, "written": written, "target": target, "dry_run": dry_run})
+
+
+# ---------------------------------------------------------------------------
+# Ollama model management endpoints
+# ---------------------------------------------------------------------------
+
+
 @app.get("/api/ollama/models")
 def api_ollama_models():
     return jsonify(build_models_payload())

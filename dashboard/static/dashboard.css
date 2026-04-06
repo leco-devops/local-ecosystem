@@ -4145,3 +4145,428 @@ button.dev-open-doc:hover {
     min-width: 0;
   }
 }
+
+/* ==========================================================================
+   AI Settings panel (Infrastructure tab §6)
+   ========================================================================== */
+
+.ai-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ai-settings__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.ai-settings__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+  flex: 0 1 auto;
+}
+
+.ai-settings__field--grow {
+  flex: 1 1 260px;
+}
+
+.ai-settings__label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ai-settings__model-row {
+  display: flex;
+  gap: 8px;
+}
+
+.ai-settings__model-row select {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.ai-settings__model-row input {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+
+.ai-settings__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding-top: 4px;
+}
+
+.ai-settings__status {
+  margin-left: 4px;
+}
+
+.ai-settings__status--ok {
+  color: var(--ok);
+}
+
+.ai-settings__status--err {
+  color: var(--bad);
+}
+
+/* ==========================================================================
+   AI Toggle bar (Registration wizard)
+   ========================================================================== */
+
+.ai-toggle-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  margin: 8px 0;
+  border-radius: 10px;
+  border: 2px solid rgba(167, 139, 250, 0.35);
+  background: rgba(88, 28, 135, 0.12);
+  flex-wrap: wrap;
+}
+
+.ai-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.ai-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ai-toggle__switch {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  border-radius: 12px;
+  background: rgba(71, 85, 105, 0.6);
+  border: 2px solid rgba(100, 116, 139, 0.55);
+  transition: background 0.2s, border-color 0.2s;
+  flex-shrink: 0;
+}
+
+.ai-toggle__switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(148, 163, 184, 0.9);
+  transition: transform 0.2s, background 0.2s;
+}
+
+.ai-toggle input:checked + .ai-toggle__switch {
+  background: rgba(139, 92, 246, 0.55);
+  border-color: rgba(167, 139, 250, 0.85);
+}
+
+.ai-toggle input:checked + .ai-toggle__switch::after {
+  transform: translateX(18px);
+  background: #c4b5fd;
+}
+
+.ai-toggle input:focus-visible + .ai-toggle__switch {
+  box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.35);
+}
+
+.ai-toggle__text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ai-toggle__provider {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(100, 116, 139, 0.35);
+}
+
+.ai-toggle__provider--active {
+  background: rgba(88, 28, 135, 0.25);
+  border-color: rgba(167, 139, 250, 0.5);
+  color: #c4b5fd;
+}
+
+.ai-toggle__config-btn {
+  margin-left: auto;
+  font-size: 11px !important;
+  padding: 4px 10px !important;
+}
+
+/* ==========================================================================
+   AI Analysis panel (streams AI output in wizard)
+   ========================================================================== */
+
+.ai-analysis-panel {
+  border-radius: 10px;
+  border: 2px solid rgba(167, 139, 250, 0.3);
+  background: rgba(30, 32, 56, 0.9);
+  margin: 8px 0;
+  overflow: hidden;
+}
+
+.ai-analysis-panel--running {
+  border-color: rgba(167, 139, 250, 0.55);
+  box-shadow: 0 0 18px rgba(139, 92, 246, 0.15);
+}
+
+.ai-analysis-panel--done-ok {
+  border-color: rgba(74, 222, 128, 0.4);
+}
+
+.ai-analysis-panel--done-err {
+  border-color: rgba(248, 113, 113, 0.5);
+}
+
+.ai-analysis-panel__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(100, 116, 139, 0.2);
+  background: rgba(88, 28, 135, 0.1);
+}
+
+.ai-analysis-panel__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #c4b5fd;
+}
+
+.ai-analysis-panel__meta {
+  font-size: 11px;
+}
+
+.ai-analysis-panel__timer {
+  margin-left: auto;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+/* ── Progress track (animated bar like global preloader) ── */
+.ai-analysis-panel__track {
+  position: relative;
+  height: 4px;
+  overflow: hidden;
+  background: rgba(2, 6, 23, 0.35);
+}
+
+.ai-analysis-panel__fill {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 40%;
+  min-width: 100px;
+  background: linear-gradient(90deg, #7c3aed, #a78bfa, #c4b5fd, #a78bfa, #7c3aed);
+  opacity: 0.92;
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.5);
+  animation: aiTrackSlide 1.4s ease-in-out infinite;
+}
+
+@keyframes aiTrackSlide {
+  0%   { transform: translateX(-120%); }
+  100% { transform: translateX(300%); }
+}
+
+/* ── Step indicators ── */
+.ai-analysis-panel__steps {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid rgba(100, 116, 139, 0.15);
+}
+
+.ai-step {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-right: 1px solid rgba(100, 116, 139, 0.12);
+  transition: color 0.2s, background 0.2s;
+}
+
+.ai-step:last-child {
+  border-right: none;
+}
+
+.ai-step__icon {
+  font-size: 14px;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
+.ai-step__label {
+  font-weight: 600;
+}
+
+.ai-step__detail {
+  font-size: 10px;
+  margin-left: auto;
+}
+
+/* Step states */
+.ai-step--active {
+  color: #c4b5fd;
+  background: rgba(88, 28, 135, 0.12);
+}
+
+.ai-step--active .ai-step__icon {
+  opacity: 1;
+  animation: aiStepPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes aiStepPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.ai-step--done {
+  color: var(--ok);
+}
+
+.ai-step--done .ai-step__icon {
+  opacity: 1;
+}
+
+.ai-step--error {
+  color: var(--bad);
+}
+
+.ai-step--error .ai-step__icon {
+  opacity: 1;
+}
+
+.ai-analysis-panel__log {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 10px 14px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  background: transparent;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ai-analysis-panel__log .ai-phase {
+  color: #c4b5fd;
+  font-weight: 700;
+}
+
+.ai-analysis-panel__log .ai-ok {
+  color: var(--ok);
+}
+
+.ai-analysis-panel__log .ai-err {
+  color: var(--bad);
+}
+
+.ai-analysis-panel__log .ai-file {
+  color: var(--cyan);
+}
+
+/* ── Summary bar (shown on completion) ── */
+.ai-analysis-panel__summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  border-top: 1px solid rgba(100, 116, 139, 0.15);
+}
+
+.ai-analysis-panel__summary--ok {
+  background: rgba(22, 101, 52, 0.12);
+  color: var(--ok);
+}
+
+.ai-analysis-panel__summary--err {
+  background: rgba(127, 29, 29, 0.12);
+  color: var(--bad);
+}
+
+.ai-summary__stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ai-analysis-panel__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid rgba(100, 116, 139, 0.2);
+  background: rgba(88, 28, 135, 0.08);
+  flex-wrap: wrap;
+}
+
+.ai-analysis-panel__files {
+  font-size: 11px;
+}
+
+/* Spinning indicator for active AI stream */
+.ai-analysis-panel__header .ai-spin {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(167, 139, 250, 0.3);
+  border-top-color: #c4b5fd;
+  border-radius: 50%;
+  animation: aiSpin 0.7s linear infinite;
+}
+
+@keyframes aiSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* Timeout hint */
+.ai-settings__timeout-hint {
+  display: flex;
+  align-items: center;
+  line-height: 1.45;
+}
+
+#aiTimeoutInput {
+  width: 100px;
+}
+
+/* Hybrid provider hint */
+.ai-settings__hybrid-hint {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  background: rgba(88, 28, 135, 0.1);
+  margin: 4px 0 0;
+  line-height: 1.5;
+}

@@ -5739,8 +5739,12 @@ function initHostedRegisterWizard() {
     }
   }
 
-  initHostedBrowseModal(pathIn, setMsg, () => {
-    runHostedRegisterDetect({ fromBrowse: true });
+  initHostedBrowseModal(pathIn, setMsg, async () => {
+    await runHostedRegisterDetect({ fromBrowse: true });
+    // Trigger AI analysis after browse+detect if toggle is on
+    if (typeof window._runAiAnalysis === "function") {
+      window._runAiAnalysis();
+    }
   });
 
   wireHostedYamlFilePicker(
@@ -5805,13 +5809,17 @@ function initHostedRegisterWizard() {
     if (tr) tr.remove();
   });
 
-  function tryAutoDetectFromPathField() {
+  async function tryAutoDetectFromPathField() {
     const loadExisting = loadExistingChk ? loadExistingChk.checked : true;
     if (!loadExisting) return;
     const p = pathIn.value.trim();
     if (!p) return;
     if ((manTa && manTa.value.trim()) || (locTa && locTa.value.trim())) return;
-    runHostedRegisterDetect({});
+    await runHostedRegisterDetect({});
+    // Trigger AI analysis on auto-detect if toggle is on
+    if (typeof window._runAiAnalysis === "function") {
+      window._runAiAnalysis();
+    }
   }
 
   let pathInputDebounce = null;
@@ -5997,8 +6005,12 @@ function initHostedRegisterWizard() {
     void hostedRegSyncUrlsFromLocTa((idIn && idIn.value.trim()) || "", false);
   });
 
-  detectBtn.addEventListener("click", () => {
-    runHostedRegisterDetect({});
+  detectBtn.addEventListener("click", async () => {
+    await runHostedRegisterDetect({});
+    // Trigger AI analysis after detect completes, if toggle is on
+    if (typeof window._runAiAnalysis === "function") {
+      window._runAiAnalysis();
+    }
   });
 
   genBtn?.addEventListener("click", async () => {
@@ -7973,6 +7985,8 @@ async function bootstrap() {
   applyTrendHistoryToLineChart();
   initControlActionOverlay();
   initOllamaModelsPanel();
+  initAiSettingsPanel();
+  initAiWizardToggle();
   await initLogsPanel();
   initLogEvents();
 
@@ -8049,5 +8063,604 @@ async function bootstrap() {
   }
   scheduleRefresh();
 }
+
+/* ==========================================================================
+   AI Settings panel (Infrastructure §6) + AI Wizard toggle
+   ========================================================================== */
+
+/** Which providers need an API key and/or base_url field. */
+const AI_PROVIDER_META = {
+  none:                { needsKey: false, needsUrl: false, label: "No AI" },
+  ollama:              { needsKey: false, needsUrl: false, label: "Ollama (local SLM)" },
+  openai:              { needsKey: true,  needsUrl: false, label: "OpenAI" },
+  anthropic:           { needsKey: true,  needsUrl: false, label: "Anthropic" },
+  google:              { needsKey: true,  needsUrl: false, label: "Google Gemini" },
+  "openai-compatible": { needsKey: true,  needsUrl: true,  label: "OpenAI-compatible" },
+  hybrid:              { needsKey: true,  needsUrl: false, label: "Hybrid (SLM + LLM)" },
+};
+
+/** Cached state so wizard toggle can read current provider. */
+let _aiCurrentProvider = "none";
+let _aiCurrentModel = "";
+
+function initAiSettingsPanel() {
+  const provSel    = document.getElementById("aiProviderSelect");
+  const modelSel   = document.getElementById("aiModelSelect");
+  const modelIn    = document.getElementById("aiModelCustom");
+  const keyRow     = document.getElementById("aiKeyRow");
+  const urlRow     = document.getElementById("aiBaseUrlRow");
+  const keyIn      = document.getElementById("aiApiKeyInput");
+  const urlIn      = document.getElementById("aiBaseUrlInput");
+  const saveBtn    = document.getElementById("aiSettingsSave");
+  const testBtn    = document.getElementById("aiSettingsTest");
+  const refreshBtn = document.getElementById("aiModelsRefresh");
+  const statusEl   = document.getElementById("aiSettingsStatus");
+  const testOut    = document.getElementById("aiSettingsTestOutput");
+  if (!provSel) return;
+
+  const hybridRow  = document.getElementById("aiHybridRow");
+  const hybridSlm  = document.getElementById("aiHybridSlmSelect");
+  const hybridLlm  = document.getElementById("aiHybridLlmSelect");
+  const hybridKey  = document.getElementById("aiHybridLlmKey");
+  const timeoutRow = document.getElementById("aiTimeoutRow");
+  const timeoutIn  = document.getElementById("aiTimeoutInput");
+
+  function showFieldsForProvider(prov) {
+    const meta = AI_PROVIDER_META[prov] || {};
+    keyRow.style.display    = (meta.needsKey && prov !== "hybrid") ? "" : "none";
+    urlRow.style.display    = meta.needsUrl ? "" : "none";
+    if (hybridRow) hybridRow.style.display = (prov === "hybrid") ? "" : "none";
+    if (timeoutRow) timeoutRow.style.display = (prov !== "none") ? "" : "none";
+    const hybridHint = document.getElementById("aiHybridHint");
+    if (hybridHint) hybridHint.classList.toggle("is-hidden", prov !== "hybrid");
+    if (document.getElementById("aiModelField")) {
+      document.getElementById("aiModelField").style.display = (prov === "hybrid") ? "none" : "";
+    }
+  }
+
+  provSel.addEventListener("change", () => {
+    showFieldsForProvider(provSel.value);
+    // Set sensible default timeout per provider type
+    if (timeoutIn) {
+      const defaults = { ollama: 300, "openai-compatible": 300, hybrid: 300, openai: 120, anthropic: 120, google: 120 };
+      timeoutIn.value = defaults[provSel.value] || 180;
+    }
+    // Auto-fetch models when provider changes (except none/hybrid)
+    if (provSel.value !== "none" && provSel.value !== "hybrid") {
+      refreshAiModels();
+    }
+  });
+
+  /** Load current settings from backend. */
+  async function loadAiSettings() {
+    try {
+      const r = await fetch("/api/ai/settings");
+      const d = await r.json();
+      if (!d.ok) return;
+      const prov = d.provider || "none";
+      provSel.value = prov;
+      _aiCurrentProvider = prov;
+      showFieldsForProvider(prov);
+
+      const provCfg = (d.providers || {})[prov] || {};
+      keyIn.value  = provCfg.api_key || "";
+      urlIn.value  = provCfg.base_url || "";
+      const mdl = provCfg.default_model || d.default_model || "";
+      _aiCurrentModel = mdl;
+      modelIn.value = mdl;
+
+      // Populate timeout — use per-provider timeout if set, else global
+      if (timeoutIn) {
+        const provTimeout = provCfg.timeout || d.timeout || 180;
+        timeoutIn.value = provTimeout;
+      }
+
+      // Populate hybrid fields if present
+      const hybCfg = (d.providers || {}).hybrid || {};
+      if (hybridSlm) hybridSlm.value = hybCfg.local_provider || "ollama";
+      if (hybridLlm) hybridLlm.value = hybCfg.cloud_provider || "openai";
+      if (hybridKey) hybridKey.value = hybCfg.cloud_api_key || "";
+
+      updateWizardToggleProvider(prov, mdl);
+
+      // Auto-fetch models for the active provider
+      if (prov !== "none" && prov !== "hybrid") {
+        refreshAiModels();
+      }
+    } catch (_) { /* offline / not running */ }
+  }
+
+  /** Save settings to backend. */
+  async function saveAiSettings() {
+    statusEl.textContent = "Saving…";
+    statusEl.className = "ai-settings__status muted small";
+    const prov = provSel.value;
+    const model = modelSel.value || modelIn.value.trim();
+    const timeoutVal = timeoutIn ? parseInt(timeoutIn.value, 10) || 180 : 180;
+    const payload = {
+      provider: prov,
+      default_model: model,
+      timeout: timeoutVal,
+      providers: {},
+    };
+    const pc = {};
+    if (prov === "hybrid") {
+      // Hybrid stores both local + cloud config
+      pc.local_provider = hybridSlm?.value || "ollama";
+      pc.cloud_provider = hybridLlm?.value || "openai";
+      if (hybridKey?.value.trim()) pc.cloud_api_key = hybridKey.value.trim();
+      pc.local_timeout = timeoutVal;
+      pc.cloud_timeout = Math.min(timeoutVal, 120);
+    } else {
+      if (keyIn.value.trim()) pc.api_key = keyIn.value.trim();
+      if (urlIn.value.trim()) pc.base_url = urlIn.value.trim();
+      if (model) pc.default_model = model;
+      pc.timeout = timeoutVal;
+    }
+    payload.providers[prov] = pc;
+
+    try {
+      const tok = controlToken();
+      const r = await fetch("/api/ai/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Control-Token": tok },
+        body: JSON.stringify(payload),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        statusEl.textContent = "Saved ✓";
+        statusEl.className = "ai-settings__status muted small ai-settings__status--ok";
+        _aiCurrentProvider = prov;
+        _aiCurrentModel = model;
+        updateWizardToggleProvider(prov, model);
+      } else {
+        statusEl.textContent = d.error || "Save failed";
+        statusEl.className = "ai-settings__status muted small ai-settings__status--err";
+      }
+    } catch (e) {
+      statusEl.textContent = e.message;
+      statusEl.className = "ai-settings__status muted small ai-settings__status--err";
+    }
+  }
+
+  /** Test provider connectivity. */
+  async function testAiProvider() {
+    testOut.classList.remove("is-hidden");
+    testOut.textContent = "Testing connection…\n";
+    try {
+      const tok = controlToken();
+      const r = await fetch("/api/ai/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Control-Token": tok },
+        body: JSON.stringify({ provider: provSel.value }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        let out = `✓ ${d.provider} — ${d.message}\n`;
+        if (d.models && d.models.length) {
+          out += `\nAvailable models (${d.models.length}):\n`;
+          d.models.forEach((m) => { out += `  • ${m.name}\n`; });
+        }
+        testOut.textContent = out;
+      } else {
+        testOut.textContent = `✗ ${d.provider || provSel.value}: ${d.error || d.message || "failed"}\n`;
+      }
+    } catch (e) {
+      testOut.textContent = `✗ ${e.message}\n`;
+    }
+  }
+
+  /** Refresh model dropdown from provider. */
+  async function refreshAiModels() {
+    modelSel.innerHTML = '<option value="">Loading…</option>';
+    try {
+      const r = await fetch("/api/ai/models");
+      const d = await r.json();
+      modelSel.innerHTML = '<option value="">— select model —</option>';
+      if (d.ok && d.models) {
+        d.models.forEach((m) => {
+          const opt = document.createElement("option");
+          opt.value = m.name;
+          opt.textContent = m.name;
+          modelSel.appendChild(opt);
+        });
+        // Pre-select current
+        if (_aiCurrentModel) modelSel.value = _aiCurrentModel;
+      }
+    } catch (_) {
+      modelSel.innerHTML = '<option value="">— error loading —</option>';
+    }
+  }
+
+  modelSel.addEventListener("change", () => {
+    if (modelSel.value) modelIn.value = modelSel.value;
+  });
+
+  saveBtn.addEventListener("click", saveAiSettings);
+  testBtn.addEventListener("click", testAiProvider);
+  refreshBtn.addEventListener("click", refreshAiModels);
+
+  // Initial load
+  loadAiSettings();
+}
+
+/** Update the wizard toggle indicator with current provider info. */
+function updateWizardToggleProvider(prov, model) {
+  const el = document.getElementById("aiToggleProvider");
+  const toggle = document.getElementById("aiAssistToggle");
+  if (!el) return;
+  if (prov === "none" || !prov) {
+    el.textContent = "No provider configured";
+    el.classList.remove("ai-toggle__provider--active");
+    if (toggle) { toggle.checked = false; toggle.disabled = true; }
+  } else if (prov === "hybrid") {
+    const hSlm = document.getElementById("aiHybridSlmSelect");
+    const hLlm = document.getElementById("aiHybridLlmSelect");
+    const slmLabel = hSlm ? (AI_PROVIDER_META[hSlm.value] || {}).label || hSlm.value : "Ollama";
+    const llmLabel = hLlm ? (AI_PROVIDER_META[hLlm.value] || {}).label || hLlm.value : "Cloud";
+    el.textContent = `Hybrid · ${slmLabel} → ${llmLabel}`;
+    el.classList.add("ai-toggle__provider--active");
+    if (toggle) toggle.disabled = false;
+  } else {
+    const meta = AI_PROVIDER_META[prov] || {};
+    el.textContent = `${meta.label || prov}${model ? " · " + model : ""}`;
+    el.classList.add("ai-toggle__provider--active");
+    if (toggle) toggle.disabled = false;
+  }
+}
+
+function initAiWizardToggle() {
+  const toggle    = document.getElementById("aiAssistToggle");
+  const panel     = document.getElementById("aiAnalysisPanel");
+  const settBtn   = document.getElementById("aiToggleSettings");
+  const logEl     = document.getElementById("aiAnalysisLog");
+  const metaEl    = document.getElementById("aiAnalysisMeta");
+  const timerEl   = document.getElementById("aiAnalysisTimer");
+  const trackEl   = document.getElementById("aiAnalysisTrack");
+  const stepsEl   = document.getElementById("aiAnalysisSteps");
+  const summaryEl = document.getElementById("aiAnalysisSummary");
+  const actEl     = document.getElementById("aiAnalysisActions");
+  const applyBtn  = document.getElementById("aiAnalysisApply");
+  const discBtn   = document.getElementById("aiAnalysisDiscard");
+  const filesEl   = document.getElementById("aiAnalysisFiles");
+  if (!toggle || !panel) return;
+
+  const stepEls = [
+    { el: document.getElementById("aiStep1"), detail: document.getElementById("aiStep1Detail") },
+    { el: document.getElementById("aiStep2"), detail: document.getElementById("aiStep2Detail") },
+    { el: document.getElementById("aiStep3"), detail: document.getElementById("aiStep3Detail") },
+  ];
+
+  /** Cached generated files from the AI stream. */
+  let _generatedFiles = null;
+  let _timerInterval = null;
+  let _startTime = 0;
+
+  function startTimer() {
+    _startTime = Date.now();
+    if (_timerInterval) clearInterval(_timerInterval);
+    timerEl.textContent = "0.0s";
+    _timerInterval = setInterval(() => {
+      const sec = ((Date.now() - _startTime) / 1000).toFixed(1);
+      timerEl.textContent = sec + "s";
+    }, 100);
+  }
+
+  function stopTimer() {
+    if (_timerInterval) { clearInterval(_timerInterval); _timerInterval = null; }
+  }
+
+  function setStep(n, state) {
+    // n = 1, 2, 3; state = "active" | "done" | "error" | "pending"
+    const idx = n - 1;
+    if (!stepEls[idx] || !stepEls[idx].el) return;
+    const el = stepEls[idx].el;
+    el.classList.remove("ai-step--active", "ai-step--done", "ai-step--error");
+    if (state === "active") el.classList.add("ai-step--active");
+    else if (state === "done") el.classList.add("ai-step--done");
+    else if (state === "error") el.classList.add("ai-step--error");
+    // Update icon
+    const iconEl = el.querySelector(".ai-step__icon");
+    if (iconEl) {
+      if (state === "done") iconEl.textContent = "✓";
+      else if (state === "error") iconEl.textContent = "✗";
+      else iconEl.textContent = ["①", "②", "③"][idx];
+    }
+  }
+
+  function setStepDetail(n, text) {
+    const idx = n - 1;
+    if (stepEls[idx] && stepEls[idx].detail) stepEls[idx].detail.textContent = text;
+  }
+
+  function setPanelState(state) {
+    panel.classList.remove("ai-analysis-panel--running", "ai-analysis-panel--done-ok", "ai-analysis-panel--done-err");
+    if (state === "running") panel.classList.add("ai-analysis-panel--running");
+    else if (state === "ok") panel.classList.add("ai-analysis-panel--done-ok");
+    else if (state === "error") panel.classList.add("ai-analysis-panel--done-err");
+  }
+
+  function showSummary(ok, stats) {
+    if (!summaryEl) return;
+    summaryEl.classList.remove("is-hidden", "ai-analysis-panel__summary--ok", "ai-analysis-panel__summary--err");
+    if (ok) {
+      summaryEl.classList.add("ai-analysis-panel__summary--ok");
+      summaryEl.innerHTML =
+        `<strong>✓ Analysis complete</strong>` +
+        (stats.files ? ` <span class="ai-summary__stat">${esc(String(stats.files))} files collected</span>` : "") +
+        (stats.tokens ? ` <span class="ai-summary__stat">~${Number(stats.tokens).toLocaleString()} tokens</span>` : "") +
+        (stats.generated ? ` <span class="ai-summary__stat">${esc(String(stats.generated))} configs generated</span>` : "") +
+        (stats.model ? ` <span class="ai-summary__stat">${esc(stats.provider || "")} · ${esc(stats.model)}</span>` : "") +
+        (stats.elapsed ? ` <span class="ai-summary__stat">${Number(stats.elapsed).toFixed(1)}s</span>` : "");
+    } else {
+      summaryEl.classList.add("ai-analysis-panel__summary--err");
+      summaryEl.innerHTML = `<strong>✗ ${esc(stats.error || "Analysis failed")}</strong>`;
+    }
+  }
+
+  /** Navigate to AI settings on Infrastructure tab. */
+  settBtn?.addEventListener("click", () => {
+    activateTab("infrastructureTab");
+    setTimeout(() => {
+      document.getElementById("aiSettingsGroup")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 120);
+  });
+
+  /** Toggle panel visibility. */
+  toggle.addEventListener("change", () => {
+    if (toggle.checked && _aiCurrentProvider === "none") {
+      toggle.checked = false;
+      settBtn?.click();
+      return;
+    }
+    panel.classList.toggle("is-hidden", !toggle.checked);
+    if (!toggle.checked) {
+      resetAiPanel();
+    } else {
+      // Auto-run analysis if toggle turned ON and a path+slug are already set
+      const path = (document.getElementById("hostedRegPath")?.value || "").trim();
+      const slug = (document.getElementById("hostedRegId")?.value || "").trim();
+      if (path && slug) {
+        window._runAiAnalysis();
+      } else {
+        logEl.innerHTML = '<span class="muted">Click <b>Detect</b> or <b>Browse</b> to start AI-assisted analysis.</span>\n';
+      }
+    }
+  });
+
+  function resetAiPanel() {
+    stopTimer();
+    logEl.textContent = "";
+    metaEl.textContent = "";
+    timerEl.textContent = "";
+    actEl.classList.add("is-hidden");
+    trackEl.classList.add("is-hidden");
+    stepsEl.classList.add("is-hidden");
+    summaryEl.classList.add("is-hidden");
+    filesEl.textContent = "";
+    _generatedFiles = null;
+    setPanelState("");
+    stepEls.forEach((s, i) => { setStep(i + 1, "pending"); setStepDetail(i + 1, ""); });
+  }
+
+  /** Map backend phase text → step number. */
+  function phaseToStep(text) {
+    if (/phase 1|collect/i.test(text)) return 1;
+    if (/phase 2|analy/i.test(text)) return 2;
+    if (/phase 3|generat/i.test(text)) return 3;
+    return 0;
+  }
+
+  /** Run AI analysis when Detect is clicked with AI toggle on.
+   *  Called from the existing Detect handler hook. */
+  window._runAiAnalysis = async function runAiAnalysis() {
+    if (!toggle.checked || _aiCurrentProvider === "none") return;
+
+    const path = (document.getElementById("hostedRegPath")?.value || "").trim();
+    const slug = (document.getElementById("hostedRegId")?.value || "").trim();
+    if (!path || !slug) return;
+
+    panel.classList.remove("is-hidden");
+    resetAiPanel();
+    setPanelState("running");
+    trackEl.classList.remove("is-hidden");
+    stepsEl.classList.remove("is-hidden");
+    logEl.innerHTML = '<span class="ai-phase">Initializing AI provider…</span>\n';
+    metaEl.innerHTML = '<span class="ai-spin"></span> Running…';
+    startTimer();
+
+    let currentStep = 0;
+    let collectedFiles = 0;
+    let collectedTokens = 0;
+
+    const tok = controlToken();
+    try {
+      const r = await fetch("/api/leco/ai-analyze/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Control-Token": tok },
+        body: JSON.stringify({ path, slug, source_path: "." }),
+      });
+
+      if (!r.ok) {
+        logEl.innerHTML += `<span class="ai-err">HTTP ${r.status}: ${await r.text()}</span>\n`;
+        stopTimer();
+        setPanelState("error");
+        metaEl.textContent = "Failed";
+        trackEl.classList.add("is-hidden");
+        showSummary(false, { error: `HTTP ${r.status}` });
+        return;
+      }
+
+      const reader = r.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          let ev;
+          try { ev = JSON.parse(line); } catch (_) { continue; }
+
+          if (ev.type === "phase") {
+            logEl.innerHTML += `<span class="ai-phase">${esc(ev.text)}</span>\n`;
+            // Advance step indicators
+            const step = phaseToStep(ev.text);
+            if (step > 0) {
+              // Mark previous steps done
+              for (let i = 1; i < step; i++) setStep(i, "done");
+              setStep(step, "active");
+              currentStep = step;
+              metaEl.innerHTML = `<span class="ai-spin"></span> Step ${step}/3`;
+            }
+          } else if (ev.type === "log") {
+            logEl.innerHTML += esc(ev.text) + "\n";
+          } else if (ev.type === "progress") {
+            logEl.innerHTML += `<span class="ai-ok">${esc(ev.text)}</span>\n`;
+            // Extract stats from progress data
+            if (ev.data) {
+              if (ev.data.files) collectedFiles = Array.isArray(ev.data.files) ? ev.data.files.length : ev.data.files;
+              if (ev.data.tokens) collectedTokens = ev.data.tokens;
+              if (currentStep === 1 && collectedFiles) setStepDetail(1, `${collectedFiles} files`);
+              if (ev.data.services !== undefined) setStepDetail(2, `${ev.data.services} service(s)`);
+            }
+          } else if (ev.type === "ai_token") {
+            logEl.innerHTML += esc(ev.text);
+          } else if (ev.type === "file") {
+            logEl.innerHTML += `<span class="ai-file">  ✓ ${esc(ev.text)}</span>\n`;
+          } else if (ev.type === "error") {
+            logEl.innerHTML += `<span class="ai-err">✗ ${esc(ev.text)}</span>\n`;
+            if (currentStep > 0) setStep(currentStep, "error");
+            stopTimer();
+            setPanelState("error");
+            metaEl.textContent = "Error";
+            trackEl.classList.add("is-hidden");
+            showSummary(false, { error: ev.text });
+          } else if (ev.type === "done") {
+            stopTimer();
+            trackEl.classList.add("is-hidden");
+            const d = ev.data || {};
+            if (d.ok && d.generated_files) {
+              _generatedFiles = d.generated_files;
+              const fnames = Object.keys(d.generated_files);
+              // Mark all steps done
+              setStep(1, "done"); setStep(2, "done"); setStep(3, "done");
+              setStepDetail(1, collectedFiles ? `${collectedFiles} files` : "");
+              setStepDetail(3, `${fnames.length} configs`);
+              setPanelState("ok");
+              metaEl.textContent = `Done — ${fnames.length} files generated`;
+              filesEl.textContent = fnames.join(", ");
+              actEl.classList.remove("is-hidden");
+              logEl.innerHTML += `\n<span class="ai-ok">✓ Analysis complete. ${fnames.length} config files ready.</span>\n`;
+              showSummary(true, {
+                files: d.files_collected || collectedFiles,
+                tokens: d.tokens_used || collectedTokens,
+                generated: fnames.length,
+                model: d.model || "",
+                provider: d.provider || "",
+                elapsed: d.total_elapsed || ((Date.now() - _startTime) / 1000),
+              });
+            } else {
+              setPanelState("error");
+              if (currentStep > 0) setStep(currentStep, "error");
+              metaEl.textContent = "Completed with errors";
+              logEl.innerHTML += `<span class="ai-err">${esc(d.error || "Unknown error")}</span>\n`;
+              showSummary(false, { error: d.error || "Unknown error" });
+            }
+          }
+
+          // Auto-scroll log
+          logEl.scrollTop = logEl.scrollHeight;
+        }
+      }
+
+      // If stream ended without a done event
+      if (!_generatedFiles && metaEl.textContent.includes("Running")) {
+        stopTimer();
+        trackEl.classList.add("is-hidden");
+        setPanelState("error");
+        metaEl.textContent = "Stream ended unexpectedly";
+        showSummary(false, { error: "Stream ended without completion event" });
+      }
+    } catch (e) {
+      stopTimer();
+      trackEl.classList.add("is-hidden");
+      setPanelState("error");
+      logEl.innerHTML += `<span class="ai-err">✗ ${esc(e.message)}</span>\n`;
+      metaEl.textContent = "Failed";
+      showSummary(false, { error: e.message });
+    }
+  };
+
+  function esc(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  /** Apply generated files — write to disk and populate YAML textareas. */
+  applyBtn?.addEventListener("click", async () => {
+    if (!_generatedFiles) return;
+    const path = (document.getElementById("hostedRegPath")?.value || "").trim();
+    const slug = (document.getElementById("hostedRegId")?.value || "").trim();
+    if (!path || !slug) return;
+
+    applyBtn.disabled = true;
+    applyBtn.textContent = "Writing…";
+    const tok = controlToken();
+    try {
+      const r = await fetch("/api/leco/ai-analyze/write", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Control-Token": tok },
+        body: JSON.stringify({ path, slug, files: _generatedFiles }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        const targetLabel = d.target || "";
+        logEl.innerHTML += `\n<span class="ai-ok">✓ ${d.written.length} files written to ${esc(targetLabel)}</span>\n`;
+        d.written.forEach((w) => {
+          logEl.innerHTML += `<span class="ai-file">  ${w.action}: ${esc(w.name)}</span>\n`;
+        });
+        // Populate YAML textareas if we generated them
+        const mYaml = _generatedFiles["leco.app.yaml"];
+        const lYaml = _generatedFiles["leco.yaml"];
+        if (mYaml) {
+          const ta = document.getElementById("hostedRegManifestYaml");
+          if (ta) ta.value = mYaml;
+        }
+        if (lYaml) {
+          const ta = document.getElementById("hostedRegLocalhostYaml");
+          if (ta) ta.value = lYaml;
+        }
+        metaEl.textContent = "Files written ✓";
+        actEl.classList.add("is-hidden");
+        if (summaryEl) {
+          summaryEl.innerHTML = '<strong>✓ Configs written to hosting/app-available/' + esc(slug) + '/</strong>';
+          summaryEl.className = "ai-analysis-panel__summary ai-analysis-panel__summary--ok";
+        }
+      } else {
+        logEl.innerHTML += `<span class="ai-err">Write failed: ${esc(d.error)}</span>\n`;
+      }
+    } catch (e) {
+      logEl.innerHTML += `<span class="ai-err">Write error: ${esc(e.message)}</span>\n`;
+    }
+    applyBtn.disabled = false;
+    applyBtn.textContent = "Apply generated configs";
+  });
+
+  /** Discard generated files. */
+  discBtn?.addEventListener("click", () => {
+    _generatedFiles = null;
+    actEl.classList.add("is-hidden");
+    logEl.innerHTML += '<span class="ai-err">Discarded generated files.</span>\n';
+    metaEl.textContent = "Discarded";
+    setPanelState("");
+    if (summaryEl) { summaryEl.classList.add("is-hidden"); }
+  });
+}
+
 
 bootstrap();

@@ -87,7 +87,7 @@
         <h2 class="tab-heading">Infrastructure</h2>
         <p class="tab-lead muted small">
           <strong>1 · Health</strong> (host &amp; Docker) → <strong>2 · Services</strong> (probed stack &amp; hubs) → <strong>3 · Trends</strong> →
-          <strong>4 · Cloudflare local</strong> → <strong>5 · Ollama</strong> → <strong>6 · Full inventory</strong>.
+          <strong>4 · Cloudflare local</strong> → <strong>5 · Ollama</strong> → <strong>6 · AI onboarding</strong> → <strong>7 · Full inventory</strong>.
         </p>
 
         <div class="infra-group">
@@ -181,8 +181,98 @@
           </div>
         </div>
 
+        <div class="infra-group" id="aiSettingsGroup">
+          <h3 class="infra-group__title">6 · AI-assisted onboarding</h3>
+          <p class="infra-group__lead muted small">
+            Configure AI provider for automatic application analysis during registration.
+            Supports <strong>local</strong> (Ollama) or <strong>cloud</strong> (OpenAI, Anthropic, Google, OpenAI-compatible) providers.
+            API keys are stored server-side only — never sent to the browser.
+          </p>
+          <div class="infra-group__block">
+            <h4 class="infra-subhead">Provider settings</h4>
+            <div class="ai-settings">
+              <div class="ai-settings__row">
+                <label class="ai-settings__field">
+                  <span class="ai-settings__label">AI provider</span>
+                  <select id="aiProviderSelect" aria-label="AI provider">
+                    <option value="none">No AI (deterministic only)</option>
+                    <option value="ollama">Ollama (local SLM)</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="anthropic">Anthropic</option>
+                    <option value="google">Google Gemini</option>
+                    <option value="openai-compatible">OpenAI-compatible endpoint</option>
+                    <option value="hybrid">Hybrid (local SLM + cloud LLM)</option>
+                  </select>
+                </label>
+                <label class="ai-settings__field" id="aiModelField">
+                  <span class="ai-settings__label">Model</span>
+                  <span class="ai-settings__model-row">
+                    <select id="aiModelSelect" aria-label="Model">
+                      <option value="">— select provider first —</option>
+                    </select>
+                    <input type="text" id="aiModelCustom" placeholder="or type model name" autocomplete="off" />
+                  </span>
+                </label>
+              </div>
+              <div class="ai-settings__row" id="aiKeyRow" style="display:none">
+                <label class="ai-settings__field ai-settings__field--grow">
+                  <span class="ai-settings__label">API key</span>
+                  <input type="password" id="aiApiKeyInput" autocomplete="off" placeholder="sk-… / key-… (stored server-side)" />
+                </label>
+              </div>
+              <div class="ai-settings__row" id="aiBaseUrlRow" style="display:none">
+                <label class="ai-settings__field ai-settings__field--grow">
+                  <span class="ai-settings__label">Base URL</span>
+                  <input type="text" id="aiBaseUrlInput" autocomplete="off" placeholder="http://localhost:8080/v1" />
+                </label>
+              </div>
+              <div class="ai-settings__row" id="aiTimeoutRow" style="display:none">
+                <label class="ai-settings__field">
+                  <span class="ai-settings__label">Request timeout (seconds)</span>
+                  <input type="number" id="aiTimeoutInput" min="10" max="900" step="10" value="180" autocomplete="off" placeholder="180" />
+                </label>
+                <span class="ai-settings__timeout-hint muted small">
+                  Local SLMs on CPU may need 300–600 s for large codebases. Cloud APIs typically need 60–180 s.
+                </span>
+              </div>
+              <div class="ai-settings__row ai-settings__hybrid-row" id="aiHybridRow" style="display:none">
+                <label class="ai-settings__field">
+                  <span class="ai-settings__label">Local SLM (summarizer)</span>
+                  <select id="aiHybridSlmSelect" aria-label="Local SLM">
+                    <option value="ollama" selected>Ollama</option>
+                    <option value="openai-compatible">OpenAI-compatible local</option>
+                  </select>
+                </label>
+                <label class="ai-settings__field">
+                  <span class="ai-settings__label">Cloud LLM (analyzer)</span>
+                  <select id="aiHybridLlmSelect" aria-label="Cloud LLM">
+                    <option value="openai" selected>OpenAI</option>
+                    <option value="anthropic">Anthropic</option>
+                    <option value="google">Google Gemini</option>
+                  </select>
+                </label>
+                <label class="ai-settings__field ai-settings__field--grow">
+                  <span class="ai-settings__label">Cloud API key</span>
+                  <input type="password" id="aiHybridLlmKey" autocomplete="off" placeholder="Cloud provider API key (stored server-side)" />
+                </label>
+              </div>
+              <p class="muted small ai-settings__hybrid-hint is-hidden" id="aiHybridHint">
+                <strong>Hybrid flow:</strong> Local SLM pre-summarizes your app's source code (fast, free, private),
+                then Cloud LLM produces the structured analysis from that summary (accurate, fewer tokens = lower cost).
+              </p>
+              <div class="ai-settings__toolbar">
+                <button type="button" id="aiSettingsSave" class="ctrl-act ctrl-act--ops">Save settings</button>
+                <button type="button" id="aiSettingsTest" class="ctrl-act ctrl-act--safe">Test connection</button>
+                <button type="button" id="aiModelsRefresh" class="ctrl-act ctrl-act--safe">Refresh models</button>
+                <span id="aiSettingsStatus" class="ai-settings__status muted small"></span>
+              </div>
+              <pre id="aiSettingsTestOutput" class="hosted-reg-pre is-hidden" aria-live="polite"></pre>
+            </div>
+          </div>
+        </div>
+
         <div class="infra-group infra-group--inventory">
-          <h3 class="infra-group__title">6 · Docker inventory</h3>
+          <h3 class="infra-group__title">7 · Docker inventory</h3>
           <p class="infra-group__lead muted small">Every container on this Docker host (broader than the managed service map above).</p>
           <div class="infra-group__block">
             <h4 class="infra-subhead">All containers</h4>
@@ -392,6 +482,53 @@
               <input type="checkbox" id="hostedRegDeployAfter" checked />
               After register, run <strong><code>leco-app deploy</code></strong> when the manifest has <code>dockerCompose</code> (<code>docker compose up -d --build</code>). Workers-only apps (no compose in <code>leco.yaml</code>) skip deploy automatically. Uncheck if you only want registry + Traefik.
             </label>
+            <div class="ai-toggle-bar" id="aiToggleBar">
+              <label class="ai-toggle">
+                <input type="checkbox" id="aiAssistToggle" />
+                <span class="ai-toggle__switch"></span>
+                <span class="ai-toggle__text">AI-assisted onboarding</span>
+              </label>
+              <span class="ai-toggle__provider muted small" id="aiToggleProvider">No provider configured</span>
+              <button type="button" id="aiToggleSettings" class="ctrl-act ctrl-act--safe ai-toggle__config-btn">AI Settings</button>
+            </div>
+            <div class="ai-analysis-panel is-hidden" id="aiAnalysisPanel">
+              <div class="ai-analysis-panel__header">
+                <span class="ai-analysis-panel__title">AI analysis</span>
+                <span class="ai-analysis-panel__meta muted small" id="aiAnalysisMeta"></span>
+                <span class="ai-analysis-panel__timer muted small" id="aiAnalysisTimer"></span>
+              </div>
+              <!-- Progress track (animated bar, visible while running) -->
+              <div class="ai-analysis-panel__track is-hidden" id="aiAnalysisTrack">
+                <span class="ai-analysis-panel__fill"></span>
+              </div>
+              <!-- Step indicators -->
+              <div class="ai-analysis-panel__steps is-hidden" id="aiAnalysisSteps">
+                <div class="ai-step" id="aiStep1" data-step="1">
+                  <span class="ai-step__icon">①</span>
+                  <span class="ai-step__label">Collect</span>
+                  <span class="ai-step__detail muted small" id="aiStep1Detail"></span>
+                </div>
+                <div class="ai-step" id="aiStep2" data-step="2">
+                  <span class="ai-step__icon">②</span>
+                  <span class="ai-step__label">Analyze</span>
+                  <span class="ai-step__detail muted small" id="aiStep2Detail"></span>
+                </div>
+                <div class="ai-step" id="aiStep3" data-step="3">
+                  <span class="ai-step__icon">③</span>
+                  <span class="ai-step__label">Generate</span>
+                  <span class="ai-step__detail muted small" id="aiStep3Detail"></span>
+                </div>
+              </div>
+              <pre class="ai-analysis-panel__log" id="aiAnalysisLog" aria-live="polite"></pre>
+              <!-- Summary bar (shown on completion) -->
+              <div class="ai-analysis-panel__summary is-hidden" id="aiAnalysisSummary"></div>
+              <div class="ai-analysis-panel__actions is-hidden" id="aiAnalysisActions">
+                <button type="button" id="aiAnalysisApply" class="ctrl-act ctrl-act--ops">Apply generated configs</button>
+                <button type="button" id="aiAnalysisDiscard" class="ctrl-act ctrl-act--caution">Discard</button>
+                <span class="ai-analysis-panel__files muted small" id="aiAnalysisFiles"></span>
+              </div>
+            </div>
+
             <div class="hosted-reg-urls" id="hostedRegUrlsBlock" aria-label="Public URLs for localhost profile">
               <p class="muted small hosted-reg-urls__lead">
                 <strong>Public URLs</strong> (<code>leco.yaml</code> → <code>urls</code>): edit all endpoints here. Suggested values appear after <strong>Detect</strong> or <strong>Use suggested</strong>. <strong>Load from profile YAML</strong> reads the textarea; <strong>Write into profile YAML</strong> updates the textarea (then <strong>Save YAML</strong> to persist).

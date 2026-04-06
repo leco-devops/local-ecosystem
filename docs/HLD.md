@@ -62,6 +62,35 @@ flowchart LR
 - Operator removes/reset app in Hosted apps.
 - Offboard path uses `ecosystem-unregister`, local resource cleanup, route cleanup, and registry removal.
 
+### D. AI-assisted onboarding
+
+- Operator toggles "AI Assist" in the registration wizard or AI Settings panel.
+- Provider selection: **No AI** (deterministic), **Ollama** (local SLM), **OpenAI / Anthropic / Google / OpenAI-Compatible** (cloud), **Hybrid** (local SLM + cloud LLM).
+- **Hybrid mode**: Local SLM (e.g. Ollama/qwen2.5-coder) pre-summarizes source files (fast, free, private) → Cloud LLM (e.g. OpenAI/gpt-4o-mini) analyzes the condensed summary (accurate, ~3-5x fewer tokens = lower cost). Combines speed, accuracy, and cost efficiency.
+- 3-phase pipeline: **Collect** (smart file reading within token budget) → **Analyze** (single or two-stage LLM call, structured JSON) → **Generate** (deterministic Python templates).
+- AI never writes raw text to disk — it produces structured JSON that drives Python template generators.
+- Config files produced: `leco.yaml`, `leco.app.yaml`, `docker-compose.yml`, `docker-compose.leco-hosting.yml`, `leco-docker-preload.js`, `conf/varnish/default.vcl`.
+- API keys stored server-side in `config/ai-providers.yaml` (gitignored, chmod 600). Browser only sees masked keys.
+- Streaming NDJSON to dashboard mirrors existing registration stream pattern.
+
+```mermaid
+flowchart LR
+  Wizard["Registration Wizard"]
+  AiAPI["AI Endpoints"]
+  Collect["File Collector"]
+  SLM["Local SLM (Ollama)"]
+  LLM["Cloud LLM (OpenAI/etc)"]
+  Gen["Template Generator"]
+  Disk["App Directory"]
+
+  Wizard -->|toggle AI| AiAPI
+  AiAPI --> Collect
+  Collect -->|token-budgeted files| SLM
+  SLM -->|condensed summary| LLM
+  LLM -->|structured JSON| Gen
+  Gen -->|deterministic configs| Disk
+```
+
 ## 5) Non-functional goals
 
 - Deterministic local behavior and path handling (`/project`, `workspace-parent`, hosted materialization).
@@ -80,3 +109,6 @@ flowchart LR
 - Routing drift: keep Traefik fragment generation centralized in CLI.
 - Path drift: standardize on `hosting/app-available` and registry-relative manifests.
 - Destructive actions: require `DASHBOARD_CONTROL_TOKEN` in sensitive environments.
+- AI hallucination: AI produces structured data only; deterministic templates generate all config files. All output is human-reviewable before write.
+- API key leakage: keys stored server-side (yaml, chmod 600, gitignored), never sent to browser. Masked display only.
+- Token budget overrun: adaptive budgets per provider (12K local, 30-50K cloud) with priority-tiered file collection.
