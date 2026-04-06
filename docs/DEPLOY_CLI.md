@@ -240,20 +240,28 @@ The **LEco DevOps** **Control** tab lists **core** targets from `dashboard/contr
 
 When you **delete** containers with **`leco-app offload`** or **`docker compose down`**, they disappear from Docker on the next refresh; remove the registry entry with **`ecosystem-unregister`** so the Hosted apps entry goes away too.
 
-## Offload — remove app from localhost
+## Offload — remove app from localhost (staging)
 
-Tear down the compose stack and optionally strip this app’s routers/services from Traefik’s writable merge file (default **`hosting/traefik/dynamic.yml`**):
+Tear down the compose stack and strip this app’s routers/services from Traefik’s writable merge file. Mirrors the dashboard **staging** button. Volumes are removed by default (`-v`); use `--no-volumes` to keep data.
+
+Traefik `dynamic.yml` is **auto-detected** from `--ecosystem-root` / `LECO_ECOSYSTEM_ROOT` when `--traefik-dynamic` is not explicitly given:
 
 ```bash
 cd /path/to/your/app
-# Plan only (default merge file when -E / LECO_ECOSYSTEM_ROOT is set)
-leco-app offload --dry-run --traefik-dynamic /path/to/local-ecosystem/hosting/traefik/dynamic.yml
+# Auto-detect Traefik dynamic.yml from ecosystem root:
+leco-app offload -E /path/to/local-ecosystem
 
-# Execute: Traefik keys first (backup `.yml.bak`), then docker compose down
+# Or with explicit Traefik path:
 leco-app offload --traefik-dynamic /path/to/local-ecosystem/hosting/traefik/dynamic.yml
 
-# Also remove compose volumes
-leco-app offload -v --traefik-dynamic /path/to/local-ecosystem/hosting/traefik/dynamic.yml -y
+# Plan only (no file writes, no compose down):
+leco-app offload --dry-run -E /path/to/local-ecosystem
+
+# Keep volumes (don’t wipe data):
+leco-app offload --no-volumes -E /path/to/local-ecosystem
+
+# Skip confirmation:
+leco-app offload -y -E /path/to/local-ecosystem
 ```
 
 Traefik keys are derived from **`routing`** the same way as **`leco-app traefik-fragment`** (e.g. `myapp-myhost-lh-api-http`). If you **renamed keys** when merging into `dynamic.yml`, add explicit lists to the manifest:
@@ -267,9 +275,30 @@ traefikCleanup:
     - myapp-frontend-service
 ```
 
-Compose-only offload (no Traefik file): `leco-app down` or `leco-app offload` without `--traefik-dynamic`.
+Compose-only offload (no Traefik file): `leco-app down` or `leco-app offload` without `-E` and without `--traefik-dynamic`.
 
 **LEco DevOps — Hosted apps:** **Remove** / **Reset** and **`leco-app ecosystem-unregister`** (default) run **local CF cleanup** first (when enabled), then **`docker compose down`** when the manifest defines compose and the compose file exists, then Traefik strip and registry/hosting removal. Use **`--no-compose-down`** only if you must unregister without touching containers; **`--compose-volumes`** matches **`leco-app down -v`** (used by LEco DevOps **Reset**).
+
+## Scaffold — generate app-available files from templates
+
+The **`scaffold`** command copies a sample template to `hosting/app-available/<slug>/` and replaces all generic placeholders (`my-app`, `/path/to/your/app`, `app-network`, volume names) with your slug-specific values:
+
+```bash
+# Preview what would be created:
+leco-app scaffold myapp -E /path/to/local-ecosystem --dry-run
+
+# Create with all replacements:
+leco-app scaffold myapp -E /path/to/local-ecosystem \
+  --source-path /Users/you/GitHub/YourApp \
+  --health-path /alb-health-check
+
+# Use a different template:
+leco-app scaffold myapp -E /path/to/local-ecosystem --template sample-compose-only
+```
+
+Available templates are listed in `hosting/samples/`. The default template is **`sample-node-varnish-multiprocess`** (multi-process Node.js + Varnish + MongoDB + Redis). After scaffolding, edit the generated files (especially `docker-compose.yml` source paths and `conf/varnish/default.vcl`), then register and deploy.
+
+The `init` wizard also detects `conf/` directories, `leco-docker-preload.js`, and `docker-compose.leco-hosting.yml` hosting overlays — it will offer to add the overlay to `additionalComposeFilesFromManifest` automatically.
 
 ## Relationship to local-ecosystem
 

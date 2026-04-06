@@ -442,6 +442,39 @@ def cmd_init(
     if compose_file:
         docker_spec = DockerComposeSpec(compose_file=compose_file, env_file=env_file)
 
+    # ── Detect conf/ directory and leco-docker-preload.js ──────────────────
+    conf_dir = root / "conf"
+    preloader = root / "leco-docker-preload.js"
+    if conf_dir.is_dir():
+        conf_services = sorted([d.name for d in conf_dir.iterdir() if d.is_dir()])
+        if conf_services:
+            typer.secho(
+                f"Detected conf/ directory with service configs: {', '.join(conf_services)}",
+                fg=typer.colors.GREEN,
+            )
+            typer.echo("  These will be bind-mounted :ro into containers via docker-compose.yml.")
+    if preloader.is_file():
+        typer.secho(
+            "Detected leco-docker-preload.js — runtime config patcher (Module._load).",
+            fg=typer.colors.GREEN,
+        )
+        typer.echo("  Ensure docker-compose.leco-hosting.yml mounts it to /opt/leco/ and uses -r flag.")
+
+    hosting_overlay = root / "docker-compose.leco-hosting.yml"
+    if hosting_overlay.is_file() and docker_spec:
+        if not non_interactive:
+            add_overlay = typer.confirm(
+                "Detected docker-compose.leco-hosting.yml — add as additionalComposeFilesFromManifest?",
+                default=True,
+            )
+        else:
+            add_overlay = True
+        if add_overlay:
+            overlay_name = "docker-compose.leco-hosting.yml"
+            if overlay_name not in [str(f) for f in docker_spec.additional_compose_files_from_manifest]:
+                docker_spec.additional_compose_files_from_manifest.append(overlay_name)
+                typer.echo(f"  Added {overlay_name} to additionalComposeFilesFromManifest.")
+
     cf_spec: CloudflareSpec | None = None
     if wd.config_path:
         include = non_interactive or typer.confirm(
@@ -787,26 +820,48 @@ def cmd_down(
 def cmd_offload(
     cwd: Path = Path("."),
     manifest: ManifestPathOption = None,
-    volumes: Annotated[bool, typer.Option("--volumes", "-v", help="docker compose down -v (delete volumes)")] = False,
+    volumes: Annotated[bool, typer.Option("--volumes", "-v", help="docker compose down -v (delete volumes)")] = True,
+    no_volumes: Annotated[bool, typer.Option("--no-volumes", help="Keep volumes (override default -v)")] = False,
     traefik_dynamic: Annotated[
         Optional[Path],
         typer.Option(
             "--traefik-dynamic",
-            help="Remove this app's routers/services from Traefik file-provider YAML (e.g. ../local-ecosystem/hosting/traefik/dynamic.yml)",
+            help="Path to Traefik file-provider YAML (auto-detected from -E / LECO_ECOSYSTEM_ROOT when omitted)",
         ),
     ] = None,
+    ecosystem_root: EcosystemRootOption = None,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Print plan only; no compose or file changes")] = False,
     yes: Annotated[bool, typer.Option("-y", "--yes", help="Skip confirmation")] = False,
 ) -> None:
-    """Remove app from localhost: optional Traefik routes + docker compose down."""
+    """Staging / offload: strip Traefik routes + docker compose down -v (keeps files in app-available/).
+
+    Mirrors the dashboard "staging" button.  Tears down all containers and volumes by default
+    and removes Traefik dynamic routes.  Files in hosting/app-available/ are kept intact —
+    hit ``leco-app deploy`` or the dashboard Recreate button to bring the app back.
+
+    Traefik dynamic.yml is auto-detected from --ecosystem-root / LECO_ECOSYSTEM_ROOT when
+    --traefik-dynamic is not explicitly given.
+    """
     mp = _find_manifest(cwd, manifest)
     m = load_effective_manifest(mp)
+
+    use_volumes = volumes and not no_volumes
 
     has_compose = bool(m.docker_compose)
     rkeys, skeys = manifest_traefik_keys(m)
     has_traefik_keys = bool(rkeys or skeys)
 
-    if traefik_dynamic and not has_traefik_keys:
+    # Auto-detect Traefik dynamic.yml from ecosystem root
+    resolved_traefik: Path | None = traefik_dynamic
+    if resolved_traefik is None and has_traefik_keys:
+        er = resolve_ecosystem_root(ecosystem_root)
+        if er is not None:
+            candidate = er / "hosting" / "traefik" / "dynamic.yml"
+            if candidate.is_file():
+                resolved_traefik = candidate
+                typer.echo(f"Auto-detected Traefik dynamic: {resolved_traefik}")
+
+    if resolved_traefik and not has_traefik_keys:
         typer.secho(
             "Manifest has no routing-derived Traefik keys and no traefikCleanup block — "
             "nothing to remove from dynamic.yml (add traefikCleanup.routers/services if you renamed keys).",
@@ -814,9 +869,10 @@ def cmd_offload(
             err=True,
         )
 
-    if not has_compose and not traefik_dynamic:
+    if not has_compose and not resolved_traefik:
         typer.secho(
-            "Nothing to do: manifest has no dockerCompose and --traefik-dynamic not set.",
+            "Nothing to do: manifest has no dockerCompose and no Traefik dynamic.yml found "
+            "(pass --traefik-dynamic or set LECO_ECOSYSTEM_ROOT).",
             fg=typer.colors.RED,
             err=True,
         )
@@ -824,15 +880,15 @@ def cmd_offload(
 
     if not dry_run and not yes:
         parts = []
-        if traefik_dynamic and has_traefik_keys:
-            parts.append(f"edit Traefik file ({len(rkeys)} routers, {len(skeys)} services)")
+        if resolved_traefik and has_traefik_keys:
+            parts.append(f"strip Traefik routes ({len(rkeys)} routers, {len(skeys)} services)")
         if has_compose:
-            parts.append("docker compose down" + (" -v" if volumes else ""))
+            parts.append("docker compose down --remove-orphans" + (" -v" if use_volumes else ""))
         if parts and not typer.confirm(f"Offload: {'; '.join(parts)} — continue?", default=False):
             raise typer.Exit(0)
 
-    if traefik_dynamic and has_traefik_keys:
-        tf = traefik_dynamic.resolve()
+    if resolved_traefik and has_traefik_keys:
+        tf = resolved_traefik.resolve()
         if not tf.is_file():
             typer.secho(f"Not a file: {tf}", fg=typer.colors.RED, err=True)
             raise typer.Exit(1)
@@ -857,10 +913,10 @@ def cmd_offload(
 
     if has_compose:
         if dry_run:
-            typer.echo(f"[dry-run] docker compose down{' -v' if volumes else ''} (app {m.name}, {mp.parent})")
+            typer.echo(f"[dry-run] docker compose down --remove-orphans{' -v' if use_volumes else ''} (app {m.name}, {mp.parent})")
         else:
             args = ["down", "--remove-orphans"]
-            if volumes:
+            if use_volumes:
                 args.append("-v")
             code = run_compose(m, mp, args)
             if code == 0:
@@ -1173,6 +1229,129 @@ def cmd_ecosystem_unregister(
     else:
         typer.secho(f"No entry with id {app_id!r}", fg=typer.colors.YELLOW, err=True)
         raise typer.Exit(1)
+
+
+@app.command("scaffold")
+def cmd_scaffold(
+    slug: Annotated[str, typer.Argument(help="Application slug (used for directory name, container prefix, hostname)")],
+    template: Annotated[
+        str,
+        typer.Option(
+            "--template",
+            "-t",
+            help="Sample template directory name under hosting/samples/ (e.g. sample-node-varnish-multiprocess)",
+        ),
+    ] = "sample-node-varnish-multiprocess",
+    ecosystem_root: EcosystemRootOption = None,
+    source_path: Annotated[
+        Optional[str],
+        typer.Option(
+            "--source-path",
+            help="Absolute path to upstream source repo (replaces /path/to/your/app placeholder)",
+        ),
+    ] = None,
+    health_path: Annotated[
+        str,
+        typer.Option("--health-path", help="Health-check URL path"),
+    ] = "/health",
+    network_name: Annotated[
+        Optional[str],
+        typer.Option("--network-name", help="Docker bridge network name (default: <slug>-network)"),
+    ] = None,
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Print what would be created; no file writes")] = False,
+    force: Annotated[bool, typer.Option("--force", help="Overwrite existing target directory")] = False,
+) -> None:
+    """Generate hosting/app-available/<slug>/ from a sample template with placeholder replacement.
+
+    Copies the selected sample and replaces generic placeholders (my-app, /path/to/your/app,
+    app-network, app_*) with your slug-specific values.  After scaffolding, edit the generated
+    files — especially docker-compose.yml paths and the Varnish VCL — then register the app.
+    """
+    er = resolve_ecosystem_root(ecosystem_root)
+    if er is None:
+        typer.secho(
+            "Pass --ecosystem-root / -E or set LECO_ECOSYSTEM_ROOT.",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    samples_dir = er / "hosting" / "samples"
+    src_dir = samples_dir / template
+    if not src_dir.is_dir():
+        available = [d.name for d in samples_dir.iterdir() if d.is_dir()] if samples_dir.is_dir() else []
+        typer.secho(f"Template not found: {src_dir}", fg=typer.colors.RED, err=True)
+        if available:
+            typer.echo(f"Available templates: {', '.join(sorted(available))}")
+        raise typer.Exit(1)
+
+    target_dir = er / "hosting" / "app-available" / slug
+    if target_dir.exists() and not force:
+        typer.secho(
+            f"Target already exists: {target_dir}  (use --force to overwrite)",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    net = network_name or f"{slug}-network"
+    src = source_path or "/path/to/your/app"
+
+    # Replacement map: order matters — longer strings first to avoid partial matches
+    replacements: list[tuple[str, str]] = [
+        ("my-app-server", f"{slug}-server"),
+        ("my-app-varnish", f"{slug}-varnish"),
+        ("my-app-worker", f"{slug}-worker"),
+        ("my-app-mongo", f"{slug}-mongo"),
+        ("my-app-redis", f"{slug}-redis"),
+        ("my-app-cron", f"{slug}-cron"),
+        ("my-app.lh", f"{slug}.lh"),
+        ("my-app", slug),
+        ("app-network", net),
+        ("app_mongo_data", f"{slug}_mongo_data"),
+        ("app_redis_data", f"{slug}_redis_data"),
+        ("app_node_modules", f"{slug}_node_modules"),
+        ("/path/to/your/app", src),
+    ]
+
+    files_to_write: list[tuple[Path, str]] = []
+    for root_path, dirs, files in os.walk(src_dir):
+        rel_root = Path(root_path).relative_to(src_dir)
+        for fname in files:
+            if fname == "README.md":
+                continue  # skip sample readme
+            src_file = Path(root_path) / fname
+            content = src_file.read_text(encoding="utf-8")
+            for old, new in replacements:
+                content = content.replace(old, new)
+            dest = target_dir / rel_root / fname
+            files_to_write.append((dest, content))
+
+    if dry_run:
+        typer.echo(f"Would create {target_dir}/ with {len(files_to_write)} file(s):")
+        for fp, _ in files_to_write:
+            typer.echo(f"  {fp.relative_to(target_dir)}")
+        typer.echo(f"\nPlaceholder replacements:")
+        for old, new in replacements:
+            typer.echo(f"  {old} → {new}")
+        raise typer.Exit(0)
+
+    if target_dir.exists() and force:
+        shutil.rmtree(target_dir)
+
+    for fp, content in files_to_write:
+        fp.parent.mkdir(parents=True, exist_ok=True)
+        fp.write_text(content, encoding="utf-8")
+        typer.echo(f"  {fp.relative_to(target_dir)}")
+
+    typer.secho(f"\nScaffolded {len(files_to_write)} file(s) → {target_dir}", fg=typer.colors.GREEN)
+    typer.echo(f"\nNext steps:")
+    typer.echo(f"  1. Edit docker-compose.yml — set source path, adjust images and service names")
+    typer.echo(f"  2. Edit conf/varnish/default.vcl — paste your production VCL and apply Docker adaptations")
+    typer.echo(f"  3. Edit leco-docker-preload.js — match config key names to your app's config.js exports")
+    typer.echo(f"  4. Edit docker-compose.leco-hosting.yml — adjust LECO_* env vars and command scripts")
+    typer.echo(f"  5. Register: leco-app ecosystem-register --cwd {target_dir} -E {er}")
+    typer.echo(f"  6. Deploy: leco-app deploy --cwd {target_dir}")
 
 
 @app.command("cf-deploy")

@@ -28,11 +28,33 @@ Client → Traefik (my-app.lh) → Varnish (:80) → Express (:3000) → MongoDB
 
 ## Quick start
 
+**Option A — CLI scaffold (recommended):**
+
+```bash
+leco-app scaffold myapp -E /path/to/local-ecosystem \
+  --source-path /abs/path/to/upstream/repo \
+  --health-path /alb-health-check
+```
+
+This copies all template files, replaces `my-app` → `myapp` throughout (container names, volumes, hostnames, network), and prints a next-steps checklist. Use `--dry-run` to preview.
+
+**Option B — manual copy:**
+
 1. Copy this directory to `hosting/app-available/<your-slug>/`
 2. Edit every file — replace `my-app` with your slug, adjust paths and service names
 3. Copy your production VCL to `conf/varnish/default.vcl` and apply Docker adaptations (see comments in file)
+
+**Then register and deploy:**
+
 4. Open the dashboard → **Register application** → select your app → **Register**
 5. Hit **Recreate** from the control panel
+
+Or from the CLI:
+
+```bash
+leco-app ecosystem-register --cwd hosting/app-available/myapp -E /path/to/local-ecosystem --merge-traefik
+leco-app deploy --cwd hosting/app-available/myapp
+```
 
 ## Key patterns
 
@@ -60,6 +82,12 @@ The primary service (`server`) runs `npm install` which populates the shared `ap
 ### Staging (offload)
 
 The dashboard **staging** button tears down all containers and volumes (`docker compose down -v --remove-orphans`) and strips Traefik routes, but keeps all files in `hosting/app-available/`. Hit **Recreate** to bring it back.
+
+From the CLI (mirrors the dashboard staging button):
+
+```bash
+leco-app offload --cwd hosting/app-available/myapp -E /path/to/local-ecosystem
+```
 
 ## Customisation checklist
 

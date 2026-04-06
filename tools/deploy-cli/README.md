@@ -76,8 +76,13 @@ leco-app status
 leco-app logs -f
 leco-app down              # compose down only
 
-# Remove app + Traefik routes (atomic write, then docker compose down)
-leco-app offload --traefik-dynamic /path/to/local-ecosystem/traefik/dynamic.yml
+# Staging / offload: strip Traefik routes + compose down -v (auto-detects traefik/dynamic.yml from -E)
+leco-app offload --cwd hosting/app-available/myapp -E /path/to/local-ecosystem
+# Or with explicit Traefik path:
+leco-app offload --traefik-dynamic /path/to/local-ecosystem/hosting/traefik/dynamic.yml
+
+# Scaffold a new app from the multi-process Node+Varnish template:
+leco-app scaffold myapp -E /path/to/local-ecosystem --source-path /abs/path/to/source
 
 leco-app traefik-fragment  # print YAML to paste into traefik/dynamic.yml
 leco-app traefik-fragment -o /tmp/traefik-snippet.yml
@@ -120,13 +125,14 @@ Written next to the app root (or path given to `--out`). Uses **camelCase** keys
 | Command | Description |
 |---------|-------------|
 | `onboard` | **Deploy + `ecosystem-register` + merge `routing.entries` into `traefik/dynamic.yml`** (needs `-E` or `LECO_ECOSYSTEM_ROOT`) |
-| `init` | Detect compose + wrangler; prompts; write manifest + `leco.yaml` stub; `--onboard -E …` adds register + Traefik merge after deploy |
+| `init` | Detect compose + wrangler + `conf/` + `leco-docker-preload.js` + hosting overlay; prompts; write manifest + `leco.yaml` stub; `--onboard -E …` adds register + Traefik merge after deploy |
 | `detect` | Print JSON detection result |
 | `run-hooks` | Run `prepare`, `build`, or `preStart` from merged localhost profile |
 | `deploy` | `docker compose up -d --build`; then local KV/R2/D1 from wrangler when **`cloudflare.wranglerConfig`** is set and policy allows (`--no-provision-local-cf` to skip) |
 | `stop` | `docker compose stop` |
 | `down` | `docker compose down` (`-v` optional) |
-| `offload` | `compose down` + optional `--traefik-dynamic` to strip routes (see DEPLOY_CLI.md) |
+| `offload` | **Staging**: strip Traefik routes (auto-detected from `-E` / `LECO_ECOSYSTEM_ROOT`) + `compose down -v --remove-orphans` (keeps `app-available/` files). Use `--no-volumes` to keep data. Mirrors dashboard **staging** button |
+| `scaffold` | Generate `hosting/app-available/<slug>/` from a sample template with placeholder replacement (`--template`, `--source-path`, `--dry-run`) |
 | `ecosystem-register` | Add app to `local-ecosystem/config/leco-registry.yaml`; also provisions local KV/R2/D1 from Wrangler unless `--no-provision-local-cf`; **`--merge-traefik`** updates `traefik/dynamic.yml` |
 | `provision-local-cf` | Re-run KV/R2/D1 creation from manifest’s Wrangler config |
 | `ecosystem-unregister` | Remove registry id; **local CF teardown before `compose down`** (dedicated adapters); then Traefik strip from `traefik/dynamic.yml` (`--no-strip-traefik` / `--no-clean-local-cf` / `--no-compose-down` to skip parts) |
