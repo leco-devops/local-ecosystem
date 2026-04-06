@@ -1082,7 +1082,7 @@ function serviceBrandUi() {
       return '<span class="svc-svg-icon"></span>';
     },
     partitionControlActions(actions) {
-      const d = ["remove", "reset"];
+      const d = ["remove", "reset", "staging"];
       const danger = (actions || []).filter((a) => d.includes(a));
       const safe = (actions || []).filter((a) => !d.includes(a));
       return { safe, danger };
@@ -1091,6 +1091,7 @@ function serviceBrandUi() {
       const a = (action || "").toLowerCase();
       const base = "ctrl-act";
       if (a === "remove" || a === "reset") return `${base} danger ctrl-act--destructive`;
+      if (a === "staging") return `${base} danger ctrl-act--caution`;
       if (a === "backup" || a === "start" || a === "unpause") return `${base} ctrl-act--safe`;
       if (a === "stop" || a === "pause") return `${base} ctrl-act--caution`;
       return `${base} ctrl-act--ops`;
@@ -4004,7 +4005,7 @@ function controlTargetCardHtml(SB, t) {
           </div>`;
 }
 
-const HOSTED_APP_ACTIONS = ["deploy", "recreate", "pause", "remove", "reset", "restart", "start", "stop", "unpause"];
+const HOSTED_APP_ACTIONS = ["deploy", "recreate", "pause", "remove", "reset", "restart", "staging", "start", "stop", "unpause"];
 
 function destroyHostedAppCharts() {
   ["cpu", "mem", "net"].forEach((k) => {

@@ -26,7 +26,7 @@ BACKUP_DIR = os.path.join(PROJECT_ROOT, ".local-eco-backups")
 os.makedirs(BACKUP_DIR, mode=0o755, exist_ok=True)
 
 ALLOWED_ACTIONS = frozenset(
-    {"start", "stop", "restart", "remove", "pause", "unpause", "deploy", "recreate", "reset", "backup"}
+    {"start", "stop", "restart", "remove", "pause", "unpause", "deploy", "recreate", "reset", "backup", "staging"}
 )
 
 # Subset passed as a shell function name after `source` (must be identifier-safe).
@@ -568,6 +568,25 @@ def _leco_stack_action(meta: dict, action: str) -> dict:
     if action == "unpause":
         code, log = _leco_compose_run(meta, ["unpause"], timeout=to)
         return {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
+    if action == "staging":
+        # Tear down containers + volumes but keep hosting config files.
+        # 1. docker compose down -v --remove-orphans
+        code, log = _leco_compose_run(meta, ["down", "-v", "--remove-orphans"], timeout=to)
+        # 2. Strip Traefik routes so the hostname is freed.
+        try:
+            from traefik_dynamic_file import read_dynamic, strip_router_service_keys
+            slug = str(meta.get("leco_slug") or "").strip()
+            if slug:
+                data = read_dynamic() or {}
+                http = data.get("http") or {}
+                rkeys = [k for k in (http.get("routers") or {}) if k.startswith(slug + "-")]
+                skeys = [k for k in (http.get("services") or {}) if k.startswith(slug + "-")]
+                if rkeys or skeys:
+                    strip_router_service_keys(rkeys, skeys)
+                    log += f"\nTraefik routes stripped for staging ({len(rkeys)} routers, {len(skeys)} services)."
+        except Exception as exc:
+            log += f"\nWarning: could not strip Traefik routes: {exc}"
+        return {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
     return {"ok": False, "error": f"unsupported action {action} for leco stack"}
 
 
@@ -645,6 +664,23 @@ def _stream_leco_stack_action(meta: dict, action: str) -> Iterator[dict[str, Any
         return
     if action == "unpause":
         code, log = yield from _stream_leco_compose(meta, ["unpause"], timeout=to)
+        yield _emit_done(code == 0, exit_code=code, log=log[-12000:])
+        return
+    if action == "staging":
+        code, log = yield from _stream_leco_compose(meta, ["down", "-v", "--remove-orphans"], timeout=to)
+        try:
+            from traefik_dynamic_file import read_dynamic, strip_router_service_keys
+            slug = str(meta.get("leco_slug") or "").strip()
+            if slug:
+                data = read_dynamic() or {}
+                http = data.get("http") or {}
+                rkeys = [k for k in (http.get("routers") or {}) if k.startswith(slug + "-")]
+                skeys = [k for k in (http.get("services") or {}) if k.startswith(slug + "-")]
+                if rkeys or skeys:
+                    strip_router_service_keys(rkeys, skeys)
+                    yield {"type": "log", "text": f"Traefik routes stripped for staging ({len(rkeys)} routers, {len(skeys)} services).\n"}
+        except Exception as exc:
+            yield {"type": "log", "text": f"Warning: could not strip Traefik routes: {exc}\n"}
         yield _emit_done(code == 0, exit_code=code, log=log[-12000:])
         return
     yield _emit_done(False, error=f"unsupported action {action} for leco stack")
