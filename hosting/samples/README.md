@@ -12,5 +12,6 @@ Copy a folder into **`hosting/app-available/<your-slug>/`** when you want a writ
 | **`sample-compose-only/`** | Compose-only baseline (no Wrangler). |
 | **`sample-wrangler-local-cf/`** | Full `wrangler.toml` + matching `wranglerBindingPreview` (3× KV, R2, D1). |
 | **`sample-leco-hosting-overlay/`** | Example **`docker-compose.leco-hosting.example.yml`** pattern for **`additionalComposeFilesFromManifest`** (no full app manifest). |
+| **`sample-node-varnish-multiprocess/`** | Multi-process Node.js + Varnish HTTP cache + MongoDB + Redis. Full 7-file template: runtime config preloader (`leco-docker-preload.js`), `conf/varnish/` custom service config, hosting overlay with apt-get/npm commands, shared node_modules volume. |
 
 See also **`../app-available/README.md`** for the materialization layout, **`../app-available/cvision/`** for a working overlay example, and **[docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md](../../docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md)** for Traefik troubleshooting.
