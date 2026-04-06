@@ -11,6 +11,7 @@ from typing import Any
 import yaml
 
 from leco_app.schema import ApplicationManifest
+from leco_app.traefik_dynamic_sanitize import prune_empty_http_maps
 from leco_app.traefik_fragment import (
     local_cf_adapter_host_aliases_fragment,
     merge_fragments,
@@ -28,7 +29,7 @@ def ensure_dynamic_yaml_file(p: Path) -> tuple[bool, str | None]:
         if bak.is_file():
             shutil.copy2(bak, p)
             return True, None
-        p.write_text("http:\n  routers: {}\n  services: {}\n", encoding="utf-8")
+        p.write_text("{}\n", encoding="utf-8")
         return True, None
     except OSError as exc:
         return False, str(exc)
@@ -36,6 +37,7 @@ def ensure_dynamic_yaml_file(p: Path) -> tuple[bool, str | None]:
 
 def atomic_write_dynamic_yaml(p: Path, data: dict[str, Any]) -> tuple[bool, str | None]:
     """Write YAML via temp file + os.replace."""
+    prune_empty_http_maps(data)
     text = yaml.safe_dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True)
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = ""

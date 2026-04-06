@@ -15,7 +15,9 @@ This document explains the LEco toolchain in one place: CLI, manifests, registry
 | `leco.app.yaml` | App bridge manifest (identity + profile link + root) |
 | `leco.yaml` | Profile/infrastructure details (routing, compose, cloudflare, urls) |
 | `config/leco-registry.yaml` | Registered app inventory consumed by LEco DevOps |
-| `traefik/dynamic.yml` | Route destination map for exposed hostnames |
+| `traefik/dynamic.yml` | Canonical stack routes in git (copied to **`hosting/traefik/01-stack-core.yml`** on Traefik start) |
+| `hosting/traefik/dynamic.yml` | Writable merge file for **`leco-app`** / LEco DevOps Routes (empty document **`{}`**, not **`http: {}`**) |
+| `hosting/app-available/<slug>/docker-compose.leco-hosting.yml` (optional) | Compose overlay via **`additionalComposeFilesFromManifest`** — LEco-only network/env without editing the upstream app repo |
 | `hosting/app-available/<slug>/` | Materialized writable hosted app layout |
 
 ## 3) Common lifecycle commands

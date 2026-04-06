@@ -224,6 +224,24 @@ def api_hosted_insights(slug: str):
     return jsonify(insights_for_slug(slug))
 
 
+@app.post("/api/hosted-apps/<slug>/validate-configuration")
+def api_hosted_validate_configuration(slug: str):
+    """Schema + on-disk path checks for manifest + profile (no control token)."""
+    from leco_control import leco_meta_for_slug
+    from leco_validate import validate_configuration_on_disk
+
+    meta = leco_meta_for_slug(slug.strip())
+    if not meta:
+        return jsonify({"ok": False, "error": "unknown or invalid app slug"}), 404
+    mp = meta.get("manifest_path")
+    if not mp:
+        return jsonify({"ok": False, "error": "no manifest path for this app"}), 400
+    payload = validate_configuration_on_disk(str(mp))
+    if payload.get("ok") is False:
+        return jsonify(payload), 400
+    return jsonify(payload)
+
+
 @app.get("/api/traefik/routes")
 def api_traefik_routes():
     from hosted_offboard import traefik_routes_with_hosted_hints
@@ -334,6 +352,38 @@ def api_leco_validate_yaml():
     return jsonify({"ok": True, **payload})
 
 
+@app.post("/api/leco/extract-localhost-urls")
+def api_leco_extract_localhost_urls():
+    """Parse ``urls`` from localhost profile YAML text (registration wizard)."""
+    from leco_localhost_urls import extract_localhost_urls
+
+    data = request.get_json(silent=True) or {}
+    ly = data.get("localhost_yaml")
+    if not isinstance(ly, str):
+        return jsonify({"ok": False, "error": "localhost_yaml string required"}), 400
+    urls = extract_localhost_urls(ly)
+    return jsonify({"ok": True, "urls": urls})
+
+
+@app.post("/api/leco/merge-localhost-urls")
+def api_leco_merge_localhost_urls():
+    """Merge URL rows into localhost profile YAML text (registration wizard)."""
+    from leco_localhost_urls import merge_localhost_urls
+
+    data = request.get_json(silent=True) or {}
+    ly = data.get("localhost_yaml")
+    urls = data.get("urls")
+    if not isinstance(ly, str):
+        return jsonify({"ok": False, "error": "localhost_yaml string required"}), 400
+    if not isinstance(urls, list):
+        return jsonify({"ok": False, "error": "urls array required"}), 400
+    try:
+        merged = merge_localhost_urls(ly, urls)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    return jsonify({"ok": True, "localhost_yaml": merged})
+
+
 @app.post("/api/leco/yaml-status")
 def api_leco_yaml_status():
     """Whether ``leco.app.yaml`` + localhost profile exist (no token)."""
@@ -410,6 +460,7 @@ def api_leco_register():
     path_rel = (data.get("path") or "").strip()
     app_id = (data.get("app_id") or data.get("id") or "").strip()
     label = (data.get("label") or "").strip()
+    url_overrides = data.get("url_overrides")
     if not path_rel or not app_id:
         return jsonify({"ok": False, "error": "path and app_id required"}), 400
     deploy_stack = bool(data.get("deploy_stack"))
@@ -418,6 +469,7 @@ def api_leco_register():
             path_rel,
             app_id,
             label,
+            url_overrides=url_overrides if isinstance(url_overrides, list) else None,
             deploy_stack=deploy_stack,
         )
     except ValueError as exc:
@@ -438,6 +490,7 @@ def api_leco_register_stream():
     path_rel = (data.get("path") or "").strip()
     app_id = (data.get("app_id") or data.get("id") or "").strip()
     label = (data.get("label") or "").strip()
+    url_overrides = data.get("url_overrides")
     if not path_rel or not app_id:
         return jsonify({"ok": False, "error": "path and app_id required"}), 400
     deploy_stack = bool(data.get("deploy_stack"))
@@ -449,6 +502,7 @@ def api_leco_register_stream():
                 path_rel,
                 app_id,
                 label,
+                url_overrides=url_overrides if isinstance(url_overrides, list) else None,
                 deploy_stack=deploy_stack,
             ):
                 yield json.dumps(ev, ensure_ascii=False) + "\n"

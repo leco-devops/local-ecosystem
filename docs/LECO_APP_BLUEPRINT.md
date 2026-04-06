@@ -55,7 +55,8 @@ See **`hosting/README.md`**.
 The registry and `leco-app` read **`leco.app.yaml` + `leco.yaml`** (effective manifest). **Docker is not discovered from disk as the source of truth** on **Save YAML** — only **`leco.yaml`’s** optional **`infrastructure.dockerCompose`** tells LEco which compose file(s) to run.
 
 - **`infrastructure.dockerCompose.composeFile`** — primary file path **you choose** (relative to resolved root unless absolute), e.g. **`docker-compose.yml`** or **`../docker-compose.yml`** for a Worker subfolder that shares the repo’s stack.
-- **`infrastructure.dockerCompose.additionalComposeFiles`** — optional list of extra **`-f`** files (your build/deploy split, overrides, etc.).
+- **`infrastructure.dockerCompose.additionalComposeFiles`** — optional list of extra **`-f`** files resolved from the **app root** (resolved root): build splits, vendor overrides, etc.
+- **`infrastructure.dockerCompose.additionalComposeFilesFromManifest`** — optional extra **`-f`** files resolved from the **bridge manifest directory** (parent of `leco.app.yaml`). Use under **`hosting/app-available/<slug>/`** to attach **`lh-network`**, `*.lh` URL env defaults, and similar LEco-only bits **without** editing the upstream application repo. See **`hosting/samples/sample-leco-hosting-overlay/`** and **`hosting/app-available/cvision/docker-compose.leco-hosting.yml`**.
 - **`leco-app` / `docker compose`** uses those paths only; it does not invent KV/R2/D1 containers — those bindings are **not** services in your compose file (same idea as production Cloudflare: managed APIs). Local provision targets the ecosystem’s **kv-adapter / r2-adapter / d1-adapter** (see **cloudflare-local** in Docker Desktop), not six extra containers in your app’s compose project.
 - **Generate YAML** (first-time materialization) may still **suggest** a compose file when the tree is scanned; **Save YAML** does **not** inject or overwrite **`dockerCompose`** unless you already set paths (see `allow_compose_discovery` in `dashboard/leco_detect.py`).
 - If the primary compose file is **missing**, **`leco-app down`** exits **0** with a warning; offboard still runs.
@@ -75,9 +76,10 @@ The registry and `leco-app` read **`leco.app.yaml` + `leco.yaml`** (effective ma
 
 ## 7. Traefik
 
-- **`ecosystem-register --merge-traefik`** merges **routing-derived** keys from the **effective** manifest into **`traefik/dynamic.yml`**.
+- **`ecosystem-register --merge-traefik`** merges **routing-derived** keys from the **effective** manifest into **`hosting/traefik/dynamic.yml`** (stack routes remain in **`traefik/dynamic.yml`** and are copied to **`hosting/traefik/01-stack-core.yml`** on Traefik start).
 - In v3, **`infrastructure.routing`** normally lives in **`leco.yaml`**. If neither **`routing.entries`** nor **`cloudflare.localCfPublicPrefix`** is set, register logs that Traefik merge was skipped.
 - The **Hosted apps** UI reads routing from the bridge file **and** from **`infrastructure.routing`** in the profile file (`dashboard/hosted_apps.py`).
+- **Operations / incidents:** **[HOSTED_APPS_TRAEFIK_RUNBOOK.md](HOSTED_APPS_TRAEFIK_RUNBOOK.md)** — 502, **`lh-network`**, Docker DNS vs **`routing.entries`**, dashboard URL probes, same-origin **`/api`** on `*.lh`.
 
 ---
 
@@ -115,12 +117,13 @@ The registry and `leco-app` read **`leco.app.yaml` + `leco.yaml`** (effective ma
 - **Port detection** for `deploy` could scan **additional** compose files (today `detect_compose` focuses on the app root walk).
 - **`ecosystem-unregister`** currently may abort registry removal if **local CF teardown** fails; operators can use **`--no-clean-local-cf`**; a **`--force`** that still unregisters is a possible enhancement.
 - **Traefik** keys from profile-only manifests could be unified further in `traefik_manifest_keys` if new shapes appear.
-- **Zip-uploaded** apps without a `source` symlink use the extracted tree as root; keep samples aligned in **`hosting/app-available/`**.
+- **Zip-uploaded** apps without a `source` symlink use the extracted tree as root; reference YAML packs live in **`hosting/samples/`** (not under **`hosting/app-available/`**).
 
 ---
 
 ## See also
 
+- **[HOSTED_APPS_TRAEFIK_RUNBOOK.md](HOSTED_APPS_TRAEFIK_RUNBOOK.md)** — Hosted apps behind Traefik: symptoms, fixes, code map.
 - **[hosting/README.md](../hosting/README.md)** — directory layout and zip upload.
-- **[hosting/app-available/README.md](../hosting/app-available/README.md)** — bridge vs profile samples.
+- **[hosting/app-available/README.md](../hosting/app-available/README.md)** — materialization layout; **[hosting/samples/README.md](../hosting/samples/README.md)** — reference manifest packs.
 - **[tools/deploy-cli/README.md](../tools/deploy-cli/README.md)** — package overview and local CF policy.

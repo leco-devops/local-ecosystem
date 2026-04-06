@@ -60,6 +60,17 @@ http:
       entryPoints:
       - websecure
       tls: true
+    dashboard-lh-alias-http:
+      rule: Host(`dashboard.lh`)
+      service: dashboard-service
+      entryPoints:
+      - web
+    dashboard-lh-alias-https:
+      rule: Host(`dashboard.lh`)
+      service: dashboard-service
+      entryPoints:
+      - websecure
+      tls: true
     r2-http:
       rule: Host(`r2.lh`)
       service: r2-service

@@ -28,6 +28,7 @@ from leco_detect import (
     ensure_docker_compose_in_profile_infrastructure,
     ensure_wrangler_in_manifest,
     ensure_wrangler_in_profile_infrastructure,
+    fill_resolved_paths_in_manifest,
     host_slug_from_app_id,
     registration_scan_root,
     require_registration_app_id,
@@ -80,7 +81,15 @@ def _is_workers_only_routing(entries: Any) -> bool:
     rows = [e for e in entries if isinstance(e, dict)]
     if not rows:
         return False
-    return all(str(e.get("backendHost") or "").strip() == "workers-runtime" for e in rows)
+    if all(str(e.get("backendHost") or "").strip() == "workers-runtime" for e in rows):
+        return True
+    return all(
+        isinstance(e.get("frontend"), dict)
+        and isinstance(e.get("apiBackend"), dict)
+        and str(e["frontend"].get("host") or "").strip() == "workers-runtime"
+        and str(e["apiBackend"].get("host") or "").strip() == "workers-runtime"
+        for e in rows
+    )
 
 
 def _preserve_hosting_compose_state(
@@ -272,7 +281,7 @@ def _maybe_write_hosted_compose_scaffold(
         "    environment:\n"
         "      MONGO_URL: mongodb://mongodb:27017\n"
         "      DB_NAME: app\n"
-        f"      CORS_ORIGINS: \"http://{host_slug}.lh,https://{host_slug}.lh,http://api.{host_slug}.lh,https://api.{host_slug}.lh,http://localhost:3000\"\n"
+        f"      CORS_ORIGINS: \"http://{host_slug}.lh,https://{host_slug}.lh,http://{host_slug}.lh/api,https://{host_slug}.lh/api,http://localhost:3000\"\n"
         "    depends_on:\n"
         "      - mongodb\n"
         "    networks:\n"
@@ -290,7 +299,7 @@ def _maybe_write_hosted_compose_scaffold(
         "      HOST: 0.0.0.0\n"
         "      PORT: 3000\n"
         "      WDS_SOCKET_PORT: \"443\"\n"
-        f"      REACT_APP_BACKEND_URL: https://api.{host_slug}.lh\n"
+        f"      REACT_APP_BACKEND_URL: https://{host_slug}.lh/api\n"
         "      ENABLE_HEALTH_CHECK: \"false\"\n"
         "    depends_on:\n"
         "      - backend\n"
@@ -319,8 +328,12 @@ def _maybe_write_hosted_compose_scaffold(
     if not isinstance(entries, list) or not entries or _is_workers_only_routing(entries):
         infra["routing"] = {
             "entries": [
-                {"hostname": f"{host_slug}.lh", "backendHost": f"{app_id}-frontend-1", "backendPort": 3000},
-                {"hostname": f"api.{host_slug}.lh", "backendHost": f"{app_id}-backend-1", "backendPort": 8001},
+                {
+                    "hostname": f"{host_slug}.lh",
+                    "apiPathPrefix": "/api",
+                    "frontend": {"host": f"{app_id}-frontend-1", "port": 3000},
+                    "apiBackend": {"host": f"{app_id}-backend-1", "port": 8001},
+                }
             ]
         }
     cfg = manifest.get("configRefs")
@@ -373,7 +386,6 @@ def _maybe_write_static_site_compose_scaffold(
         infra["routing"] = {
             "entries": [
                 {"hostname": f"{host_slug}.lh", "backendHost": f"{app_id}-frontend-1", "backendPort": 80},
-                {"hostname": f"api.{host_slug}.lh", "backendHost": f"{app_id}-frontend-1", "backendPort": 80},
             ]
         }
     cfg = manifest.get("configRefs")
@@ -492,6 +504,7 @@ def materialize_registration_yaml(path_rel: str, app_id: str) -> dict[str, Any]:
         prof = _profile_relpath(m)
         loc_path = orig_root / prof
         man_path.parent.mkdir(parents=True, exist_ok=True)
+        fill_resolved_paths_in_manifest(m, man_path, lo)
         man_path.write_text(yaml.safe_dump(m, **_YAML_DUMP_KW), encoding="utf-8")
         loc_path.write_text(yaml.safe_dump(lo, **_YAML_DUMP_KW), encoding="utf-8")
         return {
@@ -527,6 +540,7 @@ def materialize_registration_yaml(path_rel: str, app_id: str) -> dict[str, Any]:
     prof = _profile_relpath(m)
     loc_path = staging / prof
     loc_path.parent.mkdir(parents=True, exist_ok=True)
+    fill_resolved_paths_in_manifest(m, man_path, lo)
     man_path.write_text(yaml.safe_dump(m, **_YAML_DUMP_KW), encoding="utf-8")
     loc_path.write_text(yaml.safe_dump(lo, **_YAML_DUMP_KW), encoding="utf-8")
     src_link = staging / HOSTING_SOURCE_LINK_NAME
@@ -618,6 +632,7 @@ def save_registration_yaml(
         loc_path = orig_root / prof
         man_path.parent.mkdir(parents=True, exist_ok=True)
         loc_path.parent.mkdir(parents=True, exist_ok=True)
+        fill_resolved_paths_in_manifest(parsed_m, man_path, parsed_l)
         man_path.write_text(yaml.safe_dump(parsed_m, **_YAML_DUMP_KW), encoding="utf-8")
         loc_path.write_text(loc_dump, encoding="utf-8")
         return {
@@ -645,6 +660,7 @@ def save_registration_yaml(
     man_path = staging / "leco.app.yaml"
     loc_path = staging / prof2
     loc_path.parent.mkdir(parents=True, exist_ok=True)
+    fill_resolved_paths_in_manifest(parsed_m, man_path, parsed_l)
     man_path.write_text(yaml.safe_dump(parsed_m, **_YAML_DUMP_KW), encoding="utf-8")
     loc_path.write_text(loc_dump, encoding="utf-8")
     cfg_sync = sync_hosting_config_ref_symlinks(staging, tree_root, parsed_m, parsed_l)

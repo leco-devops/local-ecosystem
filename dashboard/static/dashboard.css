@@ -2842,6 +2842,131 @@ button.dev-open-doc:hover {
   font-size: 13px;
 }
 
+.hosted-manifest-summary {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(100, 116, 139, 0.35);
+  background: rgba(15, 23, 42, 0.35);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.hosted-manifest-summary__title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.hosted-manifest-summary__subtitle {
+  font-weight: 600;
+  margin: 12px 0 4px;
+  font-size: 12px;
+  color: rgba(148, 163, 184, 0.95);
+}
+
+.hosted-manifest-summary__paths code {
+  font-size: 11px;
+  word-break: break-all;
+}
+
+.hosted-manifest-summary__cmd code {
+  font-size: 11px;
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
+.hosted-manifest-summary__warn {
+  color: rgba(251, 191, 36, 0.95);
+}
+
+.hosted-manifest-summary__list {
+  margin: 8px 0 0;
+  padding-left: 1.2em;
+}
+
+.hosted-manifest-summary__route {
+  white-space: normal;
+}
+
+.hosted-apps-staging-bar {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  background: linear-gradient(145deg, rgba(22, 163, 74, 0.14) 0%, rgba(15, 23, 42, 0.55) 55%, rgba(15, 23, 42, 0.4) 100%);
+}
+
+.hosted-apps-staging-bar__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 20px;
+}
+
+.hosted-apps-register-primary {
+  font-size: 16px;
+  font-weight: 700;
+  padding: 14px 32px;
+  border-radius: 10px;
+  border: 1px solid rgba(21, 128, 61, 0.9);
+  cursor: pointer;
+  background: linear-gradient(180deg, #4ade80 0%, #22c55e 42%, #16a34a 100%);
+  color: #052e16;
+  box-shadow: 0 2px 14px rgba(34, 197, 94, 0.4);
+  letter-spacing: 0.02em;
+}
+
+.hosted-apps-register-primary:hover {
+  filter: brightness(1.06);
+  box-shadow: 0 4px 18px rgba(34, 197, 94, 0.45);
+}
+
+.hosted-apps-register-primary:active {
+  transform: translateY(1px);
+  filter: brightness(0.97);
+}
+
+.hosted-apps-staging-bar__validate {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.hosted-apps-staging-bar__validate-label {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.hosted-apps-staging-bar__hint {
+  margin: 12px 0 0;
+  line-height: 1.5;
+}
+
+.hosted-apps-config-validation {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 300px;
+  overflow: auto;
+}
+
+.hosted-apps-config-validation--pass {
+  background: rgba(22, 163, 74, 0.16);
+  border: 1px solid rgba(34, 197, 94, 0.45);
+  color: rgba(220, 252, 231, 0.96);
+}
+
+.hosted-apps-config-validation--fail {
+  background: rgba(127, 29, 29, 0.38);
+  border: 1px solid rgba(248, 113, 113, 0.55);
+  color: rgba(254, 226, 226, 0.96);
+}
+
 .hosted-apps-unregister-hint {
   margin-bottom: 14px;
   padding: 12px 14px;
@@ -3073,6 +3198,90 @@ button.dev-open-doc:hover {
 }
 
 /* Hosted register: stepper workflow (buttons are NOT inside .control-actions — need explicit styles) */
+.hosted-reg-urls {
+  margin: 14px 0 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(100, 116, 139, 0.4);
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.hosted-reg-urls__lead {
+  margin: 0 0 10px;
+  line-height: 1.45;
+}
+
+.hosted-reg-urls__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.hosted-reg-urls__table-wrap {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid rgba(100, 116, 139, 0.35);
+}
+
+.hosted-reg-urls__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.hosted-reg-urls__table th,
+.hosted-reg-urls__table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(100, 116, 139, 0.28);
+  vertical-align: middle;
+}
+
+.hosted-reg-urls__table thead th {
+  text-align: left;
+  font-weight: 700;
+  background: rgba(30, 41, 59, 0.65);
+  color: rgba(226, 232, 240, 0.95);
+}
+
+.hosted-reg-urls__table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.hosted-reg-urls__col-actions {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.hosted-reg-urls__table select,
+.hosted-reg-urls__table input[type="text"] {
+  width: 100%;
+  min-width: 120px;
+  box-sizing: border-box;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(100, 116, 139, 0.45);
+  background: rgba(15, 23, 42, 0.85);
+  color: inherit;
+}
+
+.hosted-reg-urls__remove {
+  padding: 4px 8px;
+  font-size: 11px;
+  border-radius: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  background: rgba(30, 41, 59, 0.9);
+  color: inherit;
+  cursor: pointer;
+}
+
+.hosted-reg-urls__remove:hover {
+  border-color: rgba(248, 113, 113, 0.55);
+  color: #fecaca;
+}
+
 .hosted-reg-workflow {
   margin: 12px 0 8px;
 }

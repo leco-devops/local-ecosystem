@@ -467,7 +467,9 @@ def get_probe_target(url):
         path = parsed.path or "/"
         if parsed.query:
             path = f"{path}?{parsed.query}"
-        probe_url = f"{parsed.scheme}://traefik{path}"
+        # Traefik terminates TLS on :443; the dashboard reaches Traefik on Docker :80 only.
+        # Using https://traefik here fails TLS (wrong cert / no listener) → status None ("HTTP 0").
+        probe_url = f"http://traefik{path}"
         headers = {"Host": host}
         return probe_url, headers
 

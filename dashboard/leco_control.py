@@ -4,6 +4,10 @@ Dynamic Control targets for leco-app style compose projects.
 Registry: config/leco-registry.yaml under PROJECT_ROOT (override DASHBOARD_LECO_REGISTRY).
 Manifest paths are relative to PROJECT_ROOT or absolute; must resolve under PROJECT_ROOT
 or its parent directory (sibling repos).
+
+Materialized apps: ``hosting/app-available/<dir>/leco.app.yaml`` that are not already listed
+in the registry (by manifest path or app id) are discoverable for the dashboard as staging
+rows until ``ecosystem-register`` adds them.
 """
 
 from __future__ import annotations
@@ -191,6 +195,18 @@ def parse_leco_manifest_for_compose(manifest_path: str) -> dict[str, Any] | None
             if not _allowed_path(ex_abs) or not os.path.isfile(ex_abs):
                 return None
             tail.extend(["-f", str(path_for_docker_daemon(Path(ex_abs).resolve()))])
+    man_extras = dc.get("additionalComposeFilesFromManifest") or dc.get("additional_compose_files_from_manifest") or []
+    if isinstance(man_extras, list):
+        mdir = Path(manifest_dir)
+        for ex in man_extras:
+            if not isinstance(ex, str) or not ex.strip():
+                continue
+            er = Path(ex.strip())
+            ex_abs = str(er.resolve()) if er.is_absolute() else str((mdir / er).resolve())
+            if not _allowed_path(ex_abs) or not os.path.isfile(ex_abs):
+                # Optional hosting-side overlays may be absent on older checkouts; do not drop compose entirely.
+                continue
+            tail.extend(["-f", str(path_for_docker_daemon(Path(ex_abs).resolve()))])
     env_file = _pick(dc, "envFile", "env_file")
     if env_file:
         ef = Path(env_file)
@@ -256,6 +272,16 @@ def parse_leco_effective_manifest_for_compose(manifest_path: str) -> dict[str, A
         if not _allowed_path(ex_abs) or not os.path.isfile(ex_abs):
             return None
         tail.extend(["-f", str(path_for_docker_daemon(Path(ex_abs).resolve()))])
+    mp_res = mp.resolve()
+    for extra in dc.additional_compose_files_from_manifest or []:
+        es = str(extra).strip()
+        if not es:
+            continue
+        er = Path(es)
+        ex_abs = str(er.resolve()) if er.is_absolute() else str((mp_res.parent / er).resolve())
+        if not _allowed_path(ex_abs) or not os.path.isfile(ex_abs):
+            continue
+        tail.extend(["-f", str(path_for_docker_daemon(Path(ex_abs).resolve()))])
     env_file = dc.env_file
     if env_file:
         ef = Path(str(env_file).strip())
@@ -316,6 +342,10 @@ def _compose_meta_worker_only(manifest_path: str) -> dict[str, Any] | None:
     root_for = str(path_for_docker_daemon(Path(root_s).resolve()))
     name = m.name
     slug = _slug(str(name)) if name else _slug(mp.parent.name)
+    if m.docker_compose is not None:
+        parsed_eff = parse_leco_effective_manifest_for_compose(manifest_path)
+        if parsed_eff and parsed_eff.get("compose_tail"):
+            return parsed_eff
     return {
         "manifest_path": manifest_path,
         "root": root_for,
@@ -324,27 +354,127 @@ def _compose_meta_worker_only(manifest_path: str) -> dict[str, Any] | None:
     }
 
 
-def leco_meta_for_slug(slug: str) -> dict[str, Any] | None:
+def _registry_manifest_abs_paths_normalized() -> set[str]:
+    s: set[str] = set()
+    for e in load_leco_registry_entries():
+        mp = resolve_manifest_path(str(e.get("manifest") or "").strip())
+        if mp:
+            s.add(os.path.normpath(mp))
+    return s
+
+
+def _registry_id_set() -> set[str]:
+    return {
+        str(e.get("id") or "").strip()
+        for e in load_leco_registry_entries()
+        if str(e.get("id") or "").strip()
+    }
+
+
+def _registry_entry_for_id(slug: str) -> dict[str, Any] | None:
     for entry in load_leco_registry_entries():
-        if str(entry.get("id") or "").strip() != slug:
+        if str(entry.get("id") or "").strip() == slug:
+            return entry
+    return None
+
+
+def iter_hosting_materialized_leco_app_manifest_paths() -> list[str]:
+    """Absolute real paths to ``hosting/app-available/*/leco.app.yaml`` under PROJECT_ROOT."""
+    base = Path(PROJECT_ROOT) / "hosting" / "app-available"
+    if not base.is_dir():
+        return []
+    out: list[str] = []
+    for child in sorted(base.iterdir()):
+        if not child.is_dir():
             continue
-        mp = resolve_manifest_path(str(entry["manifest"]).strip())
+        # Reference packs live under hosting/samples/; never treat sample-* here as staging apps.
+        if child.name.startswith("sample-"):
+            continue
+        man = child / "leco.app.yaml"
+        if not man.is_file():
+            continue
+        try:
+            rp = os.path.realpath(str(man.resolve()))
+        except OSError:
+            rp = os.path.realpath(str(man))
+        if _allowed_path(rp):
+            out.append(rp)
+    return out
+
+
+def _slug_label_from_bridge_manifest(manifest_path: str) -> tuple[str, str]:
+    """Derive registry-style slug and display label from bridge ``leco.app.yaml``."""
+    try:
+        data = yaml.safe_load(Path(manifest_path).read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError, UnicodeDecodeError):
+        return "", ""
+    if not isinstance(data, dict):
+        return "", ""
+    name = _pick(data, "name")
+    slug = _slug(str(name)) if name else _slug(Path(manifest_path).parent.name)
+    lab = _pick(data, "label", "title", "humanName", "human_name")
+    if isinstance(lab, str) and lab.strip():
+        label = lab.strip()
+    elif isinstance(name, str) and name.strip():
+        label = name.strip()
+    else:
+        label = slug
+    return slug, label
+
+
+def materialized_hosting_apps_not_in_registry() -> list[dict[str, Any]]:
+    """Staging apps under hosting/app-available not referenced by leco-registry.yaml."""
+    reg_paths = _registry_manifest_abs_paths_normalized()
+    reg_ids = _registry_id_set()
+    seen_slug: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for mp in iter_hosting_materialized_leco_app_manifest_paths():
+        if os.path.normpath(mp) in reg_paths:
+            continue
+        slug, label = _slug_label_from_bridge_manifest(mp)
+        if not slug or slug in reg_ids or slug in seen_slug:
+            continue
+        seen_slug.add(slug)
+        out.append({"slug": slug, "label": label, "manifest_path": mp})
+    out.sort(key=lambda x: (str(x["label"]).lower(), x["slug"]))
+    return out
+
+
+def _leco_meta_from_resolved_manifest(mp: str, leco_slug: str, label: str) -> dict[str, Any] | None:
+    parsed = (
+        parse_leco_manifest_for_compose(mp)
+        or parse_leco_effective_manifest_for_compose(mp)
+        or _compose_meta_worker_only(mp)
+    )
+    if not parsed:
+        return None
+    return {
+        "leco_slug": leco_slug,
+        "label": label,
+        "manifest_path": mp,
+        "root": parsed["root"],
+        "compose_tail": parsed["compose_tail"],
+    }
+
+
+def leco_meta_for_slug(slug: str) -> dict[str, Any] | None:
+    slug = (slug or "").strip()
+    if not slug:
+        return None
+    entry = _registry_entry_for_id(slug)
+    if entry:
+        mp = resolve_manifest_path(str(entry.get("manifest") or "").strip())
         if not mp:
             return None
-        parsed = (
-            parse_leco_manifest_for_compose(mp)
-            or parse_leco_effective_manifest_for_compose(mp)
-            or _compose_meta_worker_only(mp)
-        )
-        if not parsed:
-            return None
-        return {
-            "leco_slug": slug,
-            "label": str(entry.get("label") or slug),
-            "manifest_path": mp,
-            "root": parsed["root"],
-            "compose_tail": parsed["compose_tail"],
-        }
+        return _leco_meta_from_resolved_manifest(mp, slug, str(entry.get("label") or slug))
+    reg_paths = _registry_manifest_abs_paths_normalized()
+    for mp in iter_hosting_materialized_leco_app_manifest_paths():
+        if os.path.normpath(mp) in reg_paths:
+            continue
+        ms, label = _slug_label_from_bridge_manifest(mp)
+        if ms != slug:
+            continue
+        return _leco_meta_from_resolved_manifest(mp, slug, label)
     return None
 
 
@@ -358,6 +488,38 @@ def list_leco_control_targets(dc) -> list[dict[str, Any]]:
     seen: set[str] = set()
     for entry in load_leco_registry_entries():
         slug = str(entry.get("id") or "").strip()
+        if not slug or slug in seen:
+            continue
+        seen.add(slug)
+        meta = leco_meta_for_slug(slug)
+        if not meta:
+            continue
+        tid = leco_target_id_for_slug(slug)
+        rt = leco_stack_runtime(meta)
+        out.append(
+            {
+                "id": tid,
+                "label": meta["label"],
+                "group": "leco-apps",
+                "container": None,
+                "actions": sorted(
+                    {
+                        "start",
+                        "stop",
+                        "restart",
+                        "deploy",
+                        "recreate",
+                        "remove",
+                        "reset",
+                        "pause",
+                        "unpause",
+                    }
+                ),
+                "runtime": rt,
+            }
+        )
+    for cand in materialized_hosting_apps_not_in_registry():
+        slug = str(cand.get("slug") or "").strip()
         if not slug or slug in seen:
             continue
         seen.add(slug)

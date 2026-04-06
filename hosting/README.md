@@ -6,7 +6,9 @@ Writable area under the **local-ecosystem** repo (mounted `/project` in the dash
 
 | Path | Purpose |
 |------|---------|
+| **`samples/`** | Reference **`leco.app.yaml`** / **`leco.yaml`** packs (not under **`app-available/`**); the dashboard does not list them as staging apps. See **`samples/README.md`**. |
 | **`app-available/<slug>/`** | Real content: `leco.app.yaml`, `leco.yaml`, optional `source` symlink to the real app tree, optional **config symlinks** (same relative paths as `configRefs` / compose / env / wrangler when those files exist), or an unzipped app tree. |
+| **`app-available/<slug>/docker-compose.leco-hosting.yml`** (optional) | Compose **merge** file loaded via **`leco.yaml` → `infrastructure.dockerCompose.additionalComposeFilesFromManifest`**: attach **`lh-network`**, set `*.lh` / Traefik-facing env defaults, without changing the upstream app repo. See **`hosting/samples/sample-leco-hosting-overlay/`**, **`app-available/cvision/docker-compose.leco-hosting.yml`**, and **[docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md](../docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md)**. |
 
 ## Register from a read-only path (e.g. `wsp:…`)
 

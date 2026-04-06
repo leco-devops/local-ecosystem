@@ -11,29 +11,85 @@ DOCKER_BIND="${DASHBOARD_DOCKER_BIND_ROOT:-$PROJECT_ROOT}"
 HOSTING_TRAEFIK_DIR="$DOCKER_BIND/hosting/traefik"
 HOSTING_DYNAMIC="$HOSTING_TRAEFIK_DIR/dynamic.yml"
 CORE_DYNAMIC="$DOCKER_BIND/traefik/dynamic.yml"
+# Real file copy (not a symlink): Traefik's fsnotify watches each entry under
+# hosting/traefik/. Docker Desktop often returns ENOENT for watchers on symlinks that
+# point outside the mounted dir → file provider fails to start → zero HTTP routers → 404.
+CORE_DYNAMIC_COPY="$HOSTING_TRAEFIK_DIR/01-stack-core.yml"
+NORMALIZE_SCRIPT="$DOCKER_BIND/ecosystem-stack/scripts/normalize-hosting-traefik-dynamic.py"
 
 NAME="traefik"
 
-start() {
-  docker network inspect lh-network >/dev/null 2>&1 || docker network create lh-network >/dev/null
-  docker rm -f "$NAME" 2>/dev/null
+# Without PyYAML: fix the common invalid stub Traefik v3 rejects.
+_normalize_hosting_dynamic_bash() {
+  local f="$1"
+  [ -f "$f" ] || return 0
+  local compact
+  compact=$(sed 's/#.*$//' "$f" 2>/dev/null | tr -d '[:space:]' | sed 's/^---//')
+  case "$compact" in
+  http:\{\})
+    printf '%s\n' '{}' >"$f"
+    echo "ℹ️  Normalized $f (empty http → {}); install PyYAML for full YAML repair."
+    ;;
+  esac
+}
 
+_normalize_hosting_dynamic_yaml() {
+  local f="$1"
+  [ -f "$f" ] || return 0
+  if [ -f "$NORMALIZE_SCRIPT" ]; then
+    local rc=0
+    python3 "$NORMALIZE_SCRIPT" "$f" || rc=$?
+    if [ "$rc" -eq 0 ] || [ "$rc" -eq 1 ]; then
+      return "$rc"
+    fi
+    if [ "$rc" -eq 3 ]; then
+      _normalize_hosting_dynamic_bash "$f"
+      return 0
+    fi
+    echo "⚠️  normalize-hosting-traefik-dynamic.py exited $rc — trying bash fallback"
+    _normalize_hosting_dynamic_bash "$f"
+    return 0
+  fi
+  _normalize_hosting_dynamic_bash "$f"
+  return 0
+}
+
+# Ensure hosting/traefik files exist and are valid before Traefik starts (or for dashboard deploy).
+ensure_hosting_files() {
+  mkdir -p "$HOSTING_TRAEFIK_DIR"
   if [ ! -f "$CORE_DYNAMIC" ]; then
     echo "❌ Missing required persistent Traefik base file: $CORE_DYNAMIC"
     echo "   Restore it from git before starting Traefik."
     return 1
   fi
-
-  mkdir -p "$HOSTING_TRAEFIK_DIR"
+  rm -f "$HOSTING_TRAEFIK_DIR/00-core.yml" 2>/dev/null
+  rm -f "$CORE_DYNAMIC_COPY" 2>/dev/null
+  cp "$CORE_DYNAMIC" "$CORE_DYNAMIC_COPY" || {
+    echo "❌ Could not copy stack core to $CORE_DYNAMIC_COPY"
+    return 1
+  }
+  # Do not write http: {} — Traefik v3 rejects an empty http block. Use a no-op root mapping.
   if [ ! -f "$HOSTING_DYNAMIC" ]; then
-    cat >"$HOSTING_DYNAMIC" <<'EOF'
-http:
-  routers: {}
-  services: {}
-
-EOF
-    echo "ℹ️ Created recoverable writable file hosting/traefik/dynamic.yml"
+    printf '%s\n' '{}' >"$HOSTING_DYNAMIC"
+    echo "ℹ️ Created hosting/traefik/dynamic.yml (empty merge stub; leco-app adds routes here)"
   fi
+  _normalize_hosting_dynamic_yaml "$HOSTING_DYNAMIC" || return 1
+}
+
+# Fix files on disk; restart Traefik if a container exists (picks up copy vs symlink / repaired YAML).
+heal() {
+  ensure_hosting_files || return 1
+  if docker ps -a --filter "name=^/${NAME}$" --format '{{.Names}}' | grep -qx "$NAME"; then
+    echo "🔄 Restarting Traefik after hosting/traefik file repair…"
+    restart
+  fi
+}
+
+start() {
+  docker network inspect lh-network >/dev/null 2>&1 || docker network create lh-network >/dev/null
+  docker rm -f "$NAME" 2>/dev/null
+
+  ensure_hosting_files || return 1
 
   docker run -d \
     --name "$NAME" \
@@ -43,8 +99,7 @@ EOF
     -p 443:443 \
     -p 8080:8080 \
     -v "$DOCKER_BIND/traefik:/etc/traefik" \
-    -v "$CORE_DYNAMIC:/etc/traefik-dynamic/00-core.yml:ro" \
-    -v "$HOSTING_DYNAMIC:/etc/traefik-dynamic/90-hosting.yml" \
+    -v "$HOSTING_TRAEFIK_DIR:/etc/traefik-dynamic" \
     -v "$DOCKER_BIND/certs:/certs" \
     traefik:v3.3 \
     --configFile=/etc/traefik/traefik-static.yaml
@@ -65,6 +120,8 @@ if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
     start) start ;;
     stop) stop ;;
     restart) restart ;;
+    heal) heal ;;
+    ensure-hosting-files) ensure_hosting_files ;;
     remove) remove ;;
     pause) pause ;;
     unpause) unpause ;;
@@ -72,7 +129,7 @@ if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
     logs) logs ;;
     reset) reset ;;
     *)
-      echo "Usage: $0 {start|stop|restart|remove|pause|unpause|status|logs|reset}"
+      echo "Usage: $0 {start|stop|restart|heal|ensure-hosting-files|remove|pause|unpause|status|logs|reset}"
       exit 1
       ;;
   esac

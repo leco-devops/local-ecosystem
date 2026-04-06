@@ -47,6 +47,15 @@ class DockerComposeSpec(BaseModel):
             "Paths are relative to the manifest resolved root unless absolute."
         ),
     )
+    additional_compose_files_from_manifest: list[str] = Field(
+        default_factory=list,
+        alias="additionalComposeFilesFromManifest",
+        description=(
+            "Extra compose files relative to the bridge manifest directory (parent of leco.app.yaml). "
+            "Use for materialized apps under hosting/app-available/<id>/ so Traefik/network/env overlays "
+            "stay out of the upstream application repository. Merged after additionalComposeFiles."
+        ),
+    )
     project_name: str | None = Field(default=None, alias="projectName")
     profiles: list[str] = Field(default_factory=list)
     env_file: str | None = Field(default=None, alias="envFile")
@@ -295,7 +304,8 @@ class BridgeConfigRefs(BaseModel):
 
     All paths are relative to :meth:`ApplicationManifest.resolved_root` unless absolute.
     These are discoverability / documentation; deploy still uses ``leco.yaml`` ``infrastructure``
-    after merge. Omit keys you do not use.
+    after merge. Omit keys you do not use. Absolute on-disk paths are mirrored under
+    ``resolvedPaths`` (same key names) when YAML is generated or saved.
     """
 
     model_config = ConfigDict(populate_by_name=True)
@@ -338,6 +348,10 @@ class ApplicationManifest(BaseModel):
     ``infrastructure:``; keep this file to ``name``, ``root``, ``localHostProfile``, and optional
     ``configRefs`` (entrypoint paths). Older manifests may still declare ``dockerCompose`` /
     ``cloudflare`` here (version ``2``).
+
+    ``resolvedPaths`` holds absolute paths on the host for the resolved app root, this manifest,
+    the profile file, and targets of ``configRefs`` / effective profile infrastructure (filled when
+    generating or saving YAML). Operators may refresh them by re-running generate-yaml.
     """
 
     model_config = ConfigDict(populate_by_name=True)
@@ -370,6 +384,27 @@ class ApplicationManifest(BaseModel):
         alias="configRefs",
         description="Optional paths to wrangler, compose, Dockerfile, WordPress, nginx, Varnish, etc.",
     )
+    resolved_paths: dict[str, str] | None = Field(
+        None,
+        alias="resolvedPaths",
+        description=(
+            "Absolute paths: sourceRoot, manifestPath, localHostProfile, and keys mirroring "
+            "configRefs (wranglerConfig, dockerComposeFile, …) when the target exists on disk."
+        ),
+    )
+
+    @field_validator("resolved_paths", mode="before")
+    @classmethod
+    def _coerce_resolved_paths(cls, v: Any) -> dict[str, str] | None:
+        if v is None:
+            return None
+        if not isinstance(v, dict):
+            return None
+        out: dict[str, str] = {}
+        for k, val in v.items():
+            if isinstance(k, str) and k.strip():
+                out[k.strip()] = str(val) if val is not None else ""
+        return out or None
 
     def resolved_root(self, manifest_path: Path) -> Path:
         r = Path(self.root)

@@ -13,15 +13,14 @@ Each subdirectory holds a **bridge** (`leco.app.yaml`) + **profile** (`leco.yaml
 
 **Multiple compose files:** set **`infrastructure.dockerCompose.additionalComposeFiles`** in **`leco.yaml`** (list of paths relative to the resolved app root). `docker compose` is invoked with **`-f` primary `-f` each extra**; extra files must live **beside** the primary file in the real app tree (not only under `hosting/` unless you materialize or symlink them there). See **`docs/LECO_APP_BLUEPRINT.md`**.
 
-## Sample pairs (copy or symlink)
+## Reference samples
+
+Manifest **samples** live in **`hosting/samples/`** (sibling of **`app-available/`**) so the Hosted apps tab does not list them as materialized staging apps. See **`../samples/README.md`**.
+
+## Apps under this directory
 
 | Folder | Purpose |
 |--------|---------|
-| **`sample-cloudflare-application/`** | Cloudflare Worker: `wrangler.toml` + KV / R2 / D1 preview and local CF settings. |
-| **`sample-wordpress-application/`** | WordPress: Docker Compose, Traefik host, frontend/admin URLs. |
-| **`sample-nodejs-data-stack/`** | Node API + **Redis, MySQL, MongoDB, NGINX, Varnish** (all described in `notes`; compose file defines services). Split Traefik route: NGINX UI + `/api` → Node. |
-| **`sample-compose-only/`** | Compose-only baseline (no Wrangler). |
-| **`sample-wrangler-local-cf/`** | Full `wrangler.toml` + matching `wranglerBindingPreview` (3× KV, R2, D1). |
-| **`cloudflare/`** | Materialized app slot (often with `source` → real repo). |
+| **`cvision/`**, **`cloudflare/`**, … | Real or demo **materialized** slots (`leco.app.yaml` + profile, often with `source` → real repo). |
 
 Provisioning for Workers still reads **`wrangler.toml`** via `infrastructure.cloudflare.wranglerConfig`. The **`wranglerBindingPreview`** block is informational unless refreshed by dashboard **Generate YAML** / **Save YAML**.

@@ -139,6 +139,13 @@ DOC_MODULES = [
         "blurb": "Start/stop, backups, bulk actions, stack scripts.",
     },
     {
+        "id": "hosted-apps-traefik-runbook",
+        "title": "Hosted apps — Traefik runbook",
+        "category": "DevOps",
+        "rel_path": "docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md",
+        "blurb": "502, lh-network, compose DNS names, wrong-prefix routing, dashboard *.lh probes, same-origin /api — symptoms, fixes, code map.",
+    },
+    {
         "id": "devops-custom-apps",
         "title": "Deploy custom apps — Workers, Docker, NGINX, Node",
         "category": "DevOps",
@@ -223,6 +230,7 @@ def build_service_management_markdown() -> str:
             "- `POST /api/leco/yaml-status` — JSON `path`, optional `app_id`; returns whether `leco.app.yaml` and the localhost profile exist (for gating **Register**).",
             "- `POST /api/leco/generate-yaml` — JSON `path`, `app_id`, `token`; writes manifest + profile from directory scan (regenerate); read-only roots also refresh `source` and symlinks for `configRefs` / compose / env / wrangler paths (`config_symlinks` in response).",
             "- `POST /api/leco/save-yaml` — JSON `path`, `app_id`, `manifest_yaml`, `localhost_yaml`, `token`; validates and saves editor content; read-only roots same symlink behavior as generate-yaml.",
+            "- `POST /api/hosted-apps/<slug>/validate-configuration` — no token; reads `leco.app.yaml` + profile from disk; returns `validation_ok`, `summary_text`, `reference_errors` / `reference_warnings` (Pydantic schema + merged-manifest file path checks).",
             "- `POST /api/leco/register/stream` — JSON `path`, `app_id`, `label`, `deploy_stack`, `token`; NDJSON stream for `leco-app ecosystem-register` (YAML must already exist on disk).",
             "",
             "## Cloudflare local (`docker compose`)",

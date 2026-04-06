@@ -337,7 +337,7 @@
               <strong>control token</strong> when enabled. Read-only app roots materialize under <code>hosting/app-available/&lt;id&gt;/</code>
               (app id required). Path: repo-relative, <code>wsp:…</code>, or a host path when LEco DevOps was started with path hints.
               <strong>Label</strong> after Detect is guessed from <code>package.json</code> / Wrangler <code>name</code> / Compose top-level <code>name</code> when present (not from the folder name).
-              <strong>URLs in Traefik</strong> (e.g. <code>cv.lh</code>) come from <code>infrastructure.routing.entries[].hostname</code> in your profile (<code>leco.yaml</code>), not from the registry slug; <code>cloudflare.localCfPublicPrefix</code> only shapes KV/R2/D1 hosts (<code>cv-kv.lh</code>, …).
+              <strong>URLs in Traefik</strong> (e.g. <code>cv.lh</code>) come from <code>infrastructure.routing.entries[].hostname</code> in your profile (<code>leco.yaml</code>), not from the registry slug; <code>cloudflare.localCfPublicPrefix</code> only shapes KV/R2/D1 hosts (<code>cv-kv.lh</code>, …). Use the <strong>Public URLs</strong> table below to edit every <code>urls[]</code> entry (dashboard, probes, docs); <strong>Write into profile YAML</strong> copies them into the textarea before Save, and <strong>Register</strong> applies the table to disk before <code>ecosystem-register</code>.
             </p>
             <div class="hosted-register-path-row">
               <label class="hosted-register-field hosted-register-field--grow"
@@ -392,6 +392,30 @@
               <input type="checkbox" id="hostedRegDeployAfter" checked />
               After register, run <strong><code>leco-app deploy</code></strong> when the manifest has <code>dockerCompose</code> (<code>docker compose up -d --build</code>). Workers-only apps (no compose in <code>leco.yaml</code>) skip deploy automatically. Uncheck if you only want registry + Traefik.
             </label>
+            <div class="hosted-reg-urls" id="hostedRegUrlsBlock" aria-label="Public URLs for localhost profile">
+              <p class="muted small hosted-reg-urls__lead">
+                <strong>Public URLs</strong> (<code>leco.yaml</code> → <code>urls</code>): edit all endpoints here. Suggested values appear after <strong>Detect</strong> or <strong>Use suggested</strong>. <strong>Load from profile YAML</strong> reads the textarea; <strong>Write into profile YAML</strong> updates the textarea (then <strong>Save YAML</strong> to persist).
+              </p>
+              <div class="hosted-reg-urls__toolbar">
+                <button type="button" id="hostedRegUrlsSuggested" class="ctrl-act ctrl-act--ops">Use suggested</button>
+                <button type="button" id="hostedRegUrlsFromYaml" class="ctrl-act ctrl-act--ops">Load from profile YAML</button>
+                <button type="button" id="hostedRegUrlsToYaml" class="ctrl-act ctrl-act--ops">Write into profile YAML</button>
+                <button type="button" id="hostedRegUrlsAddRow" class="ctrl-act ctrl-act--ops">Add URL row</button>
+              </div>
+              <div class="hosted-reg-urls__table-wrap">
+                <table class="hosted-reg-urls__table" aria-label="URL rows">
+                  <thead>
+                    <tr>
+                      <th scope="col">Role</th>
+                      <th scope="col">Label</th>
+                      <th scope="col">Public URL</th>
+                      <th scope="col" class="hosted-reg-urls__col-actions"> </th>
+                    </tr>
+                  </thead>
+                  <tbody id="hostedRegUrlsTbody"></tbody>
+                </table>
+              </div>
+            </div>
             <div class="hosted-reg-workflow" id="hostedRegWorkflow" aria-label="Registration workflow steps">
               <div class="hosted-reg-workflow__track" role="group" aria-describedby="hostedRegWorkflowHint">
                 <div class="hosted-reg-workflow__step" data-wf-step="detect">
@@ -495,6 +519,31 @@
                 <p id="hostedAppsRuntime" class="control-card__runtime"></p>
               </header>
               <div class="hosted-apps-links" id="hostedAppsLinks"></div>
+              <div id="hostedAppsStagingBar" class="hosted-apps-staging-bar is-hidden" role="region" aria-label="Staging app">
+                <div class="hosted-apps-staging-bar__row">
+                  <button type="button" id="hostedAppsQuickRegister" class="hosted-apps-register-primary">
+                    Register application
+                  </button>
+                  <div class="hosted-apps-staging-bar__validate">
+                    <span class="hosted-apps-staging-bar__validate-label muted small">Configuration validator</span>
+                    <button type="button" id="hostedAppsValidateConfig" class="ctrl-act ctrl-act--ops">
+                      Validate YAML &amp; paths
+                    </button>
+                  </div>
+                </div>
+                <p class="muted small hosted-apps-staging-bar__hint">
+                  <strong>Register</strong> runs <code>leco-app ecosystem-register</code> (and optional deploy) using files under
+                  <code>hosting/app-available/&lt;id&gt;/</code> — same as the collapsible wizard below. Requires the
+                  <strong>control token</strong> when enabled. <strong>Validate</strong> checks schemas and that compose / wrangler /
+                  overlay paths exist on disk.
+                </p>
+                <pre id="hostedAppsConfigValidation" class="hosted-apps-config-validation is-hidden" aria-live="polite"></pre>
+              </div>
+              <div
+                id="hostedAppsManifestSummary"
+                class="hosted-manifest-summary"
+                aria-label="Effective Docker Compose and routing summary"
+              ></div>
               <div id="hostedAppsUnregisterHint" class="hosted-apps-unregister-hint is-hidden" role="status" aria-live="polite"></div>
               <div class="hosted-apps-kpi" id="hostedAppsKpi"></div>
               <div

@@ -556,6 +556,15 @@ function resolveFetchPreloaderMeta(input, init) {
     };
   }
 
+  if (pathname.startsWith("/api/hosted-apps/") && pathname.includes("/validate-configuration")) {
+    return {
+      label: "Hosted apps · validate configuration",
+      detail: `Schema + on-disk paths · ${httpLine}`,
+      path: fullPath,
+      tabId: "hostedAppsTab",
+    };
+  }
+
   if (pathname.startsWith("/api/hosted/")) {
     return {
       label: "Hosted apps · upload / auxiliary API",
@@ -1325,14 +1334,18 @@ function renderOverviewHostedAppsCard(payload) {
   const apps = Array.isArray(payload?.apps) ? payload.apps : [];
   if (!apps.length) {
     el.innerHTML =
-      '<p class="muted small overview-hosted-urls__empty">No hosted apps registered yet. Add entries via <code>leco-app ecosystem-register</code>.</p>';
+      '<p class="muted small overview-hosted-urls__empty">No hosted apps yet. Register via <code>leco-app ecosystem-register</code> or add <code>hosting/app-available/&lt;dir&gt;/leco.app.yaml</code> and refresh.</p>';
     return;
   }
   const rows = [...apps]
     .sort((a, b) => String(a?.label || a?.id || "").localeCompare(String(b?.label || b?.id || "")))
     .map((app) => {
       const dot = hostedRuntimeBadge(app?.runtime || {}, app);
-      const label = String(app?.label || app?.id || "App");
+      const labelText = String(app?.label || app?.id || "App");
+      const stagingBadge =
+        app?.pending_registration === true
+          ? ' <span class="hosted-app-sidebar-badge" title="Staging — not in registry">Staging</span>'
+          : "";
       const url = hostedOverviewPrimaryUrl(app);
       const urlHtml = url
         ? `<a class="overview-hosted-urls__link" href="${escapeAttr(url)}"${externalNavigationAttrs(url)}>${escapeHtml(url)}</a>`
@@ -1341,7 +1354,7 @@ function renderOverviewHostedAppsCard(payload) {
       return `<li class="overview-hosted-urls__item">
         <div class="overview-hosted-urls__row">
           <span class="overview-hosted-urls__dot ${dot.cls}" aria-hidden="true"></span>
-          <span class="overview-hosted-urls__app">${escapeHtml(label)}</span>
+          <span class="overview-hosted-urls__app">${escapeHtml(labelText)}${stagingBadge}</span>
         </div>
         <p class="overview-hosted-urls__meta small muted">${urlHtml}<span class="header-sep">·</span>${runtimeLabel}</p>
       </li>`;
@@ -4188,7 +4201,11 @@ function renderHostedAppsSidebar() {
       const ver = a.application_version
         ? ` <span class="muted small">${escapeHtml(a.application_version)}</span>`
         : "";
-      return `<button type="button" data-hosted-slug="${escapeAttr(a.id)}" class="${a.id === hostedSelectedSlug ? "is-active" : ""}">${escapeHtml(a.label || a.id)}${ver}</button>`;
+      const st =
+        a.pending_registration === true
+          ? ' <span class="hosted-app-sidebar-badge" title="Materialized under hosting/app-available — not in leco-registry.yaml yet">Staging</span>'
+          : "";
+      return `<button type="button" data-hosted-slug="${escapeAttr(a.id)}" class="${a.id === hostedSelectedSlug ? "is-active" : ""}">${escapeHtml(a.label || a.id)}${st}${ver}</button>`;
     })
     .join("");
   nav.querySelectorAll("[data-hosted-slug]").forEach((btn) => {
@@ -4218,7 +4235,12 @@ function resetHostedAppsDetailForLoading(slug) {
   const localEl = document.getElementById("hostedAppsLocalProfile");
   const cfEl = document.getElementById("hostedAppsCfResources");
   if (titleEl) titleEl.textContent = app?.label || slug || "—";
-  if (metaEl) metaEl.textContent = `Registry id: ${slug || "—"} · Loading app details…`;
+  if (metaEl) {
+    const pend = app?.pending_registration === true;
+    metaEl.textContent = pend
+      ? `Staging · app id ${slug || "—"} (not in registry yet) · Loading app details…`
+      : `Registry id: ${slug || "—"} · Loading app details…`;
+  }
   if (rtEl) {
     rtEl.className = "control-card__runtime control-runtime--na";
     rtEl.title = "Loading";
@@ -4236,6 +4258,18 @@ function resetHostedAppsDetailForLoading(slug) {
     unregisterHintEl.classList.add("is-hidden");
     unregisterHintEl.innerHTML = "";
   }
+  const valPre = document.getElementById("hostedAppsConfigValidation");
+  if (valPre) {
+    valPre.textContent = "";
+    valPre.classList.add("is-hidden");
+    valPre.classList.remove("hosted-apps-config-validation--pass", "hosted-apps-config-validation--fail");
+  }
+  const stagingBar = document.getElementById("hostedAppsStagingBar");
+  if (stagingBar) {
+    stagingBar.classList.toggle("is-hidden", !(app && app.pending_registration === true));
+  }
+  const sumEl = document.getElementById("hostedAppsManifestSummary");
+  if (sumEl) sumEl.innerHTML = '<p class="muted small">Loading manifest summary…</p>';
   if (ledgerEl) ledgerEl.innerHTML = '<p class="muted small">Loading resource ledger…</p>';
   if (localEl) localEl.innerHTML = '<p class="muted small">Loading local profile…</p>';
   if (cfEl) cfEl.innerHTML = '<p class="muted small">Loading Cloudflare bindings…</p>';
@@ -4292,7 +4326,7 @@ async function loadHostedAppsList() {
       if (empty) {
         empty.classList.remove("is-hidden");
         empty.innerHTML =
-          'No registered apps. Add <code>config/leco-registry.yaml</code> via <code>leco-app ecosystem-register</code>. See <code>config/leco-registry.example.yaml</code>.';
+          'No hosted apps found. Register via <code>leco-app ecosystem-register</code> (<code>config/leco-registry.yaml</code>), or place generated <code>hosting/app-available/&lt;dir&gt;/leco.app.yaml</code> and reload — staging apps appear until you register them. See <code>config/leco-registry.example.yaml</code>.';
       }
       if (detail) detail.classList.add("is-hidden");
       const nav = document.getElementById("hostedAppsSidebar");
@@ -4305,6 +4339,7 @@ async function loadHostedAppsList() {
     const still = hostedAppsList.some((a) => a.id === hostedSelectedSlug);
     if (!still) hostedSelectedSlug = hostedAppsList[0].id;
     renderHostedAppsSidebar();
+    resetHostedAppsDetailForLoading(hostedSelectedSlug);
     await refreshHostedAppsPanel();
   } catch (e) {
     if (empty) {
@@ -4347,6 +4382,96 @@ function hostedComposeControlActionsHtml(SB, target) {
   </div>`;
 }
 
+function renderHostedManifestSummary(manifestUi, snap) {
+  const el = document.getElementById("hostedAppsManifestSummary");
+  if (!el) return;
+  const mu = manifestUi || {};
+  const pdc = mu.profile_docker_compose;
+  const routes = Array.isArray(mu.routes) ? mu.routes : [];
+  const args = snap && Array.isArray(snap.compose_docker_args) ? snap.compose_docker_args : [];
+  let html = '<div class="hosted-manifest-summary__title">Effective manifest (Compose + routing)</div>';
+  const rp = mu.resolved_paths && typeof mu.resolved_paths === "object" ? mu.resolved_paths : {};
+  const rpKeys = Object.keys(rp).filter((k) => typeof rp[k] === "string" && String(rp[k]).trim());
+  if (rpKeys.length) {
+    const rpLabel = (k) => {
+      const m = {
+        sourceRoot: "App root (resolved)",
+        manifestPath: "Bridge manifest (leco.app.yaml)",
+        localHostProfile: "Localhost profile (e.g. leco.yaml)",
+        wranglerConfig: "Wrangler config",
+        packageJson: "package.json",
+        dockerComposeFile: "Docker Compose file",
+        composeOverrideFile: "Compose override",
+        envFile: "Env file",
+        dockerfile: "Dockerfile",
+        wordpressConfigPhp: "WordPress config",
+        nginxConfig: "nginx config",
+        varnishVcl: "Varnish VCL",
+        phpFpmPool: "PHP-FPM pool",
+        mysqlInit: "MySQL init",
+        mongoInit: "Mongo init",
+        redisConfig: "Redis config",
+      };
+      return m[k] || k;
+    };
+    rpKeys.sort((a, b) => {
+      const pri = (x) =>
+        ["sourceRoot", "manifestPath", "localHostProfile", "wranglerConfig", "packageJson", "dockerComposeFile"].indexOf(x);
+      const pa = pri(a);
+      const pb = pri(b);
+      if (pa >= 0 && pb >= 0) return pa - pb;
+      if (pa >= 0) return -1;
+      if (pb >= 0) return 1;
+      return a.localeCompare(b);
+    });
+    html += '<div class="hosted-manifest-summary__subtitle">Resolved paths (absolute)</div>';
+    html += '<ul class="muted small hosted-manifest-summary__list hosted-manifest-summary__paths">';
+    rpKeys.forEach((k) => {
+      html += `<li><strong>${escapeHtml(rpLabel(k))}</strong> · <code>${escapeHtml(String(rp[k]))}</code></li>`;
+    });
+    html += "</ul>";
+  }
+  if (args.length) {
+    html += `<p class="muted small hosted-manifest-summary__cmd"><code>docker compose ${args.map((x) => escapeHtml(String(x))).join(" ")}</code></p>`;
+  } else if (mu.effective_has_docker_compose === true) {
+    html +=
+      '<p class="muted small hosted-manifest-summary__warn">Compose is declared in <code>leco.yaml</code> but LEco did not build a <code>-f</code> chain — check <code>composeFile</code> under resolved app root, container vs host paths, and optional <code>additionalComposeFilesFromManifest</code> files beside <code>leco.app.yaml</code>.</p>';
+  } else {
+    html +=
+      '<p class="muted small">No <code>infrastructure.dockerCompose</code> in profile (Workers-only is fine). Add compose under <code>leco.yaml</code> to drive Deploy / service rows.</p>';
+  }
+  if (pdc && pdc.compose_file) {
+    const mx = pdc.additional_compose_files_from_manifest || [];
+    const ax = pdc.additional_compose_files || [];
+    html += '<ul class="muted small hosted-manifest-summary__list">';
+    html += `<li>Primary <code>composeFile</code> (relative to app root): <code>${escapeHtml(String(pdc.compose_file))}</code></li>`;
+    if (ax.length)
+      html += `<li>Extra <code>-f</code> (app root): ${ax.map((x) => `<code>${escapeHtml(String(x))}</code>`).join(", ")}</li>`;
+    if (mx.length)
+      html += `<li>Extra <code>-f</code> (manifest dir): ${mx.map((x) => `<code>${escapeHtml(String(x))}</code>`).join(", ")}</li>`;
+    html += "</ul>";
+  }
+  if (routes.length) {
+    const bits = routes.map((r) => {
+      const h = r.hostname ? escapeHtml(String(r.hostname)) : "—";
+      const pr = r.api_path_prefix ? ` · API ${escapeHtml(String(r.api_path_prefix))}` : "";
+      let tgt = "";
+      if (r.frontend && r.frontend.host) {
+        tgt += ` → UI ${escapeHtml(String(r.frontend.host))}:${escapeHtml(String(r.frontend.port ?? ""))}`;
+      }
+      if (r.api_backend && r.api_backend.host) {
+        tgt += ` · API ${escapeHtml(String(r.api_backend.host))}:${escapeHtml(String(r.api_backend.port ?? ""))}`;
+      }
+      if (r.backend && r.backend.host) {
+        tgt = ` → ${escapeHtml(String(r.backend.host))}:${escapeHtml(String(r.backend.port ?? ""))}`;
+      }
+      return `<span class="hosted-manifest-summary__route">${h}${pr}${tgt}</span>`;
+    });
+    html += `<p class="muted small"><strong>Traefik routing</strong> · ${bits.join(" · ")}</p>`;
+  }
+  el.innerHTML = html;
+}
+
 function renderHostedResourceLedger(manifestUi, snap) {
   const el = document.getElementById("hostedAppsResourceLedger");
   if (!el) return;
@@ -4380,8 +4505,12 @@ function renderHostedResourceLedger(manifestUi, snap) {
   if (pdc && pdc.compose_file) {
     html += `<p class="hosted-resource-ledger__card-body"><strong>Compose file</strong> (profile <code>infrastructure.dockerCompose.composeFile</code>): <code>${escapeHtml(String(pdc.compose_file))}</code>`;
     const ax = pdc.additional_compose_files;
+    const mx = pdc.additional_compose_files_from_manifest;
     if (Array.isArray(ax) && ax.length) {
-      html += `<br /><strong>Additional <code>-f</code> files:</strong> ${ax.map((x) => `<code>${escapeHtml(String(x))}</code>`).join(", ")}`;
+      html += `<br /><strong>Extra <code>-f</code> (app root):</strong> ${ax.map((x) => `<code>${escapeHtml(String(x))}</code>`).join(", ")}`;
+    }
+    if (Array.isArray(mx) && mx.length) {
+      html += `<br /><strong>Extra <code>-f</code> (manifest dir):</strong> ${mx.map((x) => `<code>${escapeHtml(String(x))}</code>`).join(", ")}`;
     }
     html += "</p>";
     html += `<p class="muted small">${services.length} service row(s) below are <strong>all</strong> resources from that compose project. They are the only containers that appear under <em>this</em> app in Docker Desktop.</p>`;
@@ -4400,7 +4529,7 @@ function renderHostedResourceLedger(manifestUi, snap) {
     html += `<p class="hosted-resource-ledger__counts"><span class="hosted-resource-ledger__count"><strong>${nKv}</strong> KV</span> · <span class="hosted-resource-ledger__count"><strong>${nR2}</strong> R2</span> · <span class="hosted-resource-ledger__count"><strong>${nD1}</strong> D1</span></p>`;
     if (dedicatedAdapters) {
       html +=
-        '<p class="muted small">This app uses <strong>dedicatedLocalAdapters</strong>: resources live on <strong>in-compose</strong> services (<code>leco-local-kv-adapter</code>, <code>leco-local-r2-adapter</code>, <code>leco-local-d1-adapter</code> plus Valkey/MinIO) in <strong>your</strong> compose project — they show under this app in Docker Desktop. <code>leco.local-cf.yaml</code> records the same Docker DNS bases the adapters use. See <code>docker-compose.leco-dedicated-cf.example.yml</code> in the sample-cloudflare-application hosting pack.</p>';
+        '<p class="muted small">This app uses <strong>dedicatedLocalAdapters</strong>: resources live on <strong>in-compose</strong> services (<code>leco-local-kv-adapter</code>, <code>leco-local-r2-adapter</code>, <code>leco-local-d1-adapter</code> plus Valkey/MinIO) in <strong>your</strong> compose project — they show under this app in Docker Desktop. <code>leco.local-cf.yaml</code> records the same Docker DNS bases the adapters use. See <code>docker-compose.leco-dedicated-cf.example.yml</code> in <code>hosting/samples/sample-cloudflare-application/</code>.</p>';
     } else {
       html +=
         '<p class="muted small">These are <strong>provisioned names</strong> on the ecosystem&rsquo;s shared <code>kv-adapter</code>, <code>r2-adapter</code>, and <code>d1-adapter</code> (the <strong>cloudflare-local</strong> Docker stack). They are <strong>not</strong> extra containers inside your app&rsquo;s compose file — same model as Cloudflare production (managed APIs). The full list is in the table below and in <code>leco.local-cf.yaml</code>.</p>';
@@ -4600,6 +4729,10 @@ async function refreshHostedAppsPanel() {
   const svcSel = document.getElementById("hostedLogService");
 
   const app = hostedAppsList.find((x) => x.id === slug);
+  const stagingBarEl = document.getElementById("hostedAppsStagingBar");
+  if (stagingBarEl) {
+    stagingBarEl.classList.toggle("is-hidden", !(app && app.pending_registration === true));
+  }
   const tailSel = document.getElementById("hostedLogTail");
   const sinceSel = document.getElementById("hostedLogSince");
   const tail = tailSel ? tailSel.value : "400";
@@ -4649,14 +4782,20 @@ async function refreshHostedAppsPanel() {
     stopHostedLogStream();
   }
 
-  if (titleEl && app) titleEl.textContent = app.label || slug;
+  if (titleEl && app) {
+    titleEl.textContent =
+      app.pending_registration === true ? `${app.label || slug} · Staging` : app.label || slug;
+  }
   if (metaEl && app) {
     const mu = snap.manifest_ui || {};
     const v = mu.application_version;
     const fp = mu.deploy_fingerprint;
     const snapAt = snap.generated_at ? ` · snapshot ${snap.generated_at}` : "";
     const src = typeof mu.source_location === "string" ? mu.source_location.trim() : "";
-    let bits = `Registry id: ${slug} · Target: ${app.target_id || "—"}`;
+    const pend = app.pending_registration === true;
+    let bits = pend
+      ? `Staging (not in registry) · app id: ${slug} · Target: ${app.target_id || "—"}`
+      : `Registry id: ${slug} · Target: ${app.target_id || "—"}`;
     if (v) bits += ` · App version: ${String(v)}`;
     if (fp && fp.short_hash) {
       bits += ` · Manifest fingerprint ${String(fp.short_hash)}`;
@@ -4668,6 +4807,17 @@ async function refreshHostedAppsPanel() {
   }
 
   const rt = snap.runtime || (app && app.runtime) || {};
+
+  /* ── Prefer the *fresh* snapshot url_probes over the cached sidebar
+   *    main_url_probe so the status dot reflects current reality. ──── */
+  if (app && snap.url_probes) {
+    const mainUrl = (snap.manifest_ui?.main_url || app.main_url || "").trim();
+    const freshProbe = mainUrl && snap.url_probes[mainUrl];
+    if (freshProbe && freshProbe.checked) {
+      app.main_url_probe = freshProbe;
+    }
+  }
+
   const probeLabel = hostedMainUrlProbeSummary(app);
   const rtLabel = escapeHtml(probeLabel || rt.label || "—");
   const rtClass = probeLabel
@@ -4762,7 +4912,18 @@ async function refreshHostedAppsPanel() {
     expectsComposeStack &&
     (rt.running === false || (Number.isFinite(rs) && rs === 0));
   if (unregisterHintEl) {
-    if (stackLooksDown) {
+    if (app && app.pending_registration === true) {
+      if (stackLooksDown) {
+        unregisterHintEl.classList.remove("is-hidden");
+        unregisterHintEl.innerHTML = `<div class="hosted-apps-unregister-hint__inner hosted-apps-unregister-hint__inner--staging">
+        <strong>Staging — not in <code>config/leco-registry.yaml</code> yet.</strong>
+        Edit YAML under <code>hosting/app-available/</code>, use <strong>Validate YAML &amp; paths</strong> above, then <strong>Register application</strong> (or the wizard below / <code>leco-app ecosystem-register</code>).
+      </div>`;
+      } else {
+        unregisterHintEl.classList.add("is-hidden");
+        unregisterHintEl.innerHTML = "";
+      }
+    } else if (stackLooksDown) {
       unregisterHintEl.classList.remove("is-hidden");
       unregisterHintEl.innerHTML = `<div class="hosted-apps-unregister-hint__inner">
         <strong>Stack is down, but this app is still registered.</strong>
@@ -4797,6 +4958,7 @@ async function refreshHostedAppsPanel() {
     }
   }
 
+  renderHostedManifestSummary(snap.manifest_ui, snap);
   renderHostedResourceLedger(snap.manifest_ui, snap);
   renderHostedLocalProfile(snap.manifest_ui, snap);
   renderHostedCfResources(snap.manifest_ui);
@@ -5122,9 +5284,151 @@ function initHostedRegisterWizard() {
   const deployChk = document.getElementById("hostedRegDeployAfter");
   const workflowEl = document.getElementById("hostedRegWorkflow");
   const workflowHintEl = document.getElementById("hostedRegWorkflowHint");
+  const urlsTbody = document.getElementById("hostedRegUrlsTbody");
   /** Path for which the last Detect succeeded (step 1 “done” until path changes). */
   let hostedRegDetectOkForPath = "";
-  if (!detectBtn || !submitBtn || !pathIn) return;
+  let hostedRegLastDetectData = null;
+  if (!detectBtn || !submitBtn || !pathIn || !urlsTbody) return;
+
+  const hostedRegUrlRoles = [
+    "frontend",
+    "api",
+    "admin",
+    "backend",
+    "cdn",
+    "websocket",
+    "storybook",
+    "graphql",
+    "other",
+  ];
+
+  function hostedRegClearUrlRows() {
+    urlsTbody.innerHTML = "";
+  }
+
+  function hostedRegAppendUrlRow(row) {
+    const roleRaw = String(row.role || "other").trim() || "other";
+    const label = row.label != null ? String(row.label) : "";
+    const publicUrl = row.public_url != null ? String(row.public_url) : "";
+    const tr = document.createElement("tr");
+    tr.dataset.hostedRegUrlRow = "1";
+    const sel = document.createElement("select");
+    sel.setAttribute("aria-label", "URL role");
+    const addRoleOpt = (value, selected) => {
+      const o = document.createElement("option");
+      o.value = value;
+      o.textContent = value;
+      if (selected) o.selected = true;
+      sel.appendChild(o);
+    };
+    if (!hostedRegUrlRoles.includes(roleRaw)) {
+      addRoleOpt(roleRaw, true);
+    }
+    hostedRegUrlRoles.forEach((r) => {
+      addRoleOpt(r, hostedRegUrlRoles.includes(roleRaw) && r === roleRaw);
+    });
+    const labelIn = document.createElement("input");
+    labelIn.type = "text";
+    labelIn.value = label;
+    labelIn.placeholder = "e.g. Main app (HTTPS)";
+    labelIn.setAttribute("aria-label", "URL label");
+    const urlIn = document.createElement("input");
+    urlIn.type = "text";
+    urlIn.value = publicUrl;
+    urlIn.placeholder = "https://app.lh or https://app.lh/api/…";
+    urlIn.setAttribute("aria-label", "Public URL");
+    const rm = document.createElement("button");
+    rm.type = "button";
+    rm.className = "hosted-reg-urls__remove";
+    rm.textContent = "Remove";
+    rm.dataset.hostedRegUrlRemove = "1";
+    const td0 = document.createElement("td");
+    td0.appendChild(sel);
+    const td1 = document.createElement("td");
+    td1.appendChild(labelIn);
+    const td2 = document.createElement("td");
+    td2.appendChild(urlIn);
+    const td3 = document.createElement("td");
+    td3.appendChild(rm);
+    tr.appendChild(td0);
+    tr.appendChild(td1);
+    tr.appendChild(td2);
+    tr.appendChild(td3);
+    urlsTbody.appendChild(tr);
+  }
+
+  function hostedRegRenderUrlRows(rows) {
+    hostedRegClearUrlRows();
+    (rows || []).forEach((r) => hostedRegAppendUrlRow(r));
+  }
+
+  function hostedRegCollectUrlRows() {
+    const out = [];
+    urlsTbody.querySelectorAll("tr[data-hosted-reg-url-row]").forEach((tr) => {
+      const sel = tr.querySelector("select");
+      const textInputs = tr.querySelectorAll('input[type="text"]');
+      const labelIn = textInputs[0];
+      const urlIn = textInputs[1];
+      const public_url = urlIn && String(urlIn.value || "").trim();
+      if (!public_url) return;
+      out.push({
+        role: sel ? String(sel.value || "other").trim() || "other" : "other",
+        label: labelIn ? String(labelIn.value || "").trim() : "",
+        public_url,
+      });
+    });
+    return out;
+  }
+
+  function hostedRegHostSlugFromAppId(appId) {
+    const raw = String(appId || "").trim().toLowerCase();
+    let s = raw.replace(/[._]/g, "-").replace(/[^a-z0-9-]+/g, "-");
+    s = s.replace(/-{2,}/g, "-").replace(/^-+|-+$/g, "");
+    return s || "app";
+  }
+
+  function hostedRegSuggestedUrlOverrides(appId) {
+    const detectHost = String(hostedRegLastDetectData?.main_url_host_slug || "").trim();
+    const host = detectHost || hostedRegHostSlugFromAppId(appId);
+    return [
+      { role: "frontend", label: "Main app (HTTPS)", public_url: `https://${host}.lh` },
+      { role: "frontend", label: "Main app (HTTP)", public_url: `http://${host}.lh` },
+      { role: "api", label: "API (HTTPS)", public_url: `https://${host}.lh/api` },
+      { role: "api", label: "API (HTTP)", public_url: `http://${host}.lh/api` },
+    ];
+  }
+
+  function hostedRegFillSuggestedRows(appId) {
+    hostedRegRenderUrlRows(hostedRegSuggestedUrlOverrides(appId));
+  }
+
+  async function hostedRegSyncUrlsFromLocTa(appIdForFallback, silent) {
+    const raw = locTa && String(locTa.value || "").trim();
+    const fallbackId =
+      appIdForFallback || (idIn && idIn.value.trim()) || "";
+    if (!raw) {
+      hostedRegFillSuggestedRows(fallbackId);
+      return;
+    }
+    try {
+      const res = await fetch("/api/leco/extract-localhost-urls", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ localhost_yaml: locTa.value }),
+        cache: "no-store",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        if (!silent) setMsg(data.error || "Could not parse URLs from profile YAML.", true);
+        return;
+      }
+      const rows = Array.isArray(data.urls) ? data.urls : [];
+      if (rows.length) hostedRegRenderUrlRows(rows);
+      else hostedRegFillSuggestedRows(fallbackId);
+    } catch (e) {
+      if (!silent) setMsg(String(e.message || e), true);
+    }
+  }
 
   function syncHostedRegWorkflow(st, busy, opts) {
     if (!workflowEl) return;
@@ -5195,9 +5499,9 @@ function initHostedRegisterWizard() {
     else if (!idOk) hint = "Enter app id (slug) for steps 2–5.";
     else if (!detectDone) hint = "Step 1: run Detect to scan compose / wrangler / archetype.";
     else if (!registrationReady)
-      hint = "Steps 2–3: Generate YAML from the scan and/or Save YAML to write files to disk.";
+      hint = "Steps 2–3: Generate YAML from the scan and/or Save YAML to disk; edit Public URLs above.";
     else if (tokReq && !tokOk) hint = "Set the control token on the Control tab to enable Register.";
-    else hint = "Step 5: Register runs ecosystem-register (and optional deploy).";
+    else hint = "Step 5: Register applies Public URLs to the profile, then ecosystem-register (and optional deploy).";
 
     workflowHintEl.textContent = hint;
   }
@@ -5263,6 +5567,9 @@ function initHostedRegisterWizard() {
     [detectBtn, valBtn, submitBtn, genBtn, saveYamlBtn].forEach((b) => {
       if (b) b.disabled = !!on;
     });
+    regPanel?.querySelectorAll("#hostedRegUrlsBlock .hosted-reg-urls__toolbar button").forEach((b) => {
+      b.disabled = !!on;
+    });
     if (on) {
       syncHostedRegWorkflow(null, true, { busyLabel: label || "Working…" });
       return;
@@ -5280,6 +5587,7 @@ function initHostedRegisterWizard() {
   function resetHostedRegisterFormAfterSuccess() {
     setRegFormBusy(false);
     hostedRegDetectOkForPath = "";
+    hostedRegLastDetectData = null;
     if (pathIn) pathIn.value = "";
     if (idIn) idIn.value = "";
     if (labelIn) labelIn.value = "";
@@ -5297,6 +5605,7 @@ function initHostedRegisterWizard() {
       yamlRep.classList.add("is-hidden");
       yamlRep.classList.remove("hosted-reg-yaml-report--pass", "hosted-reg-yaml-report--fail");
     }
+    hostedRegClearUrlRows();
     setMsg("");
     const hostedRegRootDirInp = document.getElementById("hostedRegRootDir");
     if (hostedRegRootDirInp) hostedRegRootDirInp.value = "";
@@ -5349,6 +5658,7 @@ function initHostedRegisterWizard() {
       }
       if (!data.ok) {
         hostedRegDetectOkForPath = "";
+        hostedRegLastDetectData = null;
         if (pre) {
           pre.classList.add("is-hidden");
           pre.textContent = "";
@@ -5359,6 +5669,7 @@ function initHostedRegisterWizard() {
       if (data.path_field && pathIn) {
         pathIn.value = data.path_field;
       }
+      hostedRegLastDetectData = data;
       if (pre) {
         pre.classList.remove("is-hidden");
         const {
@@ -5401,6 +5712,9 @@ function initHostedRegisterWizard() {
         }
       }
       hostedRegDetectOkForPath = pathIn.value.trim();
+      const aidAfter =
+        idIn && idIn.value.trim() ? idIn.value.trim() : previewId || "";
+      await hostedRegSyncUrlsFromLocTa(aidAfter, true);
       await refreshYamlStatus();
       if (how && how.fromBrowse) {
         setMsg(
@@ -5417,6 +5731,7 @@ function initHostedRegisterWizard() {
       }
     } catch (e) {
       hostedRegDetectOkForPath = "";
+      hostedRegLastDetectData = null;
       setMsg(String(e.message || e), true);
     } finally {
       setRegFormBusy(false);
@@ -5439,6 +5754,55 @@ function initHostedRegisterWizard() {
     "hostedRegLocalhostYaml",
     setMsg,
   );
+
+  document.getElementById("hostedRegUrlsSuggested")?.addEventListener("click", () => {
+    hostedRegFillSuggestedRows((idIn && idIn.value.trim()) || "");
+    setMsg("Filled Public URLs with suggested defaults — edit or add rows as needed.", false);
+  });
+  document.getElementById("hostedRegUrlsFromYaml")?.addEventListener("click", () => {
+    void hostedRegSyncUrlsFromLocTa((idIn && idIn.value.trim()) || "", false);
+  });
+  document.getElementById("hostedRegUrlsToYaml")?.addEventListener("click", async () => {
+    if (!locTa) return;
+    if (!locTa.value.trim()) {
+      setMsg("Profile YAML textarea is empty — Generate YAML or paste leco.yaml first.", true);
+      return;
+    }
+    const rows = hostedRegCollectUrlRows();
+    if (!rows.length) {
+      setMsg("Add at least one URL row with a non-empty public URL.", true);
+      return;
+    }
+    setRegFormBusy(true, "Merging URLs into profile YAML…");
+    try {
+      const res = await fetch("/api/leco/merge-localhost-urls", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ localhost_yaml: locTa.value, urls: rows }),
+        cache: "no-store",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setMsg(data.error || `HTTP ${res.status}`, true);
+        return;
+      }
+      locTa.value = data.localhost_yaml;
+      setMsg("URLs written into the profile YAML textarea — click Save YAML to persist.", false);
+    } catch (e) {
+      setMsg(String(e.message || e), true);
+    } finally {
+      setRegFormBusy(false);
+    }
+  });
+  document.getElementById("hostedRegUrlsAddRow")?.addEventListener("click", () => {
+    hostedRegAppendUrlRow({ role: "other", label: "", public_url: "" });
+  });
+  urlsTbody.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-hosted-reg-url-remove]");
+    if (!btn) return;
+    const tr = btn.closest("tr");
+    if (tr) tr.remove();
+  });
 
   function tryAutoDetectFromPathField() {
     const loadExisting = loadExistingChk ? loadExistingChk.checked : true;
@@ -5473,9 +5837,54 @@ function initHostedRegisterWizard() {
   locTa?.addEventListener("input", scheduleYamlFieldSync);
   let yamlStatusDebounce = null;
   idIn?.addEventListener("blur", () => refreshYamlStatus());
+
+  /* ── Slug → URL auto-sync ───────────────────────────────────────────
+   * When the user edits the App id (slug), rewrite the hostname portion
+   * of every Public URL row so the URLs stay in sync.  If no URL rows
+   * exist yet, populate them with the suggested defaults.
+   *
+   * Instead of tracking a "previous slug" variable (which gets out of
+   * sync when Detect or Load-from-YAML fills URLs with a different
+   * hostname), we extract the *actual* hostname from the first URL row
+   * each time the slug changes.
+   * ─────────────────────────────────────────────────────────────────── */
+  function _extractHostFromUrlRows() {
+    const firstUrl = urlsTbody?.querySelector("tr[data-hosted-reg-url-row] input[aria-label='Public URL']");
+    if (!firstUrl || !firstUrl.value) return "";
+    const m = firstUrl.value.match(/https?:\/\/([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)\.lh/);
+    return m ? m[1] : "";
+  }
+
   idIn?.addEventListener("input", () => {
     if (yamlStatusDebounce) clearTimeout(yamlStatusDebounce);
     yamlStatusDebounce = setTimeout(() => refreshYamlStatus(), 400);
+
+    const newId = (idIn.value || "").trim();
+    const newHost = hostedRegHostSlugFromAppId(newId);
+    if (!newHost) return;
+
+    const rows = urlsTbody?.querySelectorAll("tr[data-hosted-reg-url-row]");
+    if (!rows || rows.length === 0) {
+      /* No rows yet — fill the defaults. */
+      if (newId) hostedRegFillSuggestedRows(newId);
+      return;
+    }
+
+    /* Read the hostname that is *actually* in the URL fields right now. */
+    const curHost = _extractHostFromUrlRows();
+    if (!curHost || curHost === newHost) return;
+
+    /* Rewrite hostnames inside every URL value. */
+    const oldPat = new RegExp(
+      "(https?://)(" + curHost.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")\\.lh",
+      "g",
+    );
+    rows.forEach((tr) => {
+      const urlIn = tr.querySelectorAll('input[type="text"]')[1];
+      if (!urlIn) return;
+      const cur = urlIn.value || "";
+      if (cur) urlIn.value = cur.replace(oldPat, "$1" + newHost + ".lh");
+    });
   });
 
   const dirInp = document.getElementById("hostedRegRootDir");
@@ -5564,6 +5973,9 @@ function initHostedRegisterWizard() {
     if (regPanel.open) {
       ensureRegisterSamplesLoaded();
       refreshYamlStatus();
+      if (urlsTbody && !urlsTbody.children.length && idIn && idIn.value.trim()) {
+        hostedRegFillSuggestedRows(idIn.value.trim());
+      }
     } else {
       const ov = document.getElementById("controlActionOverlay");
       if (!ov || ov.hidden) setRegFormBusy(false);
@@ -5581,6 +5993,7 @@ function initHostedRegisterWizard() {
     if (locTa && s.localhost_yaml) locTa.value = s.localhost_yaml;
     setMsg(`Applied sample: ${s.title}. Edit, then Save YAML (or Generate YAML) before Register.`);
     refreshYamlStatus();
+    void hostedRegSyncUrlsFromLocTa((idIn && idIn.value.trim()) || "", false);
   });
 
   detectBtn.addEventListener("click", () => {
@@ -5620,6 +6033,7 @@ function initHostedRegisterWizard() {
           ? "YAML materialized under hosting (read-only root). You can edit and Save YAML, then Register."
           : "YAML written under the app root. Edit if needed, Save YAML to persist changes, then Register.",
       );
+      await hostedRegSyncUrlsFromLocTa(app_id, true);
       await refreshYamlStatus();
     } catch (e) {
       setMsg(String(e.message || e), true);
@@ -5724,11 +6138,21 @@ function initHostedRegisterWizard() {
       return;
     }
     setMsg("Registering — overlay shows progress; server runs registry + optional docker deploy (works via Traefik).");
+    const deployStack = deployChk ? !!deployChk.checked : true;
+    const urlOverrides = hostedRegCollectUrlRows();
+    if (!urlOverrides.length) {
+      setMsg(
+        "Add at least one public URL in the Public URLs table (or click Use suggested after setting app id).",
+        true,
+      );
+      return;
+    }
     const regBody = {
       path,
       app_id,
       label,
-      deploy_stack: deployChk ? !!deployChk.checked : true,
+      deploy_stack: deployStack,
+      url_overrides: urlOverrides,
     };
     setRegFormBusy(true, "Registering…");
     try {
@@ -5768,6 +6192,74 @@ function initHostedRegisterWizard() {
   });
 
   refreshYamlStatus();
+}
+
+function initHostedAppsStagingActions() {
+  const regBtn = document.getElementById("hostedAppsQuickRegister");
+  const valBtn = document.getElementById("hostedAppsValidateConfig");
+  const valPre = document.getElementById("hostedAppsConfigValidation");
+  if (!regBtn || !valBtn || !valPre) return;
+  if (regBtn.dataset.wired === "1") return;
+  regBtn.dataset.wired = "1";
+  valBtn.dataset.wired = "1";
+
+  valBtn.addEventListener("click", async () => {
+    const s = hostedSelectedSlug;
+    if (!s) return;
+    const ap = hostedAppsList.find((x) => x.id === s);
+    if (!ap || ap.pending_registration !== true) return;
+    valPre.classList.remove("hosted-apps-config-validation--pass", "hosted-apps-config-validation--fail");
+    valPre.textContent = "Validating…";
+    valPre.classList.remove("is-hidden");
+    try {
+      const res = await fetch(`/api/hosted-apps/${encodeURIComponent(s)}/validate-configuration`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        valPre.textContent = data.summary_text || data.error || `Request failed (${res.status})`;
+        valPre.classList.add("hosted-apps-config-validation--fail");
+        return;
+      }
+      valPre.textContent = data.summary_text || JSON.stringify(data, null, 2);
+      valPre.classList.toggle("hosted-apps-config-validation--pass", !!data.validation_ok);
+      valPre.classList.toggle("hosted-apps-config-validation--fail", !data.validation_ok);
+    } catch (e) {
+      valPre.textContent = String(e.message || e);
+      valPre.classList.add("hosted-apps-config-validation--fail");
+    }
+  });
+
+  regBtn.addEventListener("click", async () => {
+    const s = hostedSelectedSlug;
+    if (!s) return;
+    const ap = hostedAppsList.find((x) => x.id === s);
+    if (!ap || ap.pending_registration !== true) return;
+    const tok = controlToken();
+    if (dashboardTokenRequired() && !tok) {
+      valPre.classList.remove("is-hidden", "hosted-apps-config-validation--pass");
+      valPre.classList.add("hosted-apps-config-validation--fail");
+      valPre.textContent =
+        "Control token required — open the Control tab and save the token before registering.";
+      return;
+    }
+    const path = String(ap.registration_path || `hosting/app-available/${s}`).trim();
+    const label = String(ap.label || s).trim();
+    valPre.classList.add("is-hidden");
+    await runDashboardSyncRegisterOverlay({
+      body: { path, app_id: s, label, deploy_stack: true },
+      title: `Register · ${s}`,
+      actionVerb: "register",
+      async onFinally() {
+        await syncHostedAppsAfterRegistryMutation({
+          message: "Registered app. Refreshing hosted apps…",
+        });
+        loadOverview().catch(() => {});
+      },
+    });
+  });
 }
 
 function initHostedAppsLogToolbar() {
@@ -7471,6 +7963,7 @@ async function bootstrap() {
   initHostMetricsPanelRefresh();
   initControlBulkBar();
   initHostedAppsLogToolbar();
+  initHostedAppsStagingActions();
   initHostedRegisterWizard();
   initRoutesTab();
   initHostedChartExpandModal();

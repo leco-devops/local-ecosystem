@@ -31,6 +31,7 @@ You access services by name (**`https://n8n.lh`**, **`https://ai.lh`**, …) ins
 | **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** | **Deployment and operations** — start/stop, updates, bulk vs Control API behavior, troubleshooting |
 | **[docs/DEVELOPMENT_PLAYBOOK.md](docs/DEVELOPMENT_PLAYBOOK.md)** | Extending services, LEco DevOps APIs, Traefik routes |
 | **[docs/LECO_APP_BLUEPRINT.md](docs/LECO_APP_BLUEPRINT.md)** | LEco apps: bridge vs profile (v3), hosting symlinks, compose extras, teardown semantics |
+| **[docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md](docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md)** | Hosted apps behind Traefik: 502, `lh-network`, DNS names, dashboard probes, same-origin `/api` |
 | **[cloudflare-local/README.md](cloudflare-local/README.md)** | CF-local stack entry + links to architecture and user manual |
 
 ---
@@ -68,6 +69,7 @@ Repair routing and network attachments anytime:
 | URL | Service |
 |-----|---------|
 | http://localhost.lh | LEco DevOps (via Traefik) |
+| http://dashboard.lh | LEco DevOps (same app; add `dashboard.lh` to `*.lh` DNS like other `.lh` hosts) |
 | http://localhost:8090 | LEco DevOps (direct host port; override with `DASHBOARD_HOST_PORT`) |
 | https://traefik.lh | Traefik routing (TLS) |
 | https://ai.lh | Open WebUI |
@@ -118,7 +120,9 @@ local-ecosystem/
 │   └── config/              # e.g. ollama-pinned-models.txt, dynamic.yml copy
 ├── dashboard/               # LEco DevOps Flask app (image local/service-dashboard)
 ├── traefik/
-│   └── dynamic.yml          # *.lh routers (keep in sync with ecosystem-stack/config if you use both)
+│   ├── traefik-static.yaml  # entrypoints, file provider → hosting/traefik/
+│   └── dynamic.yml          # canonical *.lh stack routes (copied to hosting/traefik/01-stack-core.yml on Traefik start)
+├── hosting/traefik/         # runtime dynamic dir (gitignored: dynamic.yml merge fragment; 01-stack-core.yml copy)
 ├── cloudflare-local/        # docker-compose + adapters
 ├── certs/                   # mkcert *.lh PEMs
 └── docs/                    # SETUP.md, DEPLOYMENT.md, DEVELOPMENT_PLAYBOOK.md
@@ -149,7 +153,7 @@ Edit **`ecosystem-stack/config/ollama-pinned-models.txt`** (one model per line).
 | Issue | Action |
 |-------|--------|
 | `*.lh` does not resolve | dnsmasq + `/etc/resolver/lh` — see [docs/SETUP.md](docs/SETUP.md) §4 |
-| Bad Gateway | `./ecosystem-stack/ecosystem-stack.sh repair-network` |
+| Bad Gateway | `./ecosystem-stack/ecosystem-stack.sh repair-network`; Hosted apps: **[docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md](docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md)** |
 | TLS warnings | mkcert CA + files in `certs/` |
 | n8n cookies / HTTPS | Env in `ecosystem-stack/services/n8n.sh` (`N8N_TRUST_PROXY`, `N8N_SECURE_COOKIE`) |
 
@@ -169,6 +173,6 @@ To contribute, open an issue or pull request and follow **[CONTRIBUTING.md](CONT
 
 - **Project docs:** [docs/SETUP.md](docs/SETUP.md), [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), [docs/DEVOPS_GUIDE.md](docs/DEVOPS_GUIDE.md)
 - **Architecture docs:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/HLD.md](docs/HLD.md), [docs/LLD.md](docs/LLD.md)
-- **LEco DevOps app tooling:** [docs/LECO_TOOLING.md](docs/LECO_TOOLING.md), [docs/DEPLOY_CLI.md](docs/DEPLOY_CLI.md), [docs/LECO_USER_MANUAL.md](docs/LECO_USER_MANUAL.md), [docs/LECO_APP_BLUEPRINT.md](docs/LECO_APP_BLUEPRINT.md)
+- **LEco DevOps app tooling:** [docs/LECO_TOOLING.md](docs/LECO_TOOLING.md), [docs/DEPLOY_CLI.md](docs/DEPLOY_CLI.md), [docs/LECO_USER_MANUAL.md](docs/LECO_USER_MANUAL.md), [docs/LECO_APP_BLUEPRINT.md](docs/LECO_APP_BLUEPRINT.md), [docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md](docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md)
 - **Open-source docs:** [LICENSE](LICENSE), [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md)
 - **Automation guide:** [AGENTS.md](AGENTS.md)

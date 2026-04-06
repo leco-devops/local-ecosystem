@@ -9,6 +9,7 @@ from typing import Any
 import yaml
 
 from leco_app.schema import ApplicationManifest
+from leco_app.traefik_dynamic_sanitize import prune_empty_http_maps
 from leco_app.traefik_fragment import (
     local_cf_adapter_host_aliases_fragment,
     merge_fragments,
@@ -74,6 +75,7 @@ def strip_traefik_dynamic_yml(
     http["routers"] = routers
     http["services"] = services
     data["http"] = http
+    prune_empty_http_maps(data)
 
     path.write_text(
         yaml.safe_dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True),

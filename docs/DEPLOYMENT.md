@@ -13,7 +13,7 @@ This guide covers **starting, updating, stopping, and debugging** the stack afte
 | Foundation installer | `./ecosystem-stack/install-foundation.sh` | First run: dependency checks + guided service selection |
 | Per-service script | `./ecosystem-stack/services/<name>.sh <action>` | Direct control of one unit |
 | Dashboard **Control** tab | http://localhost.lh | Platform targets (ecosystem stack, infra, CF-local) with optional token |
-| Dashboard **Hosted apps** tab | http://localhost.lh | Per registered LEco DevOps app: metrics, charts, logs, insights, compose controls (`leco-stack-<id>`) |
+| Dashboard **Hosted apps** tab | http://localhost.lh | Per registry id: metrics, logs, compose controls (`leco-stack-<id>`). Rows come from **`config/leco-registry.yaml`** — finish **Register** after **Save YAML**. If compose metadata fails to load (e.g. missing optional `additionalComposeFilesFromManifest` files), fix paths in **`leco.yaml`** or add the overlay file beside **`leco.app.yaml`**. |
 
 Always run commands from the **repository root** (or pass absolute paths). The variable **`PROJECT_ROOT`** is inferred from each service script’s location.
 
@@ -35,7 +35,9 @@ Most **`ecosystem-stack/services/*.sh`** scripts support:
 | `status` | `docker ps` or compose `ps` |
 | `logs` | Follow logs |
 
-**Dashboard (`dashboard.sh`):** **`start` / `deploy`** rebuild the Docker image from **`dashboard/`** and recreate **`service-dashboard`**. On **macOS**, **`stop`** and **`remove`** also **uninstall** the host CPU metrics LaunchAgent (see SETUP.md).
+**Traefik (`traefik.sh`):** besides the usual actions, **`ensure-hosting-files`** refreshes **`hosting/traefik/01-stack-core.yml`** from **`traefik/dynamic.yml`**, ensures **`hosting/traefik/dynamic.yml`** exists, and normalizes invalid empty **`http`** stubs (Traefik v3). **`heal`** does that and **restarts** the Traefik container if it already exists (safe recovery after Docker Desktop watcher issues). From the stack CLI: **`./ecosystem-stack/ecosystem-stack.sh heal traefik`**.
+
+**Dashboard (`dashboard.sh`):** **`start` / `deploy`** rebuild the Docker image from **`dashboard/`** and recreate **`service-dashboard`**. After a successful container start, **`dashboard.sh`** runs **`traefik.sh heal`** unless **`DASHBOARD_SKIP_TRAEFIK_HEAL=1`** is set (repairs **`hosting/traefik/*`** and restarts Traefik when running). **`deploy`** skips heal during **`start`** and runs **`heal`** once at the end so Traefik is not restarted twice. On **macOS**, **`stop`** and **`remove`** also **uninstall** the host CPU metrics LaunchAgent (see SETUP.md).
 
 **Dashboard control token:** If **`DASHBOARD_CONTROL_TOKEN`** is **unset**, the Control API and Hosted apps / Routes mutations do not require a token, and the UI does not block those actions for a missing browser token. If **`DASHBOARD_CONTROL_TOKEN`** is **set**, the browser must send that value (Control tab **Save** persists it in `localStorage`). For **trusted local / single-user** setups only, **`DASHBOARD_INJECT_CONTROL_TOKEN_UI=1`** (or `true` / `yes`) embeds the same token in the main dashboard HTML and seeds `localStorage` on each load so you do not type it manually — **do not enable on internet-exposed dashboards** (the token is visible in page source and DevTools). Example extras on `docker run`: `-e DASHBOARD_CONTROL_TOKEN=…` and `-e DASHBOARD_INJECT_CONTROL_TOKEN_UI=1`. See comments in **`ecosystem-stack/services/dashboard.sh`**.
 
@@ -101,6 +103,7 @@ Bulk Control actions intentionally avoid tearing down **Traefik** (routing), **P
 | Traefik — restart | `./ecosystem-stack/ecosystem-stack.sh restart traefik` |
 | Traefik — stop / start | `./ecosystem-stack/ecosystem-stack.sh stop traefik` · `./ecosystem-stack/ecosystem-stack.sh start traefik` |
 | Traefik — direct script | `./ecosystem-stack/services/traefik.sh restart` |
+| Traefik — repair hosting files + restart if running | `./ecosystem-stack/services/traefik.sh heal` or `./ecosystem-stack/ecosystem-stack.sh heal traefik` |
 | Postgres — status | `./ecosystem-stack/ecosystem-stack.sh status postgres` |
 | Postgres — restart | `./ecosystem-stack/ecosystem-stack.sh restart postgres` |
 | Postgres — stop / start | `./ecosystem-stack/ecosystem-stack.sh stop postgres` · `./ecosystem-stack/ecosystem-stack.sh start postgres` |
@@ -166,11 +169,22 @@ The Dockerfile always rebuilds the image on **`start`/`deploy`**.
 
 ## 7. Traefik and routing changes
 
-1. Edit **`traefik/dynamic.yml`** (keep **`ecosystem-stack/config/dynamic.yml`** in sync if your workflow uses both).
-2. Reload: restart Traefik or rely on file provider polling (Traefik v3 file provider watches the file).
+Traefik reads **`/etc/traefik-dynamic`** (repo: **`hosting/traefik/`**), configured in **`traefik/traefik-static.yaml`** with **`watch: true`**.
+
+| File | Role |
+|------|------|
+| **`traefik/dynamic.yml`** | Canonical stack routes in **git**. Edited here for platform services. |
+| **`hosting/traefik/01-stack-core.yml`** | **Copy** of the above, rewritten on every **`traefik.sh start`** — must not be a symlink (see SETUP.md). |
+| **`hosting/traefik/dynamic.yml`** | **Writable** merge layer for **`leco-app`** / LEco DevOps Routes; empty document should be **`{}`**, not **`http: {}`** (Traefik v3 rejects the latter). |
+
+1. Change platform routes in **`traefik/dynamic.yml`**, then **`./ecosystem-stack/ecosystem-stack.sh restart traefik`** (or any **`traefik.sh start`**) so **`01-stack-core.yml`** is recopied.
+2. Hosted-app merges go to **`hosting/traefik/dynamic.yml`**; saves usually **reload without** restarting Traefik.
+3. If **`*.lh`** returns Traefik’s minimal **404 page not found**, run **`./ecosystem-stack/services/traefik.sh heal`** and inspect **`docker logs traefik`** for `file.Provider` / YAML errors.
+4. Keep **`ecosystem-stack/config/dynamic.yml`** in sync if your workflow uses that copy.
 
 ```bash
 ./ecosystem-stack/ecosystem-stack.sh restart traefik
+./ecosystem-stack/services/traefik.sh heal
 ```
 
 ---
@@ -230,7 +244,10 @@ Optional environment variable **`DASHBOARD_CONTROL_TOKEN`** restricts **Control*
 |---------|------------------|
 | `*.lh` does not resolve | dnsmasq running; `/etc/resolver/lh`; `ping ai.lh` |
 | TLS warnings | mkcert CA installed; correct cert files in **`certs/`** |
-| 502 from Traefik | Target container on **`lh-network`**; **`repair-network`**; service listening port matches **`dynamic.yml`** |
+| 502 from Traefik | Target container on **`lh-network`**; **`repair-network`**; Traefik **`loadBalancer`** host matches Docker DNS (**`container_name`** or **`{project}-{service}-1`**); merged **`hosting/traefik/dynamic.yml`**. See **[HOSTED_APPS_TRAEFIK_RUNBOOK.md](HOSTED_APPS_TRAEFIK_RUNBOOK.md)**. |
+| Hosted app UI works, dashboard URL row **“HTTP 0”** or API probe odd | Fixed: internal `*.lh` probes must use **`http://traefik`** + **`Host`** header (not **`https://traefik`**). Restart **LEco DevOps** after upgrading `dashboard/monitor.py`. Details in runbook. |
+| SPA on **`*.lh`** still calls **`localhost`** for API | Upstream compose **`REACT_APP_*` / `VITE_*`** pointing at host ports; use **`docker-compose.leco-hosting.yml`** to set same-origin **`*.lh`** (see **`DEPLOY_CLI.md`**, runbook §1). |
+| Traefik **404 page not found** on all `*.lh` | File provider failed: **`traefik.sh heal`** or **`restart`**; **`docker logs traefik`**; avoid symlinks for **`01-stack-core.yml`**; no standalone **`http: {}`** in **`hosting/traefik/dynamic.yml`** |
 | Dashboard empty metrics | Docker socket mounted; time for samples to accumulate |
 | macOS CPU temp flat / missing | **`~/.local-eco-host-metrics/cpu_temp_c.txt`**; LaunchAgent status; **`powermetrics`** sudo / NOPASSWD |
 | n8n cookie / HTTPS issues | Env in **`n8n.sh`** (`N8N_TRUST_PROXY`, `N8N_SECURE_COOKIE`) |
@@ -264,4 +281,5 @@ Cloudflare-local HTTP checks (expects Traefik routing to backends):
 |----------|---------|
 | [SETUP.md](SETUP.md) | First-time full setup |
 | [DEVELOPMENT_PLAYBOOK.md](DEVELOPMENT_PLAYBOOK.md) | Development workflow and APIs |
+| [HOSTED_APPS_TRAEFIK_RUNBOOK.md](HOSTED_APPS_TRAEFIK_RUNBOOK.md) | Hosted apps: Traefik 502, probes, compose overlays |
 | [../README.md](../README.md) | Overview and quick links |

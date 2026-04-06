@@ -54,7 +54,7 @@ flowchart TD
 - `hosting/`: hosted-app materialization area and templates.
 - `cloudflare-local/`: adapter compose stack and adapter implementations.
 - `infra/`: optional infra add-on compose stack.
-- `traefik/`: dynamic edge routes (`dynamic.yml`).
+- `traefik/`: static Traefik config and canonical **`dynamic.yml`**; runtime file-provider payloads live under **`hosting/traefik/`** (see **DEPLOYMENT.md** §7, **SETUP.md**).
 - `docs/`: operator, developer, and architecture documentation.
 
 ## Primary integration contracts

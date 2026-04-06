@@ -16,13 +16,14 @@ from urllib.parse import urlsplit, urlunsplit
 import requests
 import yaml
 
-from leco_detect import host_slug_from_app_id
+from leco_detect import compute_resolved_paths_for_leco_app_manifest, host_slug_from_app_id
 from leco_control import (
     compose_ps_result,
     leco_meta_for_slug,
     leco_stack_runtime,
     leco_target_id_for_slug,
     load_leco_registry_entries,
+    materialized_hosting_apps_not_in_registry,
 )
 from monitor import get_container_metrics, get_docker_client, get_docker_overview
 
@@ -70,6 +71,7 @@ def _empty_manifest_ui() -> dict[str, Any]:
         "derived_main_urls": {},
         "endpoint_urls": [],
         "source_location": "",
+        "resolved_paths": {},
     }
 
 
@@ -84,7 +86,15 @@ def _profile_docker_compose_ui(infra: dict[str, Any]) -> dict[str, Any] | None:
     extras: list[str] = []
     if isinstance(raw_ex, list):
         extras = [str(x).strip() for x in raw_ex if isinstance(x, str) and str(x).strip()]
-    return {"compose_file": cf.strip(), "additional_compose_files": extras}
+    raw_m = dc.get("additionalComposeFilesFromManifest") or dc.get("additional_compose_files_from_manifest")
+    man_ex: list[str] = []
+    if isinstance(raw_m, list):
+        man_ex = [str(x).strip() for x in raw_m if isinstance(x, str) and str(x).strip()]
+    return {
+        "compose_file": cf.strip(),
+        "additional_compose_files": extras,
+        "additional_compose_files_from_manifest": man_ex,
+    }
 
 
 def _profile_cloudflare_ui(infra: dict[str, Any]) -> dict[str, Any] | None:
@@ -374,6 +384,12 @@ def manifest_ui_fields(manifest_path: str) -> dict[str, Any]:
     app_ver = _application_version_from_manifest(data, manifest_path)
     fp = _manifest_deploy_fingerprint(manifest_path)
 
+    resolved_paths: dict[str, str] = {}
+    try:
+        resolved_paths = compute_resolved_paths_for_leco_app_manifest(data, mp, file_loc)
+    except Exception:
+        resolved_paths = {}
+
     cf_block = data.get("cloudflare") or data.get("Cloudflare")
     if not isinstance(cf_block, dict):
         cf_block = {}
@@ -446,6 +462,8 @@ def manifest_ui_fields(manifest_path: str) -> dict[str, Any]:
         source_location = str(em.resolved_root(mp).resolve())
     except Exception:
         pass
+    if not source_location and resolved_paths.get("sourceRoot"):
+        source_location = str(resolved_paths["sourceRoot"])
 
     return {
         "routes": routes,
@@ -471,6 +489,7 @@ def manifest_ui_fields(manifest_path: str) -> dict[str, Any]:
         "derived_main_urls": derived_main_urls,
         "endpoint_urls": endpoint_urls,
         "source_location": source_location,
+        "resolved_paths": resolved_paths,
     }
 
 
@@ -613,6 +632,40 @@ def list_hosted_apps() -> dict[str, Any]:
                 "id": slug,
                 "label": meta["label"],
                 "target_id": leco_target_id_for_slug(slug),
+                "pending_registration": False,
+                "runtime": rt,
+                "routes": mf["routes"],
+                "health_urls": mf["health_urls"],
+                "main_url": mf.get("main_url") or "",
+                "main_urls": mf.get("main_urls") or {},
+                "main_url_probe": probe,
+                "local_host_profile": mf.get("local_host_profile"),
+                "localhost_archetype": mf.get("localhost_archetype"),
+                "localhost_urls": mf.get("localhost_urls") or [],
+                "application_version": mf.get("application_version"),
+            }
+        )
+    for cand in materialized_hosting_apps_not_in_registry():
+        slug = str(cand.get("slug") or "").strip()
+        if not slug or slug in seen:
+            continue
+        seen.add(slug)
+        meta = leco_meta_for_slug(slug)
+        if not meta:
+            continue
+        mf = manifest_ui_fields(meta["manifest_path"])
+        rt = leco_stack_runtime(meta)
+        probe = {"checked": False}
+        rt_status = str((rt or {}).get("status") or "").strip().lower() if isinstance(rt, dict) else ""
+        if rt_status in ("running", "partial"):
+            probe = _probe_main_url(str(mf.get("main_url") or ""))
+        apps.append(
+            {
+                "id": slug,
+                "label": meta["label"],
+                "target_id": leco_target_id_for_slug(slug),
+                "pending_registration": True,
+                "registration_path": f"hosting/app-available/{slug}",
                 "runtime": rt,
                 "routes": mf["routes"],
                 "health_urls": mf["health_urls"],
@@ -653,11 +706,13 @@ def snapshot_for_slug(slug: str) -> dict[str, Any]:
         if isinstance(candidate, str) and candidate.strip():
             urls_for_probe.append(candidate.strip())
     url_probes = _probe_url_map(urls_for_probe[:16])
+    tail = meta.get("compose_tail") or []
     return {
         "ok": True,
         "slug": slug.strip(),
         "runtime": rt,
         "compose_ps_ok": code == 0,
+        "compose_docker_args": tail,
         "services": services,
         "aggregate": agg,
         "manifest_ui": mf,
@@ -768,12 +823,14 @@ def _probe_main_url(url: str) -> dict[str, Any]:
         return {"checked": False}
     headers = {"User-Agent": "local-ecosystem-dashboard-main-url-probe/1"}
     request_url = candidate
+    is_lh = False
     # Dashboard container usually cannot resolve *.lh via host DNS; probe through the
     # in-network Traefik service while preserving Host-based routing behavior.
     try:
         parts = urlsplit(candidate)
         host = (parts.hostname or "").strip().lower()
         if host.endswith(".lh"):
+            is_lh = True
             probe_host = os.getenv("DASHBOARD_TRAEFIK_INTERNAL_HOST", "traefik").strip() or "traefik"
             netloc = probe_host
             if parts.port:
@@ -784,11 +841,14 @@ def _probe_main_url(url: str) -> dict[str, Any]:
         request_url = candidate
     t0 = time.perf_counter()
     try:
+        # For *.lh probes, disable redirect following: backends (e.g. FastAPI) may
+        # redirect /api → /api/ with a Location header containing the unresolvable
+        # *.lh hostname.  A 3xx proves the backend is reachable, which is sufficient.
         r = requests.get(
             request_url,
             timeout=4,
             verify=False,
-            allow_redirects=True,
+            allow_redirects=(not is_lh),
             headers=headers,
         )
         ms = int((time.perf_counter() - t0) * 1000)

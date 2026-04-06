@@ -86,6 +86,16 @@ def compose_args(manifest: ApplicationManifest, manifest_path: Path) -> list[str
             compose_paths.append(str(path_for_docker_daemon(er.resolve())))
         else:
             compose_paths.append(str(path_for_docker_daemon((root_d / er).resolve())))
+    manifest_parent = manifest_path.parent.resolve()
+    manifest_parent_d = path_for_docker_daemon(manifest_parent)
+    for extra in dc.additional_compose_files_from_manifest or []:
+        er = Path(str(extra).strip())
+        if not str(er):
+            continue
+        cand = er.resolve() if er.is_absolute() else (manifest_parent_d / er).resolve()
+        if not cand.is_file():
+            continue
+        compose_paths.append(str(path_for_docker_daemon(cand)))
     args = [*_compose_cmd()]
     for fp in compose_paths:
         args.extend(["-f", fp])

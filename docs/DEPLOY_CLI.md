@@ -29,7 +29,7 @@ Requires **Python 3.11+** and **Docker** with the Compose v2 plugin (`docker com
 ```bash
 cd /path/to/application
 export LECO_ECOSYSTEM_ROOT=/path/to/local-ecosystem
-leco-app onboard       # deploy + ecosystem-register + merge routing → traefik/dynamic.yml
+leco-app onboard       # deploy + ecosystem-register + merge routing → hosting/traefik/dynamic.yml
 
 leco-app init          # wizard: detects docker-compose + wrangler.toml; writes leco.yaml stub
 leco-app init --onboard -E /path/to/local-ecosystem   # after deploy: register + Traefik merge
@@ -83,6 +83,7 @@ localHostProfile: leco.yaml
 Recommended for new apps: keep **`leco.app.yaml`** as a **bridge** (`name`, `root`, `localHostProfile`, optional `configRefs`, `applicationVersion`, `localhost.notes`) and put **`infrastructure`** in **`leco.yaml`** — **`dockerCompose`** (including **`additionalComposeFiles`**), **`cloudflare`**, **`routing`**, health URLs, etc. The CLI and LEco DevOps load an **effective manifest** by merging profile `infrastructure` over the bridge (`tools/deploy-cli/leco_app/schema.py`).
 
 - **`additionalComposeFiles`** — optional list of extra compose files; `docker compose` is run as **`-f` primary `-f` …** in list order. Paths are relative to the **resolved app root**; files must exist next to the primary compose file in the real checkout (not only under `hosting/` unless you symlink or copy them there).
+- **`additionalComposeFilesFromManifest`** — optional list merged **after** the above; paths are relative to **`leco.app.yaml`’s directory** (e.g. `hosting/app-available/myapp/docker-compose.leco-hosting.yml`). Keeps Traefik **`lh-network`** joins and public URL env overrides in the ecosystem repo while **`composeFile`** still points at the upstream project. Sample: **`hosting/samples/sample-leco-hosting-overlay/`**. For **split UI + `/api` routes**, frontends should call **`https://<slug>.lh/api/...`** (same origin), not `localhost:PORT` baked from upstream compose — the sample overlay sets **`REACT_APP_BACKEND_URL: ""`** and **`REACT_APP_SITE_URL`** (or your stack’s equivalent) so the browser uses the Traefik hostname.
 - **`leco-app down`** exits **0** with a warning if the primary compose file is missing (treats the stack as already removed). LEco DevOps **Remove** still runs **full offboard** afterward.
 
 Full diagram and maintainer pointers: **[LECO_APP_BLUEPRINT.md](LECO_APP_BLUEPRINT.md)**.
@@ -175,9 +176,9 @@ Production deploys require **`--confirm-production`** to reduce accidents.
 leco-app traefik-fragment -o /tmp/myapp-traefik.yml
 ```
 
-Merge the output into `traefik/dynamic.yml` manually (a `.bak` copy is made; LEco DevOps uses an atomic replace). Traefik’s file provider **`watch: true`** reloads **`dynamic.yml` without restarting Traefik**; restart only if you change static config or mounts. See [DEPLOY_CUSTOM_APPS.md](DEPLOY_CUSTOM_APPS.md).
+Merge the output into **`hosting/traefik/dynamic.yml`** manually unless you pass **`--traefik-dynamic`** (a `.bak` copy is made; LEco DevOps uses an atomic replace). Traefik’s file provider **`watch: true`** reloads files under **`hosting/traefik/`** without restarting Traefik; restart the Traefik container after changing **`traefik/dynamic.yml`** (stack core) or static config / mounts. See [DEPLOY_CUSTOM_APPS.md](DEPLOY_CUSTOM_APPS.md).
 
-The **LEco DevOps** web UI (container image built from the repo root) ships the **`leco-app`** / **`leco-devops`** CLI: **Hosted apps** control actions and **Register** use it; **Routes** can load **`traefik-fragment`** output by registry id and merge into **`dynamic.yml`**.
+The **LEco DevOps** web UI (container image built from the repo root) ships the **`leco-app`** / **`leco-devops`** CLI: **Hosted apps** control actions and **Register** use it; **Routes** can load **`traefik-fragment`** output by registry id and merge into **`hosting/traefik/dynamic.yml`**.
 
 **Manifest — single backend (legacy):**
 
@@ -241,18 +242,18 @@ When you **delete** containers with **`leco-app offload`** or **`docker compose 
 
 ## Offload — remove app from localhost
 
-Tear down the compose stack and optionally strip this app’s routers/services from Traefik’s `dynamic.yml`:
+Tear down the compose stack and optionally strip this app’s routers/services from Traefik’s writable merge file (default **`hosting/traefik/dynamic.yml`**):
 
 ```bash
 cd /path/to/your/app
-# Plan only
-leco-app offload --dry-run --traefik-dynamic /path/to/local-ecosystem/traefik/dynamic.yml
+# Plan only (default merge file when -E / LECO_ECOSYSTEM_ROOT is set)
+leco-app offload --dry-run --traefik-dynamic /path/to/local-ecosystem/hosting/traefik/dynamic.yml
 
 # Execute: Traefik keys first (backup `.yml.bak`), then docker compose down
-leco-app offload --traefik-dynamic /path/to/local-ecosystem/traefik/dynamic.yml
+leco-app offload --traefik-dynamic /path/to/local-ecosystem/hosting/traefik/dynamic.yml
 
 # Also remove compose volumes
-leco-app offload -v --traefik-dynamic /path/to/local-ecosystem/traefik/dynamic.yml -y
+leco-app offload -v --traefik-dynamic /path/to/local-ecosystem/hosting/traefik/dynamic.yml -y
 ```
 
 Traefik keys are derived from **`routing`** the same way as **`leco-app traefik-fragment`** (e.g. `myapp-myhost-lh-api-http`). If you **renamed keys** when merging into `dynamic.yml`, add explicit lists to the manifest:

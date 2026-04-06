@@ -13,7 +13,7 @@ This High-Level Design (HLD) defines major components, boundaries, and data/cont
 
 | Layer | Responsibility | Key artifacts |
 | ----- | ----- | ----- |
-| Edge | HTTP/S routing, TLS, service exposure | `traefik/dynamic.yml` |
+| Edge | HTTP/S routing, TLS, service exposure | `traefik/dynamic.yml` (git) + **`hosting/traefik/`** loaded by Traefik (`01-stack-core.yml` copy + `dynamic.yml` merge) |
 | Orchestration | Start/stop/restart/bulk operations | `ecosystem-stack/ecosystem-stack.sh`, `ecosystem-stack/core.sh`, `ecosystem-stack/services/*.sh` |
 | Operations UI/API | Monitoring, control, docs, hosted app UX | `dashboard/` |
 | LEco Toolchain | Manifest detection, register/unregister, deploy flows | `tools/deploy-cli/leco_app/` |
@@ -29,7 +29,7 @@ flowchart LR
   Control["Control API"]
   Cli["leco-app CLI"]
   Registry["leco-registry.yaml"]
-  Traefik["traefik/dynamic.yml"]
+  Traefik["hosting/traefik/*.yml"]
   Docker["Docker engine"]
   Hosted["hosting/app-available"]
 

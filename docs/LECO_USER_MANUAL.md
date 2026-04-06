@@ -65,7 +65,7 @@ Manifest versions **`lecoAppVersion: "2"`** and **`"3"`** use **`localHostProfil
 ```bash
 cd /path/to/your/app
 export LECO_ECOSYSTEM_ROOT=/path/to/local-ecosystem
-leco-app onboard       # compose up, leco-registry.yaml, merge routing.entries → traefik/dynamic.yml
+leco-app onboard       # compose up, leco-registry.yaml, merge routing.entries → hosting/traefik/dynamic.yml
 ```
 
 Or combine init + onboarding:
@@ -117,7 +117,7 @@ leco-app run-hooks --phase preStart
 
 ### 5. Traefik (`*.lh`)
 
-**`leco-app onboard`**, **`init --onboard`**, and **`ecosystem-register --merge-traefik`** merge **`routing.entries`** from the **effective** manifest into **`traefik/dynamic.yml`** (atomic write). In **v3**, **`infrastructure.routing`** normally lives in **`leco.yaml`**.
+**`leco-app onboard`**, **`init --onboard`**, and **`ecosystem-register --merge-traefik`** merge **`routing.entries`** from the **effective** manifest into **`hosting/traefik/dynamic.yml`** (atomic write). Platform stack routes live in **`traefik/dynamic.yml`** in git and are copied to **`hosting/traefik/01-stack-core.yml`** whenever **`traefik.sh start`** runs. In **v3**, **`infrastructure.routing`** normally lives in **`leco.yaml`**.
 
 For a preview or manual merge only:
 
@@ -125,7 +125,7 @@ For a preview or manual merge only:
 leco-app traefik-fragment -o /tmp/myapp-traefik.yml
 ```
 
-**Hot reload:** Traefik’s file provider uses **`watch: true`** on **`dynamic.yml`**. After you save **`traefik/dynamic.yml`**, routes update **without restarting the Traefik container**. Restart Traefik only if you change **`traefik-static.yaml`** or volume mounts.
+**Hot reload:** Traefik’s file provider watches the **`hosting/traefik/`** directory. After a merge writes **`hosting/traefik/dynamic.yml`**, routes usually update **without restarting** Traefik. Restart Traefik after changing **`traefik/dynamic.yml`** (stack core) or **`traefik-static.yaml`** / volume mounts, or run **`traefik.sh heal`** if routes disappear (see **[DEPLOYMENT.md](DEPLOYMENT.md)** §7).
 
 ### 6. Stop stack and optionally unregister
 
@@ -149,8 +149,8 @@ After **`ecosystem-register`** (or the wizard below), open **Hosted apps** for:
 
 ### Routes tab
 
-- Inspect **`traefik/dynamic.yml`** routers/services and registry overlap.
-- **Load fragment from manifest** / **Load and merge** call **`leco-app traefik-fragment`** for a registry id, then optionally merge into **`dynamic.yml`** (atomic write + **`.bak`**). Same **control token** as other mutations.
+- Inspect merged routers/services (effective config is **`hosting/traefik/*.yml`**) and registry overlap.
+- **Load fragment from manifest** / **Load and merge** call **`leco-app traefik-fragment`** for a registry id, then optionally merge into **`hosting/traefik/dynamic.yml`** (atomic write + **`.bak`**). Same **control token** as other mutations.
 
 ### Register application (wizard)
 
@@ -199,7 +199,8 @@ Full syntax, offload, and edge cases: **[DEPLOY_CLI.md](DEPLOY_CLI.md)**.
 | Symptom | Check |
 |---------|--------|
 | App not in Hosted apps list | **`ecosystem-register`** run with correct **`LECO_ECOSYSTEM_ROOT`**; v3 apps need **effective** compose (e.g. **`infrastructure.dockerCompose`** in **`leco.yaml`**, not only on the bridge); rebuild/restart LEco DevOps after registry edits |
-| Traefik 502 / no route | Containers on **`lh-network`**; **`traefik-fragment`** merged into **`dynamic.yml`**; hostnames match |
+| Traefik 502 / no route | Containers on **`lh-network`**; **`docker-compose.leco-hosting.yml`** + **`additionalComposeFilesFromManifest`**; **`traefik-fragment`** merged into **`hosting/traefik/dynamic.yml`**; **`loadBalancer`** hosts match **`container_name`** or **`{project}-{service}-1`**. Full table: **[HOSTED_APPS_TRAEFIK_RUNBOOK.md](HOSTED_APPS_TRAEFIK_RUNBOOK.md)**. |
+| Hosted apps URL column **HTTP 0** or API vs UI mismatch | Restart LEco DevOps after upgrades; probes use **`http://traefik`** for `*.lh`. Browser API base must use **`https://<app>.lh/api`** (overlay env / app code), not **`localhost`**. See runbook. |
 | **`detect`** / wizard path errors | Path must be under project or workspace-parent mount; no forbidden **`..`** traversal |
 | Hooks fail | Run from manifest directory; check **`cwd`** in steps; increase **`timeoutSec`** |
 

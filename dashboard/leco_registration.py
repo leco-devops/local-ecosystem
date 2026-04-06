@@ -20,6 +20,7 @@ from hosting_layout import (
 )
 from leco_detect import (
     compute_hosting_source_symlink_target,
+    ensure_lh_network_hosting_overlay,
     host_slug_from_app_id,
     normalize_profile_compose_backend_hosts,
     require_registration_app_id,
@@ -34,6 +35,12 @@ from leco_subprocess import (
     run_ecosystem_register,
     run_leco_deploy,
 )
+
+_YAML_DUMP_KW: dict[str, Any] = {
+    "default_flow_style": False,
+    "sort_keys": False,
+    "allow_unicode": True,
+}
 
 
 @dataclass(frozen=True)
@@ -203,6 +210,43 @@ def _register_result_dict(
     return out
 
 
+def _apply_register_url_overrides(prep: RegisterPrepared, url_overrides: list[dict[str, Any]] | None) -> None:
+    """Apply operator-confirmed localhost URLs before ecosystem-register."""
+    rows = url_overrides if isinstance(url_overrides, list) else []
+    if not rows:
+        return
+    normalized: list[dict[str, str]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        role = str(row.get("role") or "other").strip() or "other"
+        label = str(row.get("label") or "").strip()
+        public_url = str(row.get("public_url") or row.get("publicUrl") or "").strip()
+        if not public_url:
+            continue
+        normalized.append({"role": role, "label": label, "publicUrl": public_url})
+    if not normalized:
+        return
+    profile_path = Path(prep.localhost_path_str).resolve()
+    try:
+        raw = yaml.safe_load(profile_path.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError) as exc:
+        raise ValueError(f"Cannot read localhost profile for URL overrides: {exc}") from exc
+    if not isinstance(raw, dict):
+        raise ValueError("localhost profile must be a YAML mapping to apply URL overrides.")
+    raw["urls"] = normalized
+    try:
+        from leco_app.schema import LocalhostProfile
+
+        LocalhostProfile.model_validate(raw)
+    except Exception as exc:
+        raise ValueError(f"localhost URL override validation failed: {exc}") from exc
+    try:
+        profile_path.write_text(yaml.safe_dump(raw, **_YAML_DUMP_KW), encoding="utf-8")
+    except OSError as exc:
+        raise OSError(f"Failed writing localhost profile URL overrides: {exc}") from exc
+
+
 def prepare_register_from_disk(path_rel: str, app_id: str, label: str) -> RegisterPrepared:
     """Require leco.app.yaml + localhost profile on disk (or under hosting staging when read-only)."""
     orig_root = resolve_registration_path(path_rel)
@@ -261,6 +305,7 @@ def register_app_wizard(
     app_id: str,
     label: str,
     *,
+    url_overrides: list[dict[str, Any]] | None = None,
     deploy_stack: bool = False,
 ) -> dict[str, Any]:
     """
@@ -268,7 +313,9 @@ def register_app_wizard(
     Use :mod:`leco_materialize` to generate or save files first.
     """
     prep = prepare_register_from_disk(path_rel, app_id, label)
+    _apply_register_url_overrides(prep, url_overrides)
     normalize_profile_compose_backend_hosts(prep.manifest_abs)
+    ensure_lh_network_hosting_overlay(prep.manifest_abs)
     code, log = run_ecosystem_register(
         prep.manifest_abs,
         app_id=prep.app_id,
@@ -300,17 +347,33 @@ def iterate_register_app_wizard(
     app_id: str,
     label: str,
     *,
+    url_overrides: list[dict[str, Any]] | None = None,
     deploy_stack: bool = False,
 ) -> Iterator[dict[str, Any]]:
     """NDJSON-style events for the dashboard."""
     yield {"type": "log", "text": "Checking leco.app.yaml + localhost profile on disk…\n"}
     try:
         prep = prepare_register_from_disk(path_rel, app_id, label)
+        _apply_register_url_overrides(prep, url_overrides)
+        if isinstance(url_overrides, list) and url_overrides:
+            yield {
+                "type": "log",
+                "text": f"Applied URL configuration ({len(url_overrides)} entr{'y' if len(url_overrides) == 1 else 'ies'}) to localhost profile.\n",
+            }
         fix = normalize_profile_compose_backend_hosts(prep.manifest_abs)
         if (fix.get("updated") or 0) > 0:
             yield {
                 "type": "log",
                 "text": f"Normalized routing backend hosts for isolation ({fix.get('updated')} entry/entries).\n",
+            }
+        overlay = ensure_lh_network_hosting_overlay(prep.manifest_abs)
+        if overlay.get("services"):
+            yield {
+                "type": "log",
+                "text": (
+                    "Ensured Traefik edge network: added or updated docker-compose.leco-hosting.yml "
+                    f"for compose service(s) {', '.join(overlay['services'])} (attach to lh-network).\n"
+                ),
             }
     except (ValueError, OSError, yaml.YAMLError) as exc:
         yield {"type": "done", "result": {"ok": False, "error": str(exc)}}

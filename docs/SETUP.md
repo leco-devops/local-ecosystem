@@ -18,6 +18,8 @@ Use **[DEPLOYMENT.md](DEPLOYMENT.md)** for day-two operations (updates, stopping
 
 **LEco DevOps:** routed at **http://localhost.lh** (Traefik) or directly **http://localhost:8090** (`DASHBOARD_HOST_PORT` overrides the host port).
 
+**Traefik dynamic config (two layers):** the container mounts **`hosting/traefik/`** as **`/etc/traefik-dynamic`** and loads every **`*.yml`** there. On each **`traefik.sh start`**, the script **copies** the canonical **`traefik/dynamic.yml`** (git) to **`hosting/traefik/01-stack-core.yml`** — it must be a **real file**, not a symlink to the repo path: Docker Desktop’s file watcher often fails on that symlink pattern, the file provider never starts, and every `*.lh` host returns Traefik’s plain **404 page not found**. **`hosting/traefik/dynamic.yml`** is the **writable merge** file (`{}` when empty). **Traefik v3** rejects a standalone empty **`http: {}`** block; tooling and **`ecosystem-stack/scripts/normalize-hosting-traefik-dynamic.py`** (with **PyYAML**, when installed) prune invalid empty maps. **`dashboard.sh start` / `quick` / `deploy`** run **`traefik.sh heal`** by default (repairs files and restarts the Traefik container if it exists); set **`DASHBOARD_SKIP_TRAEFIK_HEAL=1`** to skip. Manual recovery: **`./ecosystem-stack/services/traefik.sh heal`** or **`restart`**, then **`docker logs traefik`**. **http://dashboard.lh** works when `dashboard.lh` resolves like other `*.lh` names.
+
 ---
 
 ## 2. Prerequisites
@@ -146,7 +148,7 @@ Or non-interactive full start (respects dependency order in `ecosystem-stack/cor
 
 | Script (`ecosystem-stack/services/`) | Container / stack | Notes |
 |------------------------------|-------------------|--------|
-| `traefik.sh` | `traefik` | Static: `traefik/traefik-static.yaml` (entrypoints, API); routes: `traefik/dynamic.yml` |
+| `traefik.sh` | `traefik` | Static: `traefik/traefik-static.yaml`; file provider dir **`hosting/traefik/`** (`01-stack-core.yml` = copy of `traefik/dynamic.yml` on each start; `dynamic.yml` = merge fragment). Extra actions: **`heal`**, **`ensure-hosting-files`** |
 | `postgres.sh` | `n8n_postgres` | n8n database |
 | `ollama.sh` | `ollama` | Pulls models from `ecosystem-stack/config/ollama-pinned-models.txt` on start |
 | `webui.sh` | `open-webui` | Points at Ollama |

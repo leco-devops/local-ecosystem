@@ -865,7 +865,12 @@ def _compose_service_backend_host(
     spec: dict[str, Any],
     project_name: str,
 ) -> str:
-    """Resolve a stable backend host on lh-network for a compose service."""
+    """Resolve a stable backend host on lh-network for a compose service.
+
+    Default Docker Compose (v2+) names containers ``{project}-{service}-{replica}``
+    (e.g. ``cv-frontend-1``). Traefik on ``lh-network`` must use that DNS name, not
+    the shortened ``cv-frontend`` form.
+    """
     cn = (spec.get("container_name") or "").strip()
     if cn:
         return cn
@@ -882,6 +887,162 @@ def _compose_service_backend_host(
                         if sa:
                             return sa
     return f"{project_name}-{service_name}-1"
+
+
+_LECO_HOSTING_OVERLAY_COMPOSE = "docker-compose.leco-hosting.yml"
+
+
+def _primary_public_hostname_from_routing(entries: list[Any]) -> str | None:
+    for row in entries:
+        if not isinstance(row, dict):
+            continue
+        hn = str(row.get("hostname") or "").strip()
+        if hn.endswith(".lh"):
+            return hn
+    return None
+
+
+def _lh_overlay_env_for_service(service_name: str, public_hostname: str) -> dict[str, str]:
+    """
+    Standard env merges for split Traefik apps: browser uses same origin on *.lh; API allows CORS.
+    Framework-specific keys are additive (unset backend URL lets CrawlerVision api.js use origin).
+    """
+    origin_https = f"https://{public_hostname}"
+    origin_http = f"http://{public_hostname}"
+    sk = str(service_name)
+    out: dict[str, str] = {}
+    if sk in ("frontend", "web", "ui", "app", "nginx"):
+        out["REACT_APP_SITE_URL"] = origin_https
+        out["REACT_APP_BACKEND_URL"] = ""
+        out["VITE_API_URL"] = ""
+    if sk in ("backend", "api", "server"):
+        out["CORS_ORIGINS"] = (
+            f"{origin_https},{origin_http},http://localhost:3000,http://127.0.0.1:3000"
+        )
+        out["FRONTEND_URL"] = origin_https
+        out["SITE_URL"] = origin_https
+        out["GEO_IP_DEV_COUNTRY"] = "${GEO_IP_DEV_COUNTRY:-US}"
+    return out
+
+
+def _service_spec_uses_lh_network(spec: dict[str, Any]) -> bool:
+    """True if the compose service is attached to external ``lh-network`` (Traefik edge)."""
+    nets = spec.get("networks")
+    if nets is None:
+        return False
+    if isinstance(nets, list):
+        return any(str(x).strip() == "lh-network" for x in nets)
+    if isinstance(nets, dict):
+        return any(str(k).strip() == "lh-network" for k in nets)
+    return False
+
+
+def _service_name_from_traefik_compose_host(
+    host: str,
+    project_name: str,
+    services: dict[str, Any],
+) -> str | None:
+    """
+    Map a Traefik ``loadBalancer`` host (compose default DNS or ``container_name``) back to a
+    compose service key so we can attach ``lh-network`` via a hosting overlay merge file.
+    """
+    return _compose_service_key_from_routing_host(host, project_name, services)
+
+
+def _compose_services_needing_lh_network_overlay(
+    routing_entries: list[Any],
+    project_name: str,
+    services: dict[str, Any],
+) -> list[str]:
+    """Compose service keys referenced by Traefik routing that are not yet on ``lh-network``."""
+    names: set[str] = set()
+    for row in routing_entries:
+        if not isinstance(row, dict):
+            continue
+        fe = row.get("frontend")
+        ab = row.get("apiBackend")
+        if isinstance(fe, dict) and isinstance(ab, dict):
+            for h in (fe.get("host"), ab.get("host")):
+                sn = _service_name_from_traefik_compose_host(str(h or ""), project_name, services)
+                if sn:
+                    names.add(sn)
+            continue
+        bh = str(row.get("backendHost") or "").strip()
+        if bh:
+            sn = _service_name_from_traefik_compose_host(bh, project_name, services)
+            if sn:
+                names.add(sn)
+    need: list[str] = []
+    for s in sorted(names):
+        spec = services.get(s)
+        if isinstance(spec, dict) and not _service_spec_uses_lh_network(spec):
+            need.append(s)
+    return need
+
+
+def _compose_service_key_from_routing_host(
+    host: str,
+    project_name: str,
+    services: dict[str, Any],
+) -> str | None:
+    """
+    Resolve a Traefik/backend hostname to a compose *service* key.
+
+    Handles default DNS (``{project}-{service}-1``), bare service names, ``container_name``,
+    and stale hosts pasted from another stack (wrong project prefix, e.g. ``cv-frontend`` for
+    project ``cvision``).
+    """
+    h = (host or "").strip()
+    if not h:
+        return None
+    pn = str(project_name).strip()
+    for sk_raw in sorted(services.keys(), key=lambda x: len(str(x)), reverse=True):
+        sk = str(sk_raw)
+        spec = services.get(sk_raw)
+        if not isinstance(spec, dict):
+            continue
+        if h == sk:
+            return sk
+        if h == f"{pn}-{sk}-1" or h == f"{pn}-{sk}":
+            return sk
+        cn = (spec.get("container_name") or "").strip()
+        if cn and h == cn:
+            return sk
+        suf1 = f"-{sk}-1"
+        if len(h) > len(suf1) and h.endswith(suf1):
+            prefix = h[: -len(suf1)]
+            if prefix:
+                return sk
+        suf2 = f"-{sk}"
+        if len(h) > len(suf2) and h.endswith(suf2) and not h.endswith(suf1):
+            prefix = h[: -len(suf2)]
+            if prefix:
+                return sk
+    return None
+
+
+def _remap_stale_compose_dns_host(
+    host: str,
+    project_name: str,
+    services: dict[str, Any],
+) -> str | None:
+    """If *host* is not the canonical DNS name for its service under *project_name*, return canonical."""
+    h = (host or "").strip()
+    if not h:
+        return None
+    sk = _compose_service_key_from_routing_host(h, project_name, services)
+    if not sk:
+        return None
+    spec = services.get(sk)
+    if not isinstance(spec, dict):
+        return None
+    canonical = _compose_service_backend_host(sk, spec, project_name)
+    if h == canonical:
+        return None
+    cn = (spec.get("container_name") or "").strip()
+    if cn and h == cn:
+        return None
+    return canonical
 
 
 def _load_compose_services_for_localhost(
@@ -916,9 +1077,10 @@ def _infer_compose_routing_entries(
     localhost: dict[str, Any], root: Path, manifest: dict[str, Any], host_slug: str
 ) -> list[dict[str, Any]]:
     """
-    Mixed routing default for compose apps:
-      - https://<slug>.lh -> frontend-ish service
-      - https://api.<slug>.lh -> backend-ish service
+    Default routing for compose apps with separate UI + API containers:
+      - Single hostname ``<slug>.lh`` with ``apiPathPrefix`` (default ``/api``): Traefik sends
+        ``PathPrefix`` traffic to the API container and the rest to the frontend (same pattern
+        as ``leco-app traefik-fragment`` split mode and default ``urls``).
     """
     loaded = _load_compose_services_for_localhost(localhost, root, manifest)
     if not loaded:
@@ -942,12 +1104,20 @@ def _infer_compose_routing_entries(
         return None
 
     frontend = _pick_service(("frontend", "web", "ui", "app", "nginx"))
-    backend = _pick_service(("backend", "api", "server", "app"))
+    backend = _pick_service(("backend", "api", "server"))
+    if not backend:
+        backend = _pick_service(("app",))
     if not frontend or not backend:
         return []
+    if frontend[0] == backend[0]:
+        return []
     return [
-        {"hostname": f"{host_slug}.lh", "backendHost": frontend[2], "backendPort": frontend[1]},
-        {"hostname": f"api.{host_slug}.lh", "backendHost": backend[2], "backendPort": backend[1]},
+        {
+            "hostname": f"{host_slug}.lh",
+            "apiPathPrefix": "/api",
+            "frontend": {"host": frontend[2], "port": frontend[1]},
+            "apiBackend": {"host": backend[2], "port": backend[1]},
+        }
     ]
 
 
@@ -958,7 +1128,9 @@ def _normalize_compose_routing_backend_hosts(
     host_slug: str,
 ) -> int:
     """
-    Replace ambiguous backend hosts like ``frontend``/``backend`` with app-scoped compose hosts.
+    Replace ambiguous backend hosts like ``frontend``/``backend`` with app-scoped compose hosts,
+    fix ``{project}-{service}`` values missing the Compose replica suffix (``-1``), and fix
+    stale hostnames copied from another stack (e.g. ``cv-frontend`` under project ``cvision``).
     Returns number of routing entries updated.
     """
     loaded = _load_compose_services_for_localhost(localhost, root, manifest)
@@ -977,20 +1149,26 @@ def _normalize_compose_routing_backend_hosts(
         dc["projectName"] = host_slug
         meta_changed = True
     updated = 0
-    service_keys = {str(k) for k in services.keys()}
     for row in entries:
         if not isinstance(row, dict):
             continue
         bh = str(row.get("backendHost") or "").strip()
-        if not bh or bh not in service_keys:
-            continue
-        spec = services.get(bh)
-        if not isinstance(spec, dict):
-            continue
-        resolved = _compose_service_backend_host(bh, spec, project_name)
-        if resolved and resolved != bh:
-            row["backendHost"] = resolved
-            updated += 1
+        if bh:
+            remapped_b = _remap_stale_compose_dns_host(bh, project_name, services)
+            if remapped_b and remapped_b != bh:
+                row["backendHost"] = remapped_b
+                updated += 1
+        for key in ("frontend", "apiBackend"):
+            tgt = row.get(key)
+            if not isinstance(tgt, dict):
+                continue
+            th = str(tgt.get("host") or "").strip()
+            if not th:
+                continue
+            remapped = _remap_stale_compose_dns_host(th, project_name, services)
+            if remapped and remapped != th:
+                tgt["host"] = remapped
+                updated += 1
     return updated + (1 if meta_changed else 0)
 
 
@@ -1012,8 +1190,12 @@ def _apply_default_routing(localhost: dict[str, Any], root: Path, manifest: dict
     if has_wrangler:
         infra["routing"] = {
             "entries": [
-                {"hostname": f"{host_slug}.lh", "backendHost": "workers-runtime", "backendPort": 8787},
-                {"hostname": f"api.{host_slug}.lh", "backendHost": "workers-runtime", "backendPort": 8787},
+                {
+                    "hostname": f"{host_slug}.lh",
+                    "apiPathPrefix": "/api",
+                    "frontend": {"host": "workers-runtime", "port": 8787},
+                    "apiBackend": {"host": "workers-runtime", "port": 8787},
+                }
             ]
         }
 
@@ -1067,6 +1249,155 @@ def ensure_docker_compose_in_manifest(manifest: dict[str, Any], orig_root: Path)
         try_root = try_root.parent
 
 
+_CONFIG_REF_RESOLVED_KEYS = (
+    "wranglerConfig",
+    "dockerComposeFile",
+    "composeOverrideFile",
+    "envFile",
+    "dockerfile",
+    "packageJson",
+    "wordpressConfigPhp",
+    "nginxConfig",
+    "varnishVcl",
+    "phpFpmPool",
+    "mysqlInit",
+    "mongoInit",
+    "redisConfig",
+)
+
+
+def _dashboard_project_root_for_paths() -> str:
+    return (os.getenv("DASHBOARD_PROJECT_ROOT") or os.getenv("LECO_ECOSYSTEM_ROOT") or "").strip()
+
+
+def _path_if_exists(p: Path) -> str | None:
+    try:
+        r = p.resolve()
+        if r.exists():
+            return str(r)
+    except OSError:
+        return None
+    return None
+
+
+def _resolved_path_for_config_ref(raw: str, *, app_root: Path) -> str | None:
+    s = (raw or "").strip()
+    if not s:
+        return None
+    p = Path(s)
+    if p.is_absolute():
+        hit = _path_if_exists(p)
+        if hit:
+            return hit
+        sp = str(p)
+        if sp.startswith("/project/") or sp == "/project":
+            root = _dashboard_project_root_for_paths()
+            if root:
+                suffix = sp[len("/project") :].lstrip("/\\")
+                alt = Path(root) / suffix if suffix else Path(root)
+                hit2 = _path_if_exists(alt)
+                if hit2:
+                    return hit2
+        return None
+    try:
+        joined = (app_root / p).resolve()
+    except OSError:
+        return None
+    return _path_if_exists(joined)
+
+
+def compute_resolved_paths_for_leco_app_manifest(
+    manifest: dict[str, Any],
+    manifest_path: Path,
+    profile_from_file: dict[str, Any] | None = None,
+) -> dict[str, str]:
+    """Build ``resolvedPaths`` for ``leco.app.yaml``: absolute host paths for root, manifest, profile, configs."""
+    mp = manifest_path.resolve()
+    try:
+        from leco_app.schema import ApplicationManifest as _AM
+
+        am = _AM.model_validate(manifest)
+        app_root = am.resolved_root(mp)
+    except Exception:
+        app_root = compute_source_target(mp.parent, manifest)
+    try:
+        app_root = app_root.resolve()
+    except OSError:
+        pass
+
+    out: dict[str, str] = {
+        "sourceRoot": str(app_root),
+        "manifestPath": str(mp),
+    }
+
+    lhp_raw = manifest.get("localHostProfile") or manifest.get("local_host_profile") or "leco.yaml"
+    if isinstance(lhp_raw, str) and lhp_raw.strip():
+        lp = Path(lhp_raw.strip())
+        try:
+            prof_path = lp.resolve() if lp.is_absolute() else (mp.parent / lp).resolve()
+        except OSError:
+            prof_path = mp.parent / lp
+        pr = _path_if_exists(prof_path)
+        if pr:
+            out["localHostProfile"] = pr
+
+    cfg = manifest.get("configRefs") or manifest.get("config_refs")
+    if isinstance(cfg, dict):
+        for key in _CONFIG_REF_RESOLVED_KEYS:
+            v = cfg.get(key)
+            if not isinstance(v, str) or not v.strip():
+                continue
+            rp = _resolved_path_for_config_ref(v, app_root=app_root)
+            if rp:
+                out[key] = rp
+
+    mcf = manifest.get("cloudflare")
+    if isinstance(mcf, dict) and "wranglerConfig" not in out:
+        wr = mcf.get("wranglerConfig") or mcf.get("wrangler_config")
+        if isinstance(wr, str) and wr.strip():
+            rp = _resolved_path_for_config_ref(wr, app_root=app_root)
+            if rp:
+                out["wranglerConfig"] = rp
+
+    prof = profile_from_file if isinstance(profile_from_file, dict) else {}
+    infra = prof.get("infrastructure")
+    if isinstance(infra, dict):
+        dc = infra.get("dockerCompose") or infra.get("docker_compose")
+        if isinstance(dc, dict):
+            if "dockerComposeFile" not in out:
+                cf = dc.get("composeFile") or dc.get("compose_file")
+                if isinstance(cf, str) and cf.strip():
+                    rp = _resolved_path_for_config_ref(cf, app_root=app_root)
+                    if rp:
+                        out["dockerComposeFile"] = rp
+            if "envFile" not in out:
+                ef = dc.get("envFile") or dc.get("env_file")
+                if isinstance(ef, str) and ef.strip():
+                    rp = _resolved_path_for_config_ref(ef, app_root=app_root)
+                    if rp:
+                        out["envFile"] = rp
+        cfb = infra.get("cloudflare")
+        if isinstance(cfb, dict) and "wranglerConfig" not in out:
+            wr = cfb.get("wranglerConfig") or cfb.get("wrangler_config")
+            if isinstance(wr, str) and wr.strip():
+                rp = _resolved_path_for_config_ref(wr, app_root=app_root)
+                if rp:
+                    out["wranglerConfig"] = rp
+
+    return out
+
+
+def fill_resolved_paths_in_manifest(
+    manifest: dict[str, Any],
+    manifest_path: Path,
+    profile_from_file: dict[str, Any] | None = None,
+) -> None:
+    """Set ``manifest['resolvedPaths']`` for YAML persistence."""
+    manifest["resolvedPaths"] = compute_resolved_paths_for_leco_app_manifest(
+        manifest, manifest_path, profile_from_file
+    )
+
+
 def build_default_manifest_and_localhost(
     root: Path,
     app_id: str,
@@ -1075,8 +1406,8 @@ def build_default_manifest_and_localhost(
     host_slug = host_slug_from_app_id(app_id)
     main_urls = main_urls_from_app_id(app_id)
     api_urls = {
-        "https": f"https://api.{host_slug}.lh",
-        "http": f"http://api.{host_slug}.lh",
+        "https": f"https://{host_slug}.lh/api",
+        "http": f"http://{host_slug}.lh/api",
     }
     scan = scan_app_directory(root)
     compose_files = scan.get("compose_files") or []
@@ -1164,7 +1495,12 @@ def build_default_manifest_and_localhost(
             {"role": "api", "label": "API (HTTP)", "publicUrl": api_urls["http"]},
         ],
         "lifecycle": {"prepare": [], "build": [], "preStart": []},
-        "notes": "",
+        "notes": (
+            "Next: open Hosted apps → Register (or run leco-app ecosystem-register) so "
+            "config/leco-registry.yaml lists this app — the tab then shows Deploy / Remove and the manifest summary. "
+            "Optional hosting-only compose: docker-compose.leco-hosting.yml beside leco.app.yaml + "
+            "infrastructure.dockerCompose.additionalComposeFilesFromManifest."
+        ),
     }
 
     ensure_docker_compose_in_profile_infrastructure(
@@ -1174,6 +1510,8 @@ def build_default_manifest_and_localhost(
     _apply_default_routing(localhost, root, manifest, host_slug, has_wrangler=has_wrangler)
     _normalize_compose_routing_backend_hosts(localhost, root, manifest, host_slug)
     enrich_infrastructure_wrangler_binding_preview(localhost.get("infrastructure") or {}, root)
+
+    fill_resolved_paths_in_manifest(manifest, root / "leco.app.yaml", localhost)
 
     return manifest, localhost
 
@@ -1223,6 +1561,108 @@ def preview_registration_yaml(root: Path, app_id: str) -> tuple[str, str]:
         "allow_unicode": True,
     }
     return yaml.safe_dump(m, **dump_kw), yaml.safe_dump(lo, **dump_kw)
+
+
+def ensure_lh_network_hosting_overlay(manifest_abs: Path) -> dict[str, Any]:
+    """
+    When localhost Traefik routing targets compose services that are not on ``lh-network``,
+    ensure a hosting-only merge file exists beside ``leco.app.yaml`` and that
+    ``dockerCompose.additionalComposeFilesFromManifest`` references it.
+
+    Without this, Traefik (on ``lh-network``) returns 502 even when compose ``ps`` is healthy.
+    """
+    mp = manifest_abs.resolve()
+    try:
+        manifest = yaml.safe_load(mp.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return {"ok": False, "error": "read manifest"}
+    if not isinstance(manifest, dict):
+        return {"ok": False, "error": "invalid manifest"}
+    prof = (manifest.get("localHostProfile") or "leco.yaml").strip() or "leco.yaml"
+    prof_path = (mp.parent / prof).resolve()
+    try:
+        localhost = yaml.safe_load(prof_path.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return {"ok": False, "error": "read localhost profile"}
+    if not isinstance(localhost, dict):
+        return {"ok": False, "error": "invalid localhost profile"}
+    host_slug = host_slug_from_app_id(str(manifest.get("name") or mp.parent.name))
+    loaded = _load_compose_services_for_localhost(localhost, mp.parent, manifest)
+    if not loaded:
+        return {"ok": True, "skipped": "no compose file or services"}
+    services, dc, infra = loaded
+    routing = infra.get("routing")
+    if not isinstance(routing, dict):
+        return {"ok": True, "skipped": "no routing"}
+    entries = routing.get("entries")
+    if not isinstance(entries, list) or not entries:
+        return {"ok": True, "skipped": "no routing entries"}
+    project_name = _compose_project_name(dc, host_slug)
+    need = _compose_services_needing_lh_network_overlay(entries, project_name, services)
+    if not need:
+        return {"ok": True, "skipped": "traefik targets already on lh-network or unmappable hosts"}
+
+    overlay_path = mp.parent / _LECO_HOSTING_OVERLAY_COMPOSE
+    profile_dirty = False
+    if not overlay_path.is_file():
+        public_hn = _primary_public_hostname_from_routing(entries)
+        svc_map: dict[str, Any] = {}
+        for s in need:
+            block: dict[str, Any] = {"networks": ["lh-network"]}
+            if public_hn:
+                env = _lh_overlay_env_for_service(s, public_hn)
+                if env:
+                    block["environment"] = env
+            svc_map[s] = block
+        piece = {
+            "services": svc_map,
+            "networks": {"lh-network": {"external": True}},
+        }
+        header = (
+            "# LEco hosting overlay — attaches Traefik upstream services to the ecosystem edge network.\n"
+            "# Referenced from leco.yaml → infrastructure.dockerCompose.additionalComposeFilesFromManifest.\n"
+            "# Includes *.lh-oriented env (CORS, REACT_APP_*) when a routing hostname ends with .lh.\n"
+            "# Safe to commit under hosting/app-available/<slug>/ without editing the upstream app repo.\n\n"
+        )
+        try:
+            overlay_path.write_text(
+                header + yaml.safe_dump(piece, default_flow_style=False, sort_keys=False, allow_unicode=True),
+                encoding="utf-8",
+            )
+        except OSError:
+            return {"ok": False, "error": "write overlay"}
+        profile_dirty = True
+
+    if not isinstance(infra.get("dockerCompose"), dict):
+        infra["dockerCompose"] = dc
+    raw_ex = (
+        dc.get("additionalComposeFilesFromManifest")
+        or dc.get("additional_compose_files_from_manifest")
+        or []
+    )
+    extras = [str(x).strip() for x in raw_ex if str(x).strip()]
+    if _LECO_HOSTING_OVERLAY_COMPOSE not in extras:
+        extras.append(_LECO_HOSTING_OVERLAY_COMPOSE)
+        dc["additionalComposeFilesFromManifest"] = extras
+        if "additional_compose_files_from_manifest" in dc:
+            del dc["additional_compose_files_from_manifest"]
+        profile_dirty = True
+
+    if profile_dirty:
+        try:
+            prof_path.write_text(
+                yaml.safe_dump(localhost, default_flow_style=False, sort_keys=False, allow_unicode=True),
+                encoding="utf-8",
+            )
+        except OSError:
+            return {"ok": False, "error": "write profile"}
+    return {
+        "ok": True,
+        "overlay_path": str(overlay_path),
+        "profile_path": str(prof_path),
+        "services": need,
+        "profile_updated": profile_dirty,
+    }
 
 
 def normalize_profile_compose_backend_hosts(manifest_abs: Path) -> dict[str, Any]:

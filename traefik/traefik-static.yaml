@@ -1,7 +1,7 @@
 # Static Traefik configuration (entrypoints, API, file provider).
-# Dynamic config is split:
-# - base/persistent: traefik/dynamic.yml
-# - writable/runtime: hosting/traefik/dynamic.yml
+# Dynamic config directory: repo hosting/traefik/ → /etc/traefik-dynamic (watch: true).
+# - Stack routes: traefik/dynamic.yml in git, copied to hosting/traefik/01-stack-core.yml on each traefik.sh start.
+# - Merge fragment: hosting/traefik/dynamic.yml (leco-app / LEco DevOps Routes; empty stub must be {}, not http: {}).
 # Longer read timeouts reduce spurious
 # "Error while Peeking first byte" when clients open :80/:443 then send slowly (host probes, preconnect).
 global:

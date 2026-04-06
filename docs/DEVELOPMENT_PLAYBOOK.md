@@ -18,7 +18,11 @@ This guide helps you **extend**, **debug**, and **ship** changes across the ecos
 |------|------|---------|
 | Ecosystem stack orchestration | `ecosystem-stack/core.sh`, `ecosystem-stack/ecosystem-stack.sh` | Start order, network repair, service scripts |
 | Per-service Docker scripts | `ecosystem-stack/services/*.sh` | `start` / `stop` / `build` for each container |
-| Traefik dynamic routes | `traefik/dynamic.yml` | `*.lh` host rules (duplicate in `ecosystem-stack/config/dynamic.yml` if you use that tree) |
+| Traefik stack routes (git) | `traefik/dynamic.yml` | Canonical `*.lh` rules; copied to **`hosting/traefik/01-stack-core.yml`** on **`traefik.sh start`** (duplicate in `ecosystem-stack/config/dynamic.yml` if you use that tree) |
+| Traefik runtime merge file | `hosting/traefik/dynamic.yml` | Writable fragment merged by **`leco-app`** / dashboard Routes; empty stub **`{}`** only (Traefik v3 rejects **`http: {}`**) |
+| Traefik hosting repair | `ecosystem-stack/services/traefik.sh` **`heal`** / **`ensure-hosting-files`** | Fixes copies + YAML stub; **`dashboard.sh`** runs **`heal`** after start unless **`DASHBOARD_SKIP_TRAEFIK_HEAL=1`** |
+| Compose overlay (hosting-only) | `hosting/app-available/<slug>/docker-compose.leco-hosting.yml` + **`additionalComposeFilesFromManifest`** | Merge Traefik **`lh-network`** / public URL env without editing the upstream app repo (`tools/deploy-cli/leco_app/compose_runner.py`) |
+| Hosted apps — issues & fixes | [HOSTED_APPS_TRAEFIK_RUNBOOK.md](HOSTED_APPS_TRAEFIK_RUNBOOK.md) | 502, **`lh-network`**, DNS names, dashboard **`*.lh`** probes, same-origin **`/api`** |
 | Cloudflare local | `cloudflare-local/docker-compose.yml`, `cloudflare-local/adapters/*` | R2, KV, D1, Workers, autoscaler |
 | LEco DevOps | `dashboard/` | Flask app, metrics, control API, UI |
 | TLS | `certs/` | mkcert wildcard for `*.lh` |
@@ -56,7 +60,7 @@ The **Docs** tab includes a generated module **Service management commands** (`s
 ## 4. Adding a new `*.lh` service
 
 1. **Container**: create or extend a `ecosystem-stack/services/<name>.sh` script (or add a compose service on `lh-network`).
-2. **Traefik**: add `routers` + `services` in `traefik/dynamic.yml` pointing at `http://<container>:<port>`.
+2. **Traefik**: add `routers` + `services` in **`traefik/dynamic.yml`** pointing at `http://<container>:<port>`, then restart Traefik so **`hosting/traefik/01-stack-core.yml`** is refreshed. Per-app merges from manifests use **`hosting/traefik/dynamic.yml`**.
 3. **DNS**: ensure `something.lh` resolves (dnsmasq / etc.) to the host running Traefik.
 4. **Dashboard** (optional): add URLs to `monitor.py` `SERVICE_MAP` for probes and to the static URL catalog in `dashboard/reference_data.py` (or rely on SERVICE_MAP-driven encyclopedia).
 

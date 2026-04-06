@@ -22,6 +22,7 @@ print_usage() {
   echo "./ecosystem-stack.sh reset [service]"
   echo "./ecosystem-stack.sh repair-network"
   echo "./ecosystem-stack.sh ollama-pull-models   # pull pinned models into running ollama"
+  echo "./ecosystem-stack.sh heal traefik         # repair hosting/traefik/* + restart Traefik if running"
 }
 
 pause_prompt() {

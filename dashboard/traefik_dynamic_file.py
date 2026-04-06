@@ -17,6 +17,19 @@ TRAEFIK_DYNAMIC = os.getenv(
 )
 
 
+def _prune_empty_http_maps(data: dict[str, Any]) -> None:
+    """Traefik v3 rejects empty http sections, including bare ``http: {}``."""
+    http = data.get("http")
+    if not isinstance(http, dict):
+        return
+    for key in ("routers", "services", "middlewares", "serversTransports"):
+        block = http.get(key)
+        if isinstance(block, dict) and len(block) == 0:
+            http.pop(key, None)
+    if len(http) == 0:
+        data.pop("http", None)
+
+
 def _ensure_dynamic_file_path() -> Path:
     """Ensure writable hosting dynamic file exists; recover from .bak when possible."""
     p = Path(TRAEFIK_DYNAMIC)
@@ -32,7 +45,7 @@ def _ensure_dynamic_file_path() -> Path:
             # Fall back to creating a minimal writable dynamic file below.
             pass
     if not p.exists():
-        p.write_text("http:\n  routers: {}\n  services: {}\n", encoding="utf-8")
+        p.write_text("{}\n", encoding="utf-8")
     return p
 
 
@@ -45,6 +58,7 @@ def _atomic_write_dynamic_yaml(p: Path, data: dict[str, Any]) -> tuple[bool, str
     Serialize data to dynamic.yml via a temp file in the same directory + os.replace,
     so Traefik's file watcher never reads a half-written file.
     """
+    _prune_empty_http_maps(data)
     text = yaml.safe_dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True)
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = ""

@@ -179,6 +179,13 @@ def _validate_existing_manifest_tree(mp: Path) -> tuple[MergedApplication | None
             ap = p.resolve() if p.is_absolute() else (root / p).resolve()
             if not ap.is_file():
                 return None, f"dockerCompose.additionalComposeFiles entry not found: {ap}"
+        for rel in m.docker_compose.additional_compose_files_from_manifest or []:
+            p = Path(str(rel).strip())
+            if not str(p):
+                continue
+            ap = p.resolve() if p.is_absolute() else (mp.parent / p).resolve()
+            if not ap.is_file():
+                return None, f"dockerCompose.additionalComposeFilesFromManifest entry not found: {ap}"
     if m.cloudflare and m.cloudflare.wrangler_config:
         wc = root / Path(m.cloudflare.wrangler_config)
         if not wc.is_file():
@@ -464,10 +471,16 @@ def cmd_init(
                 default=False,
             )
             if split_ui_api:
-                fh = typer.prompt("Frontend container/DNS name (e.g. cv-frontend)", default="")
+                fh = typer.prompt(
+                    "Frontend container/DNS name (e.g. cv-frontend-1; docker compose default)",
+                    default="",
+                )
                 fp = typer.prompt("Frontend container port", default=3000, type=int)
                 ap = typer.prompt("API path prefix", default="/api")
-                ah = typer.prompt("API backend container/DNS name (e.g. cv-backend)", default="")
+                ah = typer.prompt(
+                    "API backend container/DNS name (e.g. cv-backend-1; docker compose default)",
+                    default="",
+                )
                 api_p = typer.prompt("API backend container port", default=8001, type=int)
                 if not fh.strip() or not ah.strip():
                     typer.secho("Split mode needs non-empty frontend and API host names.", fg=typer.colors.RED, err=True)

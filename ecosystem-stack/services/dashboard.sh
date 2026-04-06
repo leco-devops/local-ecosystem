@@ -115,16 +115,26 @@ start() {
     $HOST_MAC_TEMP_MOUNT \
     "$IMAGE" || return 1
 
+  # Keep hosting/traefik in a Traefik v3–safe shape (real 01-stack-core copy, no http: {} stub).
+  # heal restarts Traefik when its container exists so the file provider reloads reliably on Docker Desktop.
+  if [ "${DASHBOARD_SKIP_TRAEFIK_HEAL:-0}" != "1" ]; then
+    local traefik_heal="$PROJECT_ROOT/ecosystem-stack/services/traefik.sh"
+    if [ -f "$traefik_heal" ]; then
+      bash "$traefik_heal" heal || echo "⚠️  Traefik heal failed — if *.lh shows Traefik 404, run: bash $traefik_heal restart"
+    fi
+  fi
+
   _darwin_host_metrics_sched install
 }
 
 # Alias: full image rebuild + container recreate (same as start).
 deploy() {
-  start || return 1
+  # start() runs traefik heal unless skipped; avoid double Traefik restart here.
+  DASHBOARD_SKIP_TRAEFIK_HEAL=1 start || return 1
   local traefik_script="$PROJECT_ROOT/ecosystem-stack/services/traefik.sh"
   if [ -f "$traefik_script" ]; then
-    echo "🔄 Reloading Traefik to pick up route/mount changes from dashboard deploy…"
-    bash "$traefik_script" restart || return 1
+    echo "🔄 Reloading Traefik after dashboard deploy (hosting/traefik repair + restart)…"
+    bash "$traefik_script" heal || return 1
   else
     echo "⚠️  Traefik service script not found at $traefik_script — skipped Traefik reload."
   fi

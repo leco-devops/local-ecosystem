@@ -24,9 +24,9 @@ This repo is a local platform with:
 - Orchestration: `ecosystem-stack/ecosystem-stack.sh`, `ecosystem-stack/core.sh`, `ecosystem-stack/services/*.sh`
 - Dashboard: `dashboard/`
 - LEco CLI: `tools/deploy-cli/leco_app/`
-- Hosting layout: `hosting/app-available/`
+- Hosting layout: `hosting/app-available/` (optional **`docker-compose.leco-hosting.yml`** + **`additionalComposeFilesFromManifest`** for LEco-only compose merges beside `leco.app.yaml`); reference YAML packs: `hosting/samples/` (not scanned as staging apps)
 - Registry: `config/leco-registry.yaml`
-- Traefik routes: `traefik/dynamic.yml`
+- Traefik routes: canonical `traefik/dynamic.yml`; runtime file provider dir `hosting/traefik/` (`01-stack-core.yml` = copy on each Traefik start; `dynamic.yml` = merge target for `leco-app` / dashboard). Use `ecosystem-stack/services/traefik.sh` **`heal`** / **`ensure-hosting-files`** when fixing global 404 or invalid empty `http` YAML.
 - Primary docs: `README.md`, `docs/`
 
 ## Architecture docs (read first for large changes)
@@ -37,6 +37,7 @@ This repo is a local platform with:
 - `docs/LECO_TOOLING.md`
 - `docs/LECO_APP_BLUEPRINT.md`
 - `docs/DEVELOPMENT_PLAYBOOK.md`
+- `docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md` (Traefik + Hosted apps: 502, `lh-network`, probes, routing normalization)
 
 ## Agent operating rules
 
@@ -52,7 +53,7 @@ This repo is a local platform with:
    - `dashboard/leco_registration.py`
    - `tools/deploy-cli/leco_app/schema.py`
 5. When changing routing semantics, update all of:
-   - `traefik/dynamic.yml` behavior/docs
+   - `traefik/dynamic.yml` and merge target `hosting/traefik/dynamic.yml` behavior/docs
    - CLI route generation/merge code
    - related docs (`docs/DEPLOY_CLI.md`, `docs/LECO_APP_BLUEPRINT.md`)
 6. Keep in-app docs discoverable:
@@ -64,6 +65,7 @@ This repo is a local platform with:
 - Python syntax: `python3 -m compileall -q dashboard tools/deploy-cli/leco_app`
 - Check for regressions in docs links from `README.md` and `dashboard/docs_catalog.py`
 - If adding docs, ensure paths are repo-root relative and loadable via `/api/docs/content`
+- Hosted apps / Traefik behavior: see `docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md` when changing `dashboard/leco_detect.py`, `dashboard/monitor.py`, or hosting overlays
 
 ## High-value follow-up conventions
 
