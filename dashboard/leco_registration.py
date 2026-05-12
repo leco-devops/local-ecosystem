@@ -367,12 +367,25 @@ def iterate_register_app_wizard(
                 "text": f"Normalized routing backend hosts for isolation ({fix.get('updated')} entry/entries).\n",
             }
         overlay = ensure_lh_network_hosting_overlay(prep.manifest_abs)
-        if overlay.get("services"):
+        overlay_svcs = overlay.get("services") or []
+        reset_svcs = overlay.get("ports_reset_services") or []
+        if overlay_svcs or reset_svcs:
+            net_txt = (
+                f"attach to lh-network for {', '.join(overlay_svcs)}"
+                if isinstance(overlay_svcs, list) and overlay_svcs
+                else ""
+            )
+            reset_txt = (
+                f"reset upstream host ports for {', '.join(reset_svcs)}"
+                if isinstance(reset_svcs, list) and reset_svcs
+                else ""
+            )
+            detail = "; ".join(x for x in (net_txt, reset_txt) if x)
             yield {
                 "type": "log",
                 "text": (
-                    "Ensured Traefik edge network: added or updated docker-compose.leco-hosting.yml "
-                    f"for compose service(s) {', '.join(overlay['services'])} (attach to lh-network).\n"
+                    "Ensured hosting overlay: added or updated docker-compose.leco-hosting.yml "
+                    f"({detail}).\n"
                 ),
             }
     except (ValueError, OSError, yaml.YAMLError) as exc:

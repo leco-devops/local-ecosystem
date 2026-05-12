@@ -1591,11 +1591,13 @@ def preview_registration_yaml(root: Path, app_id: str) -> tuple[str, str]:
 
 def ensure_lh_network_hosting_overlay(manifest_abs: Path) -> dict[str, Any]:
     """
-    When localhost Traefik routing targets compose services that are not on ``lh-network``,
-    ensure a hosting-only merge file exists beside ``leco.app.yaml`` and that
+    Ensure a hosting-only merge file exists beside ``leco.app.yaml`` and that
     ``dockerCompose.additionalComposeFilesFromManifest`` references it.
 
-    Without this, Traefik (on ``lh-network``) returns 502 even when compose ``ps`` is healthy.
+    The generated overlay does two things for hosted apps:
+    - attach Traefik-targeted services to ``lh-network`` so ``*.lh`` routes work
+    - strip upstream host ``ports`` publishes with ``!reset`` so hosted apps do not collide with
+      Traefik / local databases on ``:80`` / ``:3000`` / ``:5432`` / ...
     """
     mp = manifest_abs.resolve()
     try:
@@ -1632,35 +1634,53 @@ def ensure_lh_network_hosting_overlay(manifest_abs: Path) -> dict[str, Any]:
     if not isinstance(entries, list) or not entries:
         return {"ok": True, "skipped": "no routing entries"}
     project_name = _compose_project_name(dc, host_slug)
+    port_reset_services = [
+        str(name)
+        for name, spec in services.items()
+        if isinstance(spec, dict) and _service_has_publishable_ports(spec)
+    ]
     need = _compose_services_needing_lh_network_overlay(entries, project_name, services)
-    if not need:
-        return {"ok": True, "skipped": "traefik targets already on lh-network or unmappable hosts"}
+    if not need and not port_reset_services:
+        return {"ok": True, "skipped": "no lh-network or host-port overlay changes needed"}
+    need_set = set(need)
+    port_reset_set = set(port_reset_services)
 
     overlay_path = mp.parent / _LECO_HOSTING_OVERLAY_COMPOSE
     profile_dirty = False
     if not overlay_path.is_file():
         public_hn = _primary_public_hostname_from_routing(entries)
-        svc_map: dict[str, Any] = {}
-        for s in need:
-            block: dict[str, Any] = {"networks": ["lh-network"]}
-            if public_hn:
-                env = _lh_overlay_env_for_service(s, public_hn)
-                if env:
-                    block["environment"] = env
-            svc_map[s] = block
-        piece = {
-            "services": svc_map,
-            "networks": {"lh-network": {"external": True}},
-        }
         header = (
             "# LEco hosting overlay — attaches Traefik upstream services to the ecosystem edge network.\n"
             "# Referenced from leco.yaml → infrastructure.dockerCompose.additionalComposeFilesFromManifest.\n"
             "# Includes *.lh-oriented env (CORS, REACT_APP_*) when a routing hostname ends with .lh.\n"
+            "# Also strips upstream host publishes with ports: !reset [] so hosted apps do not collide\n"
+            "# with Traefik or other local stacks on :80 / :3000 / :5432 / ... .\n"
             "# Safe to commit under hosting/app-available/<slug>/ without editing the upstream app repo.\n\n"
         )
+        lines = [header, "services:\n"]
+        overlay_services = sorted(need_set | port_reset_set, key=lambda x: x.lower())
+        for s in overlay_services:
+            lines.append(f"  {s}:\n")
+            if s in port_reset_set:
+                lines.append("    ports: !reset []\n")
+            if s in need_set:
+                lines.append("    networks:\n")
+                lines.append("      - lh-network\n")
+                if public_hn:
+                    env = _lh_overlay_env_for_service(s, public_hn)
+                    if env:
+                        lines.append("    environment:\n")
+                        for k, v in env.items():
+                            vv = yaml.safe_dump(v, default_flow_style=True, allow_unicode=True).strip()
+                            lines.append(f"      {k}: {vv}\n")
+            lines.append("\n")
+        if need_set:
+            lines.append("networks:\n")
+            lines.append("  lh-network:\n")
+            lines.append("    external: true\n")
         try:
             overlay_path.write_text(
-                header + yaml.safe_dump(piece, default_flow_style=False, sort_keys=False, allow_unicode=True),
+                "".join(lines),
                 encoding="utf-8",
             )
         except OSError:
@@ -1695,6 +1715,7 @@ def ensure_lh_network_hosting_overlay(manifest_abs: Path) -> dict[str, Any]:
         "overlay_path": str(overlay_path),
         "profile_path": str(prof_path),
         "services": need,
+        "ports_reset_services": port_reset_services,
         "profile_updated": profile_dirty,
     }
 

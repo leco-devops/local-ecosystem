@@ -12,6 +12,7 @@
 
 services:
   my-frontend:
+    ports: !reset []
     networks:
       - default
       - lh-network
@@ -21,11 +22,15 @@ services:
       REACT_APP_API_BASE: ${REACT_APP_API_BASE:-https://myapp.lh/api}
 
   my-backend:
+    ports: !reset []
     networks:
       - default
       - lh-network
     environment:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://myapp.lh,https://myapp.lh}
+
+  my-database:
+    ports: !reset []
 
 networks:
   lh-network:
