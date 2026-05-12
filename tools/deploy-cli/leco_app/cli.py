@@ -1089,12 +1089,33 @@ def cmd_runtimes(
             ldetect = importlib.import_module("leco_detect")
             cands = ldetect.detect_runtime_candidates_for_manifest(mp)
             for c in cands or []:
+                expected = list(c.get("_expected_secrets") or [])
+                wired_keys: set[str] = set()
+                missing: list[str] = []
+                dv = mp.parent / ".dev.vars"
+                if dv.is_file():
+                    try:
+                        for ln in dv.read_text(encoding="utf-8").splitlines():
+                            s = ln.strip()
+                            if not s or s.startswith("#"):
+                                continue
+                            k, _, v = s.partition("=")
+                            k = k.strip()
+                            if k and v.strip():
+                                wired_keys.add(k)
+                    except OSError:
+                        pass
+                missing = [s for s in expected if s not in wired_keys]
                 detection_payload.append(
                     {
                         "id": c.get("_id") or c.get("id"),
                         "type": c.get("type"),
                         "detail": c.get("_detail") or "",
                         "suggested_upstream_yaml": c.get("_suggested_upstream_yaml") or "",
+                        "expected_secrets": expected,
+                        "wired_secrets": sorted(s for s in expected if s in wired_keys),
+                        "missing_secrets": missing,
+                        "dev_vars_path": str(dv) if dv.is_file() else "",
                         "spec": {k: v for k, v in c.items() if not k.startswith("_")},
                     }
                 )
@@ -1178,6 +1199,24 @@ def cmd_runtimes(
                     "    (paste under your routing.entries[].upstream and add a"
                     " '/' catch-all rule for your frontend service)"
                 )
+            expected = d.get("expected_secrets") or []
+            if expected:
+                wired = d.get("wired_secrets") or []
+                missing = d.get("missing_secrets") or []
+                typer.echo(
+                    f"    expected .dev.vars secrets: {len(expected)}"
+                    f"  (wired: {len(wired)}, missing: {len(missing)})"
+                )
+                if d.get("dev_vars_path"):
+                    typer.echo(f"      .dev.vars: {d['dev_vars_path']}")
+                else:
+                    example_path = mp.parent / ".dev.vars.example"
+                    typer.echo(
+                        f"      .dev.vars not present yet — skeleton: {example_path}"
+                    )
+                if missing:
+                    head = ", ".join(missing[:8]) + ("…" if len(missing) > 8 else "")
+                    typer.secho(f"      missing: {head}", fg=typer.colors.YELLOW)
 
 
 @app.command("ecosystem-register")

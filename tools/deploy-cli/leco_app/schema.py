@@ -200,6 +200,28 @@ class LocalRuntimeSpec(BaseModel):
             "picks LEco's reference image under infra/runtimes/<type>/."
         ),
     )
+    strip_bindings: list[str] | str | None = Field(
+        default=None,
+        alias="stripBindings",
+        description=(
+            "Cloudflare Workers only. List of top-level wrangler.toml sections to remove from the "
+            "in-container view of the config (e.g. ``[\"browser\"]``). Default = ``[\"browser\"]`` because "
+            "Wrangler local cannot simulate Browser Rendering. Set to ``\"none\"`` (or ``[]``) to keep all "
+            "bindings and rely on ``wrangler dev --remote`` instead. Upstream wrangler.toml is never edited."
+        ),
+    )
+    production_only_bindings: list[str] | str | None = Field(
+        default=None,
+        alias="productionOnlyBindings",
+        description=(
+            "Informational list of binding/feature names this runtime depends on that LEco cannot simulate "
+            "locally (e.g. ``[\"browser\", \"vectorize\", \"analytics_engine_datasets\"]``). LEco surfaces "
+            "these as ``expected: production-only`` badges in the dashboard / ``leco-app runtimes`` output "
+            "so the operator does not chase phantom \"down\" markers in /health for paid Cloudflare features. "
+            "Defaults to a conservative built-in list (see ``dashboard/leco_runtimes/cloudflare_workers.py``). "
+            "Set to ``\"none\"`` to suppress the badge entirely."
+        ),
+    )
 
     @field_validator("id")
     @classmethod

@@ -55,8 +55,14 @@ edge runtime get wired up?" command. By default it:
   (per-runtime container name on `lh-network`, port, config, source dir),
 - scans the resolved app root for a Worker entrypoint and surfaces a copy-
   pasteable `routing.entries[].upstream` YAML block matching the URL paths
-  the Worker actually handles. The same hint is emitted by the registration
-  wizard (`leco-app ecosystem-register` and the dashboard Register flow).
+  the Worker actually handles,
+- enumerates **expected `.dev.vars` secrets** (every `env.<NAME>`
+  referenced in Worker source that isn't already in wrangler.toml `[vars]`
+  / bindings) and reports `wired: M/N (missing: …)` against the operator's
+  actual `.dev.vars` file. Values are never logged — only key presence.
+
+The same hints are emitted by the registration wizard (`leco-app
+ecosystem-register` and the dashboard Register flow).
 
 **Init — Traefik routes:** when the wizard asks for hostnames, **press Enter on an empty hostname** to finish adding routes (otherwise it keeps prompting). For **React + API** stacks, choose **split route** so the tool writes **`frontend`** + **`apiBackend`** and `traefik-fragment` emits **`Host && PathPrefix(/api…)`** routers (priority over the UI `Host` rule), matching how **local-ecosystem** routes apps like CrawlerVision.
 
@@ -104,11 +110,12 @@ Recommended for new apps: keep **`leco.app.yaml`** as a **bridge** (`name`, `roo
   - **`config`** — wrangler.toml (or equivalent) path relative to `sourceDir`.
   - **`sourceDir`** — relative to the manifest's resolved root.
   - **`port`** — container port Traefik forwards to (default `8787`).
-  - **`devVarsFile`** — optional secrets file under `hosting/app-available/<slug>/`, bind-mounted read-only.
+  - **`devVarsFile`** — optional secrets file under `hosting/app-available/<slug>/`, bind-mounted read-only into the container at `/app/.dev.vars`. **Auto-detected** when the file is literally named `.dev.vars` and lives next to `leco.yaml`; the explicit field only matters for non-default paths.
   - **`stripBindings`** *(Cloudflare Workers only)* — list of top-level TOML tables to remove from a **sanitized** in-container `wrangler.toml` overlay; defaults to **`["browser"]`** (Browser Rendering — Miniflare cannot simulate it). Pass **`"none"`** to keep everything and rely on `wrangler dev --remote` instead. Upstream `wrangler.toml` is never edited on disk.
+  - **`productionOnlyBindings`** *(Cloudflare Workers only, informational)* — list of bindings the production Worker uses that LEco cannot simulate locally (Browser Rendering, Vectorize, Hyperdrive, Analytics Engine, Email Routing producer, mTLS certs). Surfaced as `expected: production-only` badges in `leco-app runtimes` and the dashboard so operators don't chase phantom "down" markers in `/health` for paid CF features. Defaults to a conservative built-in list; set to `"none"` to suppress.
   - **`image`** — override the default runtime image (advanced; see `infra/runtimes/<type>/`).
 
-  The runtime container's DNS name is **`leco-rt-<slug>-<runtime.id>`** on **`lh-network`**. The adapter also bind-mounts the per-runtime overlay directory **`hosting/app-available/<slug>/.leco-runtime/<runtime.id>/`** into the container at **`/leco-runtime/d1`**, where operators can drop **`d1-bootstrap-<BINDING>.sql`** schema files the runtime applies on first boot before running `wrangler d1 migrations apply` in a per-file-failure-tolerant loop. See **`hosting/samples/sample-cf-worker-runtime/`** for the full shape and the runbook §7 for the failure modes this handles.
+  The runtime container's DNS name is **`leco-rt-<slug>-<runtime.id>`** on **`lh-network`**. The adapter also bind-mounts the per-runtime overlay directory **`hosting/app-available/<slug>/.leco-runtime/<runtime.id>/`** into the container at **`/leco-runtime/d1`**, where operators can drop **`d1-bootstrap-<BINDING>.sql`** schema files the runtime applies on first boot before running `wrangler d1 migrations apply` in a per-file-failure-tolerant loop. On every overlay materialization the adapter also scans the Worker source for `env.<UPPER_SNAKE>` references that are not declared in wrangler.toml `[vars]` or as bindings, and writes a **`.dev.vars.example`** skeleton (grouped by vendor) into `hosting/app-available/<slug>/`. Existing `.dev.vars.example` is never overwritten. See **`hosting/samples/sample-cf-worker-runtime/`** for the full shape and the runbook §7 for the failure modes this handles.
 - **`routing.entries[].upstream`** *(v3, optional)* — list of **`{prefix, target, runtime?, service?}`** rules per hostname. **`target: runtime`** forwards a prefix to a sibling **`runtimes[].id`**; **`target: service`** (or alias **`frontend`** / **`backend`**) forwards to a Docker DNS name on **`lh-network`**. Replaces the legacy **`frontend`** / **`apiBackend`** / **`backendHost`** fields for the same entry; Traefik priority is derived from prefix length so **`/health/json`** outranks **`/api`** outranks **`/`** automatically (no manual priority math). The Cloudflare Workers adapter scans your Worker entrypoint (`src/index.ts`, `worker.ts`, …) for `pathname === '…'`, `pathname.startsWith('…')`, and router-call patterns (`app.get('…')`, etc.) and the registration wizard / **`leco-app runtimes --detect`** print a copy-pasteable YAML block listing the prefixes the Worker handles.
 
 Full diagram and maintainer pointers: **[LECO_APP_BLUEPRINT.md](LECO_APP_BLUEPRINT.md)**.

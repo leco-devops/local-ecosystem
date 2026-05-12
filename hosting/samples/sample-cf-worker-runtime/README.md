@@ -12,8 +12,10 @@ container next to your compose stack.
 | File / dir | Purpose |
 |------|---------|
 | **`leco.app.yaml`** | Bridge manifest; uses the standard `root: source` symlink pattern. |
-| **`leco.yaml`** | Localhost profile with `infrastructure.runtimes[]` + upstream-driven `routing.entries[]`. Now also documents `stripBindings` and the bootstrap directory layout. |
+| **`leco.yaml`** | Localhost profile with `infrastructure.runtimes[]` + upstream-driven `routing.entries[]`. Documents `devVarsFile`, `stripBindings`, `productionOnlyBindings`, and the bootstrap directory layout. |
 | **(generated)** `docker-compose.leco-runtime.yml` | Written by LEco beside the manifest on register / deploy. Gitignored. |
+| **(generated)** `.dev.vars.example` | Auto-written by LEco on overlay materialization. Lists every UPPER_SNAKE `env.<NAME>` referenced in the Worker source that is NOT declared as a wrangler.toml `[vars]` key or binding. Grouped by vendor. **Existing files are never overwritten.** Gitignored. |
+| **(operator-owned)** `.dev.vars` | Where you fill in actual secret values. LEco auto-bind-mounts it at `/app/.dev.vars` inside the runtime container whenever the file exists — `devVarsFile:` in `leco.yaml` is optional. Gitignored. |
 | **(generated)** `.leco-runtime/<runtime_id>/wrangler.toml` | Sanitized in-container view of upstream wrangler.toml (bindings Wrangler local can't simulate removed). Gitignored. |
 | **(operator-owned)** `.leco-runtime/<runtime_id>/d1-bootstrap-<BINDING>.sql` | Optional first-boot D1 schema. Useful when the upstream app keeps its base schema outside `migrations/` (e.g. in a TS constant `exec()`d from an admin endpoint). Gitignored. |
 
@@ -55,6 +57,23 @@ Worker entrypoint (`src/index.ts` / `worker.ts` / etc.) for `pathname === '…'`
 `pathname.startsWith('…')`, and router-call patterns (`app.get('…')`,
 `router.post('…')`, …) and prints a copy-pasteable `routing.upstream` YAML
 block. Re-run it on schema changes with `leco-app runtimes -f leco.app.yaml`.
+
+The same scan also enumerates **expected `.dev.vars` secrets** (every
+UPPER_SNAKE `env.<NAME>` referenced in the Worker source that is not already
+wired via `[vars]` or a binding) and reports `wired: N/M (missing: …)` in
+both the wizard log and the CLI, so an operator can see at a glance which
+keys still need values:
+
+```text
+expected .dev.vars secrets: 27  (wired: 0, missing: 27)
+  .dev.vars not present yet — skeleton: hosting/app-available/<slug>/.dev.vars.example
+  missing: ANTHROPIC_API_KEY, BREVO_SMTP_KEY, CF_API_TOKEN, …
+```
+
+Copy the auto-generated `.dev.vars.example` to `.dev.vars`, fill in real
+values, re-deploy: every downstream feature that depends on those keys
+flips from `down` to `healthy` in the Worker's `/health/json` board on the
+next probe cycle, without a single change to the upstream Worker repo.
 
 No changes to the upstream Worker repo, no host port collisions, no
 "production has it / local doesn't" 404 drift. When the Worker 404s, the

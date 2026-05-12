@@ -53,9 +53,17 @@ infrastructure:
     sourceDir: cloudflare
     config: wrangler.toml
     port: 8787
-    # Optional: read secrets from a file under hosting/app-available/<slug>/
-    # (gitignored — never lives in the upstream repo).
-    # devVarsFile: .dev.vars
+
+    # Operator-supplied secrets file. LEco bind-mounts it to /app/.dev.vars
+    # inside the runtime container — Wrangler reads it automatically. The
+    # field is OPTIONAL: if you simply drop a file named `.dev.vars` next to
+    # this leco.yaml, the runtime adapter auto-detects and mounts it without
+    # any manifest change. LEco also auto-generates `.dev.vars.example`
+    # listing every `env.<NAME>` reference the Worker source uses that is
+    # NOT declared in wrangler.toml `[vars]` or as a binding — grouped by
+    # vendor (LLM / Payments / Email / Cloudflare / Other) so you can fill
+    # values quickly. Existing `.dev.vars.example` is never overwritten.
+    devVarsFile: .dev.vars
 
     # Optional: strip locally-incompatible bindings from a sanitized
     # wrangler.toml overlay the runtime sees (upstream wrangler.toml is never
@@ -64,6 +72,19 @@ infrastructure:
     #   stripBindings: "none"          # keep everything; rely on `wrangler dev --remote`
     # See infra/runtimes/cloudflare-workers/README.md for the full list of
     # bindings Wrangler local cannot simulate.
+
+    # Informational: list paid Cloudflare-platform features this Worker
+    # depends on in production that have no local equivalent. LEco surfaces
+    # them as `expected: production-only` badges in `leco-app runtimes` and
+    # the dashboard, so you don't chase phantom "down" markers on
+    # /health/json for things like Browser Rendering. Defaults to a
+    # conservative built-in list (`browser`, `vectorize`, `hyperdrive`,
+    # `analytics_engine_datasets`, `send_email`, `mtls_certificates`).
+    # Set to `none` to suppress the badge entirely.
+    # productionOnlyBindings:
+    # - browser
+    # - vectorize
+    # - analytics_engine_datasets
 
   routing:
     entries:

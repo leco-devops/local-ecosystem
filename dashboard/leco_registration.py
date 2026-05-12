@@ -407,6 +407,7 @@ def iterate_register_app_wizard(
             rtype = cand.get("type") or "?"
             detail = (cand.get("_detail") or "").strip()
             yaml_hint = (cand.get("_suggested_upstream_yaml") or "").strip()
+            secrets: list[str] = list(cand.get("_expected_secrets") or [])
             parts = [f"Detected edge runtime: type={rtype} id={rid}"]
             if detail:
                 parts.append(f"  - {detail}")
@@ -422,6 +423,41 @@ def iterate_register_app_wizard(
                     "  ↳ Declare it under `infrastructure.runtimes[]` and add"
                     " matching `routing.entries[].upstream[]` rules in leco.yaml."
                 )
+            if secrets:
+                # Wired vs missing snapshot. Read .dev.vars (if present) only
+                # to extract key names — we never log values. The example file
+                # is written by the runtime adapter on overlay materialization.
+                dev_vars_path = prep.manifest_abs.parent / ".dev.vars"
+                wired: set[str] = set()
+                if dev_vars_path.is_file():
+                    try:
+                        for line in dev_vars_path.read_text(encoding="utf-8").splitlines():
+                            s = line.strip()
+                            if not s or s.startswith("#"):
+                                continue
+                            key, _, val = s.partition("=")
+                            key = key.strip()
+                            if key and val.strip():
+                                wired.add(key)
+                    except OSError:
+                        pass
+                missing = [s for s in secrets if s not in wired]
+                wired_known = [s for s in secrets if s in wired]
+                parts.append(
+                    f"  ↳ Expected `.dev.vars` secrets ({len(secrets)}): "
+                    + ", ".join(secrets[:8])
+                    + (f" (+{len(secrets) - 8} more)" if len(secrets) > 8 else "")
+                )
+                if wired:
+                    parts.append(
+                        f"     wired in .dev.vars: {len(wired_known)}/{len(secrets)}"
+                        + (f" (missing: {', '.join(missing[:6])}{'…' if len(missing) > 6 else ''})" if missing else "")
+                    )
+                else:
+                    parts.append(
+                        "     No `.dev.vars` found yet — see auto-generated"
+                        f" `hosting/app-available/{prep.manifest_abs.parent.name}/.dev.vars.example`."
+                    )
             parts.append("  ↳ Reference: docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md §7.")
             yield {"type": "log", "text": "\n".join(parts) + "\n"}
 

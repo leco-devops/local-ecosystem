@@ -44,7 +44,49 @@ DEFAULT_PORT = 8787
 # ``infrastructure.runtimes[].stripBindings`` (a passthrough field).
 DEFAULT_LOCAL_UNSUPPORTED_BINDINGS: tuple[str, ...] = ("browser",)
 
+# Top-level wrangler.toml sections whose features Wrangler local cannot fully
+# simulate (today). Surfaced informationally in the dashboard / CLI so an
+# operator knows which "down" lines on a hosted app's /health are
+# production-only behavior rather than a LEco misconfiguration. Apps can
+# override with ``infrastructure.runtimes[].productionOnlyBindings`` to refine
+# the badge text per environment.
+INFORMATIONAL_PRODUCTION_ONLY_BINDINGS: tuple[str, ...] = (
+    "browser",      # Cloudflare Browser Rendering (paid platform feature)
+    "vectorize",    # Vector embeddings store (no Miniflare equivalent)
+    "hyperdrive",   # Connection pooler for managed DBs (cloud-only)
+    "analytics_engine_datasets",  # Cloudflare Analytics Engine (cloud-only)
+    "send_email",   # Cloudflare Email Routing producer (cloud-only)
+    "mtls_certificates",
+)
+
 _TOML_TABLE_HEADER_RE = re.compile(r"^\s*\[\[?(?P<name>[A-Za-z_][A-Za-z0-9_.\- ]*)\]\]?\s*(#.*)?$")
+
+# ``binding = "NAME"`` declared anywhere on a line. Wrangler accepts both the
+# line-leading form (``binding = "FOO"`` inside ``[[d1_databases]]``) and the
+# inline-table form (``assets = { directory = ..., binding = "ASSETS", ... }``)
+# so we match the substring without anchoring to start-of-line.
+_TOML_BINDING_VALUE_RE = re.compile(r'\bbinding\s*=\s*"([A-Za-z_][A-Za-z0-9_]*)"')
+
+# Lines under ``[vars]`` look like ``KEY = "value"`` / ``KEY = 123``. We never
+# capture values — only the key names.
+_TOML_VARS_KEY_RE = re.compile(r"^\s*([A-Z][A-Z0-9_]{1,})\s*=")
+
+# Worker source references to env. Match both dotted (``env.OPENAI_API_KEY``)
+# and bracketed (``env["OPENAI_API_KEY"]``) access. Restricted to UPPER_SNAKE
+# (2+ chars after the leading letter) to avoid camelCase property noise.
+_ENV_REF_RE = re.compile(
+    r"""\benv\s*(?:\.([A-Z][A-Z0-9_]{1,})|\[\s*['"]([A-Z][A-Z0-9_]{1,})['"]\s*\])"""
+)
+
+# Worker source files we scan for env references. Limited to keep onboarding
+# fast on huge repos (we only need the names that *occur*, not every callsite).
+_WORKER_SOURCE_GLOBS: tuple[str, ...] = ("**/*.ts", "**/*.tsx", "**/*.js", "**/*.mjs", "**/*.cjs")
+
+# Hard caps on the source-scan walk so onboarding does not stall on huge
+# monorepos. We only need to discover *which* env keys are referenced, so
+# bounded reading per file is fine.
+_MAX_SOURCE_FILE_BYTES = 256_000
+_MAX_SOURCE_FILES_SCANNED = 400
 
 
 class CloudflareWorkersAdapter(RuntimeAdapter):
@@ -114,12 +156,35 @@ class CloudflareWorkersAdapter(RuntimeAdapter):
                         + (f"  ➜ suggested upstream rules: {routing_hint}" if routing_hint else "")
                     )
                     yaml_hint = suggested_upstream_yaml("worker", worker_paths)
+
+                # Scan the Worker source for env.<NAME> references that aren't
+                # already wired through wrangler.toml [vars] / bindings — these
+                # are the secrets the operator has to provide locally.
+                expected_secrets: list[str] = []
+                dev_vars_example = ""
+                try:
+                    wrangler_text = path.read_text(encoding="utf-8", errors="ignore")
+                except OSError:
+                    wrangler_text = ""
+                if wrangler_text:
+                    expected_secrets = detect_expected_secrets(worker_dir, wrangler_text)
+                    if expected_secrets:
+                        slug_hint = app_root.name
+                        dev_vars_example = render_dev_vars_example(expected_secrets, slug_hint)
+                        detail = (
+                            f"{detail}; .dev.vars secrets expected: "
+                            f"{', '.join(expected_secrets[:6])}"
+                            + (f" (+{len(expected_secrets) - 6} more)" if len(expected_secrets) > 6 else "")
+                        )
+
                 return RuntimeDetection(
                     type=self.type,
                     runtime_id="worker",
                     spec=spec,
                     detail=detail,
                     suggested_upstream_yaml=yaml_hint,
+                    expected_secrets=tuple(expected_secrets),
+                    dev_vars_example=dev_vars_example,
                 )
         return None
 
@@ -245,20 +310,72 @@ class CloudflareWorkersAdapter(RuntimeAdapter):
             )
             environment["LECO_D1_BOOTSTRAP_DIR"] = "/leco-runtime/d1"
 
-        dev_vars = (spec.get("devVarsFile") or "").strip()
-        if dev_vars:
-            dev_vars_host = (ctx.manifest_dir / dev_vars).resolve()
-            # Bind the file (compose creates a dir if the source doesn't exist,
-            # so we only emit the mount when the file is actually on disk).
-            if dev_vars_host.is_file():
-                volumes.append(
-                    {
-                        "type": "bind",
-                        "source": str(dev_vars_host),
-                        "target": "/app/.dev.vars",
-                        "read_only": True,
-                    }
+        # .dev.vars binding (Wrangler reads /app/.dev.vars automatically).
+        #
+        # We accept two equivalent inputs:
+        #   1. explicit ``infrastructure.runtimes[].devVarsFile`` (path relative
+        #      to the manifest dir),
+        #   2. an auto-detected ``.dev.vars`` file at the manifest root.
+        # If both resolve, the explicit path wins. Compose mounts a file only
+        # if the source actually exists (otherwise docker would create a dir).
+        dev_vars_target = "/app/.dev.vars"
+        dev_vars_host_path: Path | None = None
+        explicit_dev_vars = (spec.get("devVarsFile") or "").strip()
+        if explicit_dev_vars:
+            cand = (ctx.manifest_dir / explicit_dev_vars).resolve()
+            if cand.is_file():
+                dev_vars_host_path = cand
+        if dev_vars_host_path is None and ctx.manifest_dir_container is not None:
+            implicit = (ctx.manifest_dir_container / ".dev.vars").resolve()
+            if implicit.is_file():
+                # Map container-visible path back to the host path used by the
+                # Docker daemon (the implicit file always lives under the
+                # operator-owned hosting/app-available/<slug>/ tree).
+                try:
+                    rel = implicit.relative_to(ctx.manifest_dir_container)
+                    dev_vars_host_path = (ctx.manifest_dir / rel).resolve()
+                except ValueError:
+                    dev_vars_host_path = implicit
+        if dev_vars_host_path is not None and dev_vars_host_path.is_file():
+            volumes.append(
+                {
+                    "type": "bind",
+                    "source": str(dev_vars_host_path),
+                    "target": dev_vars_target,
+                    "read_only": True,
+                }
+            )
+            environment["LECO_DEV_VARS"] = dev_vars_target
+        else:
+            environment["LECO_DEV_VARS"] = ""
+
+        # Auto-materialize a .dev.vars.example skeleton when the operator has
+        # not yet written one. This is the discoverability bridge — operators
+        # see what secrets are expected without spelunking through CV's source.
+        # Never overwrite an existing .dev.vars.example (operator may have
+        # customized comments / grouping), and never touch .dev.vars itself.
+        if ctx.manifest_dir_container is not None:
+            try:
+                example_text = self._render_dev_vars_example_for_overlay(
+                    spec, ctx, config_rel
                 )
+            except Exception:
+                example_text = ""
+            if example_text:
+                example_path = ctx.manifest_dir_container / ".dev.vars.example"
+                if not example_path.exists():
+                    try:
+                        example_path.write_text(example_text, encoding="utf-8")
+                    except OSError:
+                        pass
+
+        # Surface production-only bindings (informational env var). Adapters
+        # downstream — CLI, dashboard hosted-app card — read this to render
+        # "expected unavailable locally" badges so operators don't chase
+        # phantom "down" markers for paid Cloudflare-platform features.
+        prod_only = self._resolve_production_only_bindings(spec)
+        if prod_only:
+            environment["LECO_PRODUCTION_ONLY_BINDINGS"] = ",".join(sorted(prod_only))
 
         return {
             "image": image,
@@ -294,6 +411,52 @@ class CloudflareWorkersAdapter(RuntimeAdapter):
             ctx.named_volume(runtime_id, "node-modules"),
             ctx.named_volume(runtime_id, "wrangler-state"),
         ]
+
+    def _render_dev_vars_example_for_overlay(
+        self,
+        spec: dict[str, Any],
+        ctx: RuntimeBuildContext,
+        config_rel: str,
+    ) -> str:
+        """Read the in-container wrangler.toml + Worker source and return a
+        ``.dev.vars.example`` body. Empty if the scan yields zero expected
+        secrets (in which case the operator never sees the file).
+        """
+        if ctx.manifest_root_container is None:
+            return ""
+        source_dir = (spec.get("sourceDir") or "").strip()
+        worker_dir = ctx.manifest_root_container / source_dir if source_dir else ctx.manifest_root_container
+        worker_dir = worker_dir.resolve()
+        cfg = (worker_dir / config_rel).resolve()
+        if not cfg.is_file():
+            return ""
+        try:
+            wrangler_text = cfg.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            return ""
+        secrets = detect_expected_secrets(worker_dir, wrangler_text)
+        if not secrets:
+            return ""
+        return render_dev_vars_example(secrets, ctx.app_slug)
+
+    def _resolve_production_only_bindings(self, spec: dict[str, Any]) -> set[str]:
+        """Effective list of production-only bindings to surface as informational badges.
+
+        Defaults to :data:`INFORMATIONAL_PRODUCTION_ONLY_BINDINGS`. Operators
+        can refine with ``infrastructure.runtimes[].productionOnlyBindings``
+        (list or ``"none"``).
+        """
+        raw = spec.get("productionOnlyBindings", None)
+        if raw is None:
+            return set(INFORMATIONAL_PRODUCTION_ONLY_BINDINGS)
+        if isinstance(raw, str):
+            s = raw.strip().lower()
+            if s in {"", "none", "off", "false"}:
+                return set()
+            return {p.strip().lower() for p in s.split(",") if p.strip()}
+        if isinstance(raw, list):
+            return {str(x).strip().lower() for x in raw if str(x).strip()}
+        return set(INFORMATIONAL_PRODUCTION_ONLY_BINDINGS)
 
     def _resolve_strip_list(self, spec: dict[str, Any]) -> set[str]:
         """Effective list of TOML sections to strip from the in-container wrangler.toml.
@@ -410,6 +573,171 @@ def suggested_upstream_yaml(runtime_id: str, paths: set[str]) -> str:
         lines.append("        target: runtime")
         lines.append(f"        runtime: {runtime_id}")
     return "\n".join(lines)
+
+
+def _collect_wrangler_known_names(wrangler_text: str) -> tuple[set[str], set[str]]:
+    """Return ``(vars_keys, binding_names)`` from a ``wrangler.toml`` body.
+
+    - ``vars_keys`` are UPPER_SNAKE keys defined under the top-level ``[vars]``
+      table (sub-environment ``[env.staging.vars]`` etc. are ignored — they
+      only ever ship to that named env, not to local dev).
+    - ``binding_names`` are the values of ``binding = "<NAME>"`` lines anywhere
+      in the file (D1, KV, R2, queues, vectorize, browser, AI, durable
+      objects…). These are valid local references too, so we exclude them from
+      the "missing secret" list.
+
+    Pure text walker, no TOML parser: a wrangler.toml is operator-authored
+    and we'd rather degrade gracefully than refuse to scan when a line trips
+    a strict parser.
+    """
+    vars_keys: set[str] = set()
+    bindings: set[str] = set()
+    in_top_vars = False
+    for raw in wrangler_text.splitlines():
+        line = raw.rstrip()
+        header = _TOML_TABLE_HEADER_RE.match(line)
+        if header:
+            name = header.group("name").strip()
+            in_top_vars = name == "vars"
+            continue
+        if in_top_vars:
+            m = _TOML_VARS_KEY_RE.match(line)
+            if m:
+                vars_keys.add(m.group(1))
+        for m2 in _TOML_BINDING_VALUE_RE.finditer(line):
+            bindings.add(m2.group(1))
+    return vars_keys, bindings
+
+
+def _scan_worker_env_refs(worker_dir: Path) -> set[str]:
+    """Walk Worker source and return the set of UPPER_SNAKE ``env.<NAME>`` references.
+
+    Bounded by ``_MAX_SOURCE_FILE_BYTES`` and ``_MAX_SOURCE_FILES_SCANNED`` so
+    onboarding stays fast on big repos. We skip ``node_modules``, ``dist`` and
+    ``.wrangler`` to stay inside the operator's own code.
+    """
+    if not worker_dir.is_dir():
+        return set()
+    found: set[str] = set()
+    scanned = 0
+    skip_dirs = {"node_modules", "dist", "build", ".wrangler", ".turbo", ".next", "public"}
+    candidates: list[Path] = []
+    for pattern in _WORKER_SOURCE_GLOBS:
+        for path in worker_dir.glob(pattern):
+            if any(part in skip_dirs for part in path.parts):
+                continue
+            candidates.append(path)
+            if len(candidates) >= _MAX_SOURCE_FILES_SCANNED * 2:
+                break
+        if len(candidates) >= _MAX_SOURCE_FILES_SCANNED * 2:
+            break
+    # Stable order so repeated scans are deterministic.
+    candidates.sort()
+    for path in candidates:
+        if scanned >= _MAX_SOURCE_FILES_SCANNED:
+            break
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")[: _MAX_SOURCE_FILE_BYTES]
+        except OSError:
+            continue
+        scanned += 1
+        for m in _ENV_REF_RE.finditer(text):
+            name = m.group(1) or m.group(2)
+            if name:
+                found.add(name)
+    return found
+
+
+# Names we never recommend as "missing secrets" even when referenced — they
+# are platform / SDK conventions, not operator-supplied API keys, and listing
+# them in a ``.dev.vars.example`` would just clutter the file.
+_ENV_REF_IGNORE: frozenset[str] = frozenset(
+    {
+        "NODE_ENV",
+        "DEBUG",
+        "CI",
+        "TZ",
+        "LANG",
+        # Wrangler injects these for the runtime itself.
+        "ENVIRONMENT",
+        "WRANGLER_LOG",
+    }
+)
+
+
+def detect_expected_secrets(worker_dir: Path, wrangler_text: str) -> list[str]:
+    """Return the ordered list of operator-supplied secrets the runtime expects.
+
+    Algorithm:
+        1. Read ``[vars]`` keys + ``binding = "NAME"`` values from ``wrangler.toml``.
+        2. Grep the Worker source for ``env.<UPPER_SNAKE>`` / ``env["UPPER_SNAKE"]``.
+        3. Subtract (1) and a small SDK/platform ignore list from (2).
+
+    The result is what an operator needs to drop into
+    ``hosting/app-available/<slug>/.dev.vars`` to actually exercise every
+    feature locally — and it is exactly the set LEco materializes into
+    ``.dev.vars.example`` so the file is self-documenting.
+    """
+    vars_keys, bindings = _collect_wrangler_known_names(wrangler_text)
+    refs = _scan_worker_env_refs(worker_dir)
+    expected = sorted(refs - vars_keys - bindings - _ENV_REF_IGNORE)
+    return expected
+
+
+def render_dev_vars_example(secrets: list[str], slug: str) -> str:
+    """Render the ``.dev.vars.example`` body for a runtime's expected secrets.
+
+    The file lists one ``KEY=`` placeholder per detected secret, grouped by
+    coarse prefix (LLM / Payment / Email / Cloudflare / Other) so operators
+    don't have to scan a flat 30-line list. Never contains real values.
+    """
+    if not secrets:
+        return ""
+    groups: dict[str, list[str]] = {
+        "Cloudflare platform": [],
+        "LLM providers": [],
+        "Payments": [],
+        "Email": [],
+        "Other": [],
+    }
+    LLM_PREFIXES = ("OPENAI", "ANTHROPIC", "CLAUDE", "GEMINI", "GOOGLE_GEMINI", "PERPLEXITY", "XAI", "GROK", "EDEN_AI")
+    PAY_PREFIXES = ("STRIPE", "RAZORPAY", "PAYPAL", "PAYTM")
+    EMAIL_PREFIXES = ("BREVO", "RESEND", "POSTMARK", "MAILGUN", "SENDGRID", "SMTP")
+    CF_PREFIXES = ("CF_", "CLOUDFLARE_", "WRANGLER_")
+    for name in secrets:
+        if any(name.startswith(p) for p in CF_PREFIXES):
+            groups["Cloudflare platform"].append(name)
+        elif any(name.startswith(p) for p in LLM_PREFIXES):
+            groups["LLM providers"].append(name)
+        elif any(name.startswith(p) for p in PAY_PREFIXES):
+            groups["Payments"].append(name)
+        elif any(name.startswith(p) for p in EMAIL_PREFIXES):
+            groups["Email"].append(name)
+        else:
+            groups["Other"].append(name)
+
+    header = (
+        "# LEco DevOps — auto-generated .dev.vars.example\n"
+        f"# App: {slug}\n"
+        "# Drop a copy named `.dev.vars` next to this file, fill in real values,\n"
+        "# then re-deploy. LEco bind-mounts `.dev.vars` into the runtime at\n"
+        "# /app/.dev.vars (Wrangler local reads it automatically — no manifest\n"
+        "# field needed). This file lists every UPPER_SNAKE `env.<NAME>` the\n"
+        "# Worker source references that is NOT already declared in\n"
+        "# wrangler.toml `[vars]` or as a binding. Regenerated each time LEco\n"
+        "# materializes the runtime overlay (existing `.dev.vars` is never\n"
+        "# touched).\n"
+        "\n"
+    )
+    lines: list[str] = [header]
+    for group, names in groups.items():
+        if not names:
+            continue
+        lines.append(f"# --- {group} ---")
+        for n in names:
+            lines.append(f"{n}=")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def _sanitize_wrangler_toml(text: str, strip_names: set[str]) -> tuple[str, set[str]]:

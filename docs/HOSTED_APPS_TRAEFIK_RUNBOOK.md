@@ -22,6 +22,8 @@ This document records **common failures** seen with **LEco DevOps Hosted apps** 
 | **502** on **`<slug>.lh/api/*`**; runtime logs show **`spawn …/workerd ENOENT`** | LEco runtime image was on **`node:22-alpine`** (musl libc). Cloudflare's **`workerd`** binary published on npm is glibc-only and crash-loops on musl. | Image is now **`node:22-bookworm-slim`** (glibc). Rebuild **`leco/runtime-cloudflare-workers:latest`** from **`infra/runtimes/cloudflare-workers/`** and recreate the runtime container *and* its per-app **`node_modules`** named volume (musl-built artifacts must be evicted): `docker volume rm <project>_leco-rt-<slug>-<runtime>-node-modules` then **`leco-app deploy`**. |
 | **500** with **`D1_ERROR: no such table: <name>: SQLITE_ERROR`** on a Worker route | Local D1 file is empty — production was bootstrapped out-of-band (e.g. a `D1_INIT_SQL` exec from an admin endpoint) and/or **`wrangler d1 migrations apply`** aborted on a single bad migration leaving later ones pending. | Drop the upstream baseline schema into **`hosting/app-available/<slug>/.leco-runtime/<runtime_id>/d1-bootstrap-<BINDING>.sql`** (or **`d1-bootstrap.sql`** as a fallback) and redeploy. The runtime entrypoint applies the bootstrap, then runs a **resilient** migration loop that tolerates per-file failures by recording them in `d1_migrations` and retrying. See **§7 → D1 schema bootstrap + resilient migrations**. |
 | **`<slug>.lh/<path>`** returns the **frontend SPA shell** (HTML with *"You need to enable JavaScript to run this app."*) but production returns JSON for the same path | Path is Worker-served in production but no **`routing.entries[].upstream`** rule directs it at the local runtime — Traefik falls through to the catch-all **`/`** → frontend service. Common offenders: **`/health/json`**, **`/.well-known/*`**, **`/metrics`**, **`/sitemap.xml`**. | Add a longer-prefix rule pointing at the runtime in **`leco.yaml`**, e.g. **`{ prefix: /health/json, target: runtime, runtime: worker }`**. The Cloudflare Workers adapter's **`detect()`** now scans the Worker entrypoint (**`src/index.ts`** / **`worker.ts`**) for `pathname === '...'` / `pathname.startsWith('...')` / `app.get('...', …)` patterns and surfaces a hint with suggested rules during onboarding. Re-merge Traefik after editing (**`leco-app ecosystem-register --merge-traefik`**); the longer prefix automatically wins because the fragment generator derives router priorities from prefix length. |
+| **Worker `/health/json`** (or any feature board) reports many SaaS / LLM / payment / email services as **`down`** locally while production shows them healthy | The Worker references `env.OPENAI_API_KEY`, `env.STRIPE_SECRET_KEY`, etc., but no `.dev.vars` is wired into the runtime container, so the Worker's `hasEnvVar()` checks return `false`. LEco is healthy — those are operator-supplied secrets that ship as Wrangler secrets in production. | LEco now auto-generates **`hosting/app-available/<slug>/.dev.vars.example`** on every overlay materialization, listing every UPPER_SNAKE `env.<NAME>` referenced in Worker source that is NOT already declared in wrangler.toml `[vars]` or as a binding (grouped by vendor: LLM / Payments / Email / Cloudflare / Other). Copy it to `.dev.vars`, fill in real values, redeploy. The runtime adapter auto-bind-mounts `.dev.vars` at `/app/.dev.vars` whenever the file exists — no manifest field required. Run **`leco-app runtimes -f leco.app.yaml`** to see `wired: N/M (missing: …)` against the operator file. See **§7 → Operator-supplied secrets (`.dev.vars` auto-scan)**. |
+| **Worker `/health/json`** still reports `browser` / `vectorize` / `analytics_engine_datasets` as **`down`** locally after secrets are filled in | Those bindings are *production-only* Cloudflare features (Browser Rendering, Vector embeddings store, Analytics Engine — none have a Miniflare equivalent). They will *always* be `down` locally. | Declare them under **`infrastructure.runtimes[].productionOnlyBindings`** in **`leco.yaml`** (e.g. `[browser, vectorize, analytics_engine_datasets, send_email]`). LEco surfaces them as `expected: production-only` informational badges so operators don't chase phantom red dots. Defaults to a conservative built-in list; set to `none` to suppress entirely. |
 
 ---
 
@@ -252,10 +254,90 @@ explicit list (`["browser", "ai"]`) or `"none"` / `[]` to disable stripping
 entirely (use `--remote` mode if you need full fidelity). The sanitized file
 includes a header listing which sections were dropped.
 
+### Operator-supplied secrets (`.dev.vars` auto-scan)
+
+Production Workers usually rely on a handful of operator-supplied secrets
+(`OPENAI_API_KEY`, `STRIPE_SECRET_KEY`, `BREVO_SMTP_KEY`, `CF_API_TOKEN`,
+`TURNSTILE_SECRET_KEY`, …) that ship through `wrangler secret put` — never
+into `wrangler.toml`. Without them every feature that depends on those keys
+reports `down` in the Worker's health board even though LEco itself is
+healthy. LEco closes this discoverability gap automatically:
+
+1. **Auto-scan.** The Cloudflare Workers adapter walks the Worker source
+   (`src/**/*.ts|tsx|js|mjs|cjs`, bounded scan) for `env.<UPPER_SNAKE>` and
+   `env["UPPER_SNAKE"]` references, then subtracts every name already
+   declared in `wrangler.toml` `[vars]` or as a `binding = "NAME"` (anywhere,
+   including the inline `assets = { …, binding = "ASSETS" }` form). The
+   remainder is the *expected secrets* set.
+
+2. **Auto-generated `.dev.vars.example`.** Every overlay materialization
+   writes `hosting/app-available/<slug>/.dev.vars.example` (gitignored)
+   listing one `KEY=` placeholder per expected secret, **grouped by vendor**
+   (Cloudflare platform / LLM providers / Payments / Email / Other) so an
+   operator can fill values without spelunking through the upstream source.
+   Existing `.dev.vars.example` is **never overwritten** — operators can
+   safely add comments / re-order.
+
+3. **Auto-bind `.dev.vars`.** If `hosting/app-available/<slug>/.dev.vars`
+   exists, the adapter bind-mounts it at `/app/.dev.vars` inside the runtime
+   container. Wrangler reads it automatically. No manifest field required;
+   `infrastructure.runtimes[].devVarsFile:` is still accepted for explicit
+   configuration (e.g. pointing at a non-default path).
+
+4. **Diagnostic surface.** Both the registration wizard log and
+   `leco-app runtimes -f leco.app.yaml` print
+   `expected .dev.vars secrets: N (wired: M, missing: …)` with the actual
+   missing key names, plus the path of `.dev.vars` (when present) or the
+   skeleton file (when not). Values are never logged — only key presence.
+
+The flow for any new Worker app:
+```bash
+# 1. Register the app — LEco scans the source and writes .dev.vars.example.
+leco-app ecosystem-register --merge-traefik
+
+# 2. Copy the skeleton and fill in real secret values.
+cp hosting/app-available/<slug>/.dev.vars.example \
+   hosting/app-available/<slug>/.dev.vars
+${EDITOR} hosting/app-available/<slug>/.dev.vars
+
+# 3. Redeploy — the adapter auto-mounts .dev.vars; Wrangler picks it up.
+leco-app deploy
+```
+
+### Production-only bindings (informational badge)
+
+Some Cloudflare-platform features genuinely have no local equivalent:
+**`browser`** (Browser Rendering), **`vectorize`** (Vector store),
+**`hyperdrive`** (managed-DB connection pool),
+**`analytics_engine_datasets`** (Analytics Engine), **`send_email`**
+(Email Routing producer), **`mtls_certificates`**. Even after every secret
+is filled in, the Worker's `/health/json` will keep reporting these as
+`down` because Miniflare returns `null`/`undefined` for them.
+
+Declare them under `infrastructure.runtimes[].productionOnlyBindings` in
+`leco.yaml`:
+
+```yaml
+infrastructure:
+  runtimes:
+  - id: worker
+    type: cloudflare-workers
+    productionOnlyBindings: [browser, vectorize, analytics_engine_datasets, send_email]
+```
+
+LEco surfaces those as `expected: production-only` informational badges in
+`leco-app runtimes` output and the dashboard hosted-app card so operators
+can tell at a glance which red dots are "missing API key" (actionable) vs
+"paid CF feature, will-never-work-locally" (expected). Defaults to a
+conservative built-in list — override with a custom list or set to
+`"none"` to suppress the badge.
+
 ### Diagnostic command
 
-`leco-app runtimes -f leco.app.yaml` prints the adapter registry and
-declared runtimes for that manifest. Combine with
+`leco-app runtimes -f leco.app.yaml` prints the adapter registry, the
+declared runtimes for that manifest, the detection hint (Worker paths +
+suggested `routing.upstream` YAML), and the secret wiring snapshot
+(expected / wired / missing). Combine with
 `docker logs leco-rt-<slug>-<runtime>` to confirm the runtime is up.
 
 ### Code map

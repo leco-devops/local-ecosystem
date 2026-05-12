@@ -43,6 +43,15 @@ class RuntimeDetection:
     suggested_upstream_yaml: str = ""
     """Optional copy-pasteable ``routing.entries[].upstream`` YAML fragment for
     a manifest file. Empty when the adapter cannot infer prefixes."""
+    expected_secrets: tuple[str, ...] = ()
+    """Names referenced in the runtime source as ``env.<NAME>`` that are NOT
+    declared as wrangler.toml ``[vars]`` keys or top-level bindings. Operators
+    need to provide these via ``hosting/app-available/<slug>/.dev.vars`` (or
+    ``infrastructure.runtimes[].devVarsFile``) for the corresponding features
+    to come up locally."""
+    dev_vars_example: str = ""
+    """Optional ``KEY=`` skeleton (one per line) for the operator-owned
+    ``.dev.vars`` file. Empty when no secrets were detected."""
 
 
 @dataclass(frozen=True)

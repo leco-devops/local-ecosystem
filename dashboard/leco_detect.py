@@ -1960,6 +1960,8 @@ def detect_runtime_candidates_for_manifest(manifest_abs: Path) -> list[dict[str,
         spec["_detail"] = d.detail or ""
         spec["_id"] = d.runtime_id
         spec["_suggested_upstream_yaml"] = d.suggested_upstream_yaml or ""
+        spec["_expected_secrets"] = list(d.expected_secrets or ())
+        spec["_dev_vars_example"] = d.dev_vars_example or ""
         out.append(spec)
     return out
 
