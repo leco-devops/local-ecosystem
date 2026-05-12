@@ -529,7 +529,12 @@ def materialize_registration_yaml(path_rel: str, app_id: str) -> dict[str, Any]:
         except OSError:
             pass
     ensure_docker_compose_in_profile_infrastructure(
-        lo, scan_root, m, app_tree_base=source_target, allow_compose_discovery=True
+        lo,
+        scan_root,
+        m,
+        app_tree_base=source_target,
+        allow_compose_discovery=True,
+        manifest_parent=staging,
     )
     ensure_wrangler_in_profile_infrastructure(lo, scan_root, m, app_tree_base=source_target)
     _maybe_write_static_site_compose_scaffold(staging, aid, source_target, m, lo)

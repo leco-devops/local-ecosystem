@@ -4436,16 +4436,21 @@ function renderHostedManifestSummary(manifestUi, snap) {
     html += `<p class="muted small hosted-manifest-summary__cmd"><code>docker compose ${args.map((x) => escapeHtml(String(x))).join(" ")}</code></p>`;
   } else if (mu.effective_has_docker_compose === true) {
     html +=
-      '<p class="muted small hosted-manifest-summary__warn">Compose is declared in <code>leco.yaml</code> but LEco did not build a <code>-f</code> chain — check <code>composeFile</code> under resolved app root, container vs host paths, and optional <code>additionalComposeFilesFromManifest</code> files beside <code>leco.app.yaml</code>.</p>';
+      '<p class="muted small hosted-manifest-summary__warn">Compose is declared in <code>leco.yaml</code> but LEco did not build a <code>-f</code> chain — check <code>composeFile</code> under resolved app root, optional <code>composeFileFromManifest</code> beside <code>leco.app.yaml</code>, container vs host paths, and <code>additionalComposeFilesFromManifest</code>.</p>';
   } else {
     html +=
       '<p class="muted small">No <code>infrastructure.dockerCompose</code> in profile (Workers-only is fine). Add compose under <code>leco.yaml</code> to drive Deploy / service rows.</p>';
   }
-  if (pdc && pdc.compose_file) {
+  if (pdc && (pdc.compose_file || pdc.compose_file_from_manifest)) {
     const mx = pdc.additional_compose_files_from_manifest || [];
     const ax = pdc.additional_compose_files || [];
     html += '<ul class="muted small hosted-manifest-summary__list">';
-    html += `<li>Primary <code>composeFile</code> (relative to app root): <code>${escapeHtml(String(pdc.compose_file))}</code></li>`;
+    if (pdc.compose_file_from_manifest) {
+      html += `<li>Primary <code>composeFileFromManifest</code> (beside <code>leco.app.yaml</code>): <code>${escapeHtml(String(pdc.compose_file_from_manifest))}</code></li>`;
+    }
+    if (pdc.compose_file) {
+      html += `<li>Primary <code>composeFile</code> (relative to app root): <code>${escapeHtml(String(pdc.compose_file))}</code></li>`;
+    }
     if (ax.length)
       html += `<li>Extra <code>-f</code> (app root): ${ax.map((x) => `<code>${escapeHtml(String(x))}</code>`).join(", ")}</li>`;
     if (mx.length)
@@ -4503,8 +4508,14 @@ function renderHostedResourceLedger(manifestUi, snap) {
 
   html += '<div class="hosted-resource-ledger__card">';
   html += '<div class="hosted-resource-ledger__card-title">Docker / Compose</div>';
-  if (pdc && pdc.compose_file) {
-    html += `<p class="hosted-resource-ledger__card-body"><strong>Compose file</strong> (profile <code>infrastructure.dockerCompose.composeFile</code>): <code>${escapeHtml(String(pdc.compose_file))}</code>`;
+  if (pdc && (pdc.compose_file || pdc.compose_file_from_manifest)) {
+    html += '<p class="hosted-resource-ledger__card-body">';
+    if (pdc.compose_file_from_manifest) {
+      html += `<strong>Compose entry</strong> (<code>composeFileFromManifest</code>): <code>${escapeHtml(String(pdc.compose_file_from_manifest))}</code> — hosting-only wrapper; upstream compose is usually <code>include</code>d from the <code>source</code> link.`;
+    }
+    if (pdc.compose_file) {
+      html += `${pdc.compose_file_from_manifest ? "<br />" : ""}<strong>Compose file</strong> (<code>composeFile</code> relative to app root): <code>${escapeHtml(String(pdc.compose_file))}</code>`;
+    }
     const ax = pdc.additional_compose_files;
     const mx = pdc.additional_compose_files_from_manifest;
     if (Array.isArray(ax) && ax.length) {
@@ -7418,6 +7429,16 @@ async function runDashboardSyncRegisterOverlay(opts) {
     const registerOk = res.ok && data.ok === true;
     const deployFine = data.deploy_stack_ran !== true || data.deploy_ok === true;
     const ok = registerOk && deployFine;
+    /** @param {unknown} deployLog */
+    const deployPortConflictHint = (deployLog) => {
+      const s = deployLog == null ? "" : String(deployLog);
+      if (!/port is already allocated/i.test(s)) return "";
+      const pg =
+        /:5432\b/.test(s) || /postgresql/i.test(s)
+          ? " Database services often publish :5432 on the host — use `ports: !reset []` on that service too (apps still use internal `postgresql:5432`)."
+          : "";
+      return ` Port conflict: a host port in compose is already in use (e.g. :80 with Traefik, or :5432 with another Postgres).${pg} In hosting-only mode use composeFileFromManifest + include upstream + \`ports: !reset []\` per publishing service (see hosting/samples/sample-hosting-compose-entry/), or free the port on the host.`;
+    };
     const infraGaps = Array.isArray(data.register_infrastructure_gaps) ? data.register_infrastructure_gaps : [];
     const composeGap =
       data.effective_has_docker_compose === false || infraGaps.some((x) => String(x).includes("dockerCompose"));
@@ -7431,7 +7452,7 @@ async function runDashboardSyncRegisterOverlay(opts) {
       outcome.error = data.error
         ? String(data.error)
         : !deployFine
-          ? "Docker deploy failed (registry may still be updated). See log below."
+          ? "Docker deploy failed (registry may still be updated). See log below." + deployPortConflictHint(data.deploy_log)
           : `HTTP ${res.status}`;
     }
 

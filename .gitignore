@@ -23,4 +23,8 @@ certs/*-key.pem
 hosting/traefik/dynamic.yml
 # Copy of traefik/dynamic.yml created by ecosystem-stack/services/traefik.sh (not a symlink)
 hosting/traefik/01-stack-core.yml
+
+# Per-machine selection recorded by ecosystem-stack/install-foundation.sh
+ecosystem-stack/config/install-selection.env
+
 /Backup

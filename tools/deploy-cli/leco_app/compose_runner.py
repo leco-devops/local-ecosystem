@@ -58,6 +58,15 @@ def path_for_docker_daemon(container_path: Path) -> Path:
     return rp
 
 
+def compose_subprocess_cwd(manifest: ApplicationManifest, manifest_path: Path) -> Path:
+    """Directory for docker compose subprocess cwd — always paths visible to this process (not host-remapped)."""
+    if not manifest.docker_compose:
+        return manifest.resolved_root(manifest_path).resolve()
+    if (manifest.docker_compose.compose_file_from_manifest or "").strip():
+        return manifest_path.parent.resolve()
+    return manifest.resolved_root(manifest_path).resolve()
+
+
 def _env_for_manifest(manifest: ApplicationManifest, manifest_path: Path) -> dict[str, str]:
     """Pass through host env; optional COMPOSE_PROJECT_NAME only if set in manifest."""
     env = os.environ.copy()
@@ -66,18 +75,39 @@ def _env_for_manifest(manifest: ApplicationManifest, manifest_path: Path) -> dic
     return env
 
 
+def primary_compose_path(manifest: ApplicationManifest, manifest_path: Path) -> Path | None:
+    """Filesystem path to the primary compose file (root composeFile or composeFileFromManifest)."""
+    if not manifest.docker_compose:
+        return None
+    dc = manifest.docker_compose
+    cfm = (dc.compose_file_from_manifest or "").strip()
+    if cfm:
+        er = Path(cfm)
+        return er.resolve() if er.is_absolute() else (manifest_path.parent / er).resolve()
+    root = manifest.resolved_root(manifest_path)
+    rel = Path(dc.compose_file)
+    return rel.resolve() if rel.is_absolute() else (root / rel).resolve()
+
+
 def compose_args(manifest: ApplicationManifest, manifest_path: Path) -> list[str]:
     if not manifest.docker_compose:
         raise ValueError("Manifest has no dockerCompose section")
     root = manifest.resolved_root(manifest_path)
     root_d = path_for_docker_daemon(root)
+    manifest_parent = manifest_path.parent.resolve()
     dc = manifest.docker_compose
     compose_paths: list[str] = []
-    rel = Path(dc.compose_file)
-    if rel.is_absolute():
-        compose_paths.append(str(path_for_docker_daemon(rel.resolve())))
+    cfm = (dc.compose_file_from_manifest or "").strip()
+    if cfm:
+        er = Path(cfm)
+        cfm_abs = er.resolve() if er.is_absolute() else (manifest_parent / er).resolve()
+        compose_paths.append(str(path_for_docker_daemon(cfm_abs)))
     else:
-        compose_paths.append(str(path_for_docker_daemon((root_d / rel).resolve())))
+        rel = Path(dc.compose_file)
+        if rel.is_absolute():
+            compose_paths.append(str(path_for_docker_daemon(rel.resolve())))
+        else:
+            compose_paths.append(str(path_for_docker_daemon((root_d / rel).resolve())))
     for extra in dc.additional_compose_files or []:
         er = Path(str(extra).strip())
         if not str(er):
@@ -86,13 +116,11 @@ def compose_args(manifest: ApplicationManifest, manifest_path: Path) -> list[str
             compose_paths.append(str(path_for_docker_daemon(er.resolve())))
         else:
             compose_paths.append(str(path_for_docker_daemon((root_d / er).resolve())))
-    manifest_parent = manifest_path.parent.resolve()
-    manifest_parent_d = path_for_docker_daemon(manifest_parent)
     for extra in dc.additional_compose_files_from_manifest or []:
         er = Path(str(extra).strip())
         if not str(er):
             continue
-        cand = er.resolve() if er.is_absolute() else (manifest_parent_d / er).resolve()
+        cand = er.resolve() if er.is_absolute() else (manifest_parent / er).resolve()
         if not cand.is_file():
             continue
         compose_paths.append(str(path_for_docker_daemon(cand)))
@@ -118,10 +146,9 @@ def run_compose(
     *,
     cwd: Path | None = None,
 ) -> int:
-    root = manifest.resolved_root(manifest_path)
-    root_d = path_for_docker_daemon(root)
     cmd = [*compose_args(manifest, manifest_path), *subcmd]
-    return subprocess.call(cmd, cwd=cwd or root_d, env=_env_for_manifest(manifest, manifest_path))
+    scwd = compose_subprocess_cwd(manifest, manifest_path)
+    return subprocess.call(cmd, cwd=cwd or scwd, env=_env_for_manifest(manifest, manifest_path))
 
 
 def run_compose_capture(
@@ -129,12 +156,11 @@ def run_compose_capture(
     manifest_path: Path,
     subcmd: Sequence[str],
 ) -> subprocess.CompletedProcess[str]:
-    root = manifest.resolved_root(manifest_path)
-    root_d = path_for_docker_daemon(root)
     cmd = [*compose_args(manifest, manifest_path), *subcmd]
+    scwd = compose_subprocess_cwd(manifest, manifest_path)
     return subprocess.run(
         cmd,
-        cwd=root_d,
+        cwd=scwd,
         env=_env_for_manifest(manifest, manifest_path),
         capture_output=True,
         text=True,

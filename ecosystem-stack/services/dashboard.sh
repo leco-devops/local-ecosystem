@@ -51,15 +51,27 @@ start() {
     return 1
   fi
 
-  export DOCKER_BUILDKIT=1
+  # Build helper: prefer buildx when available, else fall back to the legacy builder.
+  # The minimal Docker CLI inside the LEco DevOps container has no buildx plugin, so
+  # forcing DOCKER_BUILDKIT=1 here used to fail with "BuildKit is enabled but the buildx
+  # component is missing or broken." (Same issue n8n.sh handles below.)
+  _dashboard_docker_build() {
+    if docker buildx version >/dev/null 2>&1; then
+      docker buildx build --load -t "$IMAGE" -f "$APP_DIR/Dockerfile" "$PROJECT_ROOT"
+    else
+      echo "→ DOCKER_BUILDKIT=0 docker build …  (legacy builder — no buildx in this environment)"
+      DOCKER_BUILDKIT=0 docker build -t "$IMAGE" -f "$APP_DIR/Dockerfile" "$PROJECT_ROOT"
+    fi
+  }
+
   if [ "${DASHBOARD_SKIP_BUILD:-0}" = "1" ] && docker image inspect "$IMAGE" >/dev/null 2>&1; then
     echo "⏭️  Skipping docker build (DASHBOARD_SKIP_BUILD=1, image exists). Use deploy without skip to rebuild."
   elif [ "${DASHBOARD_SKIP_BUILD:-0}" = "1" ]; then
     echo "⚠️  DASHBOARD_SKIP_BUILD=1 but $IMAGE missing — building…"
-    docker build -t "$IMAGE" -f "$APP_DIR/Dockerfile" "$PROJECT_ROOT" || return 1
+    _dashboard_docker_build || return 1
   else
     echo "🔨 Building dashboard image…"
-    docker build -t "$IMAGE" -f "$APP_DIR/Dockerfile" "$PROJECT_ROOT" || return 1
+    _dashboard_docker_build || return 1
   fi
   echo "ℹ️  Flask runs from /project/dashboard when mounted — for app.py/static/template edits use: docker restart $NAME (or quick start) without rebuilding."
   docker network inspect lh-network >/dev/null 2>&1 || docker network create lh-network >/dev/null

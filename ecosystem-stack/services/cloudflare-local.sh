@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
 # Safe to `source` from ecosystem-stack/core.sh; also runnable as ./ecosystem-stack/services/cloudflare-local.sh …
 if [ -z "${PROJECT_ROOT:-}" ]; then
-  PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+  # Inside the LEco DevOps container the natural resolution lands on /project (the bind path
+  # only visible *inside* the container). docker compose forwards bind sources verbatim to the
+  # host Docker daemon, which doesn't see /project — so volumes like ./migrations get denied.
+  # dashboard.sh exports LECO_PROJECT_ROOT_HOST and double-mounts the repo at that host path,
+  # so we prefer it whenever it points at a real directory we can read here.
+  if [ -n "${LECO_PROJECT_ROOT_HOST:-}" ] && [ -d "$LECO_PROJECT_ROOT_HOST" ]; then
+    PROJECT_ROOT="$LECO_PROJECT_ROOT_HOST"
+  else
+    PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+  fi
 fi
 
 NAME="cloudflare-local"

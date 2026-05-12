@@ -23,6 +23,7 @@ Use this pattern when the **application repository** should stay free of LEco-sp
 
 ## See also
 
+- **`hosting/samples/sample-hosting-compose-entry/`** — when you must **remove** upstream host **`ports`** (e.g. **:80** vs Traefik), use **`composeFileFromManifest`** + **`include`** + **`ports: !reset []`** instead of relying on this overlay alone.
 - `hosting/app-available/cvision/docker-compose.leco-hosting.yml` — working overlay for CrawlerVision-style stacks.
 - **[docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md](../../../docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md)** — symptoms and fixes (502, probes, same-origin API).
 - `docs/LECO_APP_BLUEPRINT.md` — full bridge / profile rules.

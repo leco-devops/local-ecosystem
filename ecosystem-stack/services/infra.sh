@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 # Safe to `source` from ecosystem-stack/core.sh; also runnable as ./ecosystem-stack/services/infra.sh …
 if [ -z "${PROJECT_ROOT:-}" ]; then
-  PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+  # Inside the LEco DevOps container, walking up from this script lands on /project — a path the
+  # host Docker daemon doesn't see. Compose then refuses bind mounts like ./varnish/default.vcl.
+  # Prefer the host path that dashboard.sh exposes via LECO_PROJECT_ROOT_HOST + double bind mount.
+  if [ -n "${LECO_PROJECT_ROOT_HOST:-}" ] && [ -d "$LECO_PROJECT_ROOT_HOST" ]; then
+    PROJECT_ROOT="$LECO_PROJECT_ROOT_HOST"
+  else
+    PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+  fi
 fi
 
 NAME="infra-stack"

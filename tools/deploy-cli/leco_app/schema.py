@@ -53,7 +53,19 @@ class DockerComposeSpec(BaseModel):
         description=(
             "Extra compose files relative to the bridge manifest directory (parent of leco.app.yaml). "
             "Use for materialized apps under hosting/app-available/<id>/ so Traefik/network/env overlays "
-            "stay out of the upstream application repository. Merged after additionalComposeFiles."
+            "stay out of the upstream application repository. Merged after the primary compose file "
+            "(whether that primary is composeFile or composeFileFromManifest)."
+        ),
+    )
+    compose_file_from_manifest: str | None = Field(
+        default=None,
+        alias="composeFileFromManifest",
+        description=(
+            "Primary compose file relative to the leco.app.yaml directory (hosting/app-available/<slug>/). "
+            "When set, it is the first -f passed to docker compose and composeFile under the resolved root "
+            "is not used — typical pattern: include upstream source/docker-compose.yml, then patch services "
+            "(e.g. ports: !reset [] to stop publishing host :80 when Traefik owns it). "
+            "Keeps all overrides in the hosting tree without editing the upstream repository."
         ),
     )
     project_name: str | None = Field(default=None, alias="projectName")

@@ -486,8 +486,7 @@ def _leco_app_manifest_run(
 ) -> tuple[int, str]:
     """Run LEco DevOps CLI (leco-app) with --manifest (deploy/stop/down)."""
     mp = meta["manifest_path"]
-    # meta["root"] is remapped for the Docker daemon (host paths). leco-app runs inside this
-    # container and must use a cwd that exists here — same as leco_subprocess.run_leco_deploy.
+    # leco-app runs in this container; cwd must be the manifest directory (exists here).
     leco_cwd = str(Path(mp).resolve().parent)
     argv = [subcommand, "--manifest", mp]
     if extra_args:

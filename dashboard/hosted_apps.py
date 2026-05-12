@@ -80,7 +80,10 @@ def _profile_docker_compose_ui(infra: dict[str, Any]) -> dict[str, Any] | None:
     if not isinstance(dc, dict):
         return None
     cf = dc.get("composeFile") or dc.get("compose_file")
-    if not isinstance(cf, str) or not cf.strip():
+    cfm = dc.get("composeFileFromManifest") or dc.get("compose_file_from_manifest")
+    cf_s = cf.strip() if isinstance(cf, str) and cf.strip() else ""
+    cfm_s = cfm.strip() if isinstance(cfm, str) and cfm.strip() else ""
+    if not cf_s and not cfm_s:
         return None
     raw_ex = dc.get("additionalComposeFiles") or dc.get("additional_compose_files")
     extras: list[str] = []
@@ -91,7 +94,8 @@ def _profile_docker_compose_ui(infra: dict[str, Any]) -> dict[str, Any] | None:
     if isinstance(raw_m, list):
         man_ex = [str(x).strip() for x in raw_m if isinstance(x, str) and str(x).strip()]
     return {
-        "compose_file": cf.strip(),
+        "compose_file": cf_s or None,
+        "compose_file_from_manifest": cfm_s or None,
         "additional_compose_files": extras,
         "additional_compose_files_from_manifest": man_ex,
     }

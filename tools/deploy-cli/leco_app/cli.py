@@ -15,7 +15,7 @@ import yaml
 from pydantic import ValidationError
 
 from leco_app import DISPLAY_NAME, __version__
-from leco_app.compose_runner import run_compose, run_compose_capture
+from leco_app.compose_runner import primary_compose_path, run_compose, run_compose_capture
 from leco_app.detectors.archetype import detect_archetype
 from leco_app.detectors.compose import detect_compose
 from leco_app.detectors.ports import check_host_ports
@@ -169,9 +169,16 @@ def _validate_existing_manifest_tree(mp: Path) -> tuple[MergedApplication | None
             return None, f"localHostProfile not found: {prof} (manifest references {m.local_host_profile!r})"
     root = m.resolved_root(mp)
     if m.docker_compose:
-        cf = root / Path(m.docker_compose.compose_file)
-        if not cf.is_file():
-            return None, f"dockerCompose.composeFile not found: {cf}"
+        cfm = (m.docker_compose.compose_file_from_manifest or "").strip()
+        if cfm:
+            p = Path(cfm)
+            ap = p.resolve() if p.is_absolute() else (mp.parent / p).resolve()
+            if not ap.is_file():
+                return None, f"dockerCompose.composeFileFromManifest not found: {ap}"
+        else:
+            cf = root / Path(m.docker_compose.compose_file)
+            if not cf.is_file():
+                return None, f"dockerCompose.composeFile not found: {cf}"
         for rel in m.docker_compose.additional_compose_files or []:
             p = Path(str(rel).strip())
             if not str(p):
@@ -800,9 +807,8 @@ def cmd_down(
     if not m.docker_compose:
         typer.secho("Manifest has no dockerCompose section.", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
-    root = m.resolved_root(mp)
-    cf = root / Path(m.docker_compose.compose_file)
-    if not cf.is_file():
+    cf = primary_compose_path(m, mp)
+    if not cf or not cf.is_file():
         typer.secho(
             f"Compose file not on disk ({cf}) — treating stack as already removed (exit 0).",
             fg=typer.colors.YELLOW,
@@ -1185,9 +1191,8 @@ def cmd_ecosystem_unregister(
         try:
             m = load_effective_manifest(mp)
             if m.docker_compose:
-                root = m.resolved_root(mp)
-                cf = root / Path(m.docker_compose.compose_file)
-                if cf.is_file():
+                cf = primary_compose_path(m, mp)
+                if cf and cf.is_file():
                     args = ["down", "--remove-orphans"]
                     if compose_volumes:
                         args.append("-v")

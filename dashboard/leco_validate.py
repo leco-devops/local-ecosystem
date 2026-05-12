@@ -276,9 +276,16 @@ def validate_configuration_on_disk(manifest_abs: str) -> dict[str, Any]:
         em = merged.manifest
         root = em.resolved_root(mp)
         if em.docker_compose:
-            cf = root / Path(em.docker_compose.compose_file)
-            if not cf.is_file():
-                reference_errors.append(f"dockerCompose.composeFile not found: {cf}")
+            cfm = (em.docker_compose.compose_file_from_manifest or "").strip()
+            if cfm:
+                p = Path(cfm)
+                ap = p.resolve() if p.is_absolute() else (mp.parent / p).resolve()
+                if not ap.is_file():
+                    reference_errors.append(f"dockerCompose.composeFileFromManifest not found: {ap}")
+            else:
+                cf = root / Path(em.docker_compose.compose_file)
+                if not cf.is_file():
+                    reference_errors.append(f"dockerCompose.composeFile not found: {cf}")
             for rel in em.docker_compose.additional_compose_files or []:
                 p = Path(str(rel).strip())
                 if not str(p):

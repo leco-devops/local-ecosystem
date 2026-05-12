@@ -177,11 +177,10 @@ def parse_leco_manifest_for_compose(manifest_path: str) -> dict[str, Any] | None
     if not _allowed_path(compose_abs) or not os.path.isfile(compose_abs):
         return None
 
-    # Docker Desktop (dashboard in container + socket): bind sources must be host paths, not
-    # /workspace-parent/... which exists only in the dashboard container.
+    # -f/--env-file paths are remapped for the Docker daemon; subprocess cwd stays container-local.
     root_c = Path(root).resolve()
     compose_c = Path(compose_abs).resolve()
-    root_for_compose = str(path_for_docker_daemon(root_c))
+    root_for_compose = str(root_c.resolve())
     compose_for_daemon = str(path_for_docker_daemon(compose_c))
 
     tail: list[str] = ["-f", compose_for_daemon]
@@ -245,24 +244,34 @@ def parse_leco_effective_manifest_for_compose(manifest_path: str) -> dict[str, A
     dc = m.docker_compose
     if dc is None:
         return None
-    compose_rel = (dc.compose_file or "").strip()
-    if not compose_rel:
-        return None
     root = m.resolved_root(mp)
     root_s = str(root.resolve())
     if not _allowed_path(root_s):
         return None
-    cf = Path(compose_rel)
-    compose_abs = str(cf.resolve()) if cf.is_absolute() else str((root / compose_rel).resolve())
-    if not _allowed_path(compose_abs) or not os.path.isfile(compose_abs):
-        return None
-
     root_c = Path(root).resolve()
-    compose_c = Path(compose_abs).resolve()
-    root_for_compose = str(path_for_docker_daemon(root_c))
-    compose_for_daemon = str(path_for_docker_daemon(compose_c))
-
-    tail: list[str] = ["-f", compose_for_daemon]
+    # cwd for `docker compose` must exist where the dashboard process runs (container paths).
+    # path_for_docker_daemon() is only for -f/--env-file args the Docker Desktop daemon resolves.
+    cfm = (dc.compose_file_from_manifest or "").strip()
+    compose_rel = (dc.compose_file or "").strip()
+    if cfm:
+        cer = Path(cfm)
+        cfm_abs = str(cer.resolve()) if cer.is_absolute() else str((mp.parent / cer).resolve())
+        if not _allowed_path(cfm_abs) or not os.path.isfile(cfm_abs):
+            return None
+        compose_for_daemon = str(path_for_docker_daemon(Path(cfm_abs).resolve()))
+        tail: list[str] = ["-f", compose_for_daemon]
+        root_for_compose = str(mp.parent.resolve())
+    elif compose_rel:
+        cf = Path(compose_rel)
+        compose_abs = str(cf.resolve()) if cf.is_absolute() else str((root / compose_rel).resolve())
+        if not _allowed_path(compose_abs) or not os.path.isfile(compose_abs):
+            return None
+        compose_c = Path(compose_abs).resolve()
+        compose_for_daemon = str(path_for_docker_daemon(compose_c))
+        tail = ["-f", compose_for_daemon]
+        root_for_compose = str(root_c.resolve())
+    else:
+        return None
     for extra in dc.additional_compose_files or []:
         es = str(extra).strip()
         if not es:
@@ -325,7 +334,7 @@ def _compose_meta_worker_only(manifest_path: str) -> dict[str, Any] | None:
         root = os.path.realpath(os.path.join(manifest_dir, str(root_rel)))
         if not _allowed_path(root):
             return None
-        root_for = str(path_for_docker_daemon(Path(root).resolve()))
+        root_for = str(Path(root).resolve())
         name = _pick(data, "name")
         slug = _slug(str(name)) if name else _slug(Path(manifest_path).parent.name)
         return {
@@ -339,7 +348,7 @@ def _compose_meta_worker_only(manifest_path: str) -> dict[str, Any] | None:
     root_s = str(root.resolve())
     if not _allowed_path(root_s):
         return None
-    root_for = str(path_for_docker_daemon(Path(root_s).resolve()))
+    root_for = str(Path(root_s).resolve())
     name = m.name
     slug = _slug(str(name)) if name else _slug(mp.parent.name)
     if m.docker_compose is not None:
@@ -593,10 +602,12 @@ def compose_ps_result(meta: dict[str, Any]) -> tuple[list[dict[str, Any]], int]:
     if not tail:
         return [], 0
 
+    cwd = str(meta.get("compose_cwd") or meta.get("root") or ".")
+
     try:
         p = subprocess.run(
             ["docker", "compose", *tail, "ps", "-a", "--format", "json"],
-            cwd=meta["root"],
+            cwd=cwd,
             capture_output=True,
             text=True,
             timeout=45,

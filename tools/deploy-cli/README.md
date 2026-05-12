@@ -102,8 +102,10 @@ Written next to the app root (or path given to `--out`). Uses **camelCase** keys
 |-------|---------|
 | `name` | Slug; used for state directory |
 | `root` | `.` = manifest directory |
-| `dockerCompose.composeFile` | Path to compose file relative to `root` |
+| `dockerCompose.composeFile` | Path to compose file relative to `root` (ignored as first `-f` when `composeFileFromManifest` is set) |
+| `dockerCompose.composeFileFromManifest` | Optional primary `-f` relative to `leco.app.yaml` (hosting-only wrapper; often `include`s `source/docker-compose.yml`) |
 | `dockerCompose.additionalComposeFiles` | Optional extra `-f` files (merged after the primary file; paths relative to `root`) |
+| `dockerCompose.additionalComposeFilesFromManifest` | Optional extra `-f` files relative to `leco.app.yaml` |
 | `dockerCompose.envFile` | Optional `--env-file` |
 | `dockerCompose.projectName` | Optional `docker compose -p` |
 | `dockerCompose.profiles` | Compose profiles |

@@ -714,6 +714,8 @@ def manifest_has_docker_compose(manifest: dict[str, Any]) -> bool:
     dc = manifest.get("dockerCompose") or manifest.get("docker_compose")
     if not isinstance(dc, dict):
         return False
+    if (dc.get("composeFileFromManifest") or dc.get("compose_file_from_manifest") or "").strip():
+        return True
     return bool((dc.get("composeFile") or dc.get("compose_file") or "").strip())
 
 
@@ -764,6 +766,7 @@ def ensure_docker_compose_in_profile_infrastructure(
     *,
     app_tree_base: Path | None = None,
     allow_compose_discovery: bool = False,
+    manifest_parent: Path | None = None,
 ) -> None:
     """
     Optionally infer ``infrastructure.dockerCompose.composeFile`` by walking up the tree.
@@ -783,7 +786,30 @@ def ensure_docker_compose_in_profile_infrastructure(
     )
     dc = infra.get("dockerCompose") or infra.get("docker_compose")
     preserved: dict[str, Any] = {}
+
+    def _dir_with_bridge_manifest() -> Path | None:
+        if manifest_parent is not None:
+            try:
+                return manifest_parent.resolve()
+            except OSError:
+                return None
+        o = orig_root.resolve()
+        if (o / "leco.app.yaml").is_file():
+            return o
+        return None
+
     if isinstance(dc, dict):
+        cfm_early = (dc.get("composeFileFromManifest") or dc.get("compose_file_from_manifest") or "").strip()
+        if cfm_early:
+            md = _dir_with_bridge_manifest()
+            if md is not None:
+                try:
+                    if (md / cfm_early).is_file():
+                        # Hosting entry (include + ports !reset) must stay the sole primary -f; never
+                        # inject composeFile from walk-up (would re-bind host :80 / :5432).
+                        return
+                except OSError:
+                    pass
         existing = (dc.get("composeFile") or dc.get("compose_file") or "").strip()
         if existing:
             try:
@@ -1587,6 +1613,14 @@ def ensure_lh_network_hosting_overlay(manifest_abs: Path) -> dict[str, Any]:
     if not isinstance(localhost, dict):
         return {"ok": False, "error": "invalid localhost profile"}
     host_slug = host_slug_from_app_id(str(manifest.get("name") or mp.parent.name))
+    infra_pre = localhost.get("infrastructure")
+    if isinstance(infra_pre, dict):
+        dc_pre = infra_pre.get("dockerCompose") or infra_pre.get("docker_compose")
+        if isinstance(dc_pre, dict):
+            cfm0 = (dc_pre.get("composeFileFromManifest") or dc_pre.get("compose_file_from_manifest") or "").strip()
+            if cfm0 and (mp.parent / cfm0).is_file():
+                return {"ok": True, "skipped": "composeFileFromManifest — lh-network belongs in hosting entry compose"}
+
     loaded = _load_compose_services_for_localhost(localhost, mp.parent, manifest)
     if not loaded:
         return {"ok": True, "skipped": "no compose file or services"}
@@ -1815,3 +1849,222 @@ notes: ""
 """,
         },
     ]
+
+
+def _service_has_publishable_ports(spec: Any) -> bool:
+    if not isinstance(spec, dict):
+        return False
+    ports = spec.get("ports")
+    if ports is None:
+        return False
+    if isinstance(ports, dict):
+        return bool(ports)
+    if isinstance(ports, list):
+        return len(ports) > 0
+    return bool(ports)
+
+
+def infer_single_backend_routing_from_services(
+    services: dict[str, Any],
+    host_slug: str,
+    project_name: str,
+) -> list[dict[str, Any]] | None:
+    """One Traefik legacy route (single backend) for stacks like Headwind (hmdm → 8080)."""
+    candidates = ("hmdm", "web", "frontend", "app", "ui", "nginx", "portal", "server")
+    keys_lower = {str(k).lower(): str(k) for k in services}
+    for c in candidates:
+        k = keys_lower.get(c.lower())
+        if not k:
+            continue
+        spec = services.get(k)
+        if not isinstance(spec, dict):
+            continue
+        port = _compose_service_internal_port(spec)
+        if port is None:
+            continue
+        bh = _compose_service_backend_host(k, spec, project_name)
+        return [{"hostname": f"{host_slug}.lh", "backendHost": bh, "backendPort": port}]
+    for k, spec in services.items():
+        if not isinstance(spec, dict):
+            continue
+        port = _compose_service_internal_port(spec)
+        if port not in (8080, 80, 8443, 443, 3000, 8000):
+            continue
+        bh = _compose_service_backend_host(str(k), spec, project_name)
+        return [{"hostname": f"{host_slug}.lh", "backendHost": bh, "backendPort": port}]
+    return None
+
+
+_ENTRY_COMPOSE_NAME = "docker-compose.leco-entry.yml"
+
+
+def ensure_hosting_compose_entry_for_register(manifest_abs: Path) -> dict[str, Any]:
+    """
+    Opt-in helper (not auto-called by register).
+    
+    If leco.yaml only uses composeFile against upstream compose that publishes host ports, write
+    ``docker-compose.leco-entry.yml`` (include + ``ports: !reset []`` + ``lh-network``) and switch
+    the profile to ``composeFileFromManifest``. Adds ``routing.entries`` when missing so Traefik
+    merge runs. Idempotent when a composeFileFromManifest entry file already exists.
+    
+    Destructive: replaces the entire ``dockerCompose`` block on the localhost profile (drops
+    ``additionalComposeFiles*``, ``profiles``, etc.) and removes ``cloudflare`` when
+    ``wranglerConfig`` is empty. The register wizard does not call this anymore; copy the sample
+    under ``hosting/samples/sample-hosting-compose-entry/`` and edit ``leco.yaml`` by hand when
+    you need this pattern.
+    """
+    mp = manifest_abs.resolve()
+    if not mp.is_file():
+        return {"applied": False, "reason": "manifest not found"}
+    try:
+        from leco_app.schema import load_effective_manifest
+    except ImportError:
+        return {"applied": False, "reason": "leco_app.schema not available"}
+
+    try:
+        m = load_effective_manifest(mp)
+    except Exception as exc:
+        return {"applied": False, "reason": f"effective manifest: {exc}"}
+
+    if not m.docker_compose:
+        return {"applied": False, "reason": "no dockerCompose"}
+
+    dc = m.docker_compose
+    cfm = (dc.compose_file_from_manifest or "").strip()
+    if cfm and (mp.parent / cfm).is_file():
+        return {"applied": False, "reason": "composeFileFromManifest already active"}
+
+    root = m.resolved_root(mp)
+    try:
+        root_r = root.resolve()
+    except OSError:
+        return {"applied": False, "reason": "bad root"}
+
+    compose_rel = (dc.compose_file or "").strip()
+    if not compose_rel:
+        return {"applied": False, "reason": "no composeFile to include from"}
+
+    compose_abs = (Path(compose_rel) if Path(compose_rel).is_absolute() else (root_r / compose_rel)).resolve()
+    if not compose_abs.is_file():
+        return {"applied": False, "reason": f"compose file missing: {compose_abs}"}
+
+    try:
+        raw_c = yaml.safe_load(compose_abs.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError, UnicodeDecodeError) as exc:
+        return {"applied": False, "reason": f"read compose: {exc}"}
+
+    svc_specs = raw_c.get("services")
+    if not isinstance(svc_specs, dict):
+        return {"applied": False, "reason": "no services in compose"}
+
+    to_reset = [str(name) for name, spec in svc_specs.items() if _service_has_publishable_ports(spec)]
+    if not to_reset:
+        return {"applied": False, "reason": "no host ports in compose"}
+
+    host_slug = host_slug_from_app_id(str(m.name or mp.parent.name))
+    project_name = (dc.project_name or "").strip() or host_slug
+    inferred_routing = infer_single_backend_routing_from_services(svc_specs, host_slug, project_name)
+    lh_attach: set[str] = set()
+    if inferred_routing:
+        bh = str(inferred_routing[0].get("backendHost") or "")
+        for name, spec in svc_specs.items():
+            if not isinstance(spec, dict):
+                continue
+            if _compose_service_backend_host(str(name), spec, project_name) == bh:
+                lh_attach.add(str(name))
+                break
+    if not lh_attach:
+        lh_attach = set(to_reset)
+
+    try:
+        rel_inc = os.path.relpath(str(compose_abs), str(mp.parent))
+    except ValueError:
+        rel_inc = str(compose_abs)
+
+    rel_inc_yaml = rel_inc.replace("\\", "/")
+
+    lines = [
+        "# Auto-generated by LEco DevOps Register — host ports removed; upstream repo unchanged.\n",
+        f"include:\n  - path: {rel_inc_yaml}\n\n",
+        "services:\n",
+    ]
+    for svc in sorted(to_reset, key=lambda x: x.lower()):
+        lines.append(f"  {svc}:\n")
+        lines.append("    ports: !reset []\n")
+        if svc in lh_attach:
+            lines.append("    networks:\n")
+            lines.append("      - default\n")
+            lines.append("      - lh-network\n\n")
+        else:
+            lines.append("\n")
+    if lh_attach:
+        lines.append("networks:\n  lh-network:\n    external: true\n")
+
+    entry_path = mp.parent / _ENTRY_COMPOSE_NAME
+    try:
+        entry_path.write_text("".join(lines), encoding="utf-8")
+    except OSError as exc:
+        return {"applied": False, "reason": f"write entry: {exc}"}
+
+    prof_name = "leco.yaml"
+    try:
+        bridge = yaml.safe_load(mp.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        bridge = {}
+    if isinstance(bridge, dict):
+        lhp = bridge.get("localHostProfile") or bridge.get("local_host_profile") or "leco.yaml"
+        if isinstance(lhp, str) and lhp.strip():
+            prof_name = lhp.strip()
+
+    prof_path = mp.parent / prof_name
+    try:
+        loc = yaml.safe_load(prof_path.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError, UnicodeDecodeError) as exc:
+        return {"applied": False, "reason": f"read profile: {exc}", "partial": str(entry_path)}
+
+    if not isinstance(loc, dict):
+        return {"applied": False, "reason": "invalid profile", "partial": str(entry_path)}
+
+    infra = loc.get("infrastructure")
+    if not isinstance(infra, dict):
+        infra = {}
+    loc["infrastructure"] = infra
+
+    new_dc: dict[str, Any] = {
+        "composeFileFromManifest": _ENTRY_COMPOSE_NAME,
+        "projectName": project_name,
+    }
+    if dc.env_file and str(dc.env_file).strip():
+        new_dc["envFile"] = str(dc.env_file).strip()
+
+    infra["dockerCompose"] = new_dc
+
+    routing = infra.get("routing")
+    entries_missing = (
+        not isinstance(routing, dict)
+        or not isinstance(routing.get("entries"), list)
+        or len(routing.get("entries") or []) == 0
+    )
+    if entries_missing and inferred_routing:
+        infra["routing"] = {"entries": inferred_routing}
+
+    cf = infra.get("cloudflare")
+    if isinstance(cf, dict):
+        wc = cf.get("wranglerConfig") or cf.get("wrangler_config")
+        if wc is None or (isinstance(wc, str) and not str(wc).strip()):
+            infra.pop("cloudflare", None)
+
+    try:
+        prof_path.write_text(
+            yaml.safe_dump(loc, default_flow_style=False, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        return {"applied": False, "reason": f"write profile: {exc}", "partial": str(entry_path)}
+
+    return {
+        "applied": True,
+        "reason": "hosting compose entry + composeFileFromManifest + routing if needed",
+        "entry": str(entry_path),
+        "services_reset": to_reset,
+    }

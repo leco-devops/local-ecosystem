@@ -1,0 +1,23 @@
+# Headwind MDM — copy beside hosting/app-available/headwind/leco.app.yaml as docker-compose.leco-entry.yml
+# leco.yaml → infrastructure.dockerCompose.composeFileFromManifest: docker-compose.leco-entry.yml
+#
+# Upstream repo uses docker-compose.yaml; bridge must have `source` → that repo.
+
+include:
+  - path: source/docker-compose.yaml
+
+services:
+  hmdm:
+    ports: !reset []
+    networks:
+      - default
+      - lh-network
+
+  postgresql:
+    ports: !reset []
+    networks:
+      - default
+
+networks:
+  lh-network:
+    external: true
