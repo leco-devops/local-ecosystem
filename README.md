@@ -31,7 +31,7 @@ You access services by name (**`https://n8n.lh`**, **`https://ai.lh`**, …) ins
 | **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** | **Deployment and operations** — start/stop, updates, bulk vs Control API behavior, troubleshooting |
 | **[docs/DEVELOPMENT_PLAYBOOK.md](docs/DEVELOPMENT_PLAYBOOK.md)** | Extending services, LEco DevOps APIs, Traefik routes |
 | **[docs/LECO_APP_BLUEPRINT.md](docs/LECO_APP_BLUEPRINT.md)** | LEco apps: bridge vs profile (v3), hosting symlinks, compose extras, teardown semantics |
-| **[docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md](docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md)** | Hosted apps behind Traefik: 502, `lh-network`, DNS names, dashboard probes, same-origin `/api` |
+| **[docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md](docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md)** | Hosted apps behind Traefik: 502, `lh-network`, DNS names, dashboard probes, same-origin `/api`, local edge runtimes (Workers / Pages / Vercel / Lambda / Deno) |
 | **[cloudflare-local/README.md](cloudflare-local/README.md)** | CF-local stack entry + links to architecture and user manual |
 
 ---

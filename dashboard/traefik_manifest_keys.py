@@ -144,7 +144,35 @@ def _local_cf_alias_fragment(manifest_name: str, prefix: str) -> dict[str, Any]:
     return {"http": {"routers": routers, "services": {}}}
 
 
+def _upstream_fragment(manifest_name: str, entry: dict[str, Any]) -> dict[str, Any]:
+    """Mirror traefik_fragment.py::_upstream_routing_fragment router key shape."""
+    hn = str(_pick(entry, "hostname", "hostName") or "").strip()
+    upstream = entry.get("upstream") or []
+    if not isinstance(upstream, list) or not upstream:
+        return {"http": {"routers": {}, "services": {}}}
+    name = _safe_id(manifest_name)
+    h = _safe_id(hn)
+    routers: dict[str, Any] = {}
+    services: dict[str, Any] = {}
+    for idx, rule in enumerate(upstream):
+        if not isinstance(rule, dict):
+            continue
+        prefix = str(rule.get("prefix") or "/").strip() or "/"
+        suffix_src = prefix.strip("/").replace("/", "-") or "root"
+        suffix = re.sub(r"[^a-z0-9-]+", "-", suffix_src.lower()).strip("-") or f"r{idx}"
+        if len(suffix) > 24:
+            suffix = suffix[:24]
+        svc_key = f"{name}-{h}-{suffix}-svc"
+        services[svc_key] = {"loadBalancer": {"servers": []}}
+        for scheme in ("http", "https"):
+            routers[f"{name}-{h}-{suffix}-{scheme}"] = {}
+    return {"http": {"routers": routers, "services": services}}
+
+
 def _entry_fragment(manifest_name: str, entry: dict[str, Any]) -> dict[str, Any]:
+    upstream = entry.get("upstream")
+    if isinstance(upstream, list) and upstream:
+        return _upstream_fragment(manifest_name, entry)
     fe = _pick(entry, "frontend", "Frontend")
     api = _pick(entry, "apiBackend", "api_backend", "ApiBackend")
     if isinstance(fe, dict) and isinstance(api, dict):

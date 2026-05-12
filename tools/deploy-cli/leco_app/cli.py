@@ -38,6 +38,7 @@ from leco_app.schema import (
     ApplicationManifest,
     CloudflareSpec,
     DockerComposeSpec,
+    LocalRuntimeSpec,
     LocalhostProfile,
     MergedApplication,
     ProfileInfrastructureSpec,
@@ -998,6 +999,185 @@ def cmd_traefik_fragment(
         typer.secho(f"Wrote {out}", fg=typer.colors.GREEN)
     else:
         typer.echo(text)
+
+
+# Mirror of dashboard/leco_runtimes/__init__.py REGISTRY for label/roadmap display.
+# Kept here as a static table so leco-app stays installable without the
+# dashboard package on PYTHONPATH; entries must be kept in sync.
+_RUNTIME_REGISTRY_DISPLAY: dict[str, tuple[str, str, bool]] = {
+    "cloudflare-workers": (
+        "Cloudflare Workers (Wrangler/Miniflare)",
+        "",
+        True,
+    ),
+    "cloudflare-pages": (
+        "Cloudflare Pages (functions/ + wrangler pages dev)",
+        "Planned image: leco/runtime-cloudflare-pages.",
+        False,
+    ),
+    "vercel": (
+        "Vercel (vercel dev)",
+        "Planned image: leco/runtime-vercel.",
+        False,
+    ),
+    "aws-lambda": (
+        "AWS Lambda (SAM / LocalStack)",
+        "Planned image: leco/runtime-aws-lambda.",
+        False,
+    ),
+    "deno-deploy": (
+        "Deno Deploy (deno serve)",
+        "Planned image: leco/runtime-deno-deploy.",
+        False,
+    ),
+}
+
+
+@app.command("runtimes")
+def cmd_runtimes(
+    cwd: Path = Path("."),
+    manifest: ManifestPathOption = None,
+    as_json: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON instead of text.")
+    ] = False,
+    detect: Annotated[
+        bool,
+        typer.Option(
+            "--detect/--no-detect",
+            help="Scan the resolved app root for unconfigured runtime candidates "
+                 "(default: on). Surfaces Worker-served URL paths + a copy-pasteable "
+                 "routing.entries[].upstream YAML block when a wrangler.toml is found.",
+        ),
+    ] = True,
+) -> None:
+    """List declared local edge runtimes and the LEco adapter registry.
+
+    Reads ``infrastructure.runtimes[]`` from the merged manifest + profile.
+    Useful when an app's compose stack is healthy but ``<slug>.lh/api/*``
+    still 404s — confirms whether a local edge-runtime (Cloudflare Workers,
+    Pages, Vercel, …) is materialized for the host. ``--detect`` adds an
+    onboarding hint (Worker URL paths + a YAML block ready to paste under
+    ``routing.entries[].upstream``).
+    """
+    mp = _find_manifest(cwd, manifest)
+    try:
+        m = load_effective_manifest(mp)
+    except (ValidationError, OSError, yaml.YAMLError) as exc:
+        typer.secho(f"Cannot load manifest: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1)
+
+    declared: list[LocalRuntimeSpec] = list(m.runtimes or [])
+    adapters_payload: list[dict[str, Any]] = [
+        {"type": t, "label": label, "roadmap": rm, "ready": ready}
+        for t, (label, rm, ready) in sorted(_RUNTIME_REGISTRY_DISPLAY.items())
+    ]
+
+    # Detection hints come from dashboard/leco_runtimes — try-import so leco-app
+    # stays installable without the dashboard package on PYTHONPATH. When run
+    # inside the service-dashboard container (the usual case during onboarding)
+    # the dashboard repo is mounted at /project/dashboard and importable.
+    detection_payload: list[dict[str, Any]] = []
+    if detect:
+        try:
+            import importlib
+            import sys as _sys
+            # Walk up from this file to add the repo root's dashboard/ dir if it
+            # exists. Repo layout: <root>/tools/deploy-cli/leco_app/cli.py.
+            candidate_dashboard = Path(__file__).resolve().parents[3] / "dashboard"
+            if candidate_dashboard.is_dir() and str(candidate_dashboard) not in _sys.path:
+                _sys.path.insert(0, str(candidate_dashboard))
+            ldetect = importlib.import_module("leco_detect")
+            cands = ldetect.detect_runtime_candidates_for_manifest(mp)
+            for c in cands or []:
+                detection_payload.append(
+                    {
+                        "id": c.get("_id") or c.get("id"),
+                        "type": c.get("type"),
+                        "detail": c.get("_detail") or "",
+                        "suggested_upstream_yaml": c.get("_suggested_upstream_yaml") or "",
+                        "spec": {k: v for k, v in c.items() if not k.startswith("_")},
+                    }
+                )
+        except Exception:
+            # Detection is best-effort; never fail the command on import error.
+            detection_payload = []
+    declared_payload: list[dict[str, Any]] = []
+    for rt in declared:
+        info = _RUNTIME_REGISTRY_DISPLAY.get(rt.type)
+        ready = bool(info and info[2])
+        declared_payload.append(
+            {
+                "id": rt.id,
+                "type": rt.type,
+                "ready": ready,
+                "config": rt.config,
+                "sourceDir": rt.source_dir,
+                "port": rt.port,
+                "image": rt.image,
+                "devVarsFile": rt.dev_vars_file,
+                "container": f"leco-rt-{re.sub(r'[^a-z0-9-]+','-', m.name.lower()).strip('-') or 'app'}-{rt.id}",
+            }
+        )
+
+    if as_json:
+        typer.echo(
+            json.dumps(
+                {
+                    "manifest": str(mp),
+                    "name": m.name,
+                    "declared": declared_payload,
+                    "adapters": adapters_payload,
+                    "detected": detection_payload,
+                },
+                indent=2,
+            )
+        )
+        return
+
+    typer.echo(f"Manifest: {mp}")
+    typer.echo(f"App: {m.name}")
+    typer.echo("")
+    typer.echo("Known runtime adapters:")
+    for row in adapters_payload:
+        status = typer.style("ready ", fg=typer.colors.GREEN) if row["ready"] else typer.style("roadmap", fg=typer.colors.YELLOW)
+        typer.echo(f"  [{status}] {row['type']:<20} {row['label']}")
+        if row["roadmap"]:
+            typer.echo(f"            {row['roadmap']}")
+    typer.echo("")
+    if not declared_payload:
+        typer.echo("No infrastructure.runtimes declared — nothing materialized.")
+        typer.echo("Add runtimes[] under leco.yaml infrastructure: to map prefixes via routing.entries[].upstream[].")
+        return
+    if declared_payload:
+        typer.echo("Declared runtimes (from infrastructure.runtimes):")
+        for row in declared_payload:
+            status = typer.style("ready", fg=typer.colors.GREEN) if row["ready"] else typer.style("roadmap", fg=typer.colors.YELLOW)
+            line = f"  - id={row['id']} type={row['type']} port={row['port']} container={row['container']} [{status}]"
+            typer.echo(line)
+            if row.get("sourceDir"):
+                typer.echo(f"      sourceDir: {row['sourceDir']}")
+            if row.get("config"):
+                typer.echo(f"      config:    {row['config']}")
+            if row.get("devVarsFile"):
+                typer.echo(f"      devVars:   {row['devVarsFile']}")
+            if row.get("image"):
+                typer.echo(f"      image:     {row['image']}")
+        typer.echo("")
+
+    if detection_payload:
+        typer.echo(typer.style("Detection hint", fg=typer.colors.CYAN))
+        for d in detection_payload:
+            typer.echo(f"  type={d['type']} id={d['id']}")
+            if d.get("detail"):
+                typer.echo(f"    {d['detail']}")
+            if d.get("suggested_upstream_yaml"):
+                typer.echo("    suggested routing.entries[].upstream YAML:")
+                for line in d["suggested_upstream_yaml"].splitlines():
+                    typer.echo(f"    | {line}")
+                typer.echo(
+                    "    (paste under your routing.entries[].upstream and add a"
+                    " '/' catch-all rule for your frontend service)"
+                )
 
 
 @app.command("ecosystem-register")

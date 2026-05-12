@@ -11,6 +11,22 @@ import re
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+# Local edge-runtime types LEco's adapter registry knows about. New adapters
+# add to this tuple in lock-step with dashboard/leco_runtimes/.
+LocalRuntimeType = Literal[
+    "cloudflare-workers",
+    "cloudflare-pages",
+    "vercel",
+    "aws-lambda",
+    "deno-deploy",
+]
+
+# Where a routing prefix is forwarded. ``runtime`` references a local edge-runtime
+# spec under ``infrastructure.runtimes[]``; ``service`` is a Docker DNS name on
+# ``lh-network`` (legacy compose service); ``frontend``/``backend`` are aliases
+# for ``service`` kept for vocabulary parity with the older split routing fields.
+RoutingUpstreamTarget = Literal["runtime", "service", "frontend", "backend"]
+
 LocalhostArchetype = Literal[
     "generic",
     "wordpress",
@@ -134,14 +150,133 @@ class ServiceTarget(BaseModel):
     port: int = Field(ge=1, le=65535)
 
 
+class LocalRuntimeSpec(BaseModel):
+    """Local edge-runtime declaration.
+
+    LEco's adapter registry (``dashboard/leco_runtimes/``) materializes one
+    compose service per entry into ``docker-compose.leco-runtime.yml`` beside
+    ``leco.app.yaml``. The upstream application tree is bind-mounted read-only
+    where the adapter needs it; LEco-owned named volumes mask generated dirs
+    (``node_modules``, ``.wrangler``, ``.vercel``, …) so the upstream repo is
+    never written to.
+
+    Only ``cloudflare-workers`` is fully implemented in V1; other ``type``
+    values are *known* but their adapters raise ``NotImplementedError`` until
+    later iterations land them.
+    """
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    id: str = Field(min_length=1, description="Stable id for routing.upstream[].runtime references")
+    type: LocalRuntimeType = Field(description="Adapter selector under dashboard/leco_runtimes/")
+    config: str | None = Field(
+        default=None,
+        description=(
+            "Adapter-specific config file (e.g. wrangler.toml, vercel.json) relative to ``sourceDir`` "
+            "when set, otherwise to the manifest directory."
+        ),
+    )
+    source_dir: str | None = Field(
+        default=None,
+        alias="sourceDir",
+        description=(
+            "Upstream source directory mounted into the runtime container. Relative to the manifest "
+            "resolved root (so it travels through any ``source`` symlink under hosting/app-available/<slug>/)."
+        ),
+    )
+    dev_vars_file: str | None = Field(
+        default=None,
+        alias="devVarsFile",
+        description=(
+            "Optional secrets/env file under hosting/app-available/<slug>/ that the adapter mounts into "
+            "the runtime container (e.g. .dev.vars for wrangler). Lives in the LEco hosting tree only."
+        ),
+    )
+    port: int = Field(default=8787, ge=1, le=65535, description="Container port the runtime listens on")
+    image: str | None = Field(
+        default=None,
+        description=(
+            "Override the generic adapter image (e.g. for a forked runtime). When unset, the adapter "
+            "picks LEco's reference image under infra/runtimes/<type>/."
+        ),
+    )
+
+    @field_validator("id")
+    @classmethod
+    def normalize_id(cls, v: str) -> str:
+        s = (v or "").strip().lower()
+        if not s or not re.match(r"^[a-z0-9][a-z0-9-]{0,39}$", s):
+            raise ValueError("runtime id must be lowercase alphanumeric/hyphen, 1-40 chars, start alnum")
+        return s
+
+
+class RoutingUpstreamRule(BaseModel):
+    """One path-prefix → upstream mapping inside a ``RoutingEntry``.
+
+    ``target`` selects what kind of upstream this prefix forwards to:
+
+    - ``runtime`` — references a sibling ``infrastructure.runtimes[]`` entry by id.
+      Traefik routes to ``leco-rt-<slug>-<runtime.id>:<runtime.port>``.
+    - ``service`` / ``frontend`` / ``backend`` — a Docker DNS name on lh-network
+      (the latter two are vocabulary aliases that read better in YAML).
+
+    Specificity wins: rules sort by descending prefix length, so ``/api`` beats
+    ``/`` for the same hostname (Traefik priorities encode this).
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    prefix: str = Field(default="/", description="Path prefix this rule matches (must start with /)")
+    target: RoutingUpstreamTarget = Field(description="Type of upstream this prefix forwards to")
+    runtime: str | None = Field(
+        default=None,
+        description="Required when target=runtime; matches one of infrastructure.runtimes[].id",
+    )
+    service: ServiceTarget | None = Field(
+        default=None,
+        description="Required when target in {service, frontend, backend}",
+    )
+
+    @field_validator("prefix")
+    @classmethod
+    def normalize_prefix(cls, v: str) -> str:
+        p = (v or "/").strip()
+        if not p.startswith("/"):
+            raise ValueError("routing upstream prefix must start with /")
+        return p
+
+    @model_validator(mode="after")
+    def shape(self) -> RoutingUpstreamRule:
+        if self.target == "runtime":
+            if not self.runtime or not str(self.runtime).strip():
+                raise ValueError("routing upstream target=runtime needs 'runtime: <id>'")
+            if self.service is not None:
+                raise ValueError("routing upstream target=runtime cannot also set 'service'")
+        else:
+            if self.service is None:
+                raise ValueError(
+                    f"routing upstream target={self.target} requires 'service: {{host, port}}'"
+                )
+            if self.runtime:
+                raise ValueError(f"routing upstream target={self.target} cannot also set 'runtime'")
+        return self
+
+
 class RoutingEntry(BaseModel):
     """Traefik file-provider fragment.
 
-    **Legacy:** single `backendHost` + `backendPort` → one service for the hostname.
+    **Modern (recommended):** ``upstream:`` list — one rule per path prefix.
+    Each rule forwards to either a local edge runtime (``target: runtime``) or
+    a Docker DNS name (``target: service``). See :class:`RoutingUpstreamRule`.
 
-    **Split (recommended for React + API):** `frontend` + `apiBackend` + `apiPathPrefix`
-    → higher-priority `Host && PathPrefix` routers to the API, catch-all `Host` to the UI
-    (same pattern as local-ecosystem apps behind Traefik).
+    **Split (still supported):** ``frontend`` + ``apiBackend`` + ``apiPathPrefix``
+    → higher-priority ``Host && PathPrefix`` routers to the API, catch-all ``Host``
+    to the UI (CrawlerVision / local-ecosystem pattern).
+
+    **Legacy:** single ``backendHost`` + ``backendPort`` → one service for the
+    hostname.
+
+    Exactly one of these shapes must apply per entry.
     """
 
     model_config = ConfigDict(populate_by_name=True)
@@ -152,6 +287,13 @@ class RoutingEntry(BaseModel):
     api_backend: ServiceTarget | None = Field(None, alias="apiBackend")
     backend_host: str = Field(default="", alias="backendHost")
     backend_port: int = Field(default=8080, alias="backendPort", ge=1, le=65535)
+    upstream: list[RoutingUpstreamRule] = Field(
+        default_factory=list,
+        description=(
+            "Optional list of path-prefix → upstream rules. When non-empty, this overrides "
+            "the legacy ``frontend``/``apiBackend``/``backendHost`` shape for this entry."
+        ),
+    )
 
     @field_validator("api_path_prefix")
     @classmethod
@@ -163,12 +305,18 @@ class RoutingEntry(BaseModel):
 
     @model_validator(mode="after")
     def routing_shape(self) -> RoutingEntry:
+        modern = bool(self.upstream)
         split = self.frontend is not None and self.api_backend is not None
         legacy = bool(self.backend_host and self.backend_host.strip())
-        if split and legacy:
-            raise ValueError("routing entry: use either (frontend + apiBackend) or backendHost, not both")
-        if not split and not legacy:
-            raise ValueError("routing entry: set non-empty backendHost or both frontend and apiBackend")
+        chosen = sum(1 for x in (modern, split, legacy) if x)
+        if chosen == 0:
+            raise ValueError(
+                "routing entry: set upstream[], or (frontend + apiBackend), or non-empty backendHost"
+            )
+        if chosen > 1:
+            raise ValueError(
+                "routing entry: pick exactly one shape — upstream[], (frontend + apiBackend), or backendHost"
+            )
         return self
 
 
@@ -284,6 +432,14 @@ class ProfileInfrastructureSpec(BaseModel):
     docker_compose: DockerComposeSpec | None = Field(default=None, alias="dockerCompose")
     cloudflare: CloudflareSpec | None = None
     routing: RoutingSpec | None = None
+    runtimes: list[LocalRuntimeSpec] = Field(
+        default_factory=list,
+        description=(
+            "Local edge-runtime containers LEco materializes beside the upstream compose stack. "
+            "Each entry produces one service in docker-compose.leco-runtime.yml and may be "
+            "referenced from routing.entries[].upstream[] by id."
+        ),
+    )
     traefik_cleanup: TraefikCleanupSpec | None = Field(default=None, alias="traefikCleanup")
     healthcheck_urls: list[str] | None = Field(
         default=None,
@@ -296,6 +452,25 @@ class ProfileInfrastructureSpec(BaseModel):
         alias="wranglerBindingPreview",
         description="Optional; filled by Generate YAML from wrangler.toml for visibility (not a second source of truth).",
     )
+
+    @model_validator(mode="after")
+    def _runtime_ids_unique(self) -> ProfileInfrastructureSpec:
+        if not self.runtimes:
+            return self
+        seen: set[str] = set()
+        for rt in self.runtimes:
+            if rt.id in seen:
+                raise ValueError(f"duplicate runtime id: {rt.id}")
+            seen.add(rt.id)
+        if self.routing and self.routing.entries:
+            for entry in self.routing.entries:
+                for rule in entry.upstream:
+                    if rule.target == "runtime" and rule.runtime not in seen:
+                        raise ValueError(
+                            f"routing entry {entry.hostname!r} references unknown runtime "
+                            f"{rule.runtime!r} (known: {sorted(seen)})"
+                        )
+        return self
 
 
 class LocalhostProfile(BaseModel):
@@ -380,6 +555,13 @@ class ApplicationManifest(BaseModel):
     docker_compose: DockerComposeSpec | None = Field(default=None, alias="dockerCompose")
     cloudflare: CloudflareSpec | None = Field(default=None)
     routing: RoutingSpec | None = None
+    runtimes: list[LocalRuntimeSpec] = Field(
+        default_factory=list,
+        description=(
+            "Local edge-runtime declarations. Usually set under leco.yaml infrastructure.runtimes; "
+            "kept here for backward compatibility when a manifest carries it inline."
+        ),
+    )
     traefik_cleanup: TraefikCleanupSpec | None = Field(default=None, alias="traefikCleanup")
     healthcheck_urls: list[str] = Field(default_factory=list, alias="healthcheckUrls")
     local_host_profile: str | None = Field(
@@ -456,6 +638,8 @@ def merge_profile_infrastructure_into_manifest(
         updates["cloudflare"] = infra.cloudflare
     if infra.routing is not None:
         updates["routing"] = infra.routing
+    if infra.runtimes:
+        updates["runtimes"] = list(infra.runtimes)
     if infra.traefik_cleanup is not None:
         updates["traefik_cleanup"] = infra.traefik_cleanup
     if infra.healthcheck_urls is not None:
@@ -499,6 +683,7 @@ def merge_infrastructure_specs(
         docker_compose=overlay.docker_compose if overlay.docker_compose is not None else base.docker_compose,
         cloudflare=overlay.cloudflare if overlay.cloudflare is not None else base.cloudflare,
         routing=overlay.routing if overlay.routing is not None else base.routing,
+        runtimes=list(overlay.runtimes) if overlay.runtimes else list(base.runtimes),
         traefik_cleanup=overlay.traefik_cleanup if overlay.traefik_cleanup is not None else base.traefik_cleanup,
         healthcheck_urls=overlay.healthcheck_urls if overlay.healthcheck_urls is not None else base.healthcheck_urls,
         container_image=overlay.container_image if overlay.container_image is not None else base.container_image,

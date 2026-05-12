@@ -11,6 +11,12 @@ from typing import Any
 import yaml
 
 from hosting_layout import HOSTING_SOURCE_LINK_NAME, compute_source_target
+from leco_runtimes import (
+    AdapterNotReady,
+    RuntimeBuildContext,
+    detect_runtimes,
+    get_adapter,
+)
 
 _SLUG_RE = re.compile(r"[^a-zA-Z0-9._-]+")
 _HOST_LABEL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
@@ -916,6 +922,7 @@ def _compose_service_backend_host(
 
 
 _LECO_HOSTING_OVERLAY_COMPOSE = "docker-compose.leco-hosting.yml"
+_LECO_RUNTIME_OVERLAY_COMPOSE = "docker-compose.leco-runtime.yml"
 
 
 def _primary_public_hostname_from_routing(entries: list[Any]) -> str | None:
@@ -1718,6 +1725,243 @@ def ensure_lh_network_hosting_overlay(manifest_abs: Path) -> dict[str, Any]:
         "ports_reset_services": port_reset_services,
         "profile_updated": profile_dirty,
     }
+
+
+def ensure_local_runtime_overlay(manifest_abs: Path) -> dict[str, Any]:
+    """Materialize ``docker-compose.leco-runtime.yml`` from ``infrastructure.runtimes``.
+
+    For every entry under the merged localhost profile's ``infrastructure.runtimes``
+    list, ask the matching adapter (from :mod:`leco_runtimes`) for a compose-service
+    dict and write a single overlay file beside ``leco.app.yaml`` that hosts all of
+    them on ``lh-network``. The overlay is then added (idempotently) to the
+    profile's ``infrastructure.dockerCompose.additionalComposeFilesFromManifest``
+    list so subsequent ``docker compose up`` invocations pick it up automatically.
+
+    The upstream application tree is **never** modified — the adapter wires
+    LEco-owned named volumes over generated dirs (``node_modules``, ``.wrangler``,
+    etc.) and bind-mounts the source read-only-in-spirit. ``.dev.vars`` and other
+    runtime secret files live under ``hosting/app-available/<slug>/`` only.
+
+    Returns a dict with keys: ``ok``, ``overlay_path``, ``profile_path``,
+    ``runtimes`` (list of materialized runtime ids), ``stubs`` (list of (id, type)
+    tuples that hit ``AdapterNotReady``), ``profile_updated``, and on no-op,
+    ``skipped`` with an explanation.
+    """
+    mp = manifest_abs.resolve()
+    try:
+        manifest = yaml.safe_load(mp.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return {"ok": False, "error": "read manifest"}
+    if not isinstance(manifest, dict):
+        return {"ok": False, "error": "invalid manifest"}
+    prof_rel = (manifest.get("localHostProfile") or "leco.yaml").strip() or "leco.yaml"
+    prof_path = (mp.parent / prof_rel).resolve()
+    try:
+        localhost = yaml.safe_load(prof_path.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return {"ok": False, "error": "read localhost profile"}
+    if not isinstance(localhost, dict):
+        return {"ok": False, "error": "invalid localhost profile"}
+
+    infra = localhost.get("infrastructure")
+    if not isinstance(infra, dict):
+        return {"ok": True, "skipped": "no infrastructure block"}
+    runtimes_raw = infra.get("runtimes")
+    if not isinstance(runtimes_raw, list) or not runtimes_raw:
+        return {"ok": True, "skipped": "no runtimes declared"}
+
+    host_slug = host_slug_from_app_id(str(manifest.get("name") or mp.parent.name))
+    manifest_root_container = compute_source_target(mp.parent, manifest).resolve()
+    manifest_dir_container = mp.parent.resolve()
+    # Bind-mount sources written into the generated compose file are consumed by
+    # the Docker daemon, not by this process. Remap container-local paths to the
+    # equivalent host paths the daemon can mount (no-op when LECO_*_HOST is unset
+    # and this process already runs on the host).
+    try:
+        from leco_app.compose_runner import path_for_docker_daemon
+        manifest_root = path_for_docker_daemon(manifest_root_container)
+        manifest_dir_host = path_for_docker_daemon(manifest_dir_container)
+    except Exception:
+        manifest_root = manifest_root_container
+        manifest_dir_host = manifest_dir_container
+    ctx = RuntimeBuildContext(
+        app_slug=host_slug,
+        manifest_dir=manifest_dir_host,
+        manifest_root=manifest_root,
+        manifest_dir_container=manifest_dir_container,
+        manifest_root_container=manifest_root_container,
+    )
+
+    services_out: dict[str, dict[str, Any]] = {}
+    named_volumes_out: dict[str, dict[str, Any] | None] = {}
+    runtime_ids: list[str] = []
+    stubs: list[tuple[str, str]] = []
+    errors: list[str] = []
+
+    for raw in runtimes_raw:
+        if not isinstance(raw, dict):
+            continue
+        rid = str(raw.get("id") or "").strip()
+        rtype = str(raw.get("type") or "").strip()
+        if not rid or not rtype:
+            errors.append(f"runtime entry missing id/type: {raw!r}")
+            continue
+        try:
+            adapter = get_adapter(rtype)
+        except KeyError as exc:
+            errors.append(str(exc))
+            continue
+        try:
+            svc = adapter.compose_service(raw, ctx)
+        except AdapterNotReady:
+            # Stub runtime — surface in the wizard but don't break onboarding
+            # of other apps. We deliberately omit the service from the overlay.
+            stubs.append((rid, rtype))
+            continue
+        except Exception as exc:
+            errors.append(f"adapter {rtype} failed for runtime {rid!r}: {exc}")
+            continue
+        container = ctx.runtime_container(rid)
+        services_out[container] = svc
+        runtime_ids.append(rid)
+        for vol in adapter.named_volumes(raw, ctx):
+            named_volumes_out.setdefault(vol, None)
+
+    if errors and not services_out:
+        return {"ok": False, "error": "; ".join(errors)}
+
+    overlay_path = mp.parent / _LECO_RUNTIME_OVERLAY_COMPOSE
+    if not services_out:
+        # No fully-implemented runtimes — nothing to materialize. Roll back any
+        # stale overlay we might have written previously so deploys don't keep
+        # mounting an empty compose file.
+        profile_dirty = _drop_runtime_overlay_from_profile(infra)
+        if profile_dirty:
+            _safe_write_yaml(prof_path, localhost)
+        return {
+            "ok": True,
+            "skipped": "no runtimes ready (all stubs)",
+            "stubs": stubs,
+            "errors": errors,
+            "profile_updated": profile_dirty,
+        }
+
+    networks_block: dict[str, Any] = {"lh-network": {"external": True}}
+    overlay_doc: dict[str, Any] = {"services": services_out, "networks": networks_block}
+    if named_volumes_out:
+        overlay_doc["volumes"] = {name: None for name in sorted(named_volumes_out)}
+
+    header = (
+        "# LEco runtime overlay — generated by dashboard/leco_detect.py::ensure_local_runtime_overlay.\n"
+        "# One service per infrastructure.runtimes[] entry. Adapters live under\n"
+        "# dashboard/leco_runtimes/; reference images under infra/runtimes/<type>/.\n"
+        "# Mounts upstream source read-only-in-spirit; LEco-owned named volumes mask\n"
+        "# node_modules / wrangler-state so the upstream app tree is never written to.\n"
+        "# Safe to commit under hosting/app-available/<slug>/.\n\n"
+    )
+    body = yaml.safe_dump(overlay_doc, default_flow_style=False, sort_keys=False, allow_unicode=True)
+    try:
+        overlay_path.write_text(header + body, encoding="utf-8")
+    except OSError:
+        return {"ok": False, "error": "write runtime overlay"}
+
+    profile_dirty = False
+    dc = infra.get("dockerCompose")
+    if not isinstance(dc, dict):
+        dc = infra.get("docker_compose")
+    if not isinstance(dc, dict):
+        dc = {}
+        infra["dockerCompose"] = dc
+        profile_dirty = True
+    raw_ex = (
+        dc.get("additionalComposeFilesFromManifest")
+        or dc.get("additional_compose_files_from_manifest")
+        or []
+    )
+    extras = [str(x).strip() for x in raw_ex if str(x).strip()]
+    if _LECO_RUNTIME_OVERLAY_COMPOSE not in extras:
+        extras.append(_LECO_RUNTIME_OVERLAY_COMPOSE)
+        dc["additionalComposeFilesFromManifest"] = extras
+        if "additional_compose_files_from_manifest" in dc:
+            del dc["additional_compose_files_from_manifest"]
+        profile_dirty = True
+
+    if profile_dirty:
+        if not _safe_write_yaml(prof_path, localhost):
+            return {"ok": False, "error": "write profile"}
+
+    return {
+        "ok": True,
+        "overlay_path": str(overlay_path),
+        "profile_path": str(prof_path),
+        "runtimes": runtime_ids,
+        "stubs": stubs,
+        "errors": errors,
+        "profile_updated": profile_dirty,
+    }
+
+
+def _drop_runtime_overlay_from_profile(infra: dict[str, Any]) -> bool:
+    """Remove the runtime overlay from ``additionalComposeFilesFromManifest`` if present."""
+    dc = infra.get("dockerCompose") or infra.get("docker_compose")
+    if not isinstance(dc, dict):
+        return False
+    raw_ex = (
+        dc.get("additionalComposeFilesFromManifest")
+        or dc.get("additional_compose_files_from_manifest")
+        or []
+    )
+    if not isinstance(raw_ex, list):
+        return False
+    extras = [str(x).strip() for x in raw_ex if str(x).strip()]
+    if _LECO_RUNTIME_OVERLAY_COMPOSE not in extras:
+        return False
+    extras = [x for x in extras if x != _LECO_RUNTIME_OVERLAY_COMPOSE]
+    dc["additionalComposeFilesFromManifest"] = extras
+    if "additional_compose_files_from_manifest" in dc:
+        del dc["additional_compose_files_from_manifest"]
+    return True
+
+
+def _safe_write_yaml(path: Path, data: dict[str, Any]) -> bool:
+    try:
+        path.write_text(
+            yaml.safe_dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+    except OSError:
+        return False
+    return True
+
+
+def detect_runtime_candidates_for_manifest(manifest_abs: Path) -> list[dict[str, Any]]:
+    """Read-only adapter scan against an app's resolved root.
+
+    Used by the registration wizard to pre-fill runtime suggestions. Returns a
+    list of dicts shaped like ``infrastructure.runtimes[]`` entries (alias keys),
+    with an extra ``_detail`` key carrying the adapter's human-readable hint
+    (e.g. *"Worker paths detected: /api, /health/json"*) and an ``_id`` key for
+    runtime-id readability in logs. The underscore prefixes keep these helper
+    fields out of YAML round-trips if the wizard ever dumps the spec back to disk.
+    """
+    mp = manifest_abs.resolve()
+    try:
+        manifest = yaml.safe_load(mp.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return []
+    if not isinstance(manifest, dict):
+        return []
+    root = compute_source_target(mp.parent, manifest).resolve()
+    if not root.is_dir():
+        return []
+    out: list[dict[str, Any]] = []
+    for d in detect_runtimes(root):
+        spec = dict(d.spec)
+        spec["_detail"] = d.detail or ""
+        spec["_id"] = d.runtime_id
+        spec["_suggested_upstream_yaml"] = d.suggested_upstream_yaml or ""
+        out.append(spec)
+    return out
 
 
 def normalize_profile_compose_backend_hosts(manifest_abs: Path) -> dict[str, Any]:

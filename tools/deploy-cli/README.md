@@ -113,7 +113,8 @@ Written next to the app root (or path given to `--out`). Uses **camelCase** keys
 | `cloudflare.wranglerEnv` | Default `--env` for Wrangler |
 | `cloudflare.provisionLocalResources` | Default `true`; set `false` to skip local KV/R2/D1 on deploy/register (unless you run **`provision-local-cf`**) |
 | `cloudflare.localCfPublicPrefix` | Optional short label (e.g. `cv`): provision + `leco.local-cf.yaml` use `https://{prefix}-kv.lh`, `-r2.lh`, `-d1.lh`; **`ecosystem-register --merge-traefik`** adds Host routes to the shared adapters. Browser bindings stay shared. |
-| `routing.entries` | Traefik fragment: legacy backend **or** split `frontend` + `apiBackend` |
+| `routing.entries` | Traefik fragment: legacy backend **or** split `frontend` + `apiBackend` **or** v3 prefix list under `upstream[]` ({prefix, target, runtime?, service?}). Priority is derived from prefix length (longer wins). |
+| `infrastructure.runtimes` | Optional list of local edge-runtime declarations (v3). Each entry: `id`, `type` (`cloudflare-workers` / `cloudflare-pages` / `vercel` / `aws-lambda` / `deno-deploy` — only `cloudflare-workers` is fully implemented today), and adapter-specific fields like `config`, `sourceDir`, `port`, `devVarsFile`, and (Cloudflare Workers only) `stripBindings`. LEco DevOps materializes them into a generated `docker-compose.leco-runtime.yml` beside `leco.app.yaml`. See `docs/DEPLOY_CLI.md` and `hosting/samples/sample-cf-worker-runtime/`. |
 | `traefikCleanup` | Optional explicit router/service keys for `leco-app offload` when names differ from fragment defaults |
 | `healthcheckUrls` | URLs probed by `leco-app status` |
 | `lecoAppVersion` | Use `"2"` when using `localHostProfile` / `localhost` |
@@ -141,6 +142,7 @@ Written next to the app root (or path given to `--out`). Uses **camelCase** keys
 | `logs` | `docker compose logs` (`-f`, `--tail`, `--service`) |
 | `status` | `docker compose ps` + optional HTTP checks |
 | `traefik-fragment` | Emit YAML for manual merge into `traefik/dynamic.yml` |
+| `runtimes` | List declared local edge runtimes + the adapter registry. Defaults to `--detect`: scans the resolved source root for Worker entrypoints and prints a copy-pasteable `routing.entries[].upstream` YAML hint. `--json` for machine output. The same hint surfaces in the dashboard Register flow log. |
 | `cf-deploy` | `wrangler deploy -c …` (requires `wrangler login`) |
 | `cf-secrets-checklist` | Heuristic list of `[vars]` keys that may need `wrangler secret put` |
 

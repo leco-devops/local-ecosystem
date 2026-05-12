@@ -65,6 +65,7 @@ COPY dashboard/timeseries.py .
 COPY dashboard/control_targets.py .
 COPY dashboard/leco_control.py .
 COPY dashboard/leco_detect.py .
+COPY dashboard/leco_runtimes ./leco_runtimes
 COPY dashboard/leco_validate.py .
 COPY dashboard/hosting_layout.py .
 COPY dashboard/hosted_zip_upload.py .

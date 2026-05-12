@@ -20,7 +20,9 @@ from hosting_layout import (
 )
 from leco_detect import (
     compute_hosting_source_symlink_target,
+    detect_runtime_candidates_for_manifest,
     ensure_lh_network_hosting_overlay,
+    ensure_local_runtime_overlay,
     host_slug_from_app_id,
     normalize_profile_compose_backend_hosts,
     require_registration_app_id,
@@ -316,6 +318,7 @@ def register_app_wizard(
     _apply_register_url_overrides(prep, url_overrides)
     normalize_profile_compose_backend_hosts(prep.manifest_abs)
     ensure_lh_network_hosting_overlay(prep.manifest_abs)
+    ensure_local_runtime_overlay(prep.manifest_abs)
     code, log = run_ecosystem_register(
         prep.manifest_abs,
         app_id=prep.app_id,
@@ -388,6 +391,62 @@ def iterate_register_app_wizard(
                     f"({detail}).\n"
                 ),
             }
+
+        # Local edge-runtime auto-detection (read-only). When the upstream tree
+        # has a wrangler.toml / vercel.json / etc., surface the adapter's
+        # detection hint (which now includes top-level URL paths the Worker
+        # entrypoint handles + suggested routing.upstream[] rules). The hint
+        # is purely informational — we never auto-mutate operator-owned YAML
+        # here. The operator copies the suggested rules into leco.yaml.
+        try:
+            candidates = detect_runtime_candidates_for_manifest(prep.manifest_abs)
+        except Exception:
+            candidates = []
+        for cand in candidates:
+            rid = cand.get("_id") or cand.get("id") or "?"
+            rtype = cand.get("type") or "?"
+            detail = (cand.get("_detail") or "").strip()
+            yaml_hint = (cand.get("_suggested_upstream_yaml") or "").strip()
+            parts = [f"Detected edge runtime: type={rtype} id={rid}"]
+            if detail:
+                parts.append(f"  - {detail}")
+            if yaml_hint:
+                parts.append(
+                    "  ↳ Paste into your leco.yaml routing entry to send detected"
+                    " paths through the runtime (add a `/` catch-all for your"
+                    " frontend underneath):"
+                )
+                parts.extend(f"      {line}" for line in yaml_hint.splitlines())
+            else:
+                parts.append(
+                    "  ↳ Declare it under `infrastructure.runtimes[]` and add"
+                    " matching `routing.entries[].upstream[]` rules in leco.yaml."
+                )
+            parts.append("  ↳ Reference: docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md §7.")
+            yield {"type": "log", "text": "\n".join(parts) + "\n"}
+
+        runtime_overlay = ensure_local_runtime_overlay(prep.manifest_abs)
+        ready_ids = runtime_overlay.get("runtimes") or []
+        stubs = runtime_overlay.get("stubs") or []
+        rt_errors = runtime_overlay.get("errors") or []
+        if ready_ids:
+            yield {
+                "type": "log",
+                "text": (
+                    "Materialized docker-compose.leco-runtime.yml for runtime(s): "
+                    f"{', '.join(ready_ids)}.\n"
+                ),
+            }
+        for rid, rtype in stubs:
+            yield {
+                "type": "log",
+                "text": (
+                    f"Runtime {rid!r} (type={rtype}) is on the roadmap — overlay skipped. "
+                    "Track infra/runtimes/ for status.\n"
+                ),
+            }
+        for err in rt_errors:
+            yield {"type": "log", "text": f"Runtime overlay note: {err}\n"}
     except (ValueError, OSError, yaml.YAMLError) as exc:
         yield {"type": "done", "result": {"ok": False, "error": str(exc)}}
         return

@@ -488,6 +488,15 @@ def _leco_app_manifest_run(
     mp = meta["manifest_path"]
     # leco-app runs in this container; cwd must be the manifest directory (exists here).
     leco_cwd = str(Path(mp).resolve().parent)
+    # Refresh the local-runtime overlay so its bind-mount paths reflect the
+    # *current* host-side mapping (LECO_WORKSPACE_PARENT_HOST / LECO_PROJECT_ROOT_HOST).
+    # Idempotent — a no-op when the manifest declares no runtimes.
+    if subcommand in {"deploy"}:
+        try:
+            from leco_detect import ensure_local_runtime_overlay
+            ensure_local_runtime_overlay(Path(mp))
+        except Exception:
+            pass
     argv = [subcommand, "--manifest", mp]
     if extra_args:
         argv.extend(extra_args)

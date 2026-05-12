@@ -42,7 +42,21 @@ leco-app ecosystem-register --merge-traefik   # register only + Traefik merge (i
 leco-app status
 leco-app logs -f
 leco-app down
+
+leco-app runtimes                       # list adapters + declared runtimes + onboarding hint
+leco-app runtimes --json --no-detect    # machine output, skip the Worker-path scan
 ```
+
+**Runtime diagnostic.** `leco-app runtimes` is the canonical "did the local
+edge runtime get wired up?" command. By default it:
+
+- prints the registry (one row per adapter, ready vs roadmap),
+- prints what your manifest declares under `infrastructure.runtimes[]`
+  (per-runtime container name on `lh-network`, port, config, source dir),
+- scans the resolved app root for a Worker entrypoint and surfaces a copy-
+  pasteable `routing.entries[].upstream` YAML block matching the URL paths
+  the Worker actually handles. The same hint is emitted by the registration
+  wizard (`leco-app ecosystem-register` and the dashboard Register flow).
 
 **Init — Traefik routes:** when the wizard asks for hostnames, **press Enter on an empty hostname** to finish adding routes (otherwise it keeps prompting). For **React + API** stacks, choose **split route** so the tool writes **`frontend`** + **`apiBackend`** and `traefik-fragment` emits **`Host && PathPrefix(/api…)`** routers (priority over the UI `Host` rule), matching how **local-ecosystem** routes apps like CrawlerVision.
 
@@ -86,6 +100,16 @@ Recommended for new apps: keep **`leco.app.yaml`** as a **bridge** (`name`, `roo
 - **`composeFileFromManifest`** — optional primary compose file **relative to `leco.app.yaml`’s directory** (e.g. `docker-compose.leco-entry.yml`). When set, it is the **first** **`-f`** and **`composeFile`** under the resolved app root is **not** used. Use to **`include`** upstream **`source/docker-compose.yml`** and patch services in the hosting tree only (e.g. **`ports: !reset []`** to stop publishing host **:80** when Traefik owns it, plus **`lh-network`**). Sample: **`hosting/samples/sample-hosting-compose-entry/`**.
 - **`additionalComposeFilesFromManifest`** — optional list merged **after** the primary compose file (whether that primary is **`composeFile`** or **`composeFileFromManifest`**); paths are relative to **`leco.app.yaml`’s directory** (e.g. `hosting/app-available/myapp/docker-compose.leco-hosting.yml`). Keeps Traefik **`lh-network`** joins, host-port stripping (**`ports: !reset []`**), and public URL env overrides in the ecosystem repo while **`composeFile`** still points at the upstream project when you are **not** using **`composeFileFromManifest`**. Sample: **`hosting/samples/sample-leco-hosting-overlay/`**. For **split UI + `/api` routes**, frontends should call **`https://<slug>.lh/api/...`** (same origin), not `localhost:PORT` baked from upstream compose — the sample overlay sets **`REACT_APP_BACKEND_URL: ""`** and **`REACT_APP_SITE_URL`** (or your stack’s equivalent) so the browser uses the Traefik hostname. New hosted-app onboarding auto-generates this overlay when routing + compose are present.
 - **`leco-app down`** exits **0** with a warning if the primary compose file is missing (treats the stack as already removed). LEco DevOps **Remove** still runs **full offboard** afterward.
+- **`infrastructure.runtimes`** *(v3, optional)* — declares local edge-runtime containers (e.g. Cloudflare Workers run via Wrangler/Miniflare) LEco DevOps materializes into a generated **`docker-compose.leco-runtime.yml`** beside **`leco.app.yaml`**. Each entry has **`id`**, **`type`** (one of **`cloudflare-workers`**, **`cloudflare-pages`**, **`vercel`**, **`aws-lambda`**, **`deno-deploy`** — only **`cloudflare-workers`** is fully implemented in V1), and adapter-specific fields:
+  - **`config`** — wrangler.toml (or equivalent) path relative to `sourceDir`.
+  - **`sourceDir`** — relative to the manifest's resolved root.
+  - **`port`** — container port Traefik forwards to (default `8787`).
+  - **`devVarsFile`** — optional secrets file under `hosting/app-available/<slug>/`, bind-mounted read-only.
+  - **`stripBindings`** *(Cloudflare Workers only)* — list of top-level TOML tables to remove from a **sanitized** in-container `wrangler.toml` overlay; defaults to **`["browser"]`** (Browser Rendering — Miniflare cannot simulate it). Pass **`"none"`** to keep everything and rely on `wrangler dev --remote` instead. Upstream `wrangler.toml` is never edited on disk.
+  - **`image`** — override the default runtime image (advanced; see `infra/runtimes/<type>/`).
+
+  The runtime container's DNS name is **`leco-rt-<slug>-<runtime.id>`** on **`lh-network`**. The adapter also bind-mounts the per-runtime overlay directory **`hosting/app-available/<slug>/.leco-runtime/<runtime.id>/`** into the container at **`/leco-runtime/d1`**, where operators can drop **`d1-bootstrap-<BINDING>.sql`** schema files the runtime applies on first boot before running `wrangler d1 migrations apply` in a per-file-failure-tolerant loop. See **`hosting/samples/sample-cf-worker-runtime/`** for the full shape and the runbook §7 for the failure modes this handles.
+- **`routing.entries[].upstream`** *(v3, optional)* — list of **`{prefix, target, runtime?, service?}`** rules per hostname. **`target: runtime`** forwards a prefix to a sibling **`runtimes[].id`**; **`target: service`** (or alias **`frontend`** / **`backend`**) forwards to a Docker DNS name on **`lh-network`**. Replaces the legacy **`frontend`** / **`apiBackend`** / **`backendHost`** fields for the same entry; Traefik priority is derived from prefix length so **`/health/json`** outranks **`/api`** outranks **`/`** automatically (no manual priority math). The Cloudflare Workers adapter scans your Worker entrypoint (`src/index.ts`, `worker.ts`, …) for `pathname === '…'`, `pathname.startsWith('…')`, and router-call patterns (`app.get('…')`, etc.) and the registration wizard / **`leco-app runtimes --detect`** print a copy-pasteable YAML block listing the prefixes the Worker handles.
 
 Full diagram and maintainer pointers: **[LECO_APP_BLUEPRINT.md](LECO_APP_BLUEPRINT.md)**.
 

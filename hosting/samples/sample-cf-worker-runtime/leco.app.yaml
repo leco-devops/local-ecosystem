@@ -1,0 +1,28 @@
+# =============================================================================
+# LEco ↔ APPLICATION BRIDGE  (leco.app.yaml) — Cloudflare Worker local runtime
+# =============================================================================
+# WHAT THIS SAMPLE SHOWS
+#   How to point a hosted app at a *locally-run* Cloudflare Worker for `/api/*`
+#   while still serving the SPA frontend from a regular compose service. The
+#   pattern is generic — copy this dir into `hosting/app-available/<slug>/`,
+#   point `source` at your upstream repo (the one containing `wrangler.toml`),
+#   and adjust ids/ports.
+#
+# UPSTREAM IS UNTOUCHED
+#   LEco mounts the upstream worker dir read-only-in-spirit. `npm ci` writes
+#   only into an LEco-owned named volume (`leco-rt-<slug>-<runtime>-node-modules`).
+#   Miniflare KV/R2/D1 state lives in `leco-rt-<slug>-<runtime>-wrangler-state`.
+#
+# WHEN TO USE
+#   Your production stack runs Cloudflare Workers (~100s of routes) AND a
+#   classic backend behind the same hostname. Locally, routing `/api` straight
+#   at the classic backend 404s the Worker-only routes — wiring the Worker as
+#   a runtime fixes that without forking the upstream repo.
+# =============================================================================
+lecoAppVersion: '3'
+applicationVersion: '0.1.0-sample'
+name: sample-cf-worker-runtime
+root: source
+localHostProfile: leco.yaml
+configRefs:
+  wranglerConfig: wrangler.toml

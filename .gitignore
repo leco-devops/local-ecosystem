@@ -27,4 +27,7 @@ hosting/traefik/01-stack-core.yml
 # Per-machine selection recorded by ecosystem-stack/install-foundation.sh
 ecosystem-stack/config/install-selection.env
 
+# leco-cli wrapper logs (per-run JSONL emitted by tools/leco-cli.sh)
+.leco-cli-logs/
+
 /Backup

@@ -57,7 +57,9 @@ The registry and `leco-app` read **`leco.app.yaml` + `leco.yaml`** (effective ma
 - **`infrastructure.dockerCompose.composeFile`** — primary file path **you choose** (relative to resolved root unless absolute), e.g. **`docker-compose.yml`** or **`../docker-compose.yml`** for a Worker subfolder that shares the repo’s stack.
 - **`infrastructure.dockerCompose.additionalComposeFiles`** — optional list of extra **`-f`** files resolved from the **app root** (resolved root): build splits, vendor overrides, etc.
 - **`infrastructure.dockerCompose.composeFileFromManifest`** — optional **primary** compose file resolved from the **bridge manifest directory**. When set, it replaces **`composeFile`** as the first **`-f`**: typical pattern is **`include: path: source/docker-compose.yml`** plus hosting-only patches (**`ports: !reset []`**, **`lh-network`**) so upstream repos stay unmodified. See **`hosting/samples/sample-hosting-compose-entry/`**.
-- **`infrastructure.dockerCompose.additionalComposeFilesFromManifest`** — optional extra **`-f`** files resolved from the **bridge manifest directory** (parent of `leco.app.yaml`). Use under **`hosting/app-available/<slug>/`** to attach **`lh-network`**, `*.lh` URL env defaults, and similar LEco-only bits **without** editing the upstream application repo. See **`hosting/samples/sample-leco-hosting-overlay/`** and **`hosting/app-available/cvision/docker-compose.leco-hosting.yml`**.
+- **`infrastructure.dockerCompose.additionalComposeFilesFromManifest`** — optional extra **`-f`** files resolved from the **bridge manifest directory** (parent of `leco.app.yaml`). Use under **`hosting/app-available/<slug>/`** to attach **`lh-network`**, `*.lh` URL env defaults, and similar LEco-only bits **without** editing the upstream application repo. See **`hosting/samples/sample-leco-hosting-overlay/`** and **`hosting/app-available/cvision/docker-compose.leco-hosting.yml`**. Auto-generated entries: **`docker-compose.leco-hosting.yml`** (hosting overlay) and **`docker-compose.leco-runtime.yml`** (local edge-runtime overlay — see §6.1).
+- **`infrastructure.runtimes`** — optional list of local edge-runtime declarations. Each entry has **`id`**, **`type`** (e.g. **`cloudflare-workers`**), and adapter-specific fields like **`config`**, **`sourceDir`**, **`port`**, **`devVarsFile`**, and the optional **`stripBindings`** (Cloudflare Workers only — strip TOML tables Wrangler local cannot simulate; default **`["browser"]`**, set to **`"none"`** to keep all bindings and rely on **`wrangler dev --remote`**). LEco DevOps materializes them into **`docker-compose.leco-runtime.yml`** beside **`leco.app.yaml`**, exposes each as **`leco-rt-<slug>-<runtime.id>`** on **`lh-network`**, and bind-mounts the per-runtime overlay dir **`hosting/app-available/<slug>/.leco-runtime/<runtime.id>/`** into the container so operators can drop in a **`d1-bootstrap-<BINDING>.sql`** schema file or a sanitized **`wrangler.toml`** view without touching the upstream repo. See §6.1 and **[HOSTED_APPS_TRAEFIK_RUNBOOK.md §7](HOSTED_APPS_TRAEFIK_RUNBOOK.md#7-local-edge-runtimes-workers-pages-vercel-lambda-deno)**.
+- **`infrastructure.routing.entries[].upstream`** — optional list of **`{prefix, target, runtime?, service?}`** rules. **`target: runtime`** forwards to a sibling **`runtimes[].id`**; **`target: service`** forwards to a Docker DNS name. Replaces the legacy **`frontend`** / **`apiBackend`** / **`backendHost`** fields when present; Traefik priority is derived from prefix length (longest wins).
 - **`leco-app` / `docker compose`** uses those paths only; it does not invent KV/R2/D1 containers — those bindings are **not** services in your compose file (same idea as production Cloudflare: managed APIs). Local provision targets the ecosystem’s **kv-adapter / r2-adapter / d1-adapter** (see **cloudflare-local** in Docker Desktop), not six extra containers in your app’s compose project.
 - **Generate YAML** (first-time materialization) may still **suggest** a compose file when the tree is scanned; **Save YAML** does **not** inject or overwrite **`dockerCompose`** unless you already set paths (see `allow_compose_discovery` in `dashboard/leco_detect.py`).
 - If the primary compose file is **missing**, **`leco-app down`** exits **0** with a warning; offboard still runs.
@@ -72,6 +74,42 @@ The registry and `leco-app` read **`leco.app.yaml` + `leco.yaml`** (effective ma
 | **`infrastructure.wranglerBindingPreview`** | Informational mirror (KV/R2/D1 rows) for UI; **does not** create Docker services. |
 | **`leco.local-cf.yaml`** | Records **names** of namespaces / buckets / databases provisioned on the **shared** local adapters; still not per-binding containers in your repo. |
 | **Local CF provision** | Creates those resources on **kv.lh / r2.lh / d1.lh** adapters; look under the **cloudflare-local** stack in Docker, not inside your app’s compose project. |
+
+### 6.1 Local edge runtimes (Workers, Pages, Vercel, Lambda, Deno)
+
+When production routes traffic through an edge runtime, the local compose
+backend usually implements only a subset of those routes and the rest
+404. LEco DevOps closes the gap by running the runtime locally — without
+modifying the upstream repo.
+
+| Concept | Where |
+|---------|-------|
+| **Schema** (`LocalRuntimeSpec`, `RoutingUpstreamRule`) | `tools/deploy-cli/leco_app/schema.py` |
+| **Adapter registry** (one module per `type`) | `dashboard/leco_runtimes/` — `cloudflare_workers.py` is implemented; `cloudflare_pages.py`, `vercel.py`, `aws_lambda.py`, `deno_deploy.py` are roadmap stubs. |
+| **Reference container images** | `infra/runtimes/<type>/` — currently `cloudflare-workers/`. |
+| **Overlay materialization** | `dashboard/leco_detect.py::ensure_local_runtime_overlay` writes `docker-compose.leco-runtime.yml` beside the manifest and patches `additionalComposeFilesFromManifest`. |
+| **Traefik routers** | `tools/deploy-cli/leco_app/traefik_fragment.py::_upstream_routing_fragment` emits one router per `routing.entries[].upstream[]` rule. |
+| **Onboarding hint** (Worker paths + suggested YAML) | `dashboard/leco_runtimes/cloudflare_workers.py::_scan_worker_paths` + `suggested_upstream_yaml`, surfaced through `leco-app runtimes --detect` and the registration wizard log. |
+| **D1 bootstrap + resilient migrations** | `infra/runtimes/cloudflare-workers/entrypoint.sh` — applies `d1-bootstrap-<BINDING>.sql` once (sentinel-tracked), then loops `wrangler d1 migrations apply` past per-file failures. |
+| **Wrangler binding sanitization** | `dashboard/leco_runtimes/cloudflare_workers.py::_sanitize_wrangler_toml` strips listed top-level TOML sections (default `[browser]`); the sanitized copy is bind-overlaid at `/app/wrangler.toml` inside the container. |
+| **CLI diagnostic** | `leco-app runtimes -f leco.app.yaml` (defaults to `--detect`). |
+| **Sample manifest** | `hosting/samples/sample-cf-worker-runtime/`. |
+
+Zero-touch upstream contract:
+
+1. **Source tree**: bind-mounted at `/app` with `/app/node_modules` and
+   `/app/.wrangler` masked by LEco-owned named volumes — installs and
+   Miniflare state never write back to the upstream tree.
+2. **wrangler.toml**: a sanitized copy (per `stripBindings`) is bind-mounted
+   *on top of* `/app/wrangler.toml` inside the container, leaving the
+   upstream file untouched on disk.
+3. **D1 schema**: operator-owned `d1-bootstrap*.sql` under
+   `hosting/app-available/<slug>/.leco-runtime/<runtime_id>/` is applied
+   once on first boot via `wrangler d1 execute --file`, then `wrangler d1
+   migrations apply` runs in a bounded retry loop that records each
+   failing migration in `d1_migrations` so the batch can progress past it.
+4. **Secrets**: live under `hosting/app-available/<slug>/.dev.vars`
+   (gitignored), never in the upstream repo.
 
 ---
 

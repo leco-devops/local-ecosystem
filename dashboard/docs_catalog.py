@@ -143,7 +143,7 @@ DOC_MODULES = [
         "title": "Hosted apps — Traefik runbook",
         "category": "DevOps",
         "rel_path": "docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md",
-        "blurb": "502, lh-network, compose DNS names, wrong-prefix routing, dashboard *.lh probes, same-origin /api — symptoms, fixes, code map.",
+        "blurb": "502, lh-network, compose DNS names, wrong-prefix routing, dashboard *.lh probes, same-origin /api, local edge runtimes (Workers/Pages/Vercel/Lambda/Deno) — symptoms, fixes, code map.",
     },
     {
         "id": "devops-custom-apps",
