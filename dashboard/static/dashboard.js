@@ -67,6 +67,7 @@ const globalPreloaderState = {
   sharedGetRequests: new Map(),
   nativeFetch: null,
   preloaderWired: false,
+  clickWired: false,
 };
 
 function globalPreloaderCollapsedTitle() {
@@ -270,6 +271,56 @@ function endGlobalPreloader(id) {
   }, delay);
 }
 
+/** Inline spinner on the button/control that triggered a backend call. */
+const inlineActionState = new WeakMap();
+const actionTriggerState = { el: null, at: 0 };
+
+function noteActionTrigger(el) {
+  if (!el || !(el instanceof Element)) return;
+  actionTriggerState.el = el;
+  actionTriggerState.at = Date.now();
+}
+
+function peekActionTrigger(maxAgeMs = 220) {
+  const { el, at } = actionTriggerState;
+  if (!el || Date.now() - at > maxAgeMs) return null;
+  return el;
+}
+
+function beginInlineAction(el) {
+  if (!el || !(el instanceof Element)) return null;
+  let st = inlineActionState.get(el);
+  if (!st) {
+    st = { count: 0, hadDisabled: !!el.disabled };
+    inlineActionState.set(el, st);
+  }
+  st.count += 1;
+  if (st.count === 1) {
+    el.classList.add("btn--inline-loading");
+    el.setAttribute("aria-busy", "true");
+    if (!st.hadDisabled) el.disabled = true;
+  }
+  return el;
+}
+
+function endInlineAction(el) {
+  if (!el || !(el instanceof Element)) return;
+  const st = inlineActionState.get(el);
+  if (!st) return;
+  st.count = Math.max(0, st.count - 1);
+  if (st.count > 0) return;
+  inlineActionState.delete(el);
+  el.classList.remove("btn--inline-loading");
+  el.removeAttribute("aria-busy");
+  if (!st.hadDisabled) el.disabled = false;
+}
+
+function resolveFetchTriggerEl(init) {
+  const fromInit = init && init.dashboardTriggerEl;
+  if (fromInit instanceof Element) return fromInit;
+  return peekActionTrigger();
+}
+
 function tabLabel(tabId) {
   return TAB_LABELS[tabId] || "tab";
 }
@@ -306,7 +357,11 @@ function backendAreaLabel(pathname) {
     reference: "reference",
     leco: "registration",
     ollama: "ollama",
+    airllm: "airllm",
+    ai: "AI settings",
     "cloudflare-local": "cloudflare local",
+    "update-catalog": "update catalog",
+    ecosystem: "ecosystem updates",
   };
   return names[key] || "LEco DevOps data";
 }
@@ -534,6 +589,51 @@ function resolveFetchPreloaderMeta(input, init) {
     };
   }
 
+  if (pathname.startsWith("/api/airllm/")) {
+    const tail = pathname.replace(/^\/api\/airllm\/?/, "") || "api";
+    return {
+      label: `AirLLM · ${tail.replace(/\//g, " · ")}`,
+      detail: `Docker service: airllm · gateway http://airllm.lh · ${httpLine}`,
+      path: fullPath,
+      tabId: "infrastructureTab",
+    };
+  }
+
+  if (pathname === "/api/update-catalog/schedule") {
+    return {
+      label: "Update catalog · save schedule",
+      detail: `Writes update-catalog-schedule.json · ${httpLine}`,
+      path: fullPath,
+      tabId: "overviewTab",
+    };
+  }
+  if (pathname === "/api/update-catalog/mark-read") {
+    return {
+      label: "Update catalog · mark all read",
+      detail: `Acknowledges stack/model alerts · ${httpLine}`,
+      path: fullPath,
+      tabId: "overviewTab",
+    };
+  }
+  if (pathname.startsWith("/api/ecosystem/") || pathname.startsWith("/api/llm-catalog/")) {
+    return {
+      label: "Update catalog · releases & tables",
+      detail: `leco-update-catalog generated JSON · ${httpLine}`,
+      path: fullPath,
+      tabId: "overviewTab",
+    };
+  }
+
+  if (pathname.startsWith("/api/ai/")) {
+    const tail = pathname.replace(/^\/api\/ai\/?/, "") || "api";
+    return {
+      label: `AI settings · ${tail.replace(/\//g, " · ")}`,
+      detail: `Onboarding provider config · ${httpLine}`,
+      path: fullPath,
+      tabId: "infrastructureTab",
+    };
+  }
+
   if (pathname.startsWith("/api/leco/")) {
     const tail = pathname.replace(/^\/api\/leco\/?/, "") || "api";
     const lecoTitles = {
@@ -591,6 +691,21 @@ function resolveFetchStatus(input, init) {
 
 function instrumentBackendFetchPreloader() {
   if (globalPreloaderState.nativeFetch || typeof window.fetch !== "function") return;
+  if (!globalPreloaderState.clickWired) {
+    globalPreloaderState.clickWired = true;
+    document.addEventListener(
+      "click",
+      (e) => {
+        const t = e.target.closest(
+          'button, [role="button"], .btn, a.btn, input[type="submit"], input[type="button"]',
+        );
+        if (!t || t.disabled || t.classList.contains("tab-btn")) return;
+        if (t.id === "dashboardGlobalPreloaderToggle") return;
+        noteActionTrigger(t);
+      },
+      true,
+    );
+  }
   const nativeFetch = window.fetch.bind(window);
   globalPreloaderState.nativeFetch = nativeFetch;
   const requestMethod = (input, init) => {
@@ -621,7 +736,10 @@ function instrumentBackendFetchPreloader() {
         return sharedRes.clone();
       }
     }
-    const meta = resolveFetchPreloaderMeta(input, init || {});
+    const initObj = init || {};
+    const meta = resolveFetchPreloaderMeta(input, initObj);
+    const triggerEl = track ? resolveFetchTriggerEl(initObj) : null;
+    const inlineTok = triggerEl ? beginInlineAction(triggerEl) : null;
     if (track && !String(meta.hostedSlug || "").trim()) {
       try {
         const u = new URL(rawUrl, window.location.origin);
@@ -637,6 +755,7 @@ function instrumentBackendFetchPreloader() {
         return await nativeFetch(input, init);
       } finally {
         if (token) endGlobalPreloader(token);
+        if (inlineTok) endInlineAction(inlineTok);
       }
     })();
     if (dedupeKey) {
@@ -2239,12 +2358,12 @@ async function saveUpdateCatalogSchedule() {
     .map((x) => x.trim())
     .filter(Boolean);
   const btn = document.getElementById("ucScheduleSave");
-  if (btn) btn.disabled = true;
   try {
     const res = await fetch("/api/update-catalog/schedule", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Control-Token": tok },
       body: JSON.stringify({ mode, interval_hours: interval, fixed_times_utc, token: tok }),
+      dashboardTriggerEl: btn,
     });
     const data = await res.json();
     if (res.status === 401) {
@@ -2261,8 +2380,6 @@ async function saveUpdateCatalogSchedule() {
     await loadOverview();
   } catch (e) {
     alert(String(e));
-  } finally {
-    if (btn) btn.disabled = false;
   }
 }
 
@@ -2273,12 +2390,12 @@ async function markUpdateCatalogRead() {
     return;
   }
   const btn = document.getElementById("ucMarkAllRead");
-  if (btn) btn.disabled = true;
   try {
     const res = await fetch("/api/update-catalog/mark-read", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Control-Token": tok },
       body: JSON.stringify({ token: tok }),
+      dashboardTriggerEl: btn,
     });
     const data = await res.json();
     if (res.status === 401) {
@@ -2295,8 +2412,6 @@ async function markUpdateCatalogRead() {
     await loadOverview();
   } catch (e) {
     alert(String(e));
-  } finally {
-    if (btn) btn.disabled = false;
   }
 }
 
@@ -7655,6 +7770,7 @@ async function runDashboardStreamOverlay(opts) {
 
   const tok = controlToken();
   const payload = { ...body, token: tok };
+  const streamTrigger = peekActionTrigger(400);
 
   try {
     const res = await fetch(url, {
@@ -7663,6 +7779,7 @@ async function runDashboardStreamOverlay(opts) {
       body: JSON.stringify(payload),
       signal: ac.signal,
       cache: "no-store",
+      dashboardTriggerEl: streamTrigger || undefined,
     });
 
     if (!res.ok) {
