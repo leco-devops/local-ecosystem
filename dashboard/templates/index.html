@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>LEco DevOps</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/static/dashboard.css?v=20260516" />
+    <link rel="stylesheet" href="/static/dashboard.css?v=20260523" />
   </head>
   <body>
     <div class="wrap">
@@ -75,6 +75,15 @@
               <header class="dash-panel__head"><span class="dash-panel__title">Hosted app URLs</span></header>
               <div id="overviewHostedUrls" class="overview-hosted-urls">
                 <p class="muted small">Loading hosted app URLs…</p>
+              </div>
+            </article>
+            <article class="dash-panel dash-panel--compact dash-panel--wide dash-panel--update-catalog">
+              <header class="dash-panel__head dash-panel__head--catalog">
+                <span class="dash-panel__title">Updates &amp; catalogs</span>
+                <a class="dash-panel__link" href="/help?topic=update-catalog-service">Help</a>
+              </header>
+              <div id="overviewUpdateCatalog" class="overview-update-catalog">
+                <p class="muted small">Loading update catalog…</p>
               </div>
             </article>
           </div>
@@ -1172,6 +1181,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
-    <script src="/static/dashboard.js?v=20260516"></script>
+    <script src="/static/dashboard.js?v=20260523"></script>
   </body>
 </html>

@@ -18,7 +18,7 @@ import os
 import re
 import subprocess
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +32,7 @@ GENERATED_DIR = CONFIG_DIR / "generated"
 HELP_GENERATED = PROJECT_ROOT / "docs" / "help" / "generated"
 
 SERVICES_CFG = CONFIG_DIR / "update-watcher-services.json"
+SCHEDULE_JSON = CONFIG_DIR / "update-catalog-schedule.json"
 OLLAMA_SEED = CONFIG_DIR / "llm-catalog-ollama-seed.json"
 AIRLLM_SEED = CONFIG_DIR / "llm-catalog-airllm-seed.json"
 
@@ -490,9 +491,11 @@ def run_once() -> None:
     airllm_cat = merge_airllm_catalog(airllm_seed, hf_online)
     updates = build_updates_payload(services, ollama_cat, airllm_cat)
 
+    sched = read_json(SCHEDULE_JSON, {"mode": "interval", "interval_hours": cfg.get("check_interval_hours", INTERVAL_HOURS)})
     meta = {
         "generated_at": iso_now(),
-        "interval_hours": cfg.get("check_interval_hours", INTERVAL_HOURS),
+        "interval_hours": sched.get("interval_hours", cfg.get("check_interval_hours", INTERVAL_HOURS)),
+        "schedule_mode": sched.get("mode", "interval"),
         "ollama_online_count": len(ollama_online),
         "hf_fetched": len(hf_online),
     }
@@ -510,21 +513,58 @@ def run_once() -> None:
     )
 
 
+def _sleep_seconds_from_schedule() -> float:
+    """Align with dashboard/ecosystem_updates.sleep_seconds_for_schedule (duplicate light logic)."""
+    sched = read_json(SCHEDULE_JSON, {"mode": "interval", "interval_hours": INTERVAL_HOURS})
+    mode = str(sched.get("mode") or "interval")
+    now = datetime.now(timezone.utc)
+    meta = read_json(OUT_META, {})
+    last_s = meta.get("generated_at")
+    last_dt = None
+    if last_s:
+        try:
+            last_dt = datetime.fromisoformat(str(last_s).replace("Z", "+00:00"))
+        except ValueError:
+            pass
+    if mode == "fixed":
+        times = sched.get("fixed_times_utc") or ["06:00", "18:00"]
+        candidates = []
+        for t in times:
+            try:
+                h, m = [int(x) for x in str(t).split(":")[:2]]
+                for off in (0, 1):
+                    cand = (now + timedelta(days=off)).replace(
+                        hour=h, minute=m, second=0, microsecond=0, tzinfo=timezone.utc
+                    )
+                    if cand > now:
+                        candidates.append(cand)
+            except (ValueError, TypeError):
+                continue
+        if candidates:
+            return max(300.0, (min(candidates) - now).total_seconds())
+    interval = float(sched.get("interval_hours") or INTERVAL_HOURS)
+    if last_dt:
+        next_dt = last_dt + timedelta(hours=interval)
+        if next_dt > now:
+            return max(300.0, (next_dt - now).total_seconds())
+    return max(3600.0, interval * 3600)
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     GENERATED_DIR.mkdir(parents=True, exist_ok=True)
     if RUN_ONCE:
         run_once()
         return
-    cfg = read_json(SERVICES_CFG, {})
-    interval = float(os.getenv("UPDATE_CATALOG_INTERVAL_HOURS", cfg.get("check_interval_hours", INTERVAL_HOURS)))
-    secs = max(3600, interval * 3600)
-    LOG.info("leco-update-catalog watching every %.1f h", interval)
+    sched = read_json(SCHEDULE_JSON, {"mode": "interval", "interval_hours": INTERVAL_HOURS})
+    LOG.info("leco-update-catalog schedule mode=%s", sched.get("mode", "interval"))
     while True:
         try:
             run_once()
         except Exception:
             LOG.exception("update-catalog run failed")
+        secs = _sleep_seconds_from_schedule()
+        LOG.info("sleeping %.0f s until next catalog check", secs)
         time.sleep(secs)
 
 

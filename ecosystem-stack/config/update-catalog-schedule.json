@@ -1,0 +1,10 @@
+{
+  "_comment": "Edited from LEco DevOps Overview. Restart leco-update-catalog to apply immediately.",
+  "mode": "interval",
+  "interval_hours": 24.0,
+  "fixed_times_utc": [
+    "06:00",
+    "18:00"
+  ],
+  "updated_at": "2026-05-16T06:42:29Z"
+}

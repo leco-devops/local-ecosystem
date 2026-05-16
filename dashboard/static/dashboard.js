@@ -38,6 +38,8 @@ const METRICS_LOCAL_MAX_POINTS = 5000;
 const METRICS_CACHE_MAX_BYTES = 4_500_000;
 const LS_TREND_CACHE_KEY = "local_ecosystem_dashboard_infra_trend_v1";
 const LS_ACTIVE_TAB_KEY = "dashboard_active_tab";
+const LS_REFRESH_RATE_KEY = "dashboard_refresh_rate_ms";
+const REFRESH_RATE_OPTIONS = new Set(["5000", "10000", "30000", "60000", "0"]);
 /** Bump when cache shape changes so stale / corrupted entries are dropped. */
 const CACHE_SCHEMA_VERSION = 6;
 const LS_PRELOADER_COLLAPSED_KEY = "dashboard_preloader_collapsed";
@@ -2064,6 +2066,240 @@ function ensureOverviewCharts() {
   return true;
 }
 
+function formatCatalogWhen(iso) {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  } catch {
+    return iso;
+  }
+}
+
+function renderOverviewUpdateCatalog(uc) {
+  const el = document.getElementById("overviewUpdateCatalog");
+  if (!el) return;
+  if (!uc || uc.ok === false) {
+    el.innerHTML = `<p class="muted small">${escapeHtml(uc?.error || "Update catalog unavailable")}. Run <code>./ecosystem-stack/services/update-catalog.sh run-once</code></p>`;
+    return;
+  }
+  const watcher = uc.watcher || {};
+  const sched = uc.schedule || {};
+  const upd = uc.updates || {};
+  const cat = uc.catalog || {};
+  const links = uc.help_links || {};
+  const ui = watcher.ui_status || "unknown";
+  const statusClass =
+    ui === "running" ? "uc-status--ok" : ui === "not_deployed" ? "uc-status--muted" : "uc-status--warn";
+  const schedCfg = sched.config || {};
+  const stackUnread = upd.stack_unread_count || 0;
+  const stackTotal = upd.stack_updates_available || 0;
+  const modelUnread = upd.model_unread_count || 0;
+  const modelTotal = upd.model_alerts_count || 0;
+  const hasUnread = upd.has_unread || stackUnread > 0 || modelUnread > 0;
+  const schedMode = schedCfg.mode || sched.mode || "interval";
+  const fixedTimes = (schedCfg.fixed_times_utc || sched.fixed_times_utc || ["06:00", "18:00"]).join(", ");
+  const intervalH = schedCfg.interval_hours ?? sched.interval_hours ?? 6;
+  const nextLabel =
+    sched.next_check_in_minutes > 0
+      ? `in ~${sched.next_check_in_minutes} min`
+      : sched.overdue
+        ? "due now"
+        : "—";
+
+  let stackHtml = "";
+  (upd.stack_pending || []).slice(0, 4).forEach((s) => {
+    const latest = (s.latest || {}).full || (s.latest || {}).tag || "—";
+    const run = s.running_image || "not running";
+    const unreadCls = s.unread ? " uc-list__item--unread" : "";
+    stackHtml += `<li class="uc-list__item${unreadCls}">
+      <strong>${escapeHtml(s.label || s.id)}</strong>
+      <span class="uc-list__meta">running: <code>${escapeHtml(run)}</code> · latest: <code>${escapeHtml(latest)}</code></span>
+    </li>`;
+  });
+
+  let modelsHtml = "";
+  (upd.model_alerts || []).slice(0, 5).forEach((m) => {
+    const unreadCls = m.unread ? " uc-list__item--unread" : "";
+    modelsHtml += `<li class="uc-list__item${unreadCls}">
+      <code>${escapeHtml(m.name || "")}</code>
+      <span class="uc-list__meta">${escapeHtml(m.install || "")}</span>
+    </li>`;
+  });
+
+  const stackStatN = stackUnread || stackTotal;
+  const modelStatN = modelUnread || modelTotal;
+  const stackStatSub =
+    stackUnread && stackTotal > stackUnread ? `<span class="uc-stat__sub">${stackTotal} total</span>` : "";
+  const modelStatSub =
+    modelUnread && modelTotal > modelUnread ? `<span class="uc-stat__sub">${modelTotal} total</span>` : "";
+  const needToken = dashboardTokenRequired() && !controlToken();
+  const tokenBlock = needToken
+    ? `<div class="uc-token-hint" id="ucTokenHint">
+        <label class="uc-schedule-form__row">
+          <span class="muted small">Control token</span>
+          <input id="ucControlToken" type="password" class="uc-input" placeholder="DASHBOARD_CONTROL_TOKEN" autocomplete="off" />
+        </label>
+        <p class="muted small uc-token-hint__msg" id="ucTokenMsg">Enter your control token to save the schedule or mark updates read. You can also save it on the <a href="/?tab=controlTab">Control</a> tab.</p>
+      </div>`
+    : "";
+
+  el.innerHTML = `
+    <div class="uc-grid">
+      <div class="uc-block">
+        <div class="uc-row">
+          <span class="uc-label">Watcher</span>
+          <span class="uc-status ${statusClass}">${escapeHtml(ui)}</span>
+        </div>
+        ${
+          ui === "not_deployed"
+            ? `<p class="muted small uc-hint">Start: <code>${escapeHtml(watcher.start_cmd || "")}</code></p>`
+            : `<p class="muted small uc-hint">Container <code>${escapeHtml(watcher.container || "leco-update-catalog")}</code>${watcher.started_at ? ` · since ${escapeHtml(formatCatalogWhen(watcher.started_at))}` : ""}</p>`
+        }
+      </div>
+      <div class="uc-block uc-block--schedule">
+        <div class="uc-row"><span class="uc-label">Schedule</span><strong>${escapeHtml(sched.interval_label || "")}</strong></div>
+        <p class="muted small uc-hint">Last: ${escapeHtml(formatCatalogWhen(sched.last_check_at))} · Next: ${escapeHtml(formatCatalogWhen(sched.next_check_at))} (${escapeHtml(nextLabel)})</p>
+        <div class="uc-schedule-form">
+          <label class="uc-schedule-form__row">
+            <span class="muted small">Mode</span>
+            <select id="ucScheduleMode" class="uc-input">
+              <option value="interval"${schedMode === "interval" ? " selected" : ""}>Every N hours</option>
+              <option value="fixed"${schedMode === "fixed" ? " selected" : ""}>Fixed UTC times</option>
+            </select>
+          </label>
+          <label class="uc-schedule-form__row uc-schedule-form__row--interval">
+            <span class="muted small">Hours</span>
+            <input id="ucIntervalHours" type="number" min="1" max="168" step="1" class="uc-input" value="${escapeHtml(String(intervalH))}" />
+          </label>
+          <label class="uc-schedule-form__row uc-schedule-form__row--fixed">
+            <span class="muted small">UTC times</span>
+            <input id="ucFixedTimes" type="text" class="uc-input" placeholder="06:00, 18:00" value="${escapeHtml(fixedTimes)}" />
+          </label>
+          <button type="button" class="btn btn--sm btn--ghost" id="ucScheduleSave">Save schedule</button>
+        </div>
+      </div>
+      <div class="uc-block uc-block--summary">
+        <div class="uc-stat${stackUnread ? " uc-stat--alert" : ""}"><span class="uc-stat__n">${stackStatN}</span><span class="uc-stat__l">stack update(s)</span>${stackStatSub}</div>
+        <div class="uc-stat${modelUnread ? " uc-stat--alert" : ""}"><span class="uc-stat__n">${modelStatN}</span><span class="uc-stat__l">new Ollama</span>${modelStatSub}</div>
+        <div class="uc-stat"><span class="uc-stat__n">${cat.ollama_model_count ?? "—"}</span><span class="uc-stat__l">Ollama catalog</span></div>
+        <div class="uc-stat"><span class="uc-stat__n">${cat.airllm_model_count ?? "—"}</span><span class="uc-stat__l">AirLLM catalog</span></div>
+      </div>
+    </div>
+    ${tokenBlock}
+    ${
+      hasUnread
+        ? `<div class="uc-actions"><button type="button" class="btn btn--sm" id="ucMarkAllRead">Mark all read</button></div>`
+        : ""
+    }
+    ${
+      stackHtml
+        ? `<div class="uc-section"><div class="uc-section__title">Stack updates</div><ul class="uc-list">${stackHtml}</ul></div>`
+        : ""
+    }
+    ${
+      modelsHtml
+        ? `<div class="uc-section"><div class="uc-section__title">New Ollama models</div><ul class="uc-list">${modelsHtml}</ul></div>`
+        : !stackHtml && !modelTotal
+          ? `<p class="muted small uc-ok">No pending stack or model alerts.</p>`
+          : ""
+    }
+    <p class="uc-foot muted small">
+      <a href="${escapeHtml(links.updates || "/help?topic=ecosystem-updates")}">All updates</a>
+      · <a href="${escapeHtml(links.ollama_catalog || "/help?topic=llm-catalog-ollama")}">Ollama table</a>
+      · <a href="${escapeHtml(links.airllm_catalog || "/help?topic=llm-catalog-airllm")}">AirLLM table</a>
+    </p>`;
+
+  syncUcScheduleFormVisibility();
+  document.getElementById("ucScheduleMode")?.addEventListener("change", syncUcScheduleFormVisibility);
+  document.getElementById("ucScheduleSave")?.addEventListener("click", () => void saveUpdateCatalogSchedule());
+  document.getElementById("ucMarkAllRead")?.addEventListener("click", () => void markUpdateCatalogRead());
+}
+
+function syncUcScheduleFormVisibility() {
+  const mode = document.getElementById("ucScheduleMode")?.value || "interval";
+  document.querySelectorAll(".uc-schedule-form__row--interval").forEach((n) => {
+    n.style.display = mode === "interval" ? "" : "none";
+  });
+  document.querySelectorAll(".uc-schedule-form__row--fixed").forEach((n) => {
+    n.style.display = mode === "fixed" ? "" : "none";
+  });
+}
+
+async function saveUpdateCatalogSchedule() {
+  const tok = resolveControlToken();
+  if (tok === null) {
+    emphasizeUpdateCatalogTokenHint("Enter your control token above, then click Save schedule again.");
+    return;
+  }
+  const mode = document.getElementById("ucScheduleMode")?.value || "interval";
+  const interval = parseFloat(document.getElementById("ucIntervalHours")?.value || "6");
+  const timesRaw = document.getElementById("ucFixedTimes")?.value || "";
+  const fixed_times_utc = timesRaw
+    .split(/[,;\s]+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+  const btn = document.getElementById("ucScheduleSave");
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch("/api/update-catalog/schedule", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Control-Token": tok },
+      body: JSON.stringify({ mode, interval_hours: interval, fixed_times_utc, token: tok }),
+    });
+    const data = await res.json();
+    if (res.status === 401) {
+      try {
+        localStorage.removeItem("dashboard_control_token");
+      } catch (_) {}
+      emphasizeUpdateCatalogTokenHint("Token rejected. Check DASHBOARD_CONTROL_TOKEN and try again.");
+      return;
+    }
+    if (!res.ok || !data.ok) {
+      alert(data.error || "Failed to save schedule");
+      return;
+    }
+    await loadOverview();
+  } catch (e) {
+    alert(String(e));
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function markUpdateCatalogRead() {
+  const tok = resolveControlToken();
+  if (tok === null) {
+    emphasizeUpdateCatalogTokenHint("Enter your control token above, then click Mark all read again.");
+    return;
+  }
+  const btn = document.getElementById("ucMarkAllRead");
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch("/api/update-catalog/mark-read", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Control-Token": tok },
+      body: JSON.stringify({ token: tok }),
+    });
+    const data = await res.json();
+    if (res.status === 401) {
+      try {
+        localStorage.removeItem("dashboard_control_token");
+      } catch (_) {}
+      emphasizeUpdateCatalogTokenHint("Token rejected. Check DASHBOARD_CONTROL_TOKEN and try again.");
+      return;
+    }
+    if (!res.ok || !data.ok) {
+      alert(data.error || "Failed to mark as read");
+      return;
+    }
+    await loadOverview();
+  } catch (e) {
+    alert(String(e));
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 function renderOverviewKpi(data, cf, lastPt) {
   const mount = document.getElementById("overviewKpi");
   if (!mount) return;
@@ -2088,6 +2324,11 @@ function renderOverviewKpi(data, cf, lastPt) {
     dockRam != null || ramUsage != null
       ? formatRamPctWithBytes(dockRam, ramUsage, ramTotalEff && ramTotalEff > 0 ? ramTotalEff : null)
       : "—";
+  const uc = data.update_catalog || {};
+  const ucUpd = uc.updates || {};
+  const stackUp = ucUpd.stack_unread_count || ucUpd.stack_updates_available || 0;
+  const modelUp = ucUpd.model_unread_count || ucUpd.model_alerts_count || 0;
+  const ucWatcher = (uc.watcher || {}).ui_status || "—";
 
   mount.innerHTML = `
     <div class="kpi-cell">
@@ -2117,6 +2358,10 @@ function renderOverviewKpi(data, cf, lastPt) {
     <div class="kpi-cell kpi-cell--soft">
       <div class="kpi-value">${ref.healthy_urls ?? "—"}/${ref.total_urls ?? "—"}</div>
       <div class="kpi-label">Directory URLs</div>
+    </div>
+    <div class="kpi-cell${stackUp || modelUp ? " kpi-cell--alert" : ""}">
+      <div class="kpi-value">${stackUp + modelUp}</div>
+      <div class="kpi-label">Updates <span class="kpi-sublabel">catalog · ${escapeHtml(ucWatcher)}</span></div>
     </div>`;
 }
 
@@ -2139,6 +2384,19 @@ function renderOverviewChips(data, cf) {
   if (cfUp < 6) {
     parts.unshift(`<span class="chip chip--bad">CF local ${cfUp}/6</span>`);
   }
+  const uc = data.update_catalog || {};
+  const ucUpd = uc.updates || {};
+  const stackChip = ucUpd.stack_unread_count || ucUpd.stack_updates_available || 0;
+  const modelChip = ucUpd.model_unread_count || ucUpd.model_alerts_count || 0;
+  if (stackChip > 0 || modelChip > 0) {
+    const unreadOnly = ucUpd.has_unread;
+    parts.unshift(
+      `<span class="chip${unreadOnly ? " chip--warn" : ""}">${stackChip} stack · ${modelChip} Ollama${unreadOnly ? " new" : ""} — <a href="/help?topic=ecosystem-updates">updates</a></span>`,
+    );
+  }
+  if ((uc.watcher || {}).ui_status === "not_deployed") {
+    parts.unshift(`<span class="chip">Update catalog — <code>update-catalog.sh start</code></span>`);
+  }
   el.innerHTML = parts.join("");
 }
 
@@ -2160,6 +2418,7 @@ function updateOverviewDashboard(data, cf, metricsData) {
 
   renderOverviewKpi(data, cf, pts.length ? pts[pts.length - 1] : null);
   renderOverviewChips(data, cf);
+  renderOverviewUpdateCatalog(data.update_catalog);
 
   const cpuMeta = document.getElementById("overviewCpuMeta");
   const ramMeta = document.getElementById("overviewRamMeta");
@@ -4114,6 +4373,31 @@ function dashboardTokenRequired() {
 
 function controlToken() {
   return localStorage.getItem("dashboard_control_token") || "";
+}
+
+/** Token for API calls: skip when server has no token; use saved or inline field in Updates panel. */
+function resolveControlToken() {
+  if (!dashboardTokenRequired()) return "";
+  const saved = controlToken();
+  if (saved) return saved;
+  const inline = document.getElementById("ucControlToken")?.value?.trim();
+  if (inline) {
+    try {
+      localStorage.setItem("dashboard_control_token", inline);
+    } catch (_) {
+      /* private mode */
+    }
+    return inline;
+  }
+  return null;
+}
+
+function emphasizeUpdateCatalogTokenHint(message) {
+  const hint = document.getElementById("ucTokenHint");
+  const msg = document.getElementById("ucTokenMsg");
+  if (msg && message) msg.textContent = message;
+  hint?.classList.add("uc-token-hint--warn");
+  document.getElementById("ucControlToken")?.focus();
 }
 
 const CONTROL_GROUP_ORDER = ["ecosystem", "ecosystem-stack", "infra", "cloudflare-local"];
@@ -8131,11 +8415,32 @@ function initLogEvents() {
   });
 }
 
+function applySavedRefreshRate() {
+  const rateEl = document.getElementById("refreshRate");
+  if (!rateEl) return;
+  try {
+    const saved = localStorage.getItem(LS_REFRESH_RATE_KEY);
+    if (saved == null || !REFRESH_RATE_OPTIONS.has(saved)) return;
+    rateEl.value = saved;
+  } catch (_) {
+    /* ignore */
+  }
+}
+
+function persistRefreshRate(ms) {
+  try {
+    localStorage.setItem(LS_REFRESH_RATE_KEY, String(ms));
+  } catch (_) {
+    /* ignore */
+  }
+}
+
 function scheduleRefresh() {
   const rateEl = document.getElementById("refreshRate");
   const nextEl = document.getElementById("nextRefresh");
   if (!rateEl || !nextEl) return;
   const ms = Number(rateEl.value || "0");
+  persistRefreshRate(ms);
   if (refreshTimer) clearInterval(refreshTimer);
   if (tickTimer) clearInterval(tickTimer);
 
@@ -8267,6 +8572,7 @@ function initControlBulkBar() {
 }
 
 async function bootstrapHubChrome() {
+  applySavedRefreshRate();
   document.getElementById("refreshNow")?.addEventListener("click", () => {
     loadOverview();
   });
@@ -8300,6 +8606,7 @@ async function bootstrap() {
   initAiWizardToggle();
   await initLogsPanel();
   initLogEvents();
+  applySavedRefreshRate();
 
   const tokSave = document.getElementById("controlTokenSave");
   if (tokSave) {

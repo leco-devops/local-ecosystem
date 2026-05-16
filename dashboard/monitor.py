@@ -1085,6 +1085,14 @@ def collect_overview():
     except Exception as exc:
         airllm_llm = {"airllm_reachable": False, "error": str(exc)[:200], "rows": []}
 
+    update_catalog: dict = {}
+    try:
+        from ecosystem_updates import collect_update_catalog_panel
+
+        update_catalog = collect_update_catalog_panel()
+    except Exception as exc:
+        update_catalog = {"ok": False, "error": str(exc)[:200]}
+
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "service_count": len(services),
@@ -1097,6 +1105,7 @@ def collect_overview():
         "reference": collect_reference_status(),
         "ollama_llm": ollama_llm,
         "airllm_llm": airllm_llm,
+        "update_catalog": update_catalog,
     }
 
 

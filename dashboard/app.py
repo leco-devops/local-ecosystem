@@ -14,7 +14,14 @@ from monitor import (
     collect_service_logs,
     list_managed_services,
 )
-from ecosystem_updates import load_catalog_meta, load_ecosystem_updates, load_llm_catalog
+from ecosystem_updates import (
+    collect_update_catalog_panel,
+    load_catalog_meta,
+    load_ecosystem_updates,
+    load_llm_catalog,
+    mark_all_read,
+    save_schedule,
+)
 from help_manual import get_help_content, get_help_tree, search_help
 from popular_models import load_airllm_catalog, load_ollama_catalog
 from service_hub import get_hub_detail, list_hub_slugs
@@ -945,6 +952,35 @@ def api_llm_catalog_airllm():
 @app.get("/api/ecosystem/catalog-meta")
 def api_catalog_meta():
     return jsonify(load_catalog_meta())
+
+
+@app.get("/api/update-catalog/panel")
+def api_update_catalog_panel():
+    return jsonify(collect_update_catalog_panel())
+
+
+@app.post("/api/update-catalog/schedule")
+def api_update_catalog_schedule():
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    mode = str(data.get("mode") or "interval").strip().lower()
+    interval = data.get("interval_hours", 6)
+    times = data.get("fixed_times_utc") or []
+    if not isinstance(times, list):
+        times = [x.strip() for x in str(times).split(",") if x.strip()]
+    try:
+        return jsonify(save_schedule(mode, float(interval), times))
+    except (TypeError, ValueError) as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@app.post("/api/update-catalog/mark-read")
+def api_update_catalog_mark_read():
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    return jsonify(mark_all_read())
 
 
 @app.post("/api/control")
