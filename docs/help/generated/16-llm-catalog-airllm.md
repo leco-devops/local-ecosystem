@@ -1,6 +1,6 @@
 # AirLLM / HuggingFace open-source LLM catalog (auto-generated)
 
-_Generated **2026-05-16T06:18:49Z**. API `/api/llm-catalog/airllm`._
+_Generated **2026-05-16T06:48:47Z**. API `/api/llm-catalog/airllm`._
 
 ## Curated + trending HF instruct models
 
