@@ -112,98 +112,105 @@ class CloudflareWorkersAdapter(RuntimeAdapter):
     roadmap = ""  # fully implemented
 
     def detect(self, app_root: Path) -> RuntimeDetection | None:
-        """Surface a candidate runtime spec when ``wrangler.toml`` exists.
+        """Return the best single runtime candidate (see :meth:`detect_all`)."""
+        all_hits = self.detect_all(app_root)
+        return all_hits[0] if all_hits else None
 
-        Beyond locating ``wrangler.toml``, we also scan the Worker entrypoint
+    def detect_all(self, app_root: Path) -> list[RuntimeDetection]:
+        """Surface one runtime per wrangler TOML (``wrangler.toml``, ``wrangler.api.toml``, …).
+
+        Beyond locating wrangler configs, we also scan each Worker entrypoint
         (``src/index.ts`` / ``index.js`` etc.) for top-level path patterns
         the Worker handles. Operators then know which prefixes to add to
         ``routing.entries[].upstream`` so paths like ``/health/json`` that
         production resolves at the edge don't accidentally fall through to
         a Docker-Compose frontend that serves an SPA shell.
         """
+        from leco_wrangler_paths import list_wrangler_config_files, runtime_id_from_wrangler_relpath
+
         if not app_root.is_dir():
-            return None
-        # Common layouts: ``<root>/cloudflare/wrangler.toml`` for monorepos that
-        # carve the Worker out under its own directory (CrawlerVision-style),
-        # ``<root>/worker[s]/wrangler.toml`` for similar variants, or
-        # ``<root>/wrangler.toml`` for single-Worker repos. Some repos contain
-        # BOTH (a top-level legacy stub plus the real subdirectory Worker), so
-        # we prefer candidates whose sibling ``src/`` directory exists — that
-        # is much more likely to be the active Worker than a stale stub.
-        candidates: list[tuple[str | None, Path]] = [
-            ("cloudflare", app_root / "cloudflare" / "wrangler.toml"),
-            ("worker", app_root / "worker" / "wrangler.toml"),
-            ("workers", app_root / "workers" / "wrangler.toml"),
-            (None, app_root / "wrangler.toml"),
-        ]
-        # Re-rank so a wrangler.toml whose sibling src/ has TS/JS files comes
-        # first. Ties keep declaration order (which already prefers subdirs).
-        def _score(item: tuple[str | None, Path]) -> int:
-            _, p = item
-            if not p.is_file():
-                return -1
-            sibling_src = p.parent / "src"
-            if sibling_src.is_dir():
-                # Cheap signal: any TS/JS file under src/?
-                for ext in ("*.ts", "*.tsx", "*.js", "*.mjs"):
-                    if any(sibling_src.rglob(ext)):
-                        return 2
-                return 1
-            return 0
-        candidates.sort(key=_score, reverse=True)
-        for source_dir, path in candidates:
-            if path.is_file():
-                spec: dict[str, Any] = {
-                    "id": "worker",
-                    "type": self.type,
-                    "config": "wrangler.toml",
-                    "port": DEFAULT_PORT,
-                }
-                if source_dir:
-                    spec["sourceDir"] = source_dir
-                worker_dir = path.parent
-                worker_paths = _scan_worker_paths(worker_dir)
-                detail = f"Found {path.relative_to(app_root)}"
-                yaml_hint = ""
-                if worker_paths:
-                    routing_hint = _routing_hint_from_paths(worker_paths)
+            return []
+        configs = list_wrangler_config_files(app_root)
+        if not configs:
+            # Legacy subdirectory layouts without wrangler.*.toml naming.
+            candidates: list[tuple[str | None, Path]] = [
+                ("cloudflare", app_root / "cloudflare" / "wrangler.toml"),
+                ("worker", app_root / "worker" / "wrangler.toml"),
+                ("workers", app_root / "workers" / "wrangler.toml"),
+                (None, app_root / "wrangler.toml"),
+            ]
+
+            def _score(item: tuple[str | None, Path]) -> int:
+                _, p = item
+                if not p.is_file():
+                    return -1
+                sibling_src = p.parent / "src"
+                if sibling_src.is_dir():
+                    for ext in ("*.ts", "*.tsx", "*.js", "*.mjs"):
+                        if any(sibling_src.rglob(ext)):
+                            return 2
+                    return 1
+                return 0
+
+            candidates.sort(key=_score, reverse=True)
+            configs = [p.relative_to(app_root) for _, p in candidates if p.is_file()]
+
+        out: list[RuntimeDetection] = []
+        port = DEFAULT_PORT
+        for rel in configs:
+            path = (app_root / rel).resolve()
+            if not path.is_file():
+                continue
+            runtime_id = runtime_id_from_wrangler_relpath(rel)
+            config_rel = rel.as_posix()
+            spec: dict[str, Any] = {
+                "id": runtime_id,
+                "type": self.type,
+                "config": config_rel,
+                "port": port,
+            }
+            worker_dir = path.parent
+            worker_paths = _scan_worker_paths(worker_dir)
+            detail = f"Found {rel.as_posix()}"
+            yaml_hint = ""
+            if worker_paths:
+                routing_hint = _routing_hint_from_paths(worker_paths)
+                detail = (
+                    f"{detail}; Worker paths detected: "
+                    f"{', '.join(sorted(worker_paths)[:6])}"
+                    + (f"  ➜ suggested upstream rules: {routing_hint}" if routing_hint else "")
+                )
+                yaml_hint = suggested_upstream_yaml(runtime_id, worker_paths)
+
+            expected_secrets: list[str] = []
+            dev_vars_example = ""
+            try:
+                wrangler_text = path.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                wrangler_text = ""
+            if wrangler_text:
+                expected_secrets = detect_expected_secrets(worker_dir, wrangler_text)
+                if expected_secrets:
+                    dev_vars_example = render_dev_vars_example(expected_secrets, app_root.name)
                     detail = (
-                        f"{detail}; Worker paths detected: "
-                        f"{', '.join(sorted(worker_paths)[:6])}"
-                        + (f"  ➜ suggested upstream rules: {routing_hint}" if routing_hint else "")
+                        f"{detail}; .dev.vars secrets expected: "
+                        f"{', '.join(expected_secrets[:6])}"
+                        + (f" (+{len(expected_secrets) - 6} more)" if len(expected_secrets) > 6 else "")
                     )
-                    yaml_hint = suggested_upstream_yaml("worker", worker_paths)
 
-                # Scan the Worker source for env.<NAME> references that aren't
-                # already wired through wrangler.toml [vars] / bindings — these
-                # are the secrets the operator has to provide locally.
-                expected_secrets: list[str] = []
-                dev_vars_example = ""
-                try:
-                    wrangler_text = path.read_text(encoding="utf-8", errors="ignore")
-                except OSError:
-                    wrangler_text = ""
-                if wrangler_text:
-                    expected_secrets = detect_expected_secrets(worker_dir, wrangler_text)
-                    if expected_secrets:
-                        slug_hint = app_root.name
-                        dev_vars_example = render_dev_vars_example(expected_secrets, slug_hint)
-                        detail = (
-                            f"{detail}; .dev.vars secrets expected: "
-                            f"{', '.join(expected_secrets[:6])}"
-                            + (f" (+{len(expected_secrets) - 6} more)" if len(expected_secrets) > 6 else "")
-                        )
-
-                return RuntimeDetection(
+            out.append(
+                RuntimeDetection(
                     type=self.type,
-                    runtime_id="worker",
+                    runtime_id=runtime_id,
                     spec=spec,
                     detail=detail,
                     suggested_upstream_yaml=yaml_hint,
                     expected_secrets=tuple(expected_secrets),
                     dev_vars_example=dev_vars_example,
                 )
-        return None
+            )
+            port += 1
+        return out
 
     def compose_service(
         self,

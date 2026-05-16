@@ -188,6 +188,13 @@ DOC_MODULES = [
         "blurb": "502, lh-network, compose DNS names, wrong-prefix routing, dashboard *.lh probes, same-origin /api, local edge runtimes (Workers/Pages/Vercel/Lambda/Deno) — symptoms, fixes, code map.",
     },
     {
+        "id": "hosted-app-attached-services",
+        "title": "Hosted apps — attached services",
+        "category": "DevOps",
+        "rel_path": "docs/help/12-hosted-app-attached-services.md",
+        "blurb": "Per-app data stores, credentials, host vs Docker DNS connection strings, Compass/Adminer links (dashboard Hosted apps detail).",
+    },
+    {
         "id": "devops-custom-apps",
         "title": "Deploy custom apps — Workers, Docker, NGINX, Node",
         "category": "DevOps",
@@ -270,7 +277,7 @@ def build_service_management_markdown() -> str:
             "- `POST /api/control` with JSON `target_id: stack-ecosystem-all` and `action` set to any value from **ALLOWED_ACTIONS** in `dashboard/control.py` (start, stop, restart, deploy, pause, unpause, remove, reset, recreate, backup). Include `token` if `DASHBOARD_CONTROL_TOKEN` is set.",
             "- `POST /api/control/stream` — same JSON body; response is NDJSON (`{type:log,text}` lines, then `{type:done,result:{...}}`). The Control UI uses this for live command output.",
             "- `POST /api/leco/yaml-status` — JSON `path`, optional `app_id`; returns whether `leco.app.yaml` and the localhost profile exist (for gating **Register**).",
-            "- `POST /api/leco/generate-yaml` — JSON `path`, `app_id`, `token`; writes manifest + profile from directory scan (regenerate); read-only roots also refresh `source` and symlinks for `configRefs` / compose / env / wrangler paths (`config_symlinks` in response).",
+            "- `POST /api/leco/generate-yaml` — JSON `path`, `app_id`, `token`; writes manifest + profile from directory scan (regenerate); read-only roots also refresh `source` and config symlinks for `configRefs`, each `infrastructure.runtimes[].config`, and discovered `wrangler.*.toml` paths (`config_symlinks` in response).",
             "- `POST /api/leco/save-yaml` — JSON `path`, `app_id`, `manifest_yaml`, `localhost_yaml`, `token`; validates and saves editor content; read-only roots same symlink behavior as generate-yaml.",
             "- `POST /api/hosted-apps/<slug>/validate-configuration` — no token; reads `leco.app.yaml` + profile from disk; returns `validation_ok`, `summary_text`, `reference_errors` / `reference_warnings` (Pydantic schema + merged-manifest file path checks).",
             "- `POST /api/leco/register/stream` — JSON `path`, `app_id`, `label`, `deploy_stack`, `token`; NDJSON stream for `leco-devops ecosystem-register` (YAML must already exist on disk).",

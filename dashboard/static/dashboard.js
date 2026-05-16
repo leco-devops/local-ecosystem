@@ -5762,6 +5762,8 @@ function resetHostedAppsDetailForLoading(slug) {
   const sumEl = document.getElementById("hostedAppsManifestSummary");
   if (sumEl) sumEl.innerHTML = '<p class="muted small">Loading manifest summary…</p>';
   if (ledgerEl) ledgerEl.innerHTML = '<p class="muted small">Loading resource ledger…</p>';
+  const attachedEl = document.getElementById("hostedAppsAttachedServicesBody");
+  if (attachedEl) attachedEl.innerHTML = '<p class="muted small">Loading attached services…</p>';
   if (localEl) localEl.innerHTML = '<p class="muted small">Loading local profile…</p>';
   if (cfEl) cfEl.innerHTML = '<p class="muted small">Loading Cloudflare bindings…</p>';
 }
@@ -6054,6 +6056,130 @@ function renderHostedResourceLedger(manifestUi, snap) {
 
   html += "</div>";
   el.innerHTML = html;
+}
+
+function copyHostedAttachedText(text) {
+  const t = String(text || "").trim();
+  if (!t) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(t).catch(() => {});
+  }
+}
+
+function renderHostedAttachedServices(snap) {
+  const el = document.getElementById("hostedAppsAttachedServicesBody");
+  const section = document.getElementById("hostedAppsAttachedServices");
+  if (!el) return;
+  const att = snap && snap.attached_services;
+  const groups = att && Array.isArray(att.groups) ? att.groups : [];
+  if (att && att.error) {
+    el.innerHTML = `<p class="muted small">Attached services could not be built: <code>${escapeHtml(String(att.error))}</code>. Redeploy the dashboard container to load the latest code.</p>`;
+    if (section) section.classList.remove("is-hidden");
+    return;
+  }
+  if (!groups.length) {
+    el.innerHTML =
+      '<p class="muted small">No attached services detected for this app (compose, runtimes, or Wrangler bindings). Redeploy the LEco DevOps dashboard if you do not see this section after updating the repo.</p>';
+    if (section) section.classList.remove("is-hidden");
+    return;
+  }
+  let html = "";
+  groups.forEach((grp) => {
+    const items = Array.isArray(grp.items) ? grp.items : [];
+    if (!items.length) return;
+    html += `<div class="hosted-attached-services__group">`;
+    html += `<div class="hosted-attached-services__group-title">${escapeHtml(String(grp.label || grp.id || "Services"))}</div>`;
+    html += '<div class="hosted-attached-services__cards">';
+    items.forEach((item) => {
+      const kind = escapeHtml(String(item.kind || "service"));
+      const status = escapeHtml(String(item.status || "—"));
+      const name = escapeHtml(String(item.name || item.id || "—"));
+      const source = escapeHtml(String(item.source || ""));
+      const creds = item.credentials && typeof item.credentials === "object" ? item.credentials : {};
+      const credRows = Object.entries(creds)
+        .filter(([, v]) => v != null && String(v).trim())
+        .map(
+          ([k, v]) =>
+            `<tr><th>${escapeHtml(k)}</th><td><code class="hosted-attached-services__cred">${escapeHtml(String(v))}</code></td></tr>`,
+        )
+        .join("");
+      const endpoints = Array.isArray(item.connection_endpoints) ? item.connection_endpoints : [];
+      const flatConns = Array.isArray(item.connection_strings) ? item.connection_strings : [];
+      const connRows = endpoints.length
+        ? endpoints
+        : flatConns.map((uri) => ({ scope: "host", label: "Connection", uri }));
+      const connHtml = connRows.length
+        ? `<ul class="hosted-attached-services__conns">${connRows
+            .map((ep) => {
+              const cs = escapeHtml(String(ep.uri || ""));
+              const lab = escapeHtml(String(ep.label || ep.scope || "Connection"));
+              const scope = escapeHtml(String(ep.scope || ""));
+              return `<li class="hosted-attached-services__conn-row" data-scope="${scope}">
+                <span class="hosted-attached-services__conn-label">${lab}</span>
+                <code>${cs}</code>
+                <button type="button" class="hosted-attached-services__copy" data-copy="${cs}" title="Copy">Copy</button>
+              </li>`;
+            })
+            .join("")}</ul>`
+        : "";
+      const mgmt = Array.isArray(item.management_uis) ? item.management_uis : [];
+      const mgmtHtml = mgmt.length
+        ? `<div class="hosted-attached-services__mgmt">${mgmt
+            .map((m) => {
+              const u = escapeHtml(String(m.url || ""));
+              const lab = escapeHtml(String(m.label || "Open"));
+              const rawUrl = String(m.url || "");
+              const isDataUri = /^mongodb:|^redis:/i.test(rawUrl);
+              const title = isDataUri
+                ? "Opens on your Mac via 127.0.0.1 (published compose port). Docker names like mongo only work inside containers."
+                : "";
+              const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
+              return `<a href="${u}" target="_blank" rel="noopener noreferrer"${titleAttr}>${lab}</a>`;
+            })
+            .join(" · ")}</div>`
+        : "";
+      const hubSlug = String(item.hub_slug || "").trim();
+      const loginUrl = String(item.login_url || "").trim();
+      let actions = "";
+      if (hubSlug && item.can_auto_login) {
+        actions += `<button type="button" class="hosted-attached-services__auto" data-hub-slug="${escapeHtml(hubSlug)}" data-login-url="${escapeHtml(loginUrl)}">Auto-login</button>`;
+      }
+      if (item.hub_url) {
+        actions += ` <a href="${escapeHtml(String(item.hub_url))}" target="_blank" rel="noopener noreferrer" class="hosted-attached-services__hub">Hub</a>`;
+      }
+      const notes = item.notes ? `<p class="muted small hosted-attached-services__notes">${escapeHtml(String(item.notes))}</p>` : "";
+      const container = item.container
+        ? `<p class="muted small">Container: <code>${escapeHtml(String(item.container))}</code></p>`
+        : "";
+      html += `<article class="hosted-attached-services__card">
+        <header class="hosted-attached-services__card-head">
+          <span class="hosted-attached-services__kind">${kind}</span>
+          <strong class="hosted-attached-services__name">${name}</strong>
+          <span class="hosted-attached-services__status">${status}</span>
+        </header>
+        <p class="muted small">Source: ${source}</p>
+        ${container}
+        ${credRows ? `<table class="hosted-attached-services__cred-table"><tbody>${credRows}</tbody></table>` : ""}
+        ${connHtml}
+        ${mgmtHtml}
+        ${actions ? `<div class="hosted-attached-services__actions">${actions}</div>` : ""}
+        ${notes}
+      </article>`;
+    });
+    html += "</div></div>";
+  });
+  el.innerHTML = html || '<p class="muted small">No attached services.</p>';
+  if (section) section.classList.remove("is-hidden");
+  el.querySelectorAll(".hosted-attached-services__copy").forEach((btn) => {
+    btn.addEventListener("click", () => copyHostedAttachedText(btn.getAttribute("data-copy")));
+  });
+  el.querySelectorAll(".hosted-attached-services__auto").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const slug = btn.getAttribute("data-hub-slug");
+      const loginUrl = btn.getAttribute("data-login-url");
+      openUiSignedIn(slug, loginUrl, { container_running: true, label: slug });
+    });
+  });
 }
 
 function hostedUrlProbeStatusLabel(url, probes) {
@@ -6466,6 +6592,7 @@ async function refreshHostedAppsPanel() {
 
   renderHostedManifestSummary(snap.manifest_ui, snap);
   renderHostedResourceLedger(snap.manifest_ui, snap);
+  renderHostedAttachedServices(snap);
   renderHostedLocalProfile(snap.manifest_ui, snap);
   renderHostedCfResources(snap.manifest_ui);
 
@@ -6794,6 +6921,12 @@ function initHostedRegisterWizard() {
   /** Path for which the last Detect succeeded (step 1 “done” until path changes). */
   let hostedRegDetectOkForPath = "";
   let hostedRegLastDetectData = null;
+  /** Step 4 (Validate YAML) — set true after a successful validate-yaml call. */
+  let hostedRegValidateOk = false;
+
+  function hostedRegResetValidateStep() {
+    hostedRegValidateOk = false;
+  }
   if (!detectBtn || !submitBtn || !pathIn || !urlsTbody) return;
 
   const hostedRegUrlRoles = [
@@ -6966,7 +7099,7 @@ function initHostedRegisterWizard() {
     markDone(0, detectDone);
     markDone(1, registrationReady);
     markDone(2, registrationReady);
-    markDone(3, false);
+    markDone(3, hostedRegValidateOk);
     markDone(4, registerEnabled);
 
     let currentSet = false;
@@ -7006,6 +7139,8 @@ function initHostedRegisterWizard() {
     else if (!detectDone) hint = "Step 1: run Detect to scan compose / wrangler / archetype.";
     else if (!registrationReady)
       hint = "Steps 2–3: Generate YAML from the scan and/or Save YAML to disk; edit Public URLs above.";
+    else if (!hostedRegValidateOk)
+      hint = "Step 4: click Validate YAML (schema + wrangler/compose gap checks).";
     else if (tokReq && !tokOk) hint = "Set the control token on the Control tab to enable Register.";
     else hint = "Step 5: Register applies Public URLs to the profile, then ecosystem-register (and optional deploy).";
 
@@ -7048,7 +7183,7 @@ function initHostedRegisterWizard() {
     const app_id = idIn && idIn.value.trim() ? idIn.value.trim() : "";
     if (!path) {
       applyRegistrationYamlStatus(null);
-      return;
+      return null;
     }
     try {
       const res = await fetch("/api/leco/yaml-status", {
@@ -7058,10 +7193,15 @@ function initHostedRegisterWizard() {
         cache: "no-store",
       });
       const data = await res.json();
-      if (data.ok) applyRegistrationYamlStatus(data);
-      else applyRegistrationYamlStatus(null);
+      if (data.ok) {
+        applyRegistrationYamlStatus(data);
+        return data;
+      }
+      applyRegistrationYamlStatus(null);
+      return null;
     } catch (_) {
       applyRegistrationYamlStatus(null);
+      return null;
     }
   }
 
@@ -7510,7 +7650,15 @@ function initHostedRegisterWizard() {
     void hostedRegSyncUrlsFromLocTa((idIn && idIn.value.trim()) || "", false);
   });
 
+  pathIn?.addEventListener("input", () => {
+    hostedRegResetValidateStep();
+    hostedRegDetectOkForPath = "";
+  });
+  manTa?.addEventListener("input", hostedRegResetValidateStep);
+  locTa?.addEventListener("input", hostedRegResetValidateStep);
+
   detectBtn.addEventListener("click", async () => {
+    hostedRegResetValidateStep();
     await runHostedRegisterDetect({});
     // Trigger AI analysis after detect completes, if toggle is on
     if (typeof window._runAiAnalysis === "function") {
@@ -7530,6 +7678,7 @@ function initHostedRegisterWizard() {
       setMsg("Set the control token on the Control tab (or localStorage).", true);
       return;
     }
+    hostedRegResetValidateStep();
     setRegFormBusy(true, "Generating YAML on server…");
     setMsg("Writing leco.app.yaml + profile from detected compose / wrangler / archetype…");
     try {
@@ -7614,6 +7763,7 @@ function initHostedRegisterWizard() {
     yamlRep.textContent = "";
     try {
       const body = {
+        path: pathIn ? pathIn.value.trim() : "",
         manifest_yaml: manTa ? manTa.value : "",
         localhost_yaml: locTa ? locTa.value : "",
       };
@@ -7629,12 +7779,25 @@ function initHostedRegisterWizard() {
         return;
       }
       const pass = !!data.validation_ok;
+      const infraWarn = Array.isArray(data.infrastructure_warnings) ? data.infrastructure_warnings : [];
+      hostedRegValidateOk = pass;
       const jsonBlock = JSON.stringify(data.report || {}, null, 2);
       yamlRep.textContent = `${data.summary_text || ""}\n\n— structured report —\n${jsonBlock}`;
       yamlRep.classList.remove("is-hidden");
-      yamlRep.classList.toggle("hosted-reg-yaml-report--pass", pass);
-      yamlRep.classList.toggle("hosted-reg-yaml-report--fail", !pass);
-      setMsg(pass ? "Validation passed — see report below." : "Validation failed — see report below.", !pass);
+      yamlRep.classList.toggle("hosted-reg-yaml-report--pass", pass && !infraWarn.length);
+      yamlRep.classList.toggle("hosted-reg-yaml-report--fail", !pass || infraWarn.length > 0);
+      if (!pass) {
+        setMsg("Validation failed — see report below.", true);
+      } else if (infraWarn.length) {
+        setMsg(
+          "Schema OK — infrastructure warnings (wrangler on disk but empty leco.yaml). Re-run Generate YAML after restarting service-dashboard, or edit runtimes manually.",
+          true,
+        );
+      } else {
+        setMsg("Validation passed — see report below.");
+      }
+      const st = await refreshYamlStatus();
+      syncHostedRegWorkflow(st, false, {});
     } catch (e) {
       setMsg(String(e.message || e), true);
     } finally {

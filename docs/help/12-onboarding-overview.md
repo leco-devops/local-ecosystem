@@ -9,7 +9,7 @@
 | **Dashboard wizard** | Interactive detect, edit YAML, AI assist | **Hosted apps → Register application** |
 | **CLI one-shot** | CI, scripts, repeatability | `leco-devops onboard -E "$LECO_ECOSYSTEM_ROOT"` |
 | **CLI step-by-step** | Fine control | `init` → edit YAML → `deploy` → `ecosystem-register` |
-| **Scaffold from sample** | Known pattern (Node+varnish, CF Worker, …) | `leco-devops scaffold … --template …` |
+| **Scaffold from sample** | Known pattern (Node+varnish, CF Worker, multi-Wrangler monorepo, …) | `leco-devops scaffold … --template …` |
 | **Zip upload** | No Git on machine | **Hosted apps** zip API or dashboard upload |
 
 All paths converge on the same artifacts: **`leco.app.yaml`**, **`leco.yaml`**, registry row, and (when configured) **`hosting/traefik/dynamic.yml`** merge.
@@ -45,7 +45,7 @@ More diagrams: [Architecture & diagrams](help:architecture-diagrams).
 ## Dashboard wizard (high level)
 
 1. **Path** — absolute path, repo-relative under `/project`, or **`wsp:SiblingRepo/subpath`** (read-only sibling mount).
-2. **Detect** — scans compose, wrangler, ports, archetype; previews YAML.
+2. **Detect** — scans compose, all `wrangler.*.toml` files (including `infra/wrangler.api.toml`), ports, archetype; previews YAML and suggested `runtimes[]`.
 3. **Generate YAML** or **Save YAML** (control token) — writes manifests; read-only trees **materialize** under `hosting/app-available/<slug>/`.
 4. **Public URLs** table — optional merge into profile `urls[]`.
 5. **Register** — `ecosystem-register` + optional **Deploy stack** (`docker compose up -d --build`).
@@ -103,6 +103,8 @@ Workers-only apps (no `dockerCompose` in effective manifest) skip compose deploy
 ## Next steps
 
 - [wsp: paths & pulling code into hosting](help:onboarding-materialize)
+- [Multi-Wrangler monorepos](help:multi-wrangler-monorepo)
 - [Overriding upstream behavior](help:hosting-overrides)
 - [Deploy, rebuild, offload](help:deploy-rebuild)
 - [Hosted apps (dashboard)](help:hosted-apps)
+- [Attached services panel](help:hosted-app-attached-services)

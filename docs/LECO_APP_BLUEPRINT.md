@@ -28,7 +28,7 @@ This document is the **canonical map** of how a third-party app is represented i
 ```
 
 - Put **`infrastructure.dockerCompose`**, **`infrastructure.cloudflare`**, **`infrastructure.routing`** in **`leco.yaml`**, not on the bridge (legacy v2 allowed these on `leco.app.yaml`; v3 keeps the bridge thin).
-- **`configRefs`** on the bridge (optional) lists human/tooling paths (wrangler, compose, `.env`, …) relative to resolved root; dashboard **Generate/Save YAML** can refresh **config symlinks** under materialized `app-available/<slug>/`.
+- **`configRefs`** on the bridge (optional) lists human/tooling paths (wrangler, compose, `.env`, …) relative to resolved root; dashboard **Generate/Save YAML** can refresh **config symlinks** under materialized `app-available/<slug>/` (see §4.1).
 
 ---
 
@@ -47,6 +47,18 @@ This document is the **canonical map** of how a third-party app is represented i
 - **`root: source`** on the bridge names the **symlink file** under materialization; it is **not** joined as `orig_root/source` on the read-only tree when computing paths for save/register.
 
 See **`hosting/README.md`**.
+
+### 4.1 Config symlinks (materialized apps)
+
+When manifests live under **`hosting/app-available/<slug>/`**, **`sync_hosting_config_ref_symlinks`** (`dashboard/hosting_layout.py`) creates relative symlinks (e.g. `infra/wrangler.api.toml`) pointing at files under the resolved **`source`** tree. Paths are collected from:
+
+1. **`configRefs`** on the bridge (Generate YAML adds one key per discovered `wrangler.*.toml`, e.g. `wranglerApiConfig`, `wranglerOnboardingConfig`);
+2. **`infrastructure.runtimes[].config`** in the profile;
+3. A Wrangler directory scan (`dashboard/leco_wrangler_paths.py`) so undeclared configs are still mirrored.
+
+Symlinks are refreshed on **Generate YAML**, **Save YAML**, and materialize/register flows — not a manual one-time step. On the **host workstation**, targets under `/workspace-parent/...` are remapped to the sibling checkout (`LECO_WORKSPACE_PARENT_HOST` or the ecosystem repo’s parent directory); inside **`service-dashboard`**, `/workspace-parent/...` remains correct.
+
+**Multi-Wrangler monorepos** (several Workers + optional Pages under `infra/`) use the same mechanism. Reference: **`hosting/samples/sample-cf-multi-wrangler-monorepo/`**, **`docs/help/12-multi-wrangler-monorepo.md`**.
 
 ---
 
@@ -77,7 +89,7 @@ The registry and `leco-devops` read **`leco.app.yaml` + `leco.yaml`** (effective
 
 | Artifact | Role |
 |----------|------|
-| **`infrastructure.cloudflare.wranglerConfig`** | Path to `wrangler.toml`; **provision** and **deploy** hooks read this file. |
+| **`infrastructure.cloudflare.wranglerConfig`** | Path to primary Worker config (`wrangler.toml` or `infra/wrangler.api.toml`); **provision** and **deploy** hooks read this file. Additional Workers use **`infrastructure.runtimes[]`** (see §5). |
 | **`infrastructure.wranglerBindingPreview`** | Informational mirror (KV/R2/D1 rows) for UI; **does not** create Docker services. |
 | **`leco.local-cf.yaml`** | Records **names** of namespaces / buckets / databases provisioned on the **shared** local adapters; still not per-binding containers in your repo. |
 | **Local CF provision** | Creates those resources on **kv.lh / r2.lh / d1.lh** adapters; look under the **cloudflare-local** stack in Docker, not inside your app’s compose project. |
@@ -102,7 +114,7 @@ modifying the upstream repo.
 | **D1 bootstrap + resilient migrations** | `infra/runtimes/cloudflare-workers/entrypoint.sh` — applies `d1-bootstrap-<BINDING>.sql` once (sentinel-tracked), then loops `wrangler d1 migrations apply` past per-file failures. |
 | **Wrangler binding sanitization** | `dashboard/leco_runtimes/cloudflare_workers.py::_sanitize_wrangler_toml` strips listed top-level TOML sections (default `[browser]`); the sanitized copy is bind-overlaid at `/app/wrangler.toml` inside the container. |
 | **CLI diagnostic** | `leco-devops runtimes -f leco.app.yaml` (defaults to `--detect`). |
-| **Sample manifest** | `hosting/samples/sample-cf-worker-runtime/`. |
+| **Sample manifest** | `hosting/samples/sample-cf-worker-runtime/`; multi-Wrangler: `hosting/samples/sample-cf-multi-wrangler-monorepo/`. |
 
 Zero-touch upstream contract:
 
@@ -156,7 +168,7 @@ Zero-touch upstream contract:
 | Hosting symlink helpers | `dashboard/hosting_layout.py` |
 | Control remove/reset + offboard | `dashboard/control.py` |
 | Offboard wrapper | `dashboard/hosted_offboard.py` |
-| Hosted apps API | `dashboard/hosted_apps.py`, `dashboard/leco_control.py` |
+| Hosted apps API | `dashboard/hosted_apps.py`, `dashboard/hosted_app_services.py`, `dashboard/leco_control.py` |
 
 ---
 

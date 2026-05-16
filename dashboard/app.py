@@ -405,6 +405,7 @@ def api_leco_detect():
 @app.post("/api/leco/validate-yaml")
 def api_leco_validate_yaml():
     """Parse and validate wizard YAML against LEco ApplicationManifest / LocalhostProfile (no token)."""
+    from leco_detect import registration_scan_root, resolve_registration_path
     from leco_validate import validate_registration_yaml
 
     data = request.get_json(silent=True) or {}
@@ -414,7 +415,14 @@ def api_leco_validate_yaml():
         my = None
     if not isinstance(ly, str):
         ly = None
-    payload = validate_registration_yaml(my, ly)
+    scan_root = None
+    path_rel = (data.get("path") or "").strip()
+    if path_rel:
+        try:
+            scan_root = registration_scan_root(resolve_registration_path(path_rel))
+        except ValueError:
+            scan_root = None
+    payload = validate_registration_yaml(my, ly, scan_root=scan_root)
     return jsonify({"ok": True, **payload})
 
 

@@ -11,6 +11,15 @@ from typing import Any
 import yaml
 
 from hosting_layout import HOSTING_SOURCE_LINK_NAME, compute_source_target
+from leco_wrangler_paths import (
+    WRANGLER_PATHS,
+    list_wrangler_config_files,
+    list_wrangler_pages_config_files,
+    pages_runtime_id_from_config,
+    pick_primary_wrangler_config,
+    read_pages_build_output_dir,
+    runtime_id_from_wrangler_relpath,
+)
 from leco_runtimes import (
     AdapterNotReady,
     RuntimeBuildContext,
@@ -83,11 +92,6 @@ COMPOSE_NAMES = (
     "docker-compose.yaml",
     "compose.yml",
     "compose.yaml",
-)
-
-WRANGLER_PATHS = (
-    Path("wrangler.toml"),
-    Path("cloudflare") / "wrangler.toml",
 )
 
 # Shown in detect signals; local provision still expects TOML (see deploy-cli wrangler_cf_resources).
@@ -176,30 +180,12 @@ def _pick_primary_compose(files: list[Path]) -> Path | None:
 
 def _detect_wrangler_shallow(root: Path) -> Path | None:
     r = root.resolve()
-    for rel in WRANGLER_PATHS:
-        if (r / rel).is_file():
-            return rel
-    return None
+    shallow = [c for c in list_wrangler_config_files(r) if len(c.parts) <= 2]
+    return shallow[0] if shallow else None
 
 
 def _detect_wrangler(root: Path) -> Path | None:
-    r = root.resolve()
-    shallow = _detect_wrangler_shallow(r)
-    if shallow is not None:
-        return shallow
-    for dirpath, dirs, files in os.walk(r):
-        rp = Path(dirpath)
-        try:
-            depth = len(rp.relative_to(r).parts)
-        except ValueError:
-            continue
-        dirs[:] = [d for d in dirs if d not in _SCAN_PRUNE_DIRS]
-        if depth > 6:
-            dirs[:] = []
-            continue
-        if "wrangler.toml" in files:
-            return (rp / "wrangler.toml").relative_to(r)
-    return None
+    return pick_primary_wrangler_config(root)
 
 
 def compute_hosting_source_symlink_target(orig_root: Path, manifest_dict: dict[str, Any]) -> Path:
@@ -357,6 +343,8 @@ def collect_config_signals(root: Path) -> dict[str, Any]:
 
 def detect_archetype(root: Path) -> str:
     r = root.resolve()
+    if list_wrangler_config_files(r) or list_wrangler_pages_config_files(r):
+        return "generic"
     if (r / "wp-config.php").is_file() or (r / "wp-config-sample.php").is_file():
         return "wordpress"
     if (r / "bin" / "magento").is_file() or (r / "app" / "etc" / "env.php").is_file():
@@ -484,13 +472,19 @@ def scan_app_directory(root: Path) -> dict[str, Any]:
     compose_files = _list_compose_files(root)
     primary = _pick_primary_compose(compose_files)
     host_ports = _scan_compose_ports(root, primary) if primary else []
-    wc = _detect_wrangler(root)
+    wranglers = list_wrangler_config_files(root)
+    pages_wranglers = list_wrangler_pages_config_files(root)
+    wc = wranglers[0] if wranglers else None
     arch = detect_archetype(root)
     manifest_path = root / "leco.app.yaml"
     return {
         "root": str(root),
-        "has_wrangler": wc is not None,
+        "has_wrangler": bool(wranglers),
         "wrangler_config": wc.as_posix() if wc else None,
+        "wrangler_configs": [w.as_posix() for w in wranglers],
+        "has_wrangler_pages": bool(pages_wranglers),
+        "wrangler_pages_config": pages_wranglers[0].as_posix() if pages_wranglers else None,
+        "wrangler_pages_configs": [p.as_posix() for p in pages_wranglers],
         "compose_files": [p.as_posix() for p in compose_files],
         "host_ports": host_ports,
         "suggested_archetype": arch,
@@ -722,7 +716,17 @@ def manifest_has_docker_compose(manifest: dict[str, Any]) -> bool:
         return False
     if (dc.get("composeFileFromManifest") or dc.get("compose_file_from_manifest") or "").strip():
         return True
-    return bool((dc.get("composeFile") or dc.get("compose_file") or "").strip())
+    if (dc.get("composeFile") or dc.get("compose_file") or "").strip():
+        return True
+    for key in ("additionalComposeFilesFromManifest", "additional_compose_files_from_manifest"):
+        raw = dc.get(key)
+        if isinstance(raw, list) and any(str(x).strip() for x in raw):
+            return True
+    for key in ("additionalComposeFiles", "additional_compose_files"):
+        raw = dc.get(key)
+        if isinstance(raw, list) and any(str(x).strip() for x in raw):
+            return True
+    return False
 
 
 def manifest_has_wrangler_config(manifest: dict[str, Any]) -> bool:
@@ -1083,6 +1087,12 @@ def _load_compose_services_for_localhost(
     root: Path,
     manifest: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]] | None:
+    try:
+        from hosted_app_services import load_compose_services_for_detect
+
+        return load_compose_services_for_detect(localhost, root, manifest)
+    except Exception:
+        pass
     base = compute_source_target(root, manifest).resolve()
     infra = localhost.get("infrastructure")
     if not isinstance(infra, dict):
@@ -1221,13 +1231,46 @@ def _apply_default_routing(localhost: dict[str, Any], root: Path, manifest: dict
         infra["routing"] = {"entries": compose_entries}
         return
     if has_wrangler:
+        runtimes = infra.get("runtimes")
+        api_runtime = "worker"
+        pages_runtime: str | None = None
+        if isinstance(runtimes, list) and runtimes:
+            for rt in runtimes:
+                if not isinstance(rt, dict):
+                    continue
+                rid = str(rt.get("id") or "").strip()
+                rtype = str(rt.get("type") or "").strip()
+                if rtype == "cloudflare-pages" and rid:
+                    pages_runtime = rid
+                elif rid in ("api", "worker"):
+                    api_runtime = rid
+            if api_runtime == "worker":
+                for rt in runtimes:
+                    if isinstance(rt, dict) and str(rt.get("type") or "") == "cloudflare-workers":
+                        rid = str(rt.get("id") or "").strip()
+                        if rid == "api":
+                            api_runtime = rid
+                            break
+        upstream: list[dict[str, Any]] = [
+            {
+                "prefix": "/api",
+                "target": "runtime",
+                "runtime": api_runtime,
+            }
+        ]
+        if pages_runtime:
+            upstream.append(
+                {
+                    "prefix": "/",
+                    "target": "runtime",
+                    "runtime": pages_runtime,
+                }
+            )
         infra["routing"] = {
             "entries": [
                 {
                     "hostname": f"{host_slug}.lh",
-                    "apiPathPrefix": "/api",
-                    "frontend": {"host": "workers-runtime", "port": 8787},
-                    "apiBackend": {"host": "workers-runtime", "port": 8787},
+                    "upstream": upstream,
                 }
             ]
         }
@@ -1376,13 +1419,12 @@ def compute_resolved_paths_for_leco_app_manifest(
 
     cfg = manifest.get("configRefs") or manifest.get("config_refs")
     if isinstance(cfg, dict):
-        for key in _CONFIG_REF_RESOLVED_KEYS:
-            v = cfg.get(key)
-            if not isinstance(v, str) or not v.strip():
+        for key, v in cfg.items():
+            if not isinstance(v, str) or not str(v).strip():
                 continue
             rp = _resolved_path_for_config_ref(v, app_root=app_root)
             if rp:
-                out[key] = rp
+                out[str(key)] = rp
 
     mcf = manifest.get("cloudflare")
     if isinstance(mcf, dict) and "wranglerConfig" not in out:
@@ -1463,8 +1505,27 @@ def build_default_manifest_and_localhost(
     }
 
     config_refs: dict[str, str] = {}
-    if scan.get("wrangler_config"):
-        config_refs["wranglerConfig"] = str(scan["wrangler_config"])
+
+    def _wrangler_config_ref_key(rel: Path) -> str:
+        name = rel.name.lower()
+        if name in ("wrangler.toml", "wrangler.json", "wrangler.jsonc"):
+            return "wranglerConfig"
+        stem = rel.stem
+        if stem.startswith("wrangler."):
+            stem = stem[len("wrangler.") :]
+        parts = [p.capitalize() for p in re.split(r"[._-]+", stem) if p]
+        return "wrangler" + "".join(parts) + "Config"
+
+    wrangler_configs_early = scan.get("wrangler_configs") or []
+    if not wrangler_configs_early and scan.get("wrangler_config"):
+        wrangler_configs_early = [scan["wrangler_config"]]
+    for rel_s in wrangler_configs_early:
+        rel = Path(str(rel_s))
+        key = _wrangler_config_ref_key(rel)
+        if key not in config_refs:
+            config_refs[key] = rel.as_posix()
+    if scan.get("wrangler_pages_config"):
+        config_refs["wranglerPagesConfig"] = str(scan["wrangler_pages_config"])
     if compose_file_str:
         config_refs["dockerComposeFile"] = compose_file_str
     if (r / ".env").is_file():
@@ -1509,13 +1570,73 @@ def build_default_manifest_and_localhost(
         if env_file:
             dc["envFile"] = env_file
         infrastructure["dockerCompose"] = dc
-    has_wrangler = bool(scan.get("has_wrangler") and scan.get("wrangler_config"))
+    wrangler_configs = scan.get("wrangler_configs") or []
+    if not wrangler_configs and scan.get("wrangler_config"):
+        wrangler_configs = [scan["wrangler_config"]]
+    has_wrangler = bool(wrangler_configs)
     if has_wrangler:
-        cf: dict[str, Any] = {"wranglerConfig": scan["wrangler_config"]}
+        cf: dict[str, Any] = {"wranglerConfig": str(wrangler_configs[0])}
         pfx = _suggest_local_cf_public_prefix(app_id)
         if pfx:
             cf["localCfPublicPrefix"] = pfx
         infrastructure["cloudflare"] = cf
+        runtimes: list[dict[str, Any]] = []
+        port = 8787
+        for rel_s in wrangler_configs:
+            rel = Path(str(rel_s))
+            runtimes.append(
+                {
+                    "id": runtime_id_from_wrangler_relpath(rel),
+                    "type": "cloudflare-workers",
+                    "config": rel.as_posix(),
+                    "port": port,
+                }
+            )
+            port += 1
+        pages_configs = list_wrangler_pages_config_files(r)
+        for rel in pages_configs:
+            cfg_path = (r / rel).resolve()
+            entry: dict[str, Any] = {
+                "id": pages_runtime_id_from_config(rel),
+                "type": "cloudflare-pages",
+                "config": rel.as_posix(),
+                "port": port,
+            }
+            out_rel = read_pages_build_output_dir(cfg_path)
+            if out_rel:
+                entry["pagesBuildOutputDir"] = out_rel
+            runtimes.append(entry)
+            port += 1
+        if runtimes:
+            infrastructure["runtimes"] = runtimes
+        if pages_configs:
+            config_refs["wranglerPagesConfig"] = pages_configs[0].as_posix()
+        for rel_s in wrangler_configs:
+            rel = Path(str(rel_s))
+            key = _wrangler_config_ref_key(rel)
+            if key not in config_refs:
+                config_refs[key] = rel.as_posix()
+        if config_refs:
+            manifest["configRefs"] = config_refs
+    else:
+        pages_configs = list_wrangler_pages_config_files(r)
+        if pages_configs:
+            runtimes = [
+                {
+                    "id": pages_runtime_id_from_config(pages_configs[0]),
+                    "type": "cloudflare-pages",
+                    "config": pages_configs[0].as_posix(),
+                    "port": 8791,
+                    **(
+                        {"pagesBuildOutputDir": out}
+                        if (out := read_pages_build_output_dir((r / pages_configs[0]).resolve()))
+                        else {}
+                    ),
+                }
+            ]
+            infrastructure["runtimes"] = runtimes
+            config_refs["wranglerPagesConfig"] = pages_configs[0].as_posix()
+            manifest["configRefs"] = config_refs
 
     localhost: dict[str, Any] = {
         "schemaVersion": 2,
@@ -1540,7 +1661,8 @@ def build_default_manifest_and_localhost(
         localhost, root, manifest, allow_compose_discovery=True
     )
     ensure_wrangler_in_profile_infrastructure(localhost, root, manifest)
-    _apply_default_routing(localhost, root, manifest, host_slug, has_wrangler=has_wrangler)
+    has_edge = has_wrangler or bool(list_wrangler_pages_config_files(r))
+    _apply_default_routing(localhost, root, manifest, host_slug, has_wrangler=has_edge)
     _normalize_compose_routing_backend_hosts(localhost, root, manifest, host_slug)
     enrich_infrastructure_wrangler_binding_preview(localhost.get("infrastructure") or {}, root)
 
@@ -1878,9 +2000,26 @@ def ensure_local_runtime_overlay(manifest_abs: Path) -> dict[str, Any]:
         or dc.get("additional_compose_files_from_manifest")
         or []
     )
+    has_primary = bool(
+        (dc.get("composeFileFromManifest") or dc.get("compose_file_from_manifest") or "").strip()
+        or (dc.get("composeFile") or dc.get("compose_file") or "").strip()
+    )
+    if not has_primary:
+        dc["composeFileFromManifest"] = _LECO_RUNTIME_OVERLAY_COMPOSE
+        if "compose_file_from_manifest" in dc:
+            del dc["compose_file_from_manifest"]
+        profile_dirty = True
+    if not (dc.get("projectName") or dc.get("project_name")):
+        dc["projectName"] = host_slug
+        profile_dirty = True
+    primary_cfm = (
+        dc.get("composeFileFromManifest") or dc.get("compose_file_from_manifest") or ""
+    ).strip()
     extras = [str(x).strip() for x in raw_ex if str(x).strip()]
-    if _LECO_RUNTIME_OVERLAY_COMPOSE not in extras:
+    if primary_cfm != _LECO_RUNTIME_OVERLAY_COMPOSE and _LECO_RUNTIME_OVERLAY_COMPOSE not in extras:
         extras.append(_LECO_RUNTIME_OVERLAY_COMPOSE)
+    extras = [x for x in extras if x != primary_cfm or primary_cfm != _LECO_RUNTIME_OVERLAY_COMPOSE]
+    if extras != raw_ex:
         dc["additionalComposeFilesFromManifest"] = extras
         if "additional_compose_files_from_manifest" in dc:
             del dc["additional_compose_files_from_manifest"]
@@ -2113,6 +2252,64 @@ lifecycle:
   build: []
   preStart: []
 notes: ""
+""",
+        },
+        {
+            "id": "multi-wrangler-monorepo",
+            "title": "Cloudflare — multi-Wrangler monorepo (infra/)",
+            "description": "Several Workers under infra/wrangler.*.toml + optional Pages; one runtime per config. See hosting/samples/sample-cf-multi-wrangler-monorepo/.",
+            "manifest_yaml": """lecoAppVersion: "3"
+name: my-monorepo
+root: source
+localHostProfile: leco.yaml
+configRefs:
+  wranglerConfig: infra/wrangler.api.toml
+  wranglerOnboardingConfig: infra/wrangler.onboarding.toml
+  wranglerPagesConfig: infra/wrangler.pages.toml
+""",
+            "localhost_yaml": """schemaVersion: 2
+archetype: generic
+infrastructure:
+  cloudflare:
+    wranglerConfig: infra/wrangler.api.toml
+  runtimes:
+    - id: api
+      type: cloudflare-workers
+      config: infra/wrangler.api.toml
+      port: 8787
+    - id: onboarding
+      type: cloudflare-workers
+      config: infra/wrangler.onboarding.toml
+      port: 8788
+    - id: dashboard
+      type: cloudflare-pages
+      config: infra/wrangler.pages.toml
+      port: 8791
+      pagesBuildOutputDir: apps/dashboard/dist
+  routing:
+    entries:
+      - hostname: my-monorepo.lh
+        upstream:
+          - prefix: /api
+            target: runtime
+            runtime: api
+          - prefix: /
+            target: runtime
+            runtime: dashboard
+  dockerCompose:
+    composeFileFromManifest: docker-compose.leco-runtime.yml
+urls:
+  - role: frontend
+    label: App
+    publicUrl: https://my-monorepo.lh
+  - role: api
+    label: API
+    publicUrl: https://my-monorepo.lh/api
+lifecycle:
+  prepare: []
+  build: []
+  preStart: []
+notes: "Use wsp:YourRepo or materialize; Generate YAML refreshes config symlinks under hosting/app-available/<slug>/."
 """,
         },
     ]

@@ -12,6 +12,7 @@ Flask app in `dashboard/`. Entry: **`app.py`** (~100+ routes). Static: `static/d
 | `control_targets.py` | Controllable units for UI |
 | `leco_control.py` | Registry → compose metadata, `leco-stack-<id>` targets |
 | `hosted_apps.py` | `/api/hosted-apps*`, snapshots, logs, pending registration |
+| `hosted_app_services.py` | Attached services payload (`connection_endpoints`, credentials, compose merge) |
 | `hosted_offboard.py` | Teardown orchestration after down/unregister |
 | `hosted_zip_upload.py` | Zip → `app-available/<slug>` |
 
@@ -91,4 +92,4 @@ Dashboard **must not** duplicate register/merge logic — call **`leco-devops`**
 
 When changing manifest merge or compose resolution, update **`schema.py`** and both **`leco_detect.py`** and **`compose_runner.py`**.
 
-Next: [CLI & schema](help:dev-cli)
+Next: [CLI & schema](help:dev-cli) · [Attached services API](help:dev-hosted-app-services)

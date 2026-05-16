@@ -48,11 +48,15 @@ hosting/app-available/myapp/
   leco.app.yaml              # root: source
   leco.yaml
   source -> /workspace-parent/MyRepo   # symlink to real app tree
+  infra/wrangler.api.toml -> …/infra/wrangler.api.toml   # config symlinks (optional)
+  infra/wrangler.onboarding.toml -> …
   docker-compose.leco-hosting.yml      # optional LEco overlay
   docker-compose.leco-runtime.yml      # generated for edge runtimes
   .dev.vars / .dev.vars.example
   .leco-runtime/<runtime-id>/          # D1 bootstrap, sanitized wrangler
 ```
+
+**Config symlinks** mirror Wrangler, compose, and env paths declared in `configRefs`, listed in `infrastructure.runtimes[].config`, or discovered by scan — refreshed on **Generate YAML** / **Save YAML** (`dashboard/hosting_layout.py`). Multi-Wrangler monorepos: [Multi-Wrangler monorepos](help:multi-wrangler-monorepo).
 
 ## Registry entry
 
@@ -75,5 +79,6 @@ The **Hosted apps** tab also lists folders under `app-available/` that have vali
 
 - [Onboarding new apps](help:onboarding-overview)
 - [wsp: paths & materialize](help:onboarding-materialize)
+- [Multi-Wrangler monorepos](help:multi-wrangler-monorepo)
 - [Overriding upstream apps](help:hosting-overrides)
 - [Deploy & rebuild](help:deploy-rebuild)

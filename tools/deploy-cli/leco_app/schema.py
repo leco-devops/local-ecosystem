@@ -54,7 +54,14 @@ LocalhostUrlRole = Literal[
 
 
 class DockerComposeSpec(BaseModel):
-    compose_file: str = Field(default="docker-compose.yml", alias="composeFile")
+    compose_file: str | None = Field(
+        default=None,
+        alias="composeFile",
+        description=(
+            "Primary compose file relative to the manifest resolved root. Omit for Workers-only stacks "
+            "that use composeFileFromManifest and/or generated docker-compose.leco-runtime.yml only."
+        ),
+    )
     additional_compose_files: list[str] = Field(
         default_factory=list,
         alias="additionalComposeFiles",
@@ -89,6 +96,21 @@ class DockerComposeSpec(BaseModel):
     env_file: str | None = Field(default=None, alias="envFile")
 
     model_config = {"populate_by_name": True}
+
+
+def docker_compose_is_deployable(dc: DockerComposeSpec | None) -> bool:
+    """True when deploy/register should run ``docker compose`` (any configured compose source)."""
+    if dc is None:
+        return False
+    if (dc.compose_file_from_manifest or "").strip():
+        return True
+    if (dc.compose_file or "").strip():
+        return True
+    if any(str(x).strip() for x in dc.additional_compose_files_from_manifest or []):
+        return True
+    if any(str(x).strip() for x in dc.additional_compose_files or []):
+        return True
+    return False
 
 
 class CloudflareSpec(BaseModel):
@@ -517,12 +539,17 @@ class BridgeConfigRefs(BaseModel):
     ``resolvedPaths`` (same key names) when YAML is generated or saved.
     """
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
 
     wrangler_config: str | None = Field(
         default=None,
         alias="wranglerConfig",
         description="Cloudflare Wrangler file (wrangler.toml, wrangler.json, …).",
+    )
+    wrangler_pages_config: str | None = Field(
+        default=None,
+        alias="wranglerPagesConfig",
+        description="Cloudflare Pages wrangler config (e.g. infra/wrangler.pages.toml).",
     )
     docker_compose_file: str | None = Field(
         default=None,
@@ -623,10 +650,9 @@ class ApplicationManifest(BaseModel):
         return out or None
 
     def resolved_root(self, manifest_path: Path) -> Path:
-        r = Path(self.root)
-        if r.is_absolute():
-            return r.resolve()
-        return (manifest_path.parent / r).resolve()
+        from leco_app.paths import resolve_app_root
+
+        return resolve_app_root(manifest_path, str(self.root or "."))
 
 
 def load_manifest(path: Path) -> ApplicationManifest:

@@ -35,36 +35,45 @@ if [ ! -f "$CONFIG" ]; then
     exit 64
 fi
 
-cd "$(dirname "$CONFIG")"
+CONFIG_DIR="$(dirname "$CONFIG")"
+cd "$CONFIG_DIR"
 
 # Install upstream deps into LEco-owned /app/node_modules volume if empty.
-# We deliberately work inside the wrangler.toml directory (not /app) because
-# many monorepos keep workers under cloudflare/ or worker/ with their own package.json.
+# Prefer package.json beside the wrangler config; Raven-style monorepos keep
+# wrangler under infra/ but hoist deps at /app (pnpm-workspace.yaml).
+install_root=""
 if [ -f "package.json" ]; then
+    install_root="$(pwd)"
+elif [ -f /app/package.json ]; then
+    install_root="/app"
+fi
+
+if [ -n "$install_root" ]; then
+    cd "$install_root"
     if [ ! -d node_modules ] || [ -z "$(ls -A node_modules 2>/dev/null)" ]; then
-        log "installing node_modules (one-time per LEco volume)…"
-        installed=0
-        if [ -f "package-lock.json" ] || [ -f "npm-shrinkwrap.json" ]; then
-            # Try strict ci first (reproducible). Fall back to npm install when
-            # the lockfile is stale (common when LEco runs an older committed
-            # lockfile while package.json drifted in the upstream repo). This
-            # is the bulletproof behavior — local edge runtimes must boot even
-            # when the upstream lockfile lags.
-            if npm ci --no-audit --no-fund --progress=false; then
-                installed=1
-            else
-                log "npm ci failed — falling back to npm install (upstream lockfile may be stale)"
+        log "installing node_modules under ${install_root} (one-time per LEco volume)…"
+        if command -v pnpm >/dev/null 2>&1 && [ -f pnpm-workspace.yaml ]; then
+            pnpm install --frozen-lockfile 2>/dev/null || pnpm install || true
+        else
+            installed=0
+            if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
+                if npm ci --no-audit --no-fund --progress=false; then
+                    installed=1
+                else
+                    log "npm ci failed — falling back to npm install"
+                fi
             fi
-        fi
-        if [ "$installed" = "0" ]; then
-            npm install --no-audit --no-fund --progress=false
+            if [ "$installed" = "0" ]; then
+                npm install --no-audit --no-fund --progress=false
+            fi
         fi
         log "node_modules ready"
     else
-        log "node_modules present, skipping install"
+        log "node_modules present under ${install_root}, skipping install"
     fi
+    cd "$CONFIG_DIR"
 else
-    log "no package.json beside ${CONFIG} — running wrangler with image-global modules"
+    log "no package.json beside ${CONFIG} or under /app — wrangler may fail on monorepo imports"
 fi
 
 # Persist miniflare state across container restarts (LEco volume mounted at .wrangler).

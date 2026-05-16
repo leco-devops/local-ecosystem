@@ -19,7 +19,7 @@ Browse roots: `GET /api/leco/browse?root=project|wsp`.
 3. **Generate YAML** (control token):
    - Writes `hosting/app-available/<slug>/leco.app.yaml` and `leco.yaml`.
    - Creates **`source`** → resolved app directory on the sibling mount.
-   - Adds **config symlinks** for paths in `configRefs` / detected configs (wrangler, `.env`, compose) when targets exist.
+   - Adds **config symlinks** for `configRefs`, every `infrastructure.runtimes[].config`, and any `wrangler.*.toml` found under the resolved app tree (`.env`, compose, etc.) when targets exist. Multi-Wrangler repos therefore get `infra/wrangler.api.toml`, `infra/wrangler.onboarding.toml`, … beside `source` without hand-maintaining each link.
 4. Registry will point at **`hosting/app-available/<slug>/leco.app.yaml`** (not the read-only path).
 
 ### `source` symlink rules
@@ -37,7 +37,8 @@ Paths in **`leco.yaml`** are relative to **resolved root** = `(directory of leco
 | `infrastructure.dockerCompose.additionalComposeFiles` | Resolved root |
 | `infrastructure.dockerCompose.composeFileFromManifest` | Directory of `leco.app.yaml` (hosting slot) |
 | `infrastructure.dockerCompose.additionalComposeFilesFromManifest` | Directory of `leco.app.yaml` |
-| `infrastructure.cloudflare.wranglerConfig` | Resolved root |
+| `infrastructure.cloudflare.wranglerConfig` | Resolved root (primary Worker for provision-local-cf) |
+| `infrastructure.runtimes[].config` | Resolved root (one Wrangler file per runtime) |
 
 Example bridge + profile for materialized app:
 
@@ -89,4 +90,5 @@ Upload a zip → `hosting/app-available/<slug>/` contains the full tree (no `sou
 ## Related
 
 - [Hosting layout](help:hosting-layout)
+- [Multi-Wrangler monorepos](help:multi-wrangler-monorepo)
 - [Overriding upstream apps](help:hosting-overrides)

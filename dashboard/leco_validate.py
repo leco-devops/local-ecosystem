@@ -120,17 +120,66 @@ def _validate_localhost_blob(raw: str | None) -> dict[str, Any]:
     }
 
 
+def _infrastructure_gap_warnings(localhost_yaml: str | None, scan_root: Path | None) -> list[str]:
+    """Warn when the repo has wrangler TOML files but the profile has no infrastructure block."""
+    if scan_root is None or not scan_root.is_dir():
+        return []
+    from leco_wrangler_paths import list_wrangler_config_files, list_wrangler_pages_config_files
+
+    wranglers = list_wrangler_config_files(scan_root)
+    pages = list_wrangler_pages_config_files(scan_root)
+    if not wranglers and not pages:
+        return []
+    blob = (localhost_yaml or "").strip()
+    if not blob:
+        return [
+            "localhost profile is empty but wrangler configs exist on disk — Generate YAML before Register."
+        ]
+    try:
+        data = yaml.safe_load(blob)
+    except yaml.YAMLError:
+        return []
+    if not isinstance(data, dict):
+        return []
+    infra = data.get("infrastructure")
+    if not isinstance(infra, dict):
+        infra = {}
+    runtimes = infra.get("runtimes")
+    has_runtimes = isinstance(runtimes, list) and len(runtimes) > 0
+    cf = infra.get("cloudflare")
+    has_cf = isinstance(cf, dict) and bool(
+        (cf.get("wranglerConfig") or cf.get("wrangler_config") or "").strip()
+    )
+    if has_runtimes or has_cf:
+        return []
+    listed = ", ".join(p.as_posix() for p in [*wranglers, *pages][:5])
+    total = len(wranglers) + len(pages)
+    extra = f" (+{total - 5} more)" if total > 5 else ""
+    return [
+        "Wrangler / Pages configs exist on disk "
+        f"({listed}{extra}) but leco.yaml has empty infrastructure — "
+        "re-run Detect, then Generate YAML (restart service-dashboard if Generate still omits runtimes), "
+        "or add infrastructure.runtimes[] manually."
+    ]
+
+
 def validate_registration_yaml(
     manifest_yaml: str | None,
     localhost_yaml: str | None,
+    *,
+    scan_root: Path | None = None,
 ) -> dict[str, Any]:
     """
     Return a structured report for the dashboard. ``validation_ok`` is True only when every
     non-empty blob parses and passes Pydantic validation (empty blobs are allowed).
+    ``infrastructure_warnings`` are non-fatal gaps (empty infrastructure despite wrangler on disk).
     """
     m = _validate_manifest_blob(manifest_yaml)
     l = _validate_localhost_blob(localhost_yaml)
     validation_ok = bool(m["ok"] and l["ok"])
+    infrastructure_warnings = (
+        _infrastructure_gap_warnings(localhost_yaml, scan_root) if validation_ok else []
+    )
     lines: list[str] = []
     lines.append(f"Manifest (leco.app.yaml): {m['message']}")
     if m.get("preview"):
@@ -146,10 +195,22 @@ def validate_registration_yaml(
     if l.get("pydantic_errors"):
         for e in l["pydantic_errors"]:
             lines.append(f"  · {e['path']}: {e['message']}")
+    if infrastructure_warnings:
+        lines.append("")
+        lines.append("Infrastructure (on-disk vs YAML):")
+        for w in infrastructure_warnings:
+            lines.append(f"  ⚠ {w}")
     lines.append("")
-    lines.append("PASS — ready to register." if validation_ok else "FAIL — fix issues above.")
+    if validation_ok and not infrastructure_warnings:
+        lines.append("PASS — ready to register.")
+    elif validation_ok:
+        lines.append("PASS (schema) — fix infrastructure warnings before Register expects Traefik/deploy.")
+    else:
+        lines.append("FAIL — fix issues above.")
     return {
         "validation_ok": validation_ok,
+        "infrastructure_warnings": infrastructure_warnings,
+        "infrastructure_ok": not infrastructure_warnings,
         "report": {"manifest": m, "localhost": l},
         "summary_text": "\n".join(lines),
     }
@@ -282,8 +343,8 @@ def validate_configuration_on_disk(manifest_abs: str) -> dict[str, Any]:
                 ap = p.resolve() if p.is_absolute() else (mp.parent / p).resolve()
                 if not ap.is_file():
                     reference_errors.append(f"dockerCompose.composeFileFromManifest not found: {ap}")
-            else:
-                cf = root / Path(em.docker_compose.compose_file)
+            elif (em.docker_compose.compose_file or "").strip():
+                cf = root / Path(em.docker_compose.compose_file.strip())
                 if not cf.is_file():
                     reference_errors.append(f"dockerCompose.composeFile not found: {cf}")
             for rel in em.docker_compose.additional_compose_files or []:

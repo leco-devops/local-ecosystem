@@ -68,10 +68,26 @@ def compose_subprocess_cwd(manifest: ApplicationManifest, manifest_path: Path) -
 
 
 def _env_for_manifest(manifest: ApplicationManifest, manifest_path: Path) -> dict[str, str]:
-    """Pass through host env; optional COMPOSE_PROJECT_NAME only if set in manifest."""
+    """Pass through host env; set compose interpolation paths for host-side ``leco-devops deploy``."""
+    from leco_app.paths import find_ecosystem_root_from_manifest
+
     env = os.environ.copy()
     if manifest.docker_compose and manifest.docker_compose.project_name:
         env["COMPOSE_PROJECT_NAME"] = manifest.docker_compose.project_name
+    eco = find_ecosystem_root_from_manifest(manifest_path)
+    if eco is not None:
+        eco_s = str(eco.resolve())
+        if not (env.get("LECO_ECOSYSTEM_ROOT") or "").strip():
+            env["LECO_ECOSYSTEM_ROOT"] = eco_s
+        if not (env.get("LECO_PROJECT_ROOT_HOST") or "").strip():
+            env["LECO_PROJECT_ROOT_HOST"] = eco_s
+        if not (env.get("LECO_PROJECT_CONTAINER") or "").strip():
+            env["LECO_PROJECT_CONTAINER"] = "/project"
+        wsp_host = str(eco.parent)
+        if not (env.get("LECO_WORKSPACE_PARENT_HOST") or "").strip():
+            env["LECO_WORKSPACE_PARENT_HOST"] = wsp_host
+        if not (env.get("LECO_WORKSPACE_PARENT_CONTAINER") or "").strip():
+            env["LECO_WORKSPACE_PARENT_CONTAINER"] = "/workspace-parent"
     return env
 
 
@@ -84,9 +100,18 @@ def primary_compose_path(manifest: ApplicationManifest, manifest_path: Path) -> 
     if cfm:
         er = Path(cfm)
         return er.resolve() if er.is_absolute() else (manifest_path.parent / er).resolve()
-    root = manifest.resolved_root(manifest_path)
-    rel = Path(dc.compose_file)
-    return rel.resolve() if rel.is_absolute() else (root / rel).resolve()
+    cf = (dc.compose_file or "").strip()
+    if cf:
+        root = manifest.resolved_root(manifest_path)
+        rel = Path(cf)
+        return rel.resolve() if rel.is_absolute() else (root / rel).resolve()
+    for extra in dc.additional_compose_files_from_manifest or []:
+        er = Path(str(extra).strip())
+        if not str(er):
+            continue
+        cand = er.resolve() if er.is_absolute() else (manifest_path.parent / er).resolve()
+        return cand
+    return None
 
 
 def compose_args(manifest: ApplicationManifest, manifest_path: Path) -> list[str]:
@@ -102,12 +127,24 @@ def compose_args(manifest: ApplicationManifest, manifest_path: Path) -> list[str
         er = Path(cfm)
         cfm_abs = er.resolve() if er.is_absolute() else (manifest_parent / er).resolve()
         compose_paths.append(str(path_for_docker_daemon(cfm_abs)))
-    else:
-        rel = Path(dc.compose_file)
+    elif (dc.compose_file or "").strip():
+        rel = Path(dc.compose_file.strip())
         if rel.is_absolute():
             compose_paths.append(str(path_for_docker_daemon(rel.resolve())))
         else:
             compose_paths.append(str(path_for_docker_daemon((root_d / rel).resolve())))
+    elif dc.additional_compose_files_from_manifest:
+        for extra in dc.additional_compose_files_from_manifest:
+            er = Path(str(extra).strip())
+            if not str(er):
+                continue
+            cand = er.resolve() if er.is_absolute() else (manifest_parent / er).resolve()
+            if cand.is_file():
+                compose_paths.append(str(path_for_docker_daemon(cand)))
+    if not compose_paths:
+        raise ValueError(
+            "dockerCompose has no composeFile, composeFileFromManifest, or additionalComposeFilesFromManifest"
+        )
     for extra in dc.additional_compose_files or []:
         er = Path(str(extra).strip())
         if not str(er):
@@ -123,7 +160,9 @@ def compose_args(manifest: ApplicationManifest, manifest_path: Path) -> list[str
         cand = er.resolve() if er.is_absolute() else (manifest_parent / er).resolve()
         if not cand.is_file():
             continue
-        compose_paths.append(str(path_for_docker_daemon(cand)))
+        mapped = str(path_for_docker_daemon(cand))
+        if mapped not in compose_paths:
+            compose_paths.append(mapped)
     args = [*_compose_cmd()]
     for fp in compose_paths:
         args.extend(["-f", fp])

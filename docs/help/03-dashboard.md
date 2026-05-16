@@ -11,7 +11,7 @@ Open **`https://localhost.lh`** (or `http://localhost.lh`).
 | **Infrastructure** | Health, service cards, **Ollama/AirLLM model managers**, CF local, Docker inventory |
 | **Metrics** | Host CPU/RAM/temp history |
 | **Control** | Start/stop/restart/pause ecosystem services |
-| **Hosted apps** | Registered apps from `leco-registry.yaml` |
+| **Hosted apps** | Registered apps from `leco-registry.yaml`; detail pane includes **Attached services** (host vs Docker connection strings) |
 | **Routes** | Traefik `hosting/traefik/dynamic.yml` editor |
 | **Logs** | Per-container log tail |
 | **Help** | This manual (`/help`) |

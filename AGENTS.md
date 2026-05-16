@@ -53,6 +53,11 @@ This repo is a local platform with:
    - `dashboard/hosting_layout.py`
    - `dashboard/leco_registration.py`
    - `tools/deploy-cli/leco_app/schema.py`
+   - When changing attached services / per-app connection strings, also update:
+     - `dashboard/hosted_app_services.py`
+     - `dashboard/hosted_apps.py` (snapshot)
+     - `dashboard/static/dashboard.js` (Attached services UI)
+     - `docs/help/12-hosted-app-attached-services.md`, `docs/help/dev-08-hosted-app-services.md`
    - When changing update-catalog / LLM catalogs, also update:
  - `ecosystem-stack/update-catalog/watcher.py`
  - `ecosystem-stack/config/llm-catalog-*-seed.json`

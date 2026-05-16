@@ -168,7 +168,9 @@ def _validate_existing_manifest_tree(mp: Path) -> tuple[MergedApplication | None
         prof = (mp.parent / rel).resolve()
         if not prof.is_file():
             return None, f"localHostProfile not found: {prof} (manifest references {m.local_host_profile!r})"
-    root = m.resolved_root(mp)
+    from leco_app.paths import resolve_app_root, resolve_reference_file
+
+    root = resolve_app_root(mp, str(m.root or "."))
     if m.docker_compose:
         cfm = (m.docker_compose.compose_file_from_manifest or "").strip()
         if cfm:
@@ -176,10 +178,14 @@ def _validate_existing_manifest_tree(mp: Path) -> tuple[MergedApplication | None
             ap = p.resolve() if p.is_absolute() else (mp.parent / p).resolve()
             if not ap.is_file():
                 return None, f"dockerCompose.composeFileFromManifest not found: {ap}"
-        else:
-            cf = root / Path(m.docker_compose.compose_file)
+        elif (m.docker_compose.compose_file or "").strip():
+            cf = root / Path(m.docker_compose.compose_file.strip())
             if not cf.is_file():
                 return None, f"dockerCompose.composeFile not found: {cf}"
+        elif not any(
+            str(x).strip() for x in (m.docker_compose.additional_compose_files_from_manifest or [])
+        ) and not any(str(x).strip() for x in (m.docker_compose.additional_compose_files or [])):
+            return None, "dockerCompose has no compose file paths configured"
         for rel in m.docker_compose.additional_compose_files or []:
             p = Path(str(rel).strip())
             if not str(p):
@@ -195,9 +201,14 @@ def _validate_existing_manifest_tree(mp: Path) -> tuple[MergedApplication | None
             if not ap.is_file():
                 return None, f"dockerCompose.additionalComposeFilesFromManifest entry not found: {ap}"
     if m.cloudflare and m.cloudflare.wrangler_config:
-        wc = root / Path(m.cloudflare.wrangler_config)
-        if not wc.is_file():
-            return None, f"cloudflare.wranglerConfig not found: {wc}"
+        wr = str(m.cloudflare.wrangler_config).strip()
+        wc = resolve_reference_file(mp, str(m.root or "."), wr)
+        if wc is None:
+            return None, (
+                f"cloudflare.wranglerConfig not found: {root / wr} "
+                f"(materialized apps: ensure hosting/.../source symlink target exists on this machine, "
+                f"or set LECO_WORKSPACE_PARENT_HOST to the parent of UtilityServer)"
+            )
     return merged, None
 
 
@@ -206,8 +217,10 @@ def _deploy_from_manifest(mp: Path, *, strict_compose: bool = True) -> int:
 
     If ``strict_compose`` is False (e.g. after ``init``), missing dockerCompose logs a warning and returns 0.
     """
+    from leco_app.schema import docker_compose_is_deployable
+
     m = load_effective_manifest(mp)
-    if not m.docker_compose:
+    if not docker_compose_is_deployable(m.docker_compose):
         msg = (
             "Manifest has no dockerCompose — skipping Docker deploy "
             "(add dockerCompose to leco.yaml infrastructure or leco.app.yaml, or use leco-devops cf-deploy for Workers)."

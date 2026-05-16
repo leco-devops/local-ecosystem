@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>LEco DevOps</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/static/dashboard.css?v=20260530" />
+    <link rel="stylesheet" href="/static/dashboard.css?v=20260516b" />
   </head>
   <body>
     <div class="wrap">
@@ -811,6 +811,20 @@
               ></div>
               <div id="hostedAppsUnregisterHint" class="hosted-apps-unregister-hint is-hidden" role="status" aria-live="polite"></div>
               <div class="hosted-apps-kpi" id="hostedAppsKpi"></div>
+              <section
+                id="hostedAppsAttachedServices"
+                class="hosted-attached-services"
+                aria-label="Attached services for this application"
+              >
+                <h4 class="hosted-apps-subhead">Attached services</h4>
+                <p class="hosted-attached-services__banner" role="note">
+                  Local development only — credentials reflect compose defaults, the UI credential vault, and
+                  Wrangler/local CF bindings. Not for production.
+                </p>
+                <div id="hostedAppsAttachedServicesBody" class="hosted-attached-services__body">
+                  <p class="muted small">Loading attached services…</p>
+                </div>
+              </section>
               <div
                 id="hostedAppsResourceLedger"
                 class="hosted-resource-ledger"

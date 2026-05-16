@@ -15,6 +15,7 @@ This Low-Level Design (LLD) maps concrete modules, APIs, and responsibilities.
 | `dashboard/leco_materialize.py` | Writable materialization for read-only roots |
 | `dashboard/hosting_layout.py` | Source/target path policy and symlink handling |
 | `dashboard/hosted_apps.py` | Registry-based hosted listing, snapshots, manifest-driven UI fields |
+| `dashboard/hosted_app_services.py` | Per-app attached services: compose merge, credentials, `connection_endpoints` (host vs Docker DNS) |
 | `dashboard/hosted_offboard.py` | Offboard helper around unregister flow |
 | `dashboard/docs_catalog.py` | Whitelisted docs surfaced in in-app Docs tab |
 | `dashboard/monitor.py` | Service map, metrics aggregation, probes, and overview payloads |
@@ -54,7 +55,7 @@ This Low-Level Design (LLD) maps concrete modules, APIs, and responsibilities.
 ### LEco hosted workflows
 
 - `GET /api/hosted-apps`
-- `GET /api/hosted-apps/<slug>/snapshot`
+- `GET /api/hosted-apps/<slug>/snapshot` — includes `attached_services` (grouped items with `connection_endpoints`: `host`, `host_lh`, `docker`)
 - `GET /api/hosted-apps/<slug>/insights`
 - `POST /api/hosted/upload-zip`
 - `POST /api/leco/browse`

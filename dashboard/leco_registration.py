@@ -64,10 +64,10 @@ class RegisterPrepared:
 def effective_manifest_has_docker_compose(manifest_abs: Path) -> bool:
     """Whether ``leco-devops deploy`` would run compose (merged bridge + localhost profile)."""
     try:
-        from leco_app.schema import load_effective_manifest
+        from leco_app.schema import docker_compose_is_deployable, load_effective_manifest
 
         m = load_effective_manifest(manifest_abs.resolve())
-        return m.docker_compose is not None
+        return docker_compose_is_deployable(m.docker_compose)
     except Exception:
         return False
 

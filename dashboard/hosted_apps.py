@@ -457,12 +457,12 @@ def manifest_ui_fields(manifest_path: str) -> dict[str, Any]:
     endpoint_urls = explicit_urls
     main_urls = _dual_scheme_urls(main_url)
     try:
-        from leco_app.schema import load_effective_manifest
+        from leco_app.schema import docker_compose_is_deployable, load_effective_manifest
 
         em = load_effective_manifest(mp)
         if em.cloudflare:
             dedicated_local_adapters = bool(em.cloudflare.dedicated_local_adapters)
-        effective_has_docker_compose = em.docker_compose is not None
+        effective_has_docker_compose = docker_compose_is_deployable(em.docker_compose)
         source_location = str(em.resolved_root(mp).resolve())
     except Exception:
         pass
@@ -711,6 +711,22 @@ def snapshot_for_slug(slug: str) -> dict[str, Any]:
             urls_for_probe.append(candidate.strip())
     url_probes = _probe_url_map(urls_for_probe[:16])
     tail = meta.get("compose_tail") or []
+    attached: dict[str, Any] = {"local_dev_only": True, "groups": []}
+    try:
+        from hosted_app_services import build_attached_services
+
+        attached = build_attached_services(
+            meta["manifest_path"],
+            compose_ps=services,
+            manifest_ui=mf,
+            compose_tail=tail,
+        )
+    except Exception as exc:
+        attached = {
+            "local_dev_only": True,
+            "groups": [],
+            "error": str(exc)[:300],
+        }
     return {
         "ok": True,
         "slug": slug.strip(),
@@ -720,6 +736,7 @@ def snapshot_for_slug(slug: str) -> dict[str, Any]:
         "services": services,
         "aggregate": agg,
         "manifest_ui": mf,
+        "attached_services": attached,
         "url_probes": url_probes,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }

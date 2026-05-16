@@ -66,7 +66,7 @@ Implemented in `schema.py`, `compose_runner.py`, `leco_detect.compute_hosting_so
 | Staging dir | `hosting_layout.hosting_staging_dir(slug)` → `hosting/app-available/<slug>` |
 | Registry path | `hosting_layout.registry_manifest_relpath(slug)` |
 | Source symlink | `hosting_layout.sync_hosting_source_symlink` |
-| Config symlinks | `sync_hosting_config_ref_symlinks` |
+| Config symlinks | `sync_hosting_config_ref_symlinks` — `configRefs`, each `runtimes[].config`, wrangler scan; remaps `/workspace-parent` on host |
 
 ## Subprocess boundary
 

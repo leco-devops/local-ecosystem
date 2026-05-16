@@ -6,7 +6,7 @@ Each subdirectory holds a **bridge** (`leco.app.yaml`) + **profile** (`leco.yaml
 
 | File | Responsibility |
 |------|----------------|
-| **`leco.app.yaml`** | **Bridge to LEco:** `name` (registry slug), `root` (path resolution), `localHostProfile`, `applicationVersion`, optional `configRefs` (paths to `wrangler.toml`, compose, `.env`, Dockerfile, WordPress/nginx/Varnish/DB init, … — relative to **resolved root**), optional `localhost.notes` merged with the profile. Header comments in samples explain resolution, register/deploy, and Traefik. |
+| **`leco.app.yaml`** | **Bridge to LEco:** `name` (registry slug), `root` (path resolution), `localHostProfile`, `applicationVersion`, optional `configRefs` (paths to `wrangler.toml` or `infra/wrangler.*.toml`, compose, `.env`, Dockerfile, … — relative to **resolved root**), optional `localhost.notes` merged with the profile. On materialize, LEco mirrors those paths (plus every `runtimes[].config`) as symlinks beside `source`. |
 | **`leco.yaml`** | **Application + infra:** `infrastructure` (compose, cloudflare, routing, …), lifecycle, urls, archetype. |
 
 `leco-devops` loads the bridge, merges `leco.yaml` `infrastructure` into the effective manifest, then runs compose / provision / Traefik as configured.

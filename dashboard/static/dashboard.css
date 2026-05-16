@@ -3878,6 +3878,158 @@ button.dev-open-doc:hover {
   font-size: 1.15em;
 }
 
+.hosted-attached-services {
+  margin: 0 0 20px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid rgba(100, 116, 139, 0.35);
+}
+
+.hosted-attached-services__banner {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  color: #fde68a;
+}
+
+.hosted-attached-services__group {
+  margin-bottom: 16px;
+}
+
+.hosted-attached-services__group-title {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 10px;
+  color: #e2e8f0;
+}
+
+.hosted-attached-services__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.hosted-attached-services__card {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(2, 6, 23, 0.55);
+  border: 1px solid rgba(71, 85, 105, 0.45);
+}
+
+.hosted-attached-services__card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.hosted-attached-services__kind {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(56, 189, 248, 0.15);
+  color: #7dd3fc;
+}
+
+.hosted-attached-services__status {
+  margin-left: auto;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.hosted-attached-services__cred-table {
+  width: 100%;
+  font-size: 12px;
+  margin: 8px 0;
+  border-collapse: collapse;
+}
+
+.hosted-attached-services__cred-table th {
+  text-align: left;
+  padding: 4px 8px 4px 0;
+  color: #94a3b8;
+  font-weight: 500;
+  vertical-align: top;
+  width: 28%;
+}
+
+.hosted-attached-services__cred-table td {
+  padding: 4px 0;
+  word-break: break-all;
+}
+
+.hosted-attached-services__conns {
+  margin: 8px 0;
+  padding-left: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.hosted-attached-services__conn-row {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--surface-2, rgba(0, 0, 0, 0.04));
+  border-left: 3px solid var(--border, #ccc);
+}
+
+.hosted-attached-services__conn-row[data-scope="host"],
+.hosted-attached-services__conn-row[data-scope="host_lh"] {
+  border-left-color: var(--ok, #2d8a4e);
+}
+
+.hosted-attached-services__conn-row[data-scope="docker"] {
+  border-left-color: var(--warn, #b8860b);
+}
+
+.hosted-attached-services__conn-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: var(--muted, #666);
+}
+
+.hosted-attached-services__conns code {
+  display: block;
+  font-size: 11px;
+  word-break: break-all;
+  margin: 4px 0;
+}
+
+.hosted-attached-services__copy {
+  font-size: 10px;
+  margin-left: 6px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.hosted-attached-services__mgmt a,
+.hosted-attached-services__hub {
+  font-size: 12px;
+}
+
+.hosted-attached-services__actions {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.hosted-attached-services__auto {
+  font-size: 11px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
 .hosted-apps-kpi {
   display: flex;
   flex-wrap: wrap;

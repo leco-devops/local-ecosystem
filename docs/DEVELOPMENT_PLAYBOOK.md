@@ -122,7 +122,8 @@ Requires Traefik routing `*.lh` to backends on port 80.
 When changing registration, materialization, or compose behavior, treat these as one system:
 
 - **Effective manifest:** bridge (`leco.app.yaml`) + profile **`infrastructure`** (`leco.yaml`). Dashboard listing and control paths must resolve compose the same way as **`leco-devops`** (`dashboard/leco_control.py`, `tools/deploy-cli/leco_app/schema.py`).
-- **Read-only `wsp:` paths:** **`source`** symlink target and **`configRefs`** sync live in **`dashboard/leco_detect.py`**, **`dashboard/leco_materialize.py`**, **`dashboard/hosting_layout.py`**.
+- **Read-only `wsp:` paths:** **`source`** symlink target and **config symlinks** (`configRefs`, `runtimes[].config`, wrangler scan; host `/workspace-parent` remap) live in **`dashboard/leco_detect.py`**, **`dashboard/leco_wrangler_paths.py`**, **`dashboard/leco_materialize.py`**, **`dashboard/hosting_layout.py`**.
 - **Teardown:** **`dashboard/control.py`** + **`dashboard/hosted_offboard.py`** — offboard after **`leco-devops down`** even on failure.
+- **Attached services:** **`dashboard/hosted_app_services.py`** builds snapshot `attached_services` (compose + runtimes + CF + labeled host/Docker connection URIs). Operator help: **`docs/help/12-hosted-app-attached-services.md`**; API/fields: **`docs/help/dev-08-hosted-app-services.md`**.
 
 Operator-facing map: **[LECO_APP_BLUEPRINT.md](LECO_APP_BLUEPRINT.md)**. Dashboard **Docs** catalog: **`dashboard/docs_catalog.py`** (`leco-app-blueprint` id).

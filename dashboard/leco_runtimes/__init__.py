@@ -68,12 +68,17 @@ def detect_runtimes(app_root: Path) -> list[RuntimeDetection]:
     out: list[RuntimeDetection] = []
     for a in REGISTRY.values():
         try:
-            hit = a.detect(app_root)
+            detect_all = getattr(a, "detect_all", None)
+            if callable(detect_all):
+                hits = detect_all(app_root)
+            else:
+                hit = a.detect(app_root)
+                hits = [hit] if hit is not None else []
         except Exception:
-            # A detector must never break onboarding for unrelated apps.
-            hit = None
-        if hit is not None:
-            out.append(hit)
+            hits = []
+        for hit in hits:
+            if hit is not None:
+                out.append(hit)
     return out
 
 

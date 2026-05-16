@@ -215,6 +215,15 @@ def _preserve_hosting_compose_state(
     if existing_entries and (not isinstance(curr_entries, list) or not curr_entries or _is_workers_only_routing(curr_entries)):
         infra["routing"] = {"entries": existing_entries}
 
+    ex_runtimes = None
+    if isinstance(ex_infra, dict):
+        raw_rt = ex_infra.get("runtimes")
+        if isinstance(raw_rt, list) and raw_rt:
+            ex_runtimes = raw_rt
+    curr_runtimes = infra.get("runtimes")
+    if ex_runtimes and (not isinstance(curr_runtimes, list) or not curr_runtimes):
+        infra["runtimes"] = ex_runtimes
+
 
 def _staging_existing_profile_has_compose(staging: Path) -> bool:
     man = staging / "leco.app.yaml"

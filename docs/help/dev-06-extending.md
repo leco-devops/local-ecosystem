@@ -12,6 +12,16 @@ Extension points for new features without breaking dashboard ↔ CLI contract.
 6. **`dashboard/leco_registration.py`** — pre-register hooks
 7. **`docs/LECO_APP_BLUEPRINT.md`** + help topic if user-facing
 
+## Attached services / connection endpoints
+
+1. **`dashboard/hosted_app_services.py`** — classification, `_build_connection_endpoints`, enrich, `build_attached_services`
+2. **`dashboard/hosted_apps.py`** — snapshot wiring
+3. **`dashboard/static/dashboard.js`** — `renderHostedAttachedServices()`
+4. **`dashboard/tests/test_hosted_app_services.py`**
+5. Help: **`docs/help/12-hosted-app-attached-services.md`** (users), **`docs/help/dev-08-hosted-app-services.md`** (developers)
+
+Keep compose file resolution aligned with **`leco_detect`** / **`compose_runner`** when changing `load_merged_compose_services`.
+
 ## New local edge runtime type
 
 1. `LocalRuntimeSpec` fields in **`schema.py`**

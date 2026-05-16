@@ -74,6 +74,8 @@ HELP_TREE: list[dict] = [
             {"id": "hosting-layout", "title": "Hosting layout & components", "file": "12-hosting-layout.md"},
             {"id": "onboarding-overview", "title": "Onboarding new apps", "file": "12-onboarding-overview.md"},
             {"id": "onboarding-materialize", "title": "wsp: paths & materialize", "file": "12-onboarding-materialize.md"},
+            {"id": "multi-wrangler-monorepo", "title": "Multi-Wrangler monorepos", "file": "12-multi-wrangler-monorepo.md"},
+            {"id": "hosted-app-attached-services", "title": "Attached services panel", "file": "12-hosted-app-attached-services.md"},
             {"id": "hosting-overrides", "title": "Overriding upstream apps", "file": "12-hosting-overrides.md"},
             {"id": "deploy-rebuild", "title": "Deploy, rebuild & offload", "file": "12-deploy-rebuild.md"},
         ],
@@ -104,6 +106,7 @@ HELP_TREE: list[dict] = [
             {"id": "dev-ecosystem-stack", "title": "Ecosystem stack", "file": "dev-05-ecosystem-stack.md"},
             {"id": "dev-extending", "title": "Extending LEco", "file": "dev-06-extending.md"},
             {"id": "dev-debugging", "title": "Debugging & validation", "file": "dev-07-debugging.md"},
+            {"id": "dev-hosted-app-services", "title": "Attached services (API)", "file": "dev-08-hosted-app-services.md"},
         ],
     },
     {

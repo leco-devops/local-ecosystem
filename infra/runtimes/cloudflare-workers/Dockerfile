@@ -34,7 +34,7 @@ ENV LECO_PORT=8787 \
 RUN apt-get update \
     && apt-get install -y --no-install-recommends tini git curl wget ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && npm install --silent --global wrangler@^3 \
+    && npm install --silent --global wrangler@^3 pnpm@9 \
     && npm cache clean --force
 
 WORKDIR /app

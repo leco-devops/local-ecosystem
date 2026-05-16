@@ -80,7 +80,7 @@ Put frontend/API containers on external network **`lh-network`** so Traefik can 
 
 ### 2. Cloudflare (Wrangler) application
 
-If **`wrangler.toml`** (or **`cloudflare/wrangler.toml`**) exists, **`init`** can set **`cloudflare.wranglerConfig`** in the manifest. **Compose-only apps** (no `cloudflare` block) never trigger local KV/R2/D1. For Workers-backed apps:
+If **`wrangler.toml`**, **`infra/wrangler.*.toml`**, or **`cloudflare/wrangler.toml`** exists, **`init`** / **Detect** can set **`cloudflare.wranglerConfig`** and multiple **`infrastructure.runtimes[]`** entries (one per Worker config; optional Pages runtime for **`wrangler.pages.toml`**). **Compose-only apps** (no `cloudflare` block) never trigger local KV/R2/D1. For Workers-backed apps:
 
 | Step | Local KV/R2/D1 from wrangler |
 |------|------------------------------|
@@ -144,6 +144,7 @@ leco-devops ecosystem-unregister <slug> --ecosystem-root /path/to/local-ecosyste
 After **`ecosystem-register`** (or the wizard below), open **Hosted apps** for:
 
 - Per-service metrics, logs, insights, health URL probes (from manifest).
+- **Attached services** — compose data stores, runtimes, Cloudflare bindings, with **host** (`127.0.0.1` / `*.lh`) and **Docker DNS** connection strings (see **`docs/help/12-hosted-app-attached-services.md`**).
 - **Local profile** summary: archetype, **`leco.yaml`** URLs, lifecycle steps (read-only in the UI).
 - Lifecycle actions via **Control** targets **`leco-stack-<id>`** (same token model as other Control actions). The LEco DevOps service runs **`leco-devops deploy`**, **`stop`**, **`down`** (and **`down -v`** on reset) with **`--manifest`** for those stacks; **restart** / **recreate** / **pause** still use **`docker compose`** where LEco DevOps has no matching command. **Remove** / **Reset** always runs **offboard** (registry + hosting dirs + Traefik / local CF as configured) after **`down`**, even when **`down`** exits non-zero (e.g. missing compose file on disk).
 
@@ -158,7 +159,7 @@ On **Hosted apps**, expand **Register application**:
 
 1. **App root path** — relative to the mounted repo (e.g. **`dashboard/subapp`**) or, for siblings exposed as **workspace-parent**, the prefix **`wsp:FolderName`** (no **`..`** in the path field). **Browse** uses read-only **`GET /api/leco/browse`** to pick a folder.
 2. **Detect** — **`POST /api/leco/detect`** returns scan metadata plus, when present on disk, **`existing_manifest_yaml`** / **`existing_localhost_yaml`** (size-capped). The UI can load those into the editors or use generated previews. **Sample templates** come from **`GET /api/leco/register-samples`**.
-3. **Generate YAML** / **Save YAML** (when needed) — **`POST /api/leco/generate-yaml`** or **`POST /api/leco/save-yaml`** with the control token. Read-only **`wsp:`** trees are **materialized** under **`hosting/app-available/<slug>/`** with a **`source`** symlink and **config symlinks** for **`configRefs`** / detected paths; **`Register`** is gated until YAML exists on disk (**`POST /api/leco/yaml-status`**).
+3. **Generate YAML** / **Save YAML** (when needed) — **`POST /api/leco/generate-yaml`** or **`POST /api/leco/save-yaml`** with the control token. Read-only **`wsp:`** trees are **materialized** under **`hosting/app-available/<slug>/`** with a **`source`** symlink and **config symlinks** for **`configRefs`**, each **`runtimes[].config`**, and discovered **`wrangler.*.toml`** files (multi-Wrangler monorepos: **`docs/help/12-multi-wrangler-monorepo.md`**); **`Register`** is gated until YAML exists on disk (**`POST /api/leco/yaml-status`**).
 4. Edit the optional YAML text areas if needed.
 5. **Register** — **`POST /api/leco/register`** with the **control token** (same as **Control** tab). Writes or uses **`leco.app.yaml`** / **`leco.yaml`**, then runs **`leco-devops ecosystem-register`** inside the LEco DevOps container (includes optional local KV/R2/D1 provision for Wrangler apps).
 

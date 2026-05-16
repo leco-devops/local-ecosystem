@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 from typing import Any
+
+_WSP_CONTAINER_DEFAULT = "/workspace-parent"
 
 HOSTING_SOURCE_LINK_NAME = "source"
 
@@ -14,13 +17,25 @@ def collect_config_ref_relative_paths(
     profile_dict: dict[str, Any] | None,
 ) -> list[str]:
     """Paths (relative to app tree root) to mirror as symlinks under hosting staging."""
+    return collect_materialized_config_symlink_paths(
+        manifest_dict, profile_dict, app_tree=None
+    )
+
+
+def collect_materialized_config_symlink_paths(
+    manifest_dict: dict[str, Any],
+    profile_dict: dict[str, Any] | None,
+    *,
+    app_tree: Path | None = None,
+) -> list[str]:
+    """Config paths to symlink under ``hosting/app-available/<slug>/`` (refs + runtimes + wrangler scan)."""
     out: list[str] = []
     seen: set[str] = set()
 
     def add(raw: Any) -> None:
         if not isinstance(raw, str):
             return
-        s = raw.strip()
+        s = raw.strip().replace("\\", "/")
         if not s or s in seen:
             return
         seen.add(s)
@@ -41,7 +56,78 @@ def collect_config_ref_relative_paths(
             cf = infra.get("cloudflare")
             if isinstance(cf, dict):
                 add(cf.get("wranglerConfig") or cf.get("wrangler_config"))
+            for rt in infra.get("runtimes") or []:
+                if isinstance(rt, dict):
+                    add(rt.get("config"))
+
+    if app_tree is not None and app_tree.is_dir():
+        try:
+            from leco_wrangler_paths import (
+                list_wrangler_config_files,
+                list_wrangler_pages_config_files,
+            )
+
+            for rel in list_wrangler_config_files(app_tree) + list_wrangler_pages_config_files(
+                app_tree
+            ):
+                add(rel.as_posix())
+        except Exception:
+            pass
+
     return out
+
+
+def _find_ecosystem_root_near(staging: Path) -> Path | None:
+    p = staging.resolve()
+    for cand in (p, *p.parents):
+        if (cand / "config" / "leco-registry.yaml").is_file():
+            return cand
+    return None
+
+
+def _remap_workspace_parent_path(target: Path, *, ecosystem_root: Path | None) -> Path | None:
+    ts = os.path.normpath(str(target))
+    wsp_c = (os.environ.get("LECO_WORKSPACE_PARENT_CONTAINER") or _WSP_CONTAINER_DEFAULT).rstrip(
+        "/"
+    )
+    if not (ts == wsp_c or ts.startswith(wsp_c + os.sep)):
+        return None
+    rel = ts[len(wsp_c) :].lstrip(os.sep)
+    host_wsp = (os.environ.get("LECO_WORKSPACE_PARENT_HOST") or "").strip()
+    if not host_wsp and ecosystem_root is not None:
+        host_wsp = str(ecosystem_root.parent)
+    if not host_wsp or not rel:
+        return None
+    cand = Path(host_wsp) / rel
+    try:
+        return cand.resolve() if cand.exists() else None
+    except OSError:
+        return cand if cand.exists() else None
+
+
+def resolve_materialized_app_tree(staging: Path, app_tree: Path) -> Path:
+    """Resolved upstream app directory for config symlinks (host or container)."""
+    eco = _find_ecosystem_root_near(staging)
+    if app_tree.is_dir():
+        return app_tree.resolve()
+    src_link = staging / HOSTING_SOURCE_LINK_NAME
+    if src_link.is_symlink():
+        raw = os.readlink(src_link)
+        target = Path(raw)
+        if not target.is_absolute():
+            target = src_link.parent / target
+        if target.is_dir():
+            return target.resolve()
+        remapped = _remap_workspace_parent_path(target, ecosystem_root=eco)
+        if remapped is not None and remapped.is_dir():
+            return remapped
+    remapped = _remap_workspace_parent_path(app_tree, ecosystem_root=eco)
+    if remapped is not None and remapped.is_dir():
+        return remapped
+    try:
+        return app_tree.resolve()
+    except OSError:
+        return app_tree
 
 
 def _safe_rel_path_under_root(rel: str) -> Path | None:
@@ -74,11 +160,13 @@ def sync_hosting_config_ref_symlinks(
         Path(prof_name).as_posix(),
     }
 
-    root = app_tree.resolve()
+    root = resolve_materialized_app_tree(staging, app_tree)
     created: list[str] = []
     skipped: list[str] = []
 
-    for rel in collect_config_ref_relative_paths(manifest_dict, profile_dict):
+    for rel in collect_materialized_config_symlink_paths(
+        manifest_dict, profile_dict, app_tree=root
+    ):
         sub = _safe_rel_path_under_root(rel)
         if sub is None:
             skipped.append(rel)
@@ -96,20 +184,37 @@ def sync_hosting_config_ref_symlinks(
             skipped.append(rel)
             continue
 
-        link_path = (staging / sub).resolve()
+        link_path = staging / sub
         try:
-            link_path.relative_to(staging.resolve())
+            link_path.relative_to(staging)
         except ValueError:
             skipped.append(rel)
             continue
 
         is_dir = target_abs.is_dir()
         if link_path.is_symlink():
+            up_to_date = False
             try:
-                if link_path.resolve() == target_abs:
-                    continue
+                up_to_date = link_path.resolve() == target_abs
             except OSError:
-                pass
+                up_to_date = False
+            if up_to_date:
+                try:
+                    raw = os.readlink(link_path)
+                    tr = Path(raw)
+                    if not tr.is_absolute():
+                        tr = link_path.parent / tr
+                    ts = os.path.normpath(str(tr))
+                    wsp_c = (
+                        os.environ.get("LECO_WORKSPACE_PARENT_CONTAINER")
+                        or _WSP_CONTAINER_DEFAULT
+                    ).rstrip("/")
+                    if ts == wsp_c or ts.startswith(wsp_c + os.sep):
+                        up_to_date = False
+                except OSError:
+                    pass
+            if up_to_date:
+                continue
             link_path.unlink(missing_ok=True)
         elif link_path.exists():
             skipped.append(rel)

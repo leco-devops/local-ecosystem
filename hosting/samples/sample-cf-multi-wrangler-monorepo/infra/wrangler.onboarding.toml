@@ -1,0 +1,3 @@
+name = "sample-multi-wrangler-onboarding"
+main = "workers/onboarding/src/index.ts"
+compatibility_date = "2024-01-01"

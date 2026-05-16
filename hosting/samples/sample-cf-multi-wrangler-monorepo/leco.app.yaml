@@ -1,0 +1,18 @@
+# Bridge — multi-Wrangler monorepo (see README.md)
+lecoAppVersion: '3'
+applicationVersion: '0.1.0-sample'
+name: sample-cf-multi-wrangler-monorepo
+root: .
+localHostProfile: leco.yaml
+configRefs:
+  wranglerConfig: infra/wrangler.api.toml
+  wranglerOnboardingConfig: infra/wrangler.onboarding.toml
+  wranglerOnboardingEmailConfig: infra/wrangler.onboarding-email.toml
+  wranglerOnboardingMobileConfig: infra/wrangler.onboarding-mobile.toml
+  wranglerPagesConfig: infra/wrangler.pages.toml
+  packageJson: package.json
+localhost:
+  notes: |
+    [SAMPLE — multi wrangler]
+    Detect/Generate adds one runtime per infra/wrangler.*.toml. configRefs + materialize
+    keep matching symlinks under hosting/app-available/<slug>/ when using wsp: paths.
