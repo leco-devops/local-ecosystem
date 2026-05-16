@@ -97,7 +97,7 @@ sequenceDiagram
   participant UI as LEcoDevOpsUI
   participant API as FlaskAPI
   participant MAT as MaterializeLayer
-  participant CLI as leco-app
+  participant CLI as leco-devops
   participant REG as RegistryYaml
   participant TR as TraefikDynamic
 

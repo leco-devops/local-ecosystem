@@ -35,7 +35,7 @@
 #   1. Copy this sample to hosting/app-available/<your-slug>/
 #   2. Adjust name, paths, hostnames, service names
 #   3. Register via dashboard "Register application" or CLI:
-#      leco-app ecosystem-register
+#      leco-devops ecosystem-register
 #   4. Deploy/Recreate from the Hosted apps control panel
 #
 # CONFIG REFS

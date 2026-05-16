@@ -1,4 +1,4 @@
-# Compose-only: infrastructure.dockerCompose drives leco-app deploy.
+# Compose-only: infrastructure.dockerCompose drives leco-devops deploy.
 schemaVersion: 2
 archetype: generic
 infrastructure:

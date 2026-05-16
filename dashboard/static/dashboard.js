@@ -550,7 +550,7 @@ function resolveFetchPreloaderMeta(input, init) {
     const title = lecoTitles[key] || `LEco DevOps · ${key}`;
     return {
       label: title,
-      detail: `CLI: leco-app · materialize under hosting/app-available · ${httpLine}`,
+      detail: `CLI: leco-devops · materialize under hosting/app-available · ${httpLine}`,
       path: fullPath,
       tabId: "hostedAppsTab",
     };
@@ -1335,7 +1335,7 @@ function renderOverviewHostedAppsCard(payload) {
   const apps = Array.isArray(payload?.apps) ? payload.apps : [];
   if (!apps.length) {
     el.innerHTML =
-      '<p class="muted small overview-hosted-urls__empty">No hosted apps yet. Register via <code>leco-app ecosystem-register</code> or add <code>hosting/app-available/&lt;dir&gt;/leco.app.yaml</code> and refresh.</p>';
+      '<p class="muted small overview-hosted-urls__empty">No hosted apps yet. Register via <code>leco-devops ecosystem-register</code> or add <code>hosting/app-available/&lt;dir&gt;/leco.app.yaml</code> and refresh.</p>';
     return;
   }
   const rows = [...apps]
@@ -2582,6 +2582,29 @@ function showAppAlert(message, title = "Notice") {
   });
 }
 
+/**
+ * Same as showAppAlert but renders the body as HTML (innerHTML). Caller MUST
+ * escape any untrusted strings before composing the HTML. Used by the
+ * "Show CLI" modal that needs <pre> blocks for copyable command snippets.
+ */
+function showAppHtmlAlert(htmlMessage, title = "Notice") {
+  initAppModal();
+  const overlay = document.getElementById("appModalOverlay");
+  const cancel = document.getElementById("appModalCancel");
+  const primary = document.getElementById("appModalPrimary");
+  document.getElementById("appModalTitle").textContent = title;
+  document.getElementById("appModalMessage").innerHTML = htmlMessage;
+  overlay.dataset.mode = "alert";
+  cancel.classList.add("is-hidden");
+  primary.textContent = "Close";
+  _appModalSetPrimaryVariant(primary, "primary");
+  return new Promise((resolve) => {
+    _appModalResolve = () => resolve();
+    overlay.hidden = false;
+    primary.focus();
+  });
+}
+
 function showAppConfirm({
   title = "Confirm",
   message = "",
@@ -2605,6 +2628,138 @@ function showAppConfirm({
     overlay.hidden = false;
     primary.focus();
   });
+}
+
+/**
+ * Show a copy-pasteable list of CLI commands for a given backend+model.
+ * Modal-only — does NOT execute anything. Used by the "Show CLI" buttons in
+ * Ollama and AirLLM toolbars so users can lift commands into a terminal.
+ *
+ *   backend: "ollama" | "airllm"
+ *   model:   the model id/HF name (may be empty -> placeholder)
+ */
+function buildModelCliSnippets(backend, model) {
+  const m = (model || "").trim();
+  const safe = m || (backend === "airllm" ? "<HF_OWNER/MODEL>" : "<MODEL[:tag]>");
+  if (backend === "airllm") {
+    return [
+      { title: "Install (pull) into AirLLM cache", lines: [
+        `./leco-cli.sh airllm install '${safe}'`,
+        `# or via API:`,
+        `curl -X POST https://airllm.lh/api/pull -H 'Content-Type: application/json' \\`,
+        `     -d '{"name":"${safe}","stream":false}'`,
+      ] },
+      { title: "Load into RAM (warm)", lines: [
+        `./leco-cli.sh airllm load '${safe}'`,
+        `# or:`,
+        `curl -X POST https://airllm.lh/api/chat -H 'Content-Type: application/json' \\`,
+        `     -d '{"model":"${safe}","messages":[{"role":"user","content":"hello"}],"stream":false,"keep_alive":-1}'`,
+      ] },
+      { title: "Unload from RAM (keep_alive=0)", lines: [
+        `./leco-cli.sh airllm unload '${safe}'`,
+        `# or:`,
+        `curl -X POST https://airllm.lh/api/generate -H 'Content-Type: application/json' \\`,
+        `     -d '{"model":"${safe}","prompt":"","keep_alive":0}'`,
+      ] },
+      { title: "Remove from disk", lines: [
+        `./leco-cli.sh airllm remove-model '${safe}'`,
+        `# or:`,
+        `curl -X DELETE https://airllm.lh/api/delete -H 'Content-Type: application/json' \\`,
+        `     -d '{"name":"${safe}"}'`,
+      ] },
+      { title: "List installed / pinned (informational)", lines: [
+        `./leco-cli.sh airllm list`,
+        `./leco-cli.sh airllm popular`,
+      ] },
+    ];
+  }
+  return [
+    { title: "Install (pull) into Ollama", lines: [
+      `./leco-cli.sh ollama install '${safe}'`,
+      `# or via host ollama CLI:`,
+      `ollama pull '${safe}'`,
+      `# or via API:`,
+      `curl -X POST http://ollama.lh/api/pull -H 'Content-Type: application/json' \\`,
+      `     -d '{"name":"${safe}","stream":false}'`,
+    ] },
+    { title: "Load into RAM (warm)", lines: [
+      `./leco-cli.sh ollama load '${safe}'`,
+      `ollama run '${safe}' --keepalive=-1 ''`,
+      `# or API:`,
+      `curl -X POST http://ollama.lh/api/chat -H 'Content-Type: application/json' \\`,
+      `     -d '{"model":"${safe}","messages":[{"role":"user","content":"hello"}],"stream":false,"keep_alive":-1}'`,
+    ] },
+    { title: "Unload from RAM (keep_alive=0)", lines: [
+      `./leco-cli.sh ollama unload '${safe}'`,
+      `# or API:`,
+      `curl -X POST http://ollama.lh/api/generate -H 'Content-Type: application/json' \\`,
+      `     -d '{"model":"${safe}","prompt":"","keep_alive":0}'`,
+    ] },
+    { title: "Remove from disk", lines: [
+      `./leco-cli.sh ollama remove-model '${safe}'`,
+      `ollama rm '${safe}'`,
+      `# or API:`,
+      `curl -X DELETE http://ollama.lh/api/delete -H 'Content-Type: application/json' \\`,
+      `     -d '{"name":"${safe}"}'`,
+    ] },
+    { title: "List installed / pinned (informational)", lines: [
+      `./leco-cli.sh ollama list`,
+      `./leco-cli.sh ollama popular`,
+    ] },
+  ];
+}
+
+/** Render snippets in a generic <pre>-based modal. Reuses showAppAlert layout. */
+async function showCliSnippetsModal(backend, model) {
+  const groups = buildModelCliSnippets(backend, model);
+  const heading = backend === "airllm" ? "AirLLM" : "Ollama";
+  const body = groups
+    .map((g) => {
+      const block = g.lines.map((l) => l.replaceAll("<", "&lt;").replaceAll(">", "&gt;")).join("\n");
+      return `<div style="margin:10px 0"><div style="font-weight:600;margin-bottom:4px">${g.title}</div><pre style="white-space:pre-wrap;background:rgba(0,0,0,.05);padding:8px;border-radius:6px;font-size:12px;overflow:auto">${block}</pre></div>`;
+    })
+    .join("");
+  const html = `<div style="max-width:680px;font-family:system-ui,sans-serif">
+    <div style="margin-bottom:8px" class="muted small">Copy any of the commands below — nothing was executed.</div>
+    ${body}
+  </div>`;
+  // showAppAlert renders a string; pass HTML by allowing inner markup via a sentinel.
+  if (typeof showAppHtmlAlert === "function") {
+    await showAppHtmlAlert(html, `${heading} CLI · ${model || "(no model entered)"}`);
+    return;
+  }
+  // Fallback: strip HTML and join with blank lines.
+  const text = groups
+    .map((g) => `# ${g.title}\n${g.lines.join("\n")}`)
+    .join("\n\n");
+  await showAppAlert(text, `${heading} CLI · ${model || "(no model entered)"}`);
+}
+
+/** Populate one of the "Popular …" <select> elements from /api/{backend}/popular. */
+async function loadPopularModels(backend, selectId, inputId) {
+  const sel = document.getElementById(selectId);
+  const inp = document.getElementById(inputId);
+  if (!sel) return;
+  try {
+    const res = await fetch(`/api/${backend}/popular`);
+    const data = await res.json();
+    const models = (data && data.models) || [];
+    sel.innerHTML =
+      '<option value="">Pick a popular model…</option>' +
+      models
+        .map((m) => {
+          const label = [m.label || m.name, m.size ? `(${m.size})` : ""].filter(Boolean).join(" ");
+          const title = (m.description || "").replaceAll('"', "&quot;");
+          return `<option value="${escapeAttr(m.name)}" title="${title}">${escapeHtml(label)}</option>`;
+        })
+        .join("");
+    sel.addEventListener("change", () => {
+      const v = sel.value || "";
+      if (v && inp) inp.value = v;
+    }, { once: false });
+  } catch (e) {
+    sel.innerHTML = '<option value="">(catalog unavailable)</option>';
+  }
 }
 
 async function runOllamaModelAction(action, model, extra = {}) {
@@ -2671,11 +2826,57 @@ function initOllamaModelsPanel() {
     const inp = document.getElementById("ollamaPullNameInput");
     const name = (inp?.value || "").trim();
     if (!name) {
-      await showAppAlert("Enter a model name (e.g. llama3.2:latest).", "Pull");
+      await showAppAlert("Enter a model name (e.g. llama3.2:latest).", "Install");
       return;
     }
     runOllamaModelAction("pull", name);
   });
+  document.getElementById("ollamaLoadNameBtn")?.addEventListener("click", async () => {
+    const inp = document.getElementById("ollamaPullNameInput");
+    const name = (inp?.value || "").trim();
+    if (!name) {
+      await showAppAlert("Enter a model name (e.g. llama3.2:latest).", "Load");
+      return;
+    }
+    const ok = await showAppConfirm({
+      title: "Load model into RAM",
+      message: `Warm "${name}" into RAM with keep_alive=-1? (First load may take a while.)`,
+      confirmText: "Load",
+    });
+    if (!ok) return;
+    runOllamaModelAction("warm", name);
+  });
+  document.getElementById("ollamaUnloadNameBtn")?.addEventListener("click", async () => {
+    const inp = document.getElementById("ollamaPullNameInput");
+    const name = (inp?.value || "").trim();
+    if (!name) {
+      await showAppAlert("Enter a model name to unload.", "Unload");
+      return;
+    }
+    runOllamaModelAction("unload", name);
+  });
+  document.getElementById("ollamaRemoveNameBtn")?.addEventListener("click", async () => {
+    const inp = document.getElementById("ollamaPullNameInput");
+    const name = (inp?.value || "").trim();
+    if (!name) {
+      await showAppAlert("Enter a model name to remove.", "Remove");
+      return;
+    }
+    const ok = await showAppConfirm({
+      title: "Remove model",
+      message: `Delete "${name}" from disk? This cannot be undone.`,
+      confirmText: "Remove",
+      danger: true,
+    });
+    if (!ok) return;
+    runOllamaModelAction("delete", name);
+  });
+  document.getElementById("ollamaShowCmdBtn")?.addEventListener("click", async () => {
+    const inp = document.getElementById("ollamaPullNameInput");
+    const name = (inp?.value || "").trim();
+    await showCliSnippetsModal("ollama", name);
+  });
+  loadPopularModels("ollama", "ollamaPopularSelect", "ollamaPullNameInput");
   document.getElementById("ollamaRefreshBackupsBtn")?.addEventListener("click", () => loadOllamaBackupSelect());
   document.getElementById("ollamaRestoreBackupBtn")?.addEventListener("click", async () => {
     const sel = document.getElementById("ollamaBackupSelect");
@@ -3085,10 +3286,21 @@ function activateTab(tabId, opts = {}) {
       } else {
         loadOllamaModelsPanel();
       }
+      scrollInfraHashAnchor();
     }
   } finally {
     endGlobalPreloader(switchToken);
   }
+}
+
+/** Scroll to #infra-ollama / #infra-airllm when opening Infrastructure with a hash. */
+function scrollInfraHashAnchor() {
+  const hash = (window.location.hash || "").replace(/^#/, "");
+  if (!hash || !hash.startsWith("infra-")) return;
+  requestAnimationFrame(() => {
+    const el = document.getElementById(hash);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 }
 
 function initTabs() {
@@ -4327,7 +4539,7 @@ async function loadHostedAppsList() {
       if (empty) {
         empty.classList.remove("is-hidden");
         empty.innerHTML =
-          'No hosted apps found. Register via <code>leco-app ecosystem-register</code> (<code>config/leco-registry.yaml</code>), or place generated <code>hosting/app-available/&lt;dir&gt;/leco.app.yaml</code> and reload — staging apps appear until you register them. See <code>config/leco-registry.example.yaml</code>.';
+          'No hosted apps found. Register via <code>leco-devops ecosystem-register</code> (<code>config/leco-registry.yaml</code>), or place generated <code>hosting/app-available/&lt;dir&gt;/leco.app.yaml</code> and reload — staging apps appear until you register them. See <code>config/leco-registry.example.yaml</code>.';
       }
       if (detail) detail.classList.add("is-hidden");
       const nav = document.getElementById("hostedAppsSidebar");
@@ -4550,7 +4762,7 @@ function renderHostedResourceLedger(manifestUi, snap) {
     const dedHint = dedicatedAdapters
       ? " With <strong>dedicatedLocalAdapters</strong>, start the stack (including <code>leco-local-*</code> services) first so provision can reach the adapters on <code>lh-network</code>."
       : "";
-    html += `<p class="muted small">Wrangler lists <strong>${expKv}</strong> KV, <strong>${expR2}</strong> R2, <strong>${expD1}</strong> D1 bindings, but <code>leco.local-cf.yaml</code> is missing or empty — run <strong>Deploy</strong> (local CF provision on) or <code>leco-app provision-local-cf</code> so dedicated names appear here.${dedHint}</p>`;
+    html += `<p class="muted small">Wrangler lists <strong>${expKv}</strong> KV, <strong>${expR2}</strong> R2, <strong>${expD1}</strong> D1 bindings, but <code>leco.local-cf.yaml</code> is missing or empty — run <strong>Deploy</strong> (local CF provision on) or <code>leco-devops provision-local-cf</code> so dedicated names appear here.${dedHint}</p>`;
   } else if (w.wrangler_configured) {
     html += '<p class="muted small">Wrangler is configured; no KV/R2/D1 tables in this env or nothing provisioned yet.</p>';
   } else {
@@ -4673,7 +4885,7 @@ function renderHostedCfResources(manifestUi) {
   }
   if (w.provision_local_resources === false && hasW) {
     html +=
-      '<p class="muted small">This manifest sets <code>cloudflare.provisionLocalResources: false</code>, so deploy will not create KV/R2/D1 on the adapters unless you run <code>leco-app provision-local-cf</code> manually.</p>';
+      '<p class="muted small">This manifest sets <code>cloudflare.provisionLocalResources: false</code>, so deploy will not create KV/R2/D1 on the adapters unless you run <code>leco-devops provision-local-cf</code> manually.</p>';
   }
   if (w.note && String(w.note).includes("missing")) {
     html += `<p class="hosted-cf-resources__warn small">${escapeHtml(w.note)}</p>`;
@@ -4709,7 +4921,7 @@ function renderHostedCfResources(manifestUi) {
       html += `<tr><td>D1</td><td><code>${escapeHtml(row.binding)}</code></td><td class="muted">expected · <code>${escapeHtml(row.database_name)}</code></td></tr>`;
     });
     html +=
-      '<tr><td colspan="3" class="muted small">No <code>leco.local-cf.yaml</code> rows — run <strong>Deploy</strong> (with local CF provision enabled) or <code>leco-app provision-local-cf</code>.</td></tr>';
+      '<tr><td colspan="3" class="muted small">No <code>leco.local-cf.yaml</code> rows — run <strong>Deploy</strong> (with local CF provision enabled) or <code>leco-devops provision-local-cf</code>.</td></tr>';
   } else if (hasW && !browser) {
     html += '<tr><td colspan="3" class="muted small">No KV/R2/D1 tables in wrangler for this env.</td></tr>';
   }
@@ -4929,7 +5141,7 @@ async function refreshHostedAppsPanel() {
         unregisterHintEl.classList.remove("is-hidden");
         unregisterHintEl.innerHTML = `<div class="hosted-apps-unregister-hint__inner hosted-apps-unregister-hint__inner--staging">
         <strong>Staging — not in <code>config/leco-registry.yaml</code> yet.</strong>
-        Edit YAML under <code>hosting/app-available/</code>, use <strong>Validate YAML &amp; paths</strong> above, then <strong>Register application</strong> (or the wizard below / <code>leco-app ecosystem-register</code>).
+        Edit YAML under <code>hosting/app-available/</code>, use <strong>Validate YAML &amp; paths</strong> above, then <strong>Register application</strong> (or the wizard below / <code>leco-devops ecosystem-register</code>).
       </div>`;
       } else {
         unregisterHintEl.classList.add("is-hidden");
@@ -4942,7 +5154,7 @@ async function refreshHostedAppsPanel() {
         The sidebar lists <code>config/leco-registry.yaml</code> — stopping or removing containers does not remove that entry.
         Traefik may still have routes to old service names, which often shows as <strong>Bad Gateway</strong>.
         Use <strong>Remove from ecosystem</strong> (Control token) to unregister and strip manifest-derived Traefik keys, or run
-        <code>leco-app ecosystem-unregister ${escapeHtml(slug)} --ecosystem-root …</code>.
+        <code>leco-devops ecosystem-unregister ${escapeHtml(slug)} --ecosystem-root …</code>.
         If routes were added manually to <code>hosting/traefik/dynamic.yml</code>, edit that file (Traefik reloads it via file watch; restart Traefik only if you changed <code>traefik-static.yaml</code> or mounts).
         <div class="hosted-apps-unregister-hint__actions">
           <button type="button" class="ctrl-act ctrl-act--ops" data-hosted-offboard="${escapeAttr(slug)}">Remove from ecosystem…</button>
@@ -6786,7 +6998,7 @@ async function runHostedOffboard(slug, stripTraefik, cleanLocalCf) {
   const ok = await showAppConfirm({
     title: `Remove hosted app ${slug}`,
     message:
-      "Runs leco-app ecosystem-unregister: removes this id from config/leco-registry.yaml, optionally strips Traefik routers/services from hosting/traefik/dynamic.yml, and deletes local KV/R2/D1 resources listed in leco.local-cf.yaml. Traefik picks up dynamic.yml changes via file watch (no Traefik restart).",
+      "Runs leco-devops ecosystem-unregister: removes this id from config/leco-registry.yaml, optionally strips Traefik routers/services from hosting/traefik/dynamic.yml, and deletes local KV/R2/D1 resources listed in leco.local-cf.yaml. Traefik picks up dynamic.yml changes via file watch (no Traefik restart).",
     confirmText: "Remove",
   });
   if (!ok) return;
@@ -7319,7 +7531,7 @@ async function runDashboardStreamOverlay(opts) {
 
 /**
  * Register via JSON POST (works through Traefik; streaming NDJSON is often buffered).
- * Runs ecosystem-register + optional leco-app deploy in one server round-trip.
+ * Runs ecosystem-register + optional leco-devops deploy in one server round-trip.
  */
 async function runDashboardSyncRegisterOverlay(opts) {
   const { body, title, actionVerb = "register", onFinally } = opts;
@@ -7418,7 +7630,7 @@ async function runDashboardSyncRegisterOverlay(opts) {
 
     const parts = [];
     if (data.leco_register_log) parts.push(String(data.leco_register_log));
-    if (data.deploy_stack_ran && data.deploy_log) parts.push("--- leco-app deploy ---\n" + String(data.deploy_log));
+    if (data.deploy_stack_ran && data.deploy_log) parts.push("--- leco-devops deploy ---\n" + String(data.deploy_log));
     const logText =
       parts.length > 0 ? parts.join("\n\n") : data.error ? String(data.error) : JSON.stringify(data, null, 2);
     if (snippetEl) {
@@ -7672,9 +7884,86 @@ function formatOllamaLlmBlock(ollama, s) {
   </div>`;
 }
 
+/** AirLLM service card: table of installed / running models from overview `airllm_llm`.
+ *  Mirrors formatOllamaLlmBlock so the runtime grid shows a parallel inline list
+ *  under the AirLLM card. Reuses the Ollama svc-llm CSS so styling stays consistent.
+ */
+function formatAirLlmBlock(airllm, s) {
+  if (!s || s.container !== "airllm") return "";
+  if (!airllm) {
+    return `<div class="svc-card__extras svc-card__extras--llm"><div class="svc-card__extras-title">HF models (AirLLM)</div><p class="muted small">Model list not available.</p></div>`;
+  }
+  if (airllm.error) {
+    return `<div class="svc-card__extras svc-card__extras--llm"><div class="svc-card__extras-title">HF models (AirLLM)</div><p class="muted small">${escapeHtml(airllm.error)}</p></div>`;
+  }
+  const ver = airllm.server_version;
+  const verStr =
+    ver && typeof ver === "object" ? [ver.version, ver.airllm_version].filter(Boolean).join(" · ") : "";
+  const meta =
+    verStr || airllm.airllm_base
+      ? `<p class="muted small svc-llm-meta">${verStr ? `Server ${escapeHtml(verStr)}` : ""}${
+          verStr && airllm.airllm_base ? " · " : ""
+        }<code>${escapeHtml(String(airllm.airllm_base || ""))}</code></p>`
+      : "";
+  if (!airllm.airllm_reachable) {
+    return `<div class="svc-card__extras svc-card__extras--llm"><div class="svc-card__extras-title">HF models (AirLLM)</div>${meta}<p class="muted small">API unreachable — start the <code>airllm</code> container.</p></div>`;
+  }
+  const rows = Array.isArray(airllm.rows) ? airllm.rows : [];
+  if (rows.length === 0) {
+    return `<div class="svc-card__extras svc-card__extras--llm"><div class="svc-card__extras-title">HF models (AirLLM)</div>${meta}<p class="muted small">No models on disk. Pull from the <strong>AirLLM</strong> section below or POST to <code>/api/pull</code>.</p></div>`;
+  }
+  const sorted = [...rows].sort((a, b) => {
+    if (!!a.running !== !!b.running) return a.running ? -1 : 1;
+    if (!!a.installed !== !!b.installed) return a.installed ? -1 : 1;
+    return String(a.name || "").localeCompare(String(b.name || ""));
+  });
+  const sum = `<p class="muted small svc-llm-counts">${Number(airllm.running_count || 0)} loaded in RAM · ${Number(airllm.installed_count || 0)} on disk</p>`;
+  const thead = `<thead><tr><th>Model</th><th>State</th><th>Disk</th><th>VRAM</th><th>Params · quant</th></tr></thead>`;
+  const tbody = sorted
+    .map((r) => {
+      const name = escapeHtml(r.name || "—");
+      let stateLabel = "—";
+      let stateClass = "pill svc-llm-pill--idle";
+      if (r.running) {
+        stateLabel = "Running";
+        stateClass = "pill ok svc-llm-pill";
+      } else if (r.installed) {
+        stateLabel = "On disk";
+        stateClass = "pill svc-llm-pill--disk";
+      } else if (r.pinned) {
+        stateLabel = "Pinned only";
+        stateClass = "pill warn svc-llm-pill";
+      }
+      const pinNote = r.pinned ? ` <span class="muted">(pinned)</span>` : "";
+      const disk = r.size != null ? formatBytes(r.size) : "—";
+      let vramCell = "—";
+      if (r.running) {
+        const v = r.size_vram != null ? formatBytes(r.size_vram) : "0 B";
+        const exp = r.expires_at ? ` · ${escapeHtml(formatOllamaExpires(r.expires_at))}` : "";
+        vramCell = `${escapeHtml(v)}${exp}`;
+      }
+      const pq = [r.parameter_size, r.quantization_level].filter(Boolean).join(" · ") || "—";
+      return `<tr>
+        <td><code>${name}</code>${pinNote}</td>
+        <td><span class="${stateClass}">${stateLabel}</span></td>
+        <td class="muted">${escapeHtml(disk)}</td>
+        <td class="muted">${vramCell}</td>
+        <td class="muted small">${escapeHtml(pq)}</td>
+      </tr>`;
+    })
+    .join("");
+  return `<div class="svc-card__extras svc-card__extras--llm">
+    <div class="svc-card__extras-title">HF models (AirLLM)</div>
+    ${meta}
+    ${sum}
+    <div class="svc-llm-table-wrap"><table class="svc-llm-table">${thead}<tbody>${tbody}</tbody></table></div>
+  </div>`;
+}
+
 function renderServices(data) {
   const SB = serviceBrandUi();
   const ollamaLlm = data.ollama_llm || null;
+  const airllmLlm = data.airllm_llm || null;
   document.getElementById("services").innerHTML = data.services.map((s) => {
     const brand = SB.getBrandForManagedService(s);
     const running = s.container_info.status === "running";
@@ -7754,6 +8043,7 @@ function renderServices(data) {
         ${insightsBlock}
         ${mgmtBlock}
         ${formatOllamaLlmBlock(ollamaLlm, s)}
+        ${formatAirLlmBlock(airllmLlm, s)}
         <div class="row"><span>Container</span><code>${s.container}</code></div>
         <div class="row"><span>Networks</span><code>${(s.container_info.networks || []).join(", ") || "-"}</code></div>
         <div class="row"><span>CPU</span><span>${m.cpu_percent || 0}%</span></div>
@@ -8682,6 +8972,335 @@ function initAiWizardToggle() {
     if (summaryEl) { summaryEl.classList.add("is-hidden"); }
   });
 }
+
+// ============================================================================
+// AirLLM Models Panel (mirrors Ollama panel)
+// ============================================================================
+
+async function loadAirllmBackupSelect() {
+  const sel = document.getElementById("airllmBackupSelect");
+  if (!sel) return;
+  try {
+    const res = await fetch("/api/airllm/backups", { headers: ollamaApiHeaders(false) });
+    const data = await res.json().catch(() => ({}));
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">Select backup manifest…</option>';
+    const items = data.backups || [];
+    items.forEach((b) => {
+      const opt = document.createElement("option");
+      opt.value = b.filename;
+      const size = b.size != null ? ` (${formatBytes(b.size)})` : "";
+      const dt = b.mtime ? new Date(b.mtime * 1000).toLocaleString() : "";
+      opt.textContent = `${b.filename}${size}${dt ? ` · ${dt}` : ""}`;
+      sel.appendChild(opt);
+    });
+    if (cur && Array.from(sel.options).some((o) => o.value === cur)) {
+      sel.value = cur;
+    }
+  } catch {
+    sel.innerHTML = '<option value="">Backups unavailable</option>';
+  }
+}
+
+function airllmActionWrap(act, label, apiModel, canonical, variant, { disabled, activeDot, title } = {}) {
+  const dis = disabled ? " disabled" : "";
+  const tit = title ? ` title="${escapeAttr(title)}"` : "";
+  const dot = activeDot ? '<span class="action-state-dot" aria-hidden="true"></span>' : "";
+  return `<span class="ollama-act-wrap"><button type="button" class="ollama-act ollama-act--${variant}" data-airllm-act="${escapeAttr(
+    act,
+  )}" data-airllm-model="${escapeAttr(apiModel)}" data-airllm-canonical="${escapeAttr(canonical || "")}"${dis}${tit}>${escapeHtml(label)}</button>${dot}</span>`;
+}
+
+async function loadAirllmModelsPanel() {
+  const panel = document.getElementById("airllmModelsPanel");
+  const sum = document.getElementById("airllmModelsSummary");
+  const ins = document.getElementById("airllmModelsInsights");
+  if (!panel) return;
+  try {
+    const res = await fetch("/api/airllm/models");
+    const data = await res.json();
+    const reach = data.airllm_reachable;
+    const ver = data.server_version || {};
+    const verStr = [ver.version, ver.airllm_version].filter(Boolean).join(" · ") || "—";
+    const pinnedList = data.pinned || [];
+    const runningN = data.running_count ?? 0;
+
+    const pullAllBtn = document.getElementById("airllmPullAllBtn");
+    if (pullAllBtn) {
+      pullAllBtn.disabled = !reach || pinnedList.length === 0;
+      pullAllBtn.title = !reach ? "AirLLM shim unreachable" : pinnedList.length === 0 ? "No pinned models" : "";
+    }
+    const unloadAllBtn = document.getElementById("airllmUnloadAllBtn");
+    if (unloadAllBtn) {
+      unloadAllBtn.disabled = !reach || runningN === 0;
+      unloadAllBtn.title = !reach ? "AirLLM shim unreachable" : runningN === 0 ? "No models in RAM" : "";
+    }
+
+    if (sum) {
+      sum.textContent = reach
+        ? `API ${data.airllm_base || "—"} · ${data.installed_count ?? 0} cached · ${runningN} in RAM · ${pinnedList.length} pinned`
+        : `AirLLM unreachable (check airllm container on port 11435): ${data.airllm_base || "http://airllm:11435"}`;
+    }
+    if (ins) {
+      ins.textContent = reach
+        ? `Server: ${verStr} · manifest: ${data.pinned_file || "—"}`
+        : "Start the AirLLM shim, then refresh.";
+    }
+    const rows = data.rows || [];
+    if (!rows.length) {
+      panel.innerHTML = reach
+        ? `<p class="muted">No models cached yet. Use <strong>Pull by HF name</strong> above. Pinned names without cached blobs still appear here once added to the pinned file.</p>`
+        : `<p class="muted">Cannot list models until AirLLM shim is reachable.</p>`;
+      return;
+    }
+    const thead = `<thead><tr><th>Model</th><th>Pinned</th><th>Cached</th><th>RAM</th><th>Size</th><th>Format</th><th>Keep-alive</th><th>Actions</th></tr></thead>`;
+    const tbody = rows
+      .map((r) => {
+        const apiModel = r.api_model || r.name;
+        const canonical = r.canonical || apiModel;
+        const p = !!r.pinned;
+        const i = !!r.installed;
+        const run = !!r.running;
+        const fmt = r.model_family || r.quantization_level || "safetensors";
+        const exp = run ? formatOllamaExpires(r.expires_at) : "—";
+        const acts = [
+          airllmActionWrap("pin", "Pin", apiModel, canonical, "safe", {
+            disabled: p,
+            activeDot: p,
+            title: p ? "Already pinned" : "",
+          }),
+          airllmActionWrap("unpin", "Unpin", apiModel, canonical, "caution", {
+            disabled: !p,
+            activeDot: !p,
+            title: !p ? "Not pinned" : "",
+          }),
+          airllmActionWrap("warm", "Load", apiModel, canonical, "safe", {
+            disabled: run || !i,
+            activeDot: run,
+            title: run ? "Already in RAM" : !i ? "Not cached — pull first" : "Load into RAM",
+          }),
+          airllmActionWrap("unload", "Off", apiModel, canonical, "caution", {
+            disabled: !run,
+            activeDot: !run,
+            title: !run ? "Not loaded in RAM" : "Unload from RAM",
+          }),
+          airllmActionWrap("pull", "Pull", apiModel, canonical, "safe", {
+            disabled: i,
+            activeDot: i,
+            title: i ? "Already cached" : "",
+          }),
+          airllmActionWrap("reinstall", "Reinstall", apiModel, canonical, "ops", {
+            disabled: !i,
+            activeDot: !i,
+            title: !i ? "Not cached" : "Re-pull from HuggingFace",
+          }),
+          airllmActionWrap("delete", "Remove", apiModel, canonical, "destructive", {
+            disabled: !i,
+            activeDot: !i,
+            title: !i ? "Nothing cached to remove" : "",
+          }),
+        ].join("");
+        return `<tr>
+          <td><div class="ollama-model-name">${escapeHtml(r.name)}</div>${canonical !== r.name ? `<div class="ollama-model-canon muted small">${escapeHtml(canonical)}</div>` : ""}</td>
+          <td>${p ? "✓" : "—"}</td>
+          <td>${i ? "✓" : "—"}</td>
+          <td>${run ? "✓" : "—"}</td>
+          <td>${r.size != null ? formatBytes(r.size) : "—"}</td>
+          <td class="ollama-models-meta">${escapeHtml(fmt)}</td>
+          <td>${escapeHtml(exp)}</td>
+          <td class="ollama-models-actions">${acts}</td>
+        </tr>`;
+      })
+      .join("");
+    panel.innerHTML = `<div class="ollama-models-scroll"><table class="ollama-models-table">${thead}<tbody>${tbody}</tbody></table></div>`;
+  } catch (e) {
+    if (sum) sum.textContent = `Error: ${e.message || e}`;
+    if (ins) ins.textContent = "";
+    panel.innerHTML = `<p class="muted">Failed to load AirLLM models.</p>`;
+  }
+}
+
+async function runAirllmModelAction(action, model, extra = {}) {
+  try {
+    const res = await fetch("/api/airllm/models/action", {
+      method: "POST",
+      headers: ollamaApiHeaders(true),
+      body: JSON.stringify({ action, model: model || "", token: controlToken(), ...extra }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      await showAppAlert(data.error ? JSON.stringify(data.error) : `HTTP ${res.status}`, "AirLLM action failed");
+      return;
+    }
+    if (data.note || data.path || data.restored_from) {
+      await showAppAlert(
+        [data.note, data.path ? `File: ${data.path}` : "", data.restored_from ? `Restored: ${data.restored_from}` : ""]
+          .filter(Boolean)
+          .join("\n"),
+        "AirLLM",
+      );
+    }
+    loadAirllmModelsPanel();
+    loadAirllmBackupSelect();
+  } catch (e) {
+    await showAppAlert(String(e.message || e), "Error");
+  }
+}
+
+function initAirllmModelsPanel() {
+  document.getElementById("airllmPullAllBtn")?.addEventListener("click", async () => {
+    const ok = await showAppConfirm({
+      title: "Pull all pinned AirLLM models",
+      message: "Start background pull for all pinned HF models? This can take a long time for large models.",
+      confirmText: "Start pull",
+    });
+    if (!ok) return;
+    runAirllmModelAction("pull_all", "");
+  });
+  document.getElementById("airllmModelsRefreshBtn")?.addEventListener("click", () => {
+    loadAirllmModelsPanel();
+    loadAirllmBackupSelect();
+  });
+  document.getElementById("airllmBackupBtn")?.addEventListener("click", async () => {
+    const ok = await showAppConfirm({
+      title: "Backup AirLLM manifest",
+      message: "Write JSON to .local-eco-backups (cached models, running, pinned list snapshot)?",
+      confirmText: "Save backup",
+    });
+    if (!ok) return;
+    runAirllmModelAction("backup_manifest", "");
+  });
+  document.getElementById("airllmUnloadAllBtn")?.addEventListener("click", async () => {
+    const ok = await showAppConfirm({
+      title: "Unload AirLLM model from RAM",
+      message: "Request unload (keep_alive=0) for the currently loaded model?",
+      confirmText: "Unload",
+      danger: true,
+    });
+    if (!ok) return;
+    runAirllmModelAction("unload_all", "");
+  });
+  document.getElementById("airllmPullNameBtn")?.addEventListener("click", async () => {
+    const inp = document.getElementById("airllmPullNameInput");
+    const name = (inp?.value || "").trim();
+    if (!name) {
+      await showAppAlert("Enter a HuggingFace model ID (e.g. Qwen/Qwen2.5-7B-Instruct).", "Install");
+      return;
+    }
+    runAirllmModelAction("pull", name);
+  });
+  document.getElementById("airllmLoadNameBtn")?.addEventListener("click", async () => {
+    const inp = document.getElementById("airllmPullNameInput");
+    const name = (inp?.value || "").trim();
+    if (!name) {
+      await showAppAlert("Enter an HF model id (e.g. Qwen/Qwen2.5-7B-Instruct).", "Load");
+      return;
+    }
+    const ok = await showAppConfirm({
+      title: "Load model into RAM",
+      message: `Warm "${name}" into RAM with keep_alive=-1? AirLLM loads one model at a time; loading a new one evicts the previous.`,
+      confirmText: "Load",
+    });
+    if (!ok) return;
+    runAirllmModelAction("warm", name);
+  });
+  document.getElementById("airllmUnloadNameBtn")?.addEventListener("click", async () => {
+    const inp = document.getElementById("airllmPullNameInput");
+    const name = (inp?.value || "").trim();
+    if (!name) {
+      await showAppAlert("Enter an HF model id to unload.", "Unload");
+      return;
+    }
+    runAirllmModelAction("unload", name);
+  });
+  document.getElementById("airllmRemoveNameBtn")?.addEventListener("click", async () => {
+    const inp = document.getElementById("airllmPullNameInput");
+    const name = (inp?.value || "").trim();
+    if (!name) {
+      await showAppAlert("Enter an HF model id to remove.", "Remove");
+      return;
+    }
+    const ok = await showAppConfirm({
+      title: "Remove model",
+      message: `Delete "${name}" from the AirLLM cache (HF weights + shards)? This cannot be undone.`,
+      confirmText: "Remove",
+      danger: true,
+    });
+    if (!ok) return;
+    runAirllmModelAction("delete", name);
+  });
+  document.getElementById("airllmShowCmdBtn")?.addEventListener("click", async () => {
+    const inp = document.getElementById("airllmPullNameInput");
+    const name = (inp?.value || "").trim();
+    await showCliSnippetsModal("airllm", name);
+  });
+  loadPopularModels("airllm", "airllmPopularSelect", "airllmPullNameInput");
+  document.getElementById("airllmRefreshBackupsBtn")?.addEventListener("click", () => loadAirllmBackupSelect());
+  document.getElementById("airllmRestoreBackupBtn")?.addEventListener("click", async () => {
+    const sel = document.getElementById("airllmBackupSelect");
+    const fn = (sel?.value || "").trim();
+    if (!fn) {
+      await showAppAlert("Choose a backup file first (List backups).", "Restore");
+      return;
+    }
+    const ok = await showAppConfirm({
+      title: "Restore pinned list",
+      message: `Overwrite ecosystem-stack/config/airllm-pinned-models.txt with pinned names from ${fn}? Models on disk are not deleted.`,
+      confirmText: "Restore pinned",
+      danger: true,
+    });
+    if (!ok) return;
+    runAirllmModelAction("restore_backup", "", { filename: fn });
+  });
+  document.getElementById("airllmClearPinnedBtn")?.addEventListener("click", async () => {
+    const ok = await showAppConfirm({
+      title: "Clear pinned file",
+      message: "Remove all model names from the pinned file? (Does not delete cached models.)",
+      confirmText: "Clear pinned",
+      danger: true,
+    });
+    if (!ok) return;
+    runAirllmModelAction("clear_pinned", "");
+  });
+  document.getElementById("airllmModelsPanel")?.addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-airllm-act]");
+    if (!btn) return;
+    const act = btn.getAttribute("data-airllm-act");
+    const model = btn.getAttribute("data-airllm-model") || "";
+    if (act === "delete") {
+      const ok = await showAppConfirm({
+        title: "Remove cached model",
+        message: `Remove "${model}" from cache? This cannot be undone.`,
+        confirmText: "Remove",
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    if (act === "warm") {
+      const ok = await showAppConfirm({
+        title: "Load model into RAM",
+        message: `Load "${model}" into RAM with keep_alive? First load can take a while as AirLLM builds layer shards.`,
+        confirmText: "Load",
+      });
+      if (!ok) return;
+    }
+    const extra = {};
+    if (act === "unpin") {
+      const c = (btn.getAttribute("data-airllm-canonical") || "").trim();
+      if (c) extra.canonical = c;
+    }
+    runAirllmModelAction(act, model, extra);
+  });
+}
+
+// Initialize AirLLM panel alongside Ollama
+const originalInitOllamaModelsPanel = initOllamaModelsPanel;
+initOllamaModelsPanel = function() {
+  originalInitOllamaModelsPanel();
+  initAirllmModelsPanel();
+  loadAirllmModelsPanel();
+  loadAirllmBackupSelect();
+};
 
 
 bootstrap();

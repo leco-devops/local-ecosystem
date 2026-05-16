@@ -1,4 +1,4 @@
-# What gets built locally: leco-app parses wrangler.toml and creates ONE adapter resource per row
+# What gets built locally: leco-devops parses wrangler.toml and creates ONE adapter resource per row
 # in wranglerBindingPreview (KV namespace / R2 bucket / D1 database). Rows match wrangler.toml.
 schemaVersion: 2
 archetype: node

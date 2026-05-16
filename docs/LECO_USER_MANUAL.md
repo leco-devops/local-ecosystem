@@ -1,6 +1,6 @@
 # LEco DevOps — User manual
 
-**LEco DevOps** is the product name for the multi-app deploy tooling in `tools/deploy-cli/`. You run it as **`leco-app`** or **`leco-devops`** (identical CLIs).
+**LEco DevOps** is the product name for the multi-app deploy tooling in `tools/deploy-cli/`. You run it as **`leco-devops`**.
 
 This guide explains **what LEco DevOps is**, **how to use it day to day**, and **how the CLI connects to the LEco DevOps web UI**. For exhaustive command-line and YAML tables, see **[DEPLOY_CLI.md](DEPLOY_CLI.md)** (also listed in the **Docs** tab). For architecture context, see **[ARCHITECTURE.md](ARCHITECTURE.md)**, **[HLD.md](HLD.md)**, **[LLD.md](LLD.md)**, and **[LECO_TOOLING.md](LECO_TOOLING.md)**.
 
@@ -21,11 +21,11 @@ The ecosystem **`config/leco-registry.yaml`** lists registered apps so the **Hos
 
 | Goal | Use |
 |------|-----|
-| First-party ecosystem stack (Ollama, WebUI, Traefik, LEco DevOps **Control** targets, …) | `ecosystem-stack` scripts and **Control** tab — not **`leco-app`** for those stacks |
-| A separate repo or folder with **docker compose** | **`leco-app init`** → **`deploy`** → **`ecosystem-register`** |
+| First-party ecosystem stack (Ollama, WebUI, Traefik, LEco DevOps **Control** targets, …) | `ecosystem-stack` scripts and **Control** tab — not **`leco-devops`** for those stacks |
+| A separate repo or folder with **docker compose** | **`leco-devops init`** → **`deploy`** → **`ecosystem-register`** |
 | **Cloudflare Workers** with **Wrangler** + optional compose | LEco DevOps: manifest **`cloudflare.wranglerConfig`**; **`cf-deploy`**, **`provision-local-cf`** as needed |
 | **WordPress, Magento, Node, PHP**, etc. without Workers | **`leco.yaml`** for URLs, hooks, and (v3) **`infrastructure.routing`**; Traefik merge uses the **effective** manifest (see **[LECO_APP_BLUEPRINT.md](LECO_APP_BLUEPRINT.md)**) |
-| No compose file yet | **`leco-app init --manifest-only`** (TTY) or LEco DevOps wizard to stub manifest + **`leco.yaml`** |
+| No compose file yet | **`leco-devops init --manifest-only`** (TTY) or LEco DevOps wizard to stub manifest + **`leco.yaml`** |
 
 ---
 
@@ -36,7 +36,7 @@ From the **local-ecosystem repository root**:
 ```bash
 cd tools/deploy-cli
 pip install -e .
-leco-app --help   # equivalent: leco-devops --help
+leco-devops --help
 ```
 
 Requirements: **Python 3.11+**, **Docker** with Compose v2 (`docker compose`). Do **not** run `pip install` from `tools/` alone — only **`tools/deploy-cli/`** has `pyproject.toml`.
@@ -65,13 +65,13 @@ Manifest versions **`lecoAppVersion: "2"`** and **`"3"`** use **`localHostProfil
 ```bash
 cd /path/to/your/app
 export LECO_ECOSYSTEM_ROOT=/path/to/local-ecosystem
-leco-app onboard       # compose up, leco-registry.yaml, merge routing.entries → hosting/traefik/dynamic.yml
+leco-devops onboard       # compose up, leco-registry.yaml, merge routing.entries → hosting/traefik/dynamic.yml
 ```
 
 Or combine init + onboarding:
 
 ```bash
-leco-app init --onboard -E /path/to/local-ecosystem
+leco-devops init --onboard -E /path/to/local-ecosystem
 ```
 
 **Step-by-step equivalent:** **`deploy`** → **`ecosystem-register`** → optionally **`ecosystem-register --merge-traefik`** (or paste output of **`traefik-fragment`**).
@@ -84,9 +84,9 @@ If **`wrangler.toml`** (or **`cloudflare/wrangler.toml`**) exists, **`init`** ca
 
 | Step | Local KV/R2/D1 from wrangler |
 |------|------------------------------|
-| **`leco-app deploy`** | **Yes** by default after compose succeeds; use **`--no-provision-local-cf`** for compose-only. |
+| **`leco-devops deploy`** | **Yes** by default after compose succeeds; use **`--no-provision-local-cf`** for compose-only. |
 | **`ecosystem-register`** / **`onboard`** | **Yes** unless **`--no-provision-local-cf`**. |
-| **`leco-app provision-local-cf`** | **Always** runs when wrangler path exists (manual repair / CI). |
+| **`leco-devops provision-local-cf`** | **Always** runs when wrangler path exists (manual repair / CI). |
 
 Skips also apply when **`LECO_PROVISION_LOCAL_CF`** is `0`/`false`/`no`/`off`, or when the manifest sets **`cloudflare.provisionLocalResources: false`**. See **`tools/deploy-cli/README.md`** for extension points (new wrangler binding kinds).
 
@@ -95,8 +95,8 @@ Skips also apply when **`LECO_PROVISION_LOCAL_CF`** is `0`/`false`/`no`/`off`, o
 Production deploys use:
 
 ```bash
-leco-app cf-deploy --env staging
-leco-app cf-deploy --env production --confirm-production
+leco-devops cf-deploy --env staging
+leco-devops cf-deploy --env production --confirm-production
 ```
 
 ### 3. URLs, admin panels, CDN — `leco.yaml`
@@ -108,21 +108,21 @@ Use **`urls`** with **`role`** (`frontend`, `api`, `admin`, `backend`, `cdn`, `w
 Define commands under **`lifecycle.prepare`**, **`lifecycle.build`**, or **`lifecycle.preStart`** in **`leco.yaml`** (each step: **`command`**, optional **`cwd`**, **`shell`**, **`timeoutSec`**). Run from the app directory:
 
 ```bash
-leco-app run-hooks --phase prepare
-leco-app run-hooks --phase build
-leco-app run-hooks --phase preStart
+leco-devops run-hooks --phase prepare
+leco-devops run-hooks --phase build
+leco-devops run-hooks --phase preStart
 ```
 
 **Trust model:** these run **arbitrary shell commands** like `docker compose`. Only enable hooks in repositories you trust.
 
 ### 5. Traefik (`*.lh`)
 
-**`leco-app onboard`**, **`init --onboard`**, and **`ecosystem-register --merge-traefik`** merge **`routing.entries`** from the **effective** manifest into **`hosting/traefik/dynamic.yml`** (atomic write). Platform stack routes live in **`traefik/dynamic.yml`** in git and are copied to **`hosting/traefik/01-stack-core.yml`** whenever **`traefik.sh start`** runs. In **v3**, **`infrastructure.routing`** normally lives in **`leco.yaml`**.
+**`leco-devops onboard`**, **`init --onboard`**, and **`ecosystem-register --merge-traefik`** merge **`routing.entries`** from the **effective** manifest into **`hosting/traefik/dynamic.yml`** (atomic write). Platform stack routes live in **`traefik/dynamic.yml`** in git and are copied to **`hosting/traefik/01-stack-core.yml`** whenever **`traefik.sh start`** runs. In **v3**, **`infrastructure.routing`** normally lives in **`leco.yaml`**.
 
 For a preview or manual merge only:
 
 ```bash
-leco-app traefik-fragment -o /tmp/myapp-traefik.yml
+leco-devops traefik-fragment -o /tmp/myapp-traefik.yml
 ```
 
 **Hot reload:** Traefik’s file provider watches the **`hosting/traefik/`** directory. After a merge writes **`hosting/traefik/dynamic.yml`**, routes usually update **without restarting** Traefik. Restart Traefik after changing **`traefik/dynamic.yml`** (stack core) or **`traefik-static.yaml`** / volume mounts, or run **`traefik.sh heal`** if routes disappear (see **[DEPLOYMENT.md](DEPLOYMENT.md)** §7).
@@ -130,9 +130,9 @@ leco-app traefik-fragment -o /tmp/myapp-traefik.yml
 ### 6. Stop stack and optionally unregister
 
 ```bash
-leco-app down
+leco-devops down
 # Remove from registry + strip Traefik keys (see DEPLOY_CLI.md / offload)
-leco-app ecosystem-unregister <slug> --ecosystem-root /path/to/local-ecosystem
+leco-devops ecosystem-unregister <slug> --ecosystem-root /path/to/local-ecosystem
 ```
 
 ---
@@ -145,12 +145,12 @@ After **`ecosystem-register`** (or the wizard below), open **Hosted apps** for:
 
 - Per-service metrics, logs, insights, health URL probes (from manifest).
 - **Local profile** summary: archetype, **`leco.yaml`** URLs, lifecycle steps (read-only in the UI).
-- Lifecycle actions via **Control** targets **`leco-stack-<id>`** (same token model as other Control actions). The LEco DevOps service runs **`leco-app deploy`**, **`stop`**, **`down`** (and **`down -v`** on reset) with **`--manifest`** for those stacks; **restart** / **recreate** / **pause** still use **`docker compose`** where LEco DevOps has no matching command. **Remove** / **Reset** always runs **offboard** (registry + hosting dirs + Traefik / local CF as configured) after **`down`**, even when **`down`** exits non-zero (e.g. missing compose file on disk).
+- Lifecycle actions via **Control** targets **`leco-stack-<id>`** (same token model as other Control actions). The LEco DevOps service runs **`leco-devops deploy`**, **`stop`**, **`down`** (and **`down -v`** on reset) with **`--manifest`** for those stacks; **restart** / **recreate** / **pause** still use **`docker compose`** where LEco DevOps has no matching command. **Remove** / **Reset** always runs **offboard** (registry + hosting dirs + Traefik / local CF as configured) after **`down`**, even when **`down`** exits non-zero (e.g. missing compose file on disk).
 
 ### Routes tab
 
 - Inspect merged routers/services (effective config is **`hosting/traefik/*.yml`**) and registry overlap.
-- **Load fragment from manifest** / **Load and merge** call **`leco-app traefik-fragment`** for a registry id, then optionally merge into **`hosting/traefik/dynamic.yml`** (atomic write + **`.bak`**). Same **control token** as other mutations.
+- **Load fragment from manifest** / **Load and merge** call **`leco-devops traefik-fragment`** for a registry id, then optionally merge into **`hosting/traefik/dynamic.yml`** (atomic write + **`.bak`**). Same **control token** as other mutations.
 
 ### Register application (wizard)
 
@@ -160,7 +160,7 @@ On **Hosted apps**, expand **Register application**:
 2. **Detect** — **`POST /api/leco/detect`** returns scan metadata plus, when present on disk, **`existing_manifest_yaml`** / **`existing_localhost_yaml`** (size-capped). The UI can load those into the editors or use generated previews. **Sample templates** come from **`GET /api/leco/register-samples`**.
 3. **Generate YAML** / **Save YAML** (when needed) — **`POST /api/leco/generate-yaml`** or **`POST /api/leco/save-yaml`** with the control token. Read-only **`wsp:`** trees are **materialized** under **`hosting/app-available/<slug>/`** with a **`source`** symlink and **config symlinks** for **`configRefs`** / detected paths; **`Register`** is gated until YAML exists on disk (**`POST /api/leco/yaml-status`**).
 4. Edit the optional YAML text areas if needed.
-5. **Register** — **`POST /api/leco/register`** with the **control token** (same as **Control** tab). Writes or uses **`leco.app.yaml`** / **`leco.yaml`**, then runs **`leco-app ecosystem-register`** inside the LEco DevOps container (includes optional local KV/R2/D1 provision for Wrangler apps).
+5. **Register** — **`POST /api/leco/register`** with the **control token** (same as **Control** tab). Writes or uses **`leco.app.yaml`** / **`leco.yaml`**, then runs **`leco-devops ecosystem-register`** inside the LEco DevOps container (includes optional local KV/R2/D1 provision for Wrangler apps).
 
 If **`DASHBOARD_CONTROL_TOKEN`** is set, you must configure the token in LEco DevOps before **Register** succeeds.
 
@@ -170,17 +170,17 @@ If **`DASHBOARD_CONTROL_TOKEN`** is set, you must configure the token in LEco De
 
 | Command | Purpose |
 |---------|---------|
-| **`leco-app onboard`** | Deploy + registry + Traefik merge (typical new-app flow) |
-| **`leco-app init`** | Wizard: manifest + `leco.yaml` stub; **`--onboard -E …`** adds register + Traefik merge |
-| **`leco-app init -y`** | Non-interactive defaults |
-| **`leco-app init --manifest-only`** | Minimal manifest when no compose (TTY confirm) |
-| **`leco-app detect`** | JSON: compose, Wrangler, archetype (scripts / LEco DevOps) |
-| **`leco-app deploy` / `stop` / `down` / `status` / `logs`** | Compose lifecycle |
-| **`leco-app run-hooks --phase <prepare\|build\|preStart>`** | Run merged sidecar profile lifecycle |
-| **`leco-app traefik-fragment`** | Emit Traefik YAML snippet |
-| **`leco-app ecosystem-register`** | Append/update **`leco-registry.yaml`** |
-| **`leco-app ecosystem-unregister`** | **Local CF cleanup** (default), then **`docker compose down`**, then registry row + optional Traefik strip; **`--no-compose-down`** / **`--compose-volumes`** / **`--no-clean-local-cf`** |
-| **`leco-app cf-deploy`**, **`cf-secrets-checklist`** | Wrangler deploy and secrets hints |
+| **`leco-devops onboard`** | Deploy + registry + Traefik merge (typical new-app flow) |
+| **`leco-devops init`** | Wizard: manifest + `leco.yaml` stub; **`--onboard -E …`** adds register + Traefik merge |
+| **`leco-devops init -y`** | Non-interactive defaults |
+| **`leco-devops init --manifest-only`** | Minimal manifest when no compose (TTY confirm) |
+| **`leco-devops detect`** | JSON: compose, Wrangler, archetype (scripts / LEco DevOps) |
+| **`leco-devops deploy` / `stop` / `down` / `status` / `logs`** | Compose lifecycle |
+| **`leco-devops run-hooks --phase <prepare\|build\|preStart>`** | Run merged sidecar profile lifecycle |
+| **`leco-devops traefik-fragment`** | Emit Traefik YAML snippet |
+| **`leco-devops ecosystem-register`** | Append/update **`leco-registry.yaml`** |
+| **`leco-devops ecosystem-unregister`** | **Local CF cleanup** (default), then **`docker compose down`**, then registry row + optional Traefik strip; **`--no-compose-down`** / **`--compose-volumes`** / **`--no-clean-local-cf`** |
+| **`leco-devops cf-deploy`**, **`cf-secrets-checklist`** | Wrangler deploy and secrets hints |
 
 Full syntax, offload, and edge cases: **[DEPLOY_CLI.md](DEPLOY_CLI.md)**.
 

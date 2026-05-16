@@ -83,7 +83,7 @@ start() {
   WORKSPACE_PARENT_MOUNT=()
   if [ -d "$WORKSPACE_PARENT" ]; then
     # Mount sibling workspace twice: /workspace-parent (stable in-container path) and the host
-    # absolute path. leco-app remaps /workspace-parent → host path for docker compose so bind mounts
+    # absolute path. leco-devops remaps /workspace-parent → host path for docker compose so bind mounts
     # resolve on Docker Desktop (daemon needs host paths, not paths only visible inside this container).
     WORKSPACE_PARENT_MOUNT=(
       -v "$WORKSPACE_PARENT:/workspace-parent:ro"
@@ -99,7 +99,7 @@ start() {
   # Trusted local only — embed same token in HTML and seed the browser (see docs/DEPLOYMENT.md):
   #   -e "DASHBOARD_INJECT_CONTROL_TOKEN_UI=1"
 
-  # Register/Deploy runs leco-app here; https://kv.lh from inside the container often hits connection
+  # Register/Deploy runs leco-devops here; https://kv.lh from inside the container often hits connection
   # refused (Traefik/DNS not reachable the same way). Talk to cloudflare-local adapters on lh-network;
   # leco.local-cf.yaml still gets public https://kv.lh / r2 / d1 unless you set LECO_LOCAL_*_URL.
   LOCAL_CF_INTERNAL=(

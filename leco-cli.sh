@@ -6,18 +6,18 @@
 # Single entrypoint for managing the LEco DevOps Open Project on a developer
 # machine: foundation install, ecosystem-stack services (Traefik, Postgres,
 # Ollama, Open WebUI, n8n, Dashboard, Cloudflare-local, infra), hosted apps
-# via `leco-app`, Traefik routing, the local registry, diagnostics, and
+# via `leco-devops`, Traefik routing, the local registry, diagnostics, and
 # common URLs.
 #
 # Modeled on CrawlerVision's cv-deploy.sh (interactive menu + direct command
 # dispatcher). Wraps the existing scripts under ecosystem-stack/ and the
-# `leco-app` (leco-devops) CLI rather than duplicating their logic.
+# `leco-devops` CLI rather than duplicating their logic.
 #
 # Run without arguments for the interactive menu, or pass a command (see
 # `leco-cli.sh help`).
 
 # `set -e` would abort menu loops on the first non-zero subcommand (docker ps
-# of a missing container, leco-app exit codes, etc.) which makes the
+# of a missing container, leco-devops exit codes, etc.) which makes the
 # interactive flow unusable. Keep it off and check status codes per call.
 
 # ---------- Colors -------------------------------------------------
@@ -50,7 +50,7 @@ ACTIVITY_LOG_DIR="$PROJECT_ROOT/.leco-cli-logs"
 ACTIVITY_LOG_FILE=""
 
 # Ordered service list (matches START_ORDER in ecosystem-stack/core.sh + infra).
-SERVICES_ORDER="traefik postgres ollama webui n8n dashboard cloudflare-local infra"
+SERVICES_ORDER="traefik postgres ollama airllm webui n8n dashboard cloudflare-local infra"
 
 # ---------- Activity log (best-effort JSONL) ----------------------
 activity_init() {
@@ -83,7 +83,7 @@ show_header() {
     echo "║                                                            ║"
     echo "╚════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
-    echo -e "  ${DIM}leco-app: $(command -v leco-app 2>/dev/null || echo 'not installed')${NC}"
+    echo -e "  ${DIM}leco-devops: $(command -v leco-devops 2>/dev/null || echo 'not installed')${NC}"
     echo -e "  ${DIM}docker:   $(command -v docker 2>/dev/null || echo 'not installed')${NC}"
     echo ""
 }
@@ -101,17 +101,18 @@ show_menu() {
     echo -e "    ${GREEN}5)${NC}  🌐 Traefik & *.lh routing"
     echo -e "    ${GREEN}6)${NC}  ☁️  Cloudflare-local (KV/R2/D1/Workers adapters)"
     echo -e "    ${GREEN}7)${NC}  🦙 Ollama models"
+    echo -e "    ${GREEN}8)${NC}  🤖 AirLLM (large HF models on macOS host)"
     echo ""
     echo -e "  ${WHITE}Hosted applications${NC}"
-    echo -e "    ${GREEN}8)${NC}  📦 Hosted apps (leco-app)"
+    echo -e "    ${GREEN}9)${NC}  📦 Hosted apps (leco-devops)"
     echo ""
     echo -e "  ${WHITE}Helpers${NC}"
-    echo -e "    ${GREEN}9)${NC}  🔗 Open service URLs (browser)"
-    echo -e "    ${GREEN}10)${NC} 🩺 Diagnostics / repair (network, Traefik)"
+    echo -e "    ${GREEN}10)${NC} 🔗 Open service URLs (browser)"
+    echo -e "    ${GREEN}11)${NC} 🩺 Diagnostics / repair (network, Traefik)"
     echo ""
     echo -e "  ${WHITE}Reference${NC}"
-    echo -e "    ${GREEN}11)${NC} ❓ Help (detailed)"
-    echo -e "    ${GREEN}12)${NC} 🗂️  Menu tree"
+    echo -e "    ${GREEN}12)${NC} ❓ Help (detailed)"
+    echo -e "    ${GREEN}13)${NC} 🗂️  Menu tree"
     echo ""
     echo -e "    ${RED}0)${NC}  Exit"
     echo ""
@@ -169,10 +170,10 @@ _need_docker() {
     return 0
 }
 
-_have_leco_app() { command -v leco-app >/dev/null 2>&1; }
+_have_leco_devops() { command -v leco-devops >/dev/null 2>&1; }
 
-_warn_no_leco_app() {
-    echo -e "${YELLOW}⚠️  'leco-app' CLI not in PATH.${NC}"
+_warn_no_leco_devops() {
+    echo -e "${YELLOW}⚠️  'leco-devops' CLI not in PATH.${NC}"
     echo -e "${DIM}   Install with: pip install -e tools/deploy-cli${NC}"
     echo -e "${DIM}   Or use the dashboard UI (Hosted apps tab) at http://localhost:${DASHBOARD_HOST_PORT}/${NC}"
 }
@@ -203,6 +204,141 @@ get_services_list() {
             basename "$f" .sh
         done | tr '\n' ' '
     fi
+}
+
+# ---------- Ollama / AirLLM model helpers --------------------------
+# Shared between the two CLI subcommands. Each backend is reached via its
+# in-cluster container (`docker exec`) so the host does not need its own
+# Ollama/curl install. Ollama uses port 11434, AirLLM the shim on 11435.
+
+_llm_check_container() {
+    # _llm_check_container <name>  → 0 if up, 1 with hint otherwise
+    local name="$1"
+    if [ "$(docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null)" = "true" ]; then
+        return 0
+    fi
+    echo -e "${RED}❌ Container '$name' is not running.${NC}"
+    echo -e "${DIM}   Start it first: ./leco-cli.sh $name start${NC}"
+    return 1
+}
+
+# Map a backend ("ollama" | "airllm") to its Traefik hostname so we can probe
+# the API from the host with `curl -H 'Host:'`. Avoids assuming `curl` exists
+# inside every backend image (the official ollama image has only the `ollama`
+# binary; the AirLLM shim image does ship curl but the Traefik path works for
+# both, keeps DNS portable, and matches what dashboard/JS shows in "Show CLI").
+_llm_traefik_host() {
+    case "$1" in
+        ollama) echo "ollama.lh" ;;
+        airllm) echo "airllm.lh" ;;
+        *)      echo "" ;;
+    esac
+}
+
+# Warm a model into RAM via /api/chat with keep_alive=-1. Both Ollama and the
+# AirLLM shim implement the Ollama wire protocol, so the call is identical.
+_llm_warm() {
+    local container="$1" port="$2" model="$3"
+    _llm_check_container "$container" || return 1
+    local host
+    host="$(_llm_traefik_host "$container")"
+    if [ -z "$host" ]; then
+        echo -e "${RED}❌ Unknown LLM backend: $container${NC}"; return 1
+    fi
+    curl -fsS -X POST "http://127.0.0.1/api/chat" -H "Host: $host" \
+        -H 'Content-Type: application/json' \
+        -d "{\"model\":\"$model\",\"messages\":[{\"role\":\"user\",\"content\":\"hello\"}],\"stream\":false,\"keep_alive\":-1}" \
+        >/dev/null && echo -e "${GREEN}✓ Loaded $model into ${container} RAM (keep_alive=-1).${NC}"
+}
+
+# Unload a model from RAM via /api/generate with keep_alive=0. Same wire
+# protocol on both backends.
+_llm_unload() {
+    local container="$1" port="$2" model="$3"
+    _llm_check_container "$container" || return 1
+    local host
+    host="$(_llm_traefik_host "$container")"
+    if [ -z "$host" ]; then
+        echo -e "${RED}❌ Unknown LLM backend: $container${NC}"; return 1
+    fi
+    curl -fsS -X POST "http://127.0.0.1/api/generate" -H "Host: $host" \
+        -H 'Content-Type: application/json' \
+        -d "{\"model\":\"$model\",\"prompt\":\"\",\"keep_alive\":0}" \
+        >/dev/null && echo -e "${GREEN}✓ Unloaded $model from ${container} RAM.${NC}"
+}
+
+# Pretty-print the curated catalog JSON (ecosystem-stack/config/popular-*.json).
+# Falls back to a raw `cat` if python3 isn't on PATH.
+_llm_print_popular_catalog() {
+    local file="$1" label="$2"
+    if [ ! -f "$file" ]; then
+        echo -e "${RED}❌ Catalog missing: $file${NC}"
+        return 1
+    fi
+    if command -v python3 >/dev/null 2>&1; then
+        python3 - "$file" "$label" <<'PY'
+import json, sys
+path, label = sys.argv[1], sys.argv[2]
+try:
+    data = json.load(open(path))
+except (OSError, ValueError) as e:
+    print(f"Could not parse {path}: {e}", file=sys.stderr); sys.exit(1)
+models = data.get("models") if isinstance(data, dict) else data
+print(f"Popular {label} models — from {path}")
+print(f"{'Name':40}  {'Size':>10}  Description")
+print("-" * 100)
+for m in models or []:
+    name = (m.get("name") or "").strip()
+    size = (m.get("size") or "").strip()
+    desc = (m.get("description") or m.get("label") or "").strip()
+    print(f"{name:40}  {size:>10}  {desc}")
+print()
+print(f"Install: ./leco-cli.sh {label.lower()} install <name>")
+print(f"Load:    ./leco-cli.sh {label.lower()} load <name>")
+print(f"Unload:  ./leco-cli.sh {label.lower()} unload <name>")
+print(f"Remove:  ./leco-cli.sh {label.lower()} remove-model <name>")
+PY
+    else
+        cat "$file"
+    fi
+}
+
+# Echo the exact commands a user can copy/paste for one model.
+_llm_print_cli_help() {
+    local backend="$1" model="$2"
+    local svc port host_url
+    if [ "$backend" = "ollama" ]; then
+        svc="ollama"; port="11434"; host_url="http://ollama.lh"
+    else
+        svc="airllm"; port="11435"; host_url="https://airllm.lh"
+    fi
+    cat <<EOF
+# ${backend} · model: ${model}
+
+# Install (pull from registry/HF) into the ${svc} container
+./leco-cli.sh ${backend} install '${model}'
+
+# Load into RAM (warm, keep_alive=-1) — does NOT pull
+./leco-cli.sh ${backend} load '${model}'
+
+# Unload from RAM (keep_alive=0)
+./leco-cli.sh ${backend} unload '${model}'
+
+# Remove model from disk
+./leco-cli.sh ${backend} remove-model '${model}'
+
+# List installed models from the running container
+./leco-cli.sh ${backend} list
+
+# Curated catalog (popular picks)
+./leco-cli.sh ${backend} popular
+
+# Equivalent direct API calls (from host or another container on lh-network):
+curl -X POST ${host_url}/api/pull     -H 'Content-Type: application/json' -d '{"name":"${model}","stream":false}'
+curl -X POST ${host_url}/api/chat     -H 'Content-Type: application/json' -d '{"model":"${model}","messages":[{"role":"user","content":"hello"}],"stream":false,"keep_alive":-1}'
+curl -X POST ${host_url}/api/generate -H 'Content-Type: application/json' -d '{"model":"${model}","prompt":"","keep_alive":0}'
+curl -X DELETE ${host_url}/api/delete -H 'Content-Type: application/json' -d '{"name":"${model}"}'
+EOF
 }
 
 # ---------- Status snapshot ---------------------------------------
@@ -287,9 +423,9 @@ status_snapshot() {
 _python_with_yaml() {
     # Return path to a python3 interpreter that can `import yaml`, or empty.
     local py
-    # Try the interpreter behind leco-app first (PyYAML is a hard dep there).
-    if command -v leco-app >/dev/null 2>&1; then
-        py=$(head -1 "$(command -v leco-app)" 2>/dev/null | sed 's|^#!||' | awk '{print $1}')
+    # Try the interpreter behind leco-devops first (PyYAML is a hard dep there).
+    if command -v leco-devops >/dev/null 2>&1; then
+        py=$(head -1 "$(command -v leco-devops)" 2>/dev/null | sed 's|^#!||' | awk '{print $1}')
         if [ -x "$py" ] && "$py" -c "import yaml" >/dev/null 2>&1; then
             printf '%s' "$py"; return 0
         fi
@@ -375,6 +511,9 @@ stack_action() {
             ;;
         ollama-pull-models|pull-models)
             bash "$ECO_STACK_SH" ollama-pull-models
+            ;;
+        airllm-pull-models)
+            bash "$ECO_STACK_SH" airllm-pull-models
             ;;
         heal)
             # `stack heal traefik` mirrors ecosystem-stack/services/traefik.sh heal.
@@ -675,7 +814,62 @@ menu_ollama() {
     done
 }
 
-# ---------- Hosted apps (leco-app) --------------------------------
+# ---------- AirLLM sub-menu ---------------------------------------
+menu_airllm() {
+    while true; do
+        show_header
+        echo -e "${BLUE}═══ 🤖 AIRLLM (Large HF Models) ═══${NC}"
+        echo -e "${DIM}Pinned models: ecosystem-stack/config/airllm-pinned-models.txt${NC}"
+        echo -e "${DIM}Container: airllm · port 11435 · URL: https://airllm.lh${NC}"
+        echo -e "${DIM}Volumes: airllm_hf_cache, airllm_layer_shards (preserved by remove, deleted by reset)${NC}"
+        echo ""
+        echo -e "    ${GREEN}1)${NC} Build image (docker build ecosystem-stack/airllm)"
+        echo -e "    ${GREEN}2)${NC} Start (docker run on lh-network, port 11435)"
+        echo -e "    ${GREEN}3)${NC} Stop"
+        echo -e "    ${GREEN}4)${NC} Restart"
+        echo -e "    ${GREEN}5)${NC} Status (docker ps)"
+        echo -e "    ${GREEN}6)${NC} Logs (docker logs -f airllm)"
+        echo -e "    ${GREEN}7)${NC} Pull pinned HF models into running container"
+        echo -e "    ${GREEN}8)${NC} List installed models (curl /api/tags)"
+        echo -e "    ${GREEN}9)${NC} Open https://airllm.lh"
+        echo -e "    ${GREEN}10)${NC} Open dashboard AirLLM panel"
+        echo -e "    ${GREEN}11)${NC} Show pinned models file"
+        echo -e "    ${YELLOW}12)${NC} Remove container (HF cache + shard volumes preserved)"
+        echo -e "    ${YELLOW}13)${NC} Reset (remove container + delete HF cache + shard volumes)"
+        echo ""
+        echo -e "    ${YELLOW}0)${NC} Back"
+        echo ""
+        read -r -p "$(echo -e ${CYAN}Choose option${NC} [0-13]: )" ch
+        case "$ch" in
+            1)  _svc airllm build; press_any_key ;;
+            2)  _svc airllm start; press_any_key ;;
+            3)  _svc airllm stop; press_any_key ;;
+            4)  _svc airllm restart; press_any_key ;;
+            5)  _svc airllm status; press_any_key ;;
+            6)  _svc airllm logs ;;
+            7)  _eco airllm-pull-models; press_any_key ;;
+            8)  docker exec airllm curl -s http://127.0.0.1:11435/api/tags 2>&1 | page_output ;;
+            9)  open_url "https://airllm.lh" ;;
+            10) open_url "http://localhost:${DASHBOARD_HOST_PORT}/#/infrastructure" ;;
+            11) local pinned_file="$ECO_STACK_DIR/config/airllm-pinned-models.txt"
+                if [ -f "$pinned_file" ]; then
+                    cat "$pinned_file" | page_output
+                else
+                    echo -e "${YELLOW}Pinned file missing: $pinned_file${NC}"
+                    press_any_key
+                fi
+                ;;
+            12) confirm_action "Remove airllm container? (HF cache + shards preserved)" "N" \
+                    && _svc airllm remove; press_any_key ;;
+            13) confirm_action "Reset AirLLM (remove container + delete HF cache + shard volumes)?" "N" \
+                    && _svc airllm reset; press_any_key ;;
+            0)  return 0 ;;
+            *)  echo -e "${RED}Invalid option${NC}"; press_any_key ;;
+        esac
+    done
+}
+
+# ---------- Hosted apps (leco-devops) --------------------------------
 _registry_slugs() {
     [ -f "$REGISTRY_FILE" ] || return 0
     local py
@@ -751,14 +945,14 @@ apps_list() {
 }
 
 apps_run() {
-    # apps_run <slug> <leco-app sub> [extra args...]
+    # apps_run <slug> <leco-devops sub> [extra args...]
     local slug="$1"; shift
     local sub="$1"; shift || true
     if [ -z "$slug" ] || [ -z "$sub" ]; then
         echo -e "${RED}Usage: $0 apps <deploy|stop|down|logs|status|onboard|register|unregister> <slug> [args]${NC}"
         return 1
     fi
-    if ! _have_leco_app; then _warn_no_leco_app; return 1; fi
+    if ! _have_leco_devops; then _warn_no_leco_devops; return 1; fi
     local rel
     rel=$(_manifest_for_slug "$slug") || true
     if [ -z "$rel" ]; then
@@ -772,8 +966,8 @@ apps_run() {
         echo -e "${RED}❌ manifest path missing on disk: $abs${NC}"
         return 1
     fi
-    echo -e "${CYAN}leco-app $sub --manifest $abs $*${NC}"
-    leco-app "$sub" --manifest "$abs" "$@"
+    echo -e "${CYAN}leco-devops $sub --manifest $abs $*${NC}"
+    leco-devops "$sub" --manifest "$abs" "$@"
     return $?
 }
 
@@ -784,12 +978,12 @@ apps_onboard_path() {
         echo -e "${RED}Usage: $0 apps onboard <path-to-leco.app.yaml-or-dir>${NC}"
         return 1
     fi
-    if ! _have_leco_app; then _warn_no_leco_app; return 1; fi
-    # leco-app accepts --cwd or --manifest; pick whichever fits the path.
+    if ! _have_leco_devops; then _warn_no_leco_devops; return 1; fi
+    # leco-devops accepts --cwd or --manifest; pick whichever fits the path.
     if [ -d "$target" ]; then
-        leco-app onboard --cwd "$target" -E "$PROJECT_ROOT"
+        leco-devops onboard --cwd "$target" -E "$PROJECT_ROOT"
     elif [ -f "$target" ]; then
-        leco-app onboard --manifest "$target" -E "$PROJECT_ROOT"
+        leco-devops onboard --manifest "$target" -E "$PROJECT_ROOT"
     else
         echo -e "${RED}❌ Not a file or directory: $target${NC}"
         return 1
@@ -802,15 +996,15 @@ apps_unregister_slug() {
         echo -e "${RED}Usage: $0 apps unregister <slug>${NC}"
         return 1
     fi
-    if ! _have_leco_app; then _warn_no_leco_app; return 1; fi
-    leco-app ecosystem-unregister "$slug" -E "$PROJECT_ROOT"
+    if ! _have_leco_devops; then _warn_no_leco_devops; return 1; fi
+    leco-devops ecosystem-unregister "$slug" -E "$PROJECT_ROOT"
     return $?
 }
 
 menu_apps() {
     while true; do
         show_header
-        echo -e "${BLUE}═══ 📦 HOSTED APPS (leco-app) ═══${NC}"
+        echo -e "${BLUE}═══ 📦 HOSTED APPS (leco-devops) ═══${NC}"
         echo ""
         apps_list
         echo ""
@@ -882,7 +1076,7 @@ menu_apps_actions() {
         echo -e "    ${GREEN}7)${NC} Re-register / merge Traefik"
         echo -e "    ${GREEN}8)${NC} Provision local CF (KV/R2/D1)"
         echo -e "    ${GREEN}9)${NC} Print Traefik fragment (preview)"
-        echo -e "    ${YELLOW}10)${NC} Unregister (full offboard via leco-app)"
+        echo -e "    ${YELLOW}10)${NC} Unregister (full offboard via leco-devops)"
         echo ""
         echo -e "    ${YELLOW}0)${NC} Back"
         echo ""
@@ -895,21 +1089,21 @@ menu_apps_actions() {
             5)  apps_run "$slug" down; press_any_key ;;
             6)  confirm_action "Offload ${slug} (down -v + Traefik strip)?" "N" && apps_run "$slug" offload -y; press_any_key ;;
             7)
-                if ! _have_leco_app; then _warn_no_leco_app; press_any_key; continue; fi
+                if ! _have_leco_devops; then _warn_no_leco_devops; press_any_key; continue; fi
                 local rel abs
                 rel=$(_manifest_for_slug "$slug") && abs=$(_abs_manifest "$rel")
                 if [ -n "$abs" ] && [ -f "$abs" ]; then
-                    leco-app ecosystem-register --manifest "$abs" -E "$PROJECT_ROOT" --merge-traefik
+                    leco-devops ecosystem-register --manifest "$abs" -E "$PROJECT_ROOT" --merge-traefik
                 else
                     echo -e "${RED}manifest not found for $slug${NC}"
                 fi
                 press_any_key
                 ;;
             8)
-                if ! _have_leco_app; then _warn_no_leco_app; press_any_key; continue; fi
+                if ! _have_leco_devops; then _warn_no_leco_devops; press_any_key; continue; fi
                 local rel abs
                 rel=$(_manifest_for_slug "$slug") && abs=$(_abs_manifest "$rel")
-                [ -n "$abs" ] && leco-app provision-local-cf --manifest "$abs"
+                [ -n "$abs" ] && leco-devops provision-local-cf --manifest "$abs"
                 press_any_key
                 ;;
             9)  apps_run "$slug" traefik-fragment; press_any_key ;;
@@ -942,6 +1136,7 @@ urls_print() {
     printf "  %-30s %s\n" "Open WebUI (AI)"   "https://ai.lh"
     printf "  %-30s %s\n" "n8n"               "https://n8n.lh"
     printf "  %-30s %s\n" "Ollama"            "https://ollama.lh"
+    printf "  %-30s %s\n" "AirLLM (HF)"       "https://airllm.lh"
     printf "  %-30s %s\n" "CF-local KV"       "http://kv.lh"
     printf "  %-30s %s\n" "CF-local R2"       "http://r2.lh"
     printf "  %-30s %s\n" "CF-local D1"       "http://d1.lh"
@@ -959,25 +1154,29 @@ menu_urls() {
         echo -e "    ${GREEN}2)${NC} Open Traefik dashboard"
         echo -e "    ${GREEN}3)${NC} Open Open WebUI"
         echo -e "    ${GREEN}4)${NC} Open n8n"
-        echo -e "    ${GREEN}5)${NC} Open kv.lh"
-        echo -e "    ${GREEN}6)${NC} Open r2.lh"
-        echo -e "    ${GREEN}7)${NC} Open d1.lh"
-        echo -e "    ${GREEN}8)${NC} Print URLs only (skip open)"
+        echo -e "    ${GREEN}5)${NC} Open Ollama"
+        echo -e "    ${GREEN}6)${NC} Open AirLLM (https://airllm.lh)"
+        echo -e "    ${GREEN}7)${NC} Open kv.lh"
+        echo -e "    ${GREEN}8)${NC} Open r2.lh"
+        echo -e "    ${GREEN}9)${NC} Open d1.lh"
+        echo -e "    ${GREEN}10)${NC} Print URLs only (skip open)"
         echo ""
         echo -e "    ${YELLOW}0)${NC} Back"
         echo ""
-        read -r -p "$(echo -e ${CYAN}Choose${NC} [0-8]: )" ch
+        read -r -p "$(echo -e ${CYAN}Choose${NC} [0-10]: )" ch
         case "$ch" in
-            1) open_url "http://localhost:${DASHBOARD_HOST_PORT}" ;;
-            2) open_url "https://traefik.lh" ;;
-            3) open_url "https://ai.lh" ;;
-            4) open_url "https://n8n.lh" ;;
-            5) open_url "http://kv.lh" ;;
-            6) open_url "http://r2.lh" ;;
-            7) open_url "http://d1.lh" ;;
-            8) press_any_key ;;
-            0) return 0 ;;
-            *) echo -e "${RED}Invalid option${NC}"; press_any_key ;;
+            1)  open_url "http://localhost:${DASHBOARD_HOST_PORT}" ;;
+            2)  open_url "https://traefik.lh" ;;
+            3)  open_url "https://ai.lh" ;;
+            4)  open_url "https://n8n.lh" ;;
+            5)  open_url "https://ollama.lh" ;;
+            6)  open_url "https://airllm.lh" ;;
+            7)  open_url "http://kv.lh" ;;
+            8)  open_url "http://r2.lh" ;;
+            9)  open_url "http://d1.lh" ;;
+            10) press_any_key ;;
+            0)  return 0 ;;
+            *)  echo -e "${RED}Invalid option${NC}"; press_any_key ;;
         esac
     done
 }
@@ -1035,11 +1234,11 @@ diagnostics_run() {
         || echo -e "  ${YELLOW}⚠${NC}  hosting/traefik/01-stack-core.yml missing — run: $0 traefik heal"
     echo ""
 
-    echo -e "${WHITE}6. leco-app CLI${NC}"
-    if _have_leco_app; then
-        echo -e "  ${GREEN}✔${NC} $(command -v leco-app)"
+    echo -e "${WHITE}6. leco-devops CLI${NC}"
+    if _have_leco_devops; then
+        echo -e "  ${GREEN}✔${NC} $(command -v leco-devops)"
     else
-        echo -e "  ${YELLOW}⚠${NC}  leco-app not in PATH — pip install -e tools/deploy-cli"
+        echo -e "  ${YELLOW}⚠${NC}  leco-devops not in PATH — pip install -e tools/deploy-cli"
     fi
 }
 
@@ -1093,7 +1292,7 @@ Run without arguments for the interactive menu. Direct commands mirror the menu.
 
 Status / health
   leco-cli.sh status                      Snapshot: docker, network, services, hosted apps
-  leco-cli.sh diagnose | doctor           Detailed health (DNS, certs, Traefik files, leco-app)
+  leco-cli.sh diagnose | doctor           Detailed health (DNS, certs, Traefik files, leco-devops)
   leco-cli.sh repair                      Repair network + heal Traefik
 
 Foundation
@@ -1118,8 +1317,10 @@ Per-service shortcuts (wrap ecosystem-stack/services/<name>.sh)
   leco-cli.sh traefik   <heal|ensure-files|restart|status|logs>
   leco-cli.sh cf        <start|stop|restart|status|logs|recreate|backup|remove|reset>
   leco-cli.sh ollama    <pull|status|list|logs|restart>
+  leco-cli.sh airllm    <build|start|stop|restart|status|logs|pull|list|remove|reset|open|pinned>
+                                          (Docker container; HuggingFace safetensors models)
 
-Hosted apps (wraps leco-app; manifests resolved via config/leco-registry.yaml)
+Hosted apps (wraps leco-devops; manifests resolved via config/leco-registry.yaml)
   leco-cli.sh apps list
   leco-cli.sh apps status   <slug>
   leco-cli.sh apps deploy   <slug>
@@ -1135,7 +1336,7 @@ Hosted apps (wraps leco-app; manifests resolved via config/leco-registry.yaml)
 
 Helpers
   leco-cli.sh urls                        Print common *.lh URLs
-  leco-cli.sh open <key>                  open dashboard|traefik|webui|n8n|kv|r2|d1
+  leco-cli.sh open <key>                  open dashboard|traefik|webui|n8n|ollama|airllm|kv|r2|d1|workers
   leco-cli.sh menu                        Interactive menu (same as no args)
   leco-cli.sh tree                        Print menu tree
   leco-cli.sh help | --help | -h          This help
@@ -1143,7 +1344,7 @@ Helpers
 Tips
 - Most subcommands shell into the existing scripts under ecosystem-stack/services/*.sh
   so behavior is identical to running those scripts directly.
-- Hosted apps require `leco-app` on PATH: pip install -e tools/deploy-cli
+- Hosted apps require `leco-devops` on PATH: pip install -e tools/deploy-cli
 - The repo path is auto-detected from this script's location.
 TXT
 }
@@ -1170,18 +1371,20 @@ LEco CLI — menu tree
    └─ start/stop/restart/status/logs | recreate | backup D1 | open kv/r2/d1 | remove/reset
 7) Ollama
    └─ pull pinned | status | list models | logs | restart | open ai.lh
-8) Hosted apps (leco-app)
+8) AirLLM (Docker container)
+   └─ build | start/stop/restart | status | logs | pull pinned HF | list | open airllm.lh | remove/reset
+9) Hosted apps (leco-devops)
    ├─ List registered apps
    ├─ Per-app actions
    │   └─ status | deploy | stop | logs | down | offload | re-register | provision | fragment | unregister
    ├─ Onboard a new app from path
    ├─ Print Traefik fragment for an app
    └─ Open Hosted apps page in dashboard
-9) Open service URLs
-10) Diagnostics / repair
+10) Open service URLs
+11) Diagnostics / repair
    └─ report | repair (network + Traefik) | repair network only | heal Traefik only
-11) Help (detailed)
-12) Menu tree
+12) Help (detailed)
+13) Menu tree
 0) Exit
 TXT
 }
@@ -1193,7 +1396,7 @@ main() {
     while true; do
         show_header
         show_menu
-        read -r -p "$(echo -e ${CYAN}Select option${NC} [0-12]: )" choice
+        read -r -p "$(echo -e ${CYAN}Select option${NC} [0-13]: )" choice
         case "$choice" in
             0)  activity_log "session_end" "info"; exit 0 ;;
             1)  activity_log "status" "info"; status_snapshot; press_any_key ;;
@@ -1203,11 +1406,12 @@ main() {
             5)  activity_log "traefik" "info"; menu_traefik ;;
             6)  activity_log "cf-local" "info"; menu_cf_local ;;
             7)  activity_log "ollama" "info"; menu_ollama ;;
-            8)  activity_log "apps" "info"; menu_apps ;;
-            9)  activity_log "urls" "info"; menu_urls ;;
-            10) activity_log "diagnose" "info"; menu_diagnostics ;;
-            11) reference_help_detailed ;;
-            12) reference_menu_tree ;;
+            8)  activity_log "airllm" "info"; menu_airllm ;;
+            9)  activity_log "apps" "info"; menu_apps ;;
+            10) activity_log "urls" "info"; menu_urls ;;
+            11) activity_log "diagnose" "info"; menu_diagnostics ;;
+            12) reference_help_detailed ;;
+            13) reference_menu_tree ;;
             *)  echo -e "${RED}Invalid option${NC}"; press_any_key ;;
         esac
     done
@@ -1297,8 +1501,96 @@ if [ -n "${1:-}" ]; then
                 list)             docker exec ollama ollama list ;;
                 logs)             _svc ollama logs ;;
                 restart)          _svc ollama restart ;;
+                popular)
+                    _llm_print_popular_catalog "$ECO_STACK_DIR/config/popular-ollama-models.json" "Ollama"
+                    ;;
+                install|pull-one)
+                    name="${1:-}"; [ -z "$name" ] && { echo "Usage: $0 ollama install <model[:tag]>"; exit 1; }
+                    _llm_check_container ollama || exit 1
+                    docker exec ollama ollama pull "$name"
+                    ;;
+                load|warm)
+                    name="${1:-}"; [ -z "$name" ] && { echo "Usage: $0 ollama load <model[:tag]>"; exit 1; }
+                    _llm_warm "ollama" "11434" "$name"
+                    ;;
+                unload)
+                    name="${1:-}"; [ -z "$name" ] && { echo "Usage: $0 ollama unload <model[:tag]>"; exit 1; }
+                    _llm_unload "ollama" "11434" "$name"
+                    ;;
+                remove-model|delete|rm-model)
+                    name="${1:-}"; [ -z "$name" ] && { echo "Usage: $0 ollama remove-model <model[:tag]>"; exit 1; }
+                    confirm_action "Delete model '$name' from Ollama disk?" "N" || exit 0
+                    docker exec ollama ollama rm "$name"
+                    ;;
+                show-cmd)
+                    name="${1:-<MODEL[:tag]>}"
+                    _llm_print_cli_help "ollama" "$name"
+                    ;;
                 *)
-                    echo "Usage: $0 ollama <pull|status|list|logs|restart>"
+                    echo "Usage: $0 ollama <pull|status|list|logs|restart|popular|install <name>|load <name>|unload <name>|remove-model <name>|show-cmd [name]>"
+                    exit 1
+                    ;;
+            esac
+            ;;
+        airllm)
+            sub="${1:-status}"; shift || true
+            case "$sub" in
+                build|image)           _svc airllm build ;;
+                start)                 _svc airllm start ;;
+                stop)                  _svc airllm stop ;;
+                restart)               _svc airllm restart ;;
+                status)                _svc airllm status ;;
+                logs)                  _svc airllm logs ;;
+                pull|pull-models)      _eco airllm-pull-models ;;
+                list)                  docker exec airllm curl -s http://127.0.0.1:11435/api/tags ;;
+                remove)                confirm_action "Remove airllm container? (HF cache + shards preserved)" "N" && _svc airllm remove ;;
+                reset)                 confirm_action "Reset AirLLM (remove container + delete HF cache + shard volumes)?" "N" && _svc airllm reset ;;
+                open)                  open_url "https://airllm.lh" ;;
+                pinned|list-pinned)
+                    pinned_file="$ECO_STACK_DIR/config/airllm-pinned-models.txt"
+                    if [ -f "$pinned_file" ]; then cat "$pinned_file"; else echo "missing $pinned_file"; fi
+                    ;;
+                popular)
+                    _llm_print_popular_catalog "$ECO_STACK_DIR/config/popular-airllm-models.json" "AirLLM"
+                    ;;
+                install|pull-one)
+                    name="${1:-}"; [ -z "$name" ] && { echo "Usage: $0 airllm install <HF_OWNER/MODEL>"; exit 1; }
+                    _llm_check_container airllm || exit 1
+                    # AirLLM's /api/pull blocks until the entire HF download completes
+                    # (often many minutes / GB). Use stream:true and read the first
+                    # NDJSON line so the CLI returns once the pull job has started;
+                    # the download continues in the shim. Mirrors what ecosystem-stack
+                    # pull_pinned_models does for pinned-file boot pulls.
+                    curl -sS -N -X POST http://127.0.0.1/api/pull -H "Host: airllm.lh" \
+                        -H 'Content-Type: application/json' \
+                        -d "{\"name\":\"$name\",\"stream\":true}" \
+                        --max-time 15 | head -n 1
+                    echo -e "${GREEN}✓ Pull dispatched for $name. Watch: ./leco-cli.sh airllm logs${NC}"
+                    echo -e "${DIM}  Check progress: curl -H 'Host: airllm.lh' http://127.0.0.1/api/tags${NC}"
+                    ;;
+                load|warm)
+                    name="${1:-}"; [ -z "$name" ] && { echo "Usage: $0 airllm load <HF_OWNER/MODEL>"; exit 1; }
+                    _llm_warm "airllm" "11435" "$name"
+                    ;;
+                unload)
+                    name="${1:-}"; [ -z "$name" ] && { echo "Usage: $0 airllm unload <HF_OWNER/MODEL>"; exit 1; }
+                    _llm_unload "airllm" "11435" "$name"
+                    ;;
+                remove-model|delete|rm-model)
+                    name="${1:-}"; [ -z "$name" ] && { echo "Usage: $0 airllm remove-model <HF_OWNER/MODEL>"; exit 1; }
+                    confirm_action "Delete model '$name' from AirLLM cache (weights + shards)?" "N" || exit 0
+                    curl -fsS -X DELETE http://127.0.0.1/api/delete -H "Host: airllm.lh" \
+                        -H 'Content-Type: application/json' \
+                        -d "{\"name\":\"$name\"}" >/dev/null \
+                        || { echo "Delete failed"; exit 1; }
+                    echo -e "${GREEN}✓ Deleted $name from AirLLM disk.${NC}"
+                    ;;
+                show-cmd)
+                    name="${1:-<HF_OWNER/MODEL>}"
+                    _llm_print_cli_help "airllm" "$name"
+                    ;;
+                *)
+                    echo "Usage: $0 airllm <build|start|stop|restart|status|logs|pull|list|remove|reset|open|pinned|popular|install <name>|load <name>|unload <name>|remove-model <name>|show-cmd [name]>"
                     exit 1
                     ;;
             esac
@@ -1316,15 +1608,15 @@ if [ -n "${1:-}" ]; then
                 fragment|frag)  apps_run "${1:-}" traefik-fragment ;;
                 provision)
                     slug="${1:-}"; shift || true
-                    if ! _have_leco_app; then _warn_no_leco_app; exit 1; fi
+                    if ! _have_leco_devops; then _warn_no_leco_devops; exit 1; fi
                     rel=$(_manifest_for_slug "$slug") && abs=$(_abs_manifest "$rel")
-                    [ -n "$abs" ] && [ -f "$abs" ] && leco-app provision-local-cf --manifest "$abs" "$@"
+                    [ -n "$abs" ] && [ -f "$abs" ] && leco-devops provision-local-cf --manifest "$abs" "$@"
                     ;;
                 register|re-register)
                     slug="${1:-}"; shift || true
-                    if ! _have_leco_app; then _warn_no_leco_app; exit 1; fi
+                    if ! _have_leco_devops; then _warn_no_leco_devops; exit 1; fi
                     rel=$(_manifest_for_slug "$slug") && abs=$(_abs_manifest "$rel")
-                    [ -n "$abs" ] && [ -f "$abs" ] && leco-app ecosystem-register --manifest "$abs" -E "$PROJECT_ROOT" --merge-traefik "$@"
+                    [ -n "$abs" ] && [ -f "$abs" ] && leco-devops ecosystem-register --manifest "$abs" -E "$PROJECT_ROOT" --merge-traefik "$@"
                     ;;
                 unregister|offboard)
                     apps_unregister_slug "${1:-}"
@@ -1349,12 +1641,13 @@ if [ -n "${1:-}" ]; then
                 webui|ai|open-webui) open_url "https://ai.lh" ;;
                 n8n)                 open_url "https://n8n.lh" ;;
                 ollama)              open_url "https://ollama.lh" ;;
+                airllm)              open_url "https://airllm.lh" ;;
                 kv)                  open_url "http://kv.lh" ;;
                 r2)                  open_url "http://r2.lh" ;;
                 d1)                  open_url "http://d1.lh" ;;
                 workers)             open_url "http://workers.lh" ;;
                 *)
-                    echo "Usage: $0 open <dashboard|traefik|webui|n8n|ollama|kv|r2|d1|workers>"
+                    echo "Usage: $0 open <dashboard|traefik|webui|n8n|ollama|airllm|kv|r2|d1|workers>"
                     exit 1
                     ;;
             esac
@@ -1370,8 +1663,8 @@ if [ -n "${1:-}" ]; then
             ;;
         version|--version|-v)
             echo "leco-cli.sh (LEco DevOps Open Project) — local manager"
-            if _have_leco_app; then
-                leco-app version 2>/dev/null || true
+            if _have_leco_devops; then
+                leco-devops version 2>/dev/null || true
             fi
             ;;
         *)

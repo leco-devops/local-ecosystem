@@ -25,7 +25,7 @@
 #         declared runtimes; target=service points at a Docker Compose service.
 #
 # ONBOARDING SHORTCUT
-#   `leco-app runtimes -f leco.app.yaml` scans the resolved source root for
+#   `leco-devops runtimes -f leco.app.yaml` scans the resolved source root for
 #   Worker entrypoints (src/index.ts, worker.ts, …) and prints the URL paths
 #   it handles plus a copy-pasteable routing.upstream YAML block. The
 #   registration wizard surfaces the same hint when you click Register.
@@ -75,7 +75,7 @@ infrastructure:
 
     # Informational: list paid Cloudflare-platform features this Worker
     # depends on in production that have no local equivalent. LEco surfaces
-    # them as `expected: production-only` badges in `leco-app runtimes` and
+    # them as `expected: production-only` badges in `leco-devops runtimes` and
     # the dashboard, so you don't chase phantom "down" markers on
     # /health/json for things like Browser Rendering. Defaults to a
     # conservative built-in list (`browser`, `vectorize`, `hyperdrive`,
@@ -128,7 +128,7 @@ notes: |
   Wire-up summary:
   - LEco generates `docker-compose.leco-runtime.yml` (gitignored under
     hosting/app-available/<slug>/) the first time onboarding runs.
-  - `leco-app runtimes -f leco.app.yaml` confirms the adapter is wired AND
+  - `leco-devops runtimes -f leco.app.yaml` confirms the adapter is wired AND
     surfaces a routing.upstream YAML hint based on a scan of the Worker source.
   - First boot applies any d1-bootstrap*.sql under
     `hosting/app-available/<slug>/.leco-runtime/<runtime_id>/`, then runs

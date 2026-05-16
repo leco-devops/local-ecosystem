@@ -17,12 +17,12 @@ This document records **common failures** seen with **LEco DevOps Hosted apps** 
 | Register wizard: changing **App id (slug)** does not update Public URL hostnames | URLs were populated by **Detect** (which derives the hostname from the folder name, e.g. `cloudflare.lh`), not from the slug. No input listener synced them. | `dashboard/static/dashboard.js` adds an `input` listener on the slug field that reads the *actual* hostname from the first URL row and rewrites all rows when the slug changes (preserving custom paths like `/api`, `/graphql`). |
 | **`Bind for 0.0.0.0:80` / `:3000` / `:5432` / … **`port is already allocated`** on **`docker compose up`** | Upstream compose publishes **host ports** (web **80/3000**, API **8001**, Postgres **5432**, etc.) that another process or stack already uses | Keep the upstream repo untouched: add **`ports: !reset []`** in the hosting overlay (**`docker-compose.leco-hosting.yml`**) for every publishing service. New hosted-app onboarding now auto-generates this in **`ensure_lh_network_hosting_overlay()`**. If you want the hosting tree to own the **primary** compose file instead of an extra overlay, use **`docker-compose.leco-entry.yml`** with **`composeFileFromManifest`** + **`include`** (see **`hosting/samples/sample-hosting-compose-entry/`**). Unset env warnings → add **`envFile`** under hosting or a **`.env`** beside the manifest. |
 | **`/api/geo/ip-country`** **404** in Docker but works on Cloudflare | Route existed only on the **Worker** (`request.cf.country`), not in **FastAPI** | **CrawlerVision** **`backend/server.py`** adds **`GET /api/geo/ip-country`** for Docker (headers, **`GEO_IP_DEV_COUNTRY`**, optional **ip-api** lookup). |
-| **Worker-only API** routes 404 on **`<slug>.lh/api/*`** even though they exist in **`cloudflare/`** / **`functions/`** / etc. — production serves them fine | Local routing pointed **`/api`** at a classic compose backend (e.g. FastAPI) which only implements a subset of the production routes — the rest live in the edge runtime that isn't running locally | Declare **`infrastructure.runtimes[]`** in **`leco.yaml`** with **`type: cloudflare-workers`** (or **`vercel`** / **`aws-lambda`** / **`deno-deploy`** / **`cloudflare-pages`** once their adapters land) and switch **`routing.entries[].upstream[]`** to forward **`/api`** at **`target: runtime`**. See **§7 Local edge runtimes**, **`hosting/samples/sample-cf-worker-runtime/`**, and run **`leco-app runtimes -f leco.app.yaml`** to confirm. |
+| **Worker-only API** routes 404 on **`<slug>.lh/api/*`** even though they exist in **`cloudflare/`** / **`functions/`** / etc. — production serves them fine | Local routing pointed **`/api`** at a classic compose backend (e.g. FastAPI) which only implements a subset of the production routes — the rest live in the edge runtime that isn't running locally | Declare **`infrastructure.runtimes[]`** in **`leco.yaml`** with **`type: cloudflare-workers`** (or **`vercel`** / **`aws-lambda`** / **`deno-deploy`** / **`cloudflare-pages`** once their adapters land) and switch **`routing.entries[].upstream[]`** to forward **`/api`** at **`target: runtime`**. See **§7 Local edge runtimes**, **`hosting/samples/sample-cf-worker-runtime/`**, and run **`leco-devops runtimes -f leco.app.yaml`** to confirm. |
 | **502** on **`<slug>.lh/api/*`** after switching to **`target: runtime`**; runtime container in **`Restarting`**; logs show *"Browser Rendering is not supported locally"* | Upstream **`wrangler.toml`** declares **`[browser]`** (or another binding Miniflare cannot simulate). Wrangler local exits before binding **`:8787`**, so Traefik reports **502**. | The Cloudflare Workers adapter auto-strips **`[browser]`** by default into a sanitized **`hosting/app-available/<slug>/.leco-runtime/<runtime_id>/wrangler.toml`** and bind-mounts it on top of **`/app/wrangler.toml`** *inside the runtime container only* — upstream tree untouched. Override the strip list via **`infrastructure.runtimes[].stripBindings`** (list, or **`"none"`** to disable). See **§7 → Locally-unsupported bindings**. |
-| **502** on **`<slug>.lh/api/*`**; runtime logs show **`spawn …/workerd ENOENT`** | LEco runtime image was on **`node:22-alpine`** (musl libc). Cloudflare's **`workerd`** binary published on npm is glibc-only and crash-loops on musl. | Image is now **`node:22-bookworm-slim`** (glibc). Rebuild **`leco/runtime-cloudflare-workers:latest`** from **`infra/runtimes/cloudflare-workers/`** and recreate the runtime container *and* its per-app **`node_modules`** named volume (musl-built artifacts must be evicted): `docker volume rm <project>_leco-rt-<slug>-<runtime>-node-modules` then **`leco-app deploy`**. |
+| **502** on **`<slug>.lh/api/*`**; runtime logs show **`spawn …/workerd ENOENT`** | LEco runtime image was on **`node:22-alpine`** (musl libc). Cloudflare's **`workerd`** binary published on npm is glibc-only and crash-loops on musl. | Image is now **`node:22-bookworm-slim`** (glibc). Rebuild **`leco/runtime-cloudflare-workers:latest`** from **`infra/runtimes/cloudflare-workers/`** and recreate the runtime container *and* its per-app **`node_modules`** named volume (musl-built artifacts must be evicted): `docker volume rm <project>_leco-rt-<slug>-<runtime>-node-modules` then **`leco-devops deploy`**. |
 | **500** with **`D1_ERROR: no such table: <name>: SQLITE_ERROR`** on a Worker route | Local D1 file is empty — production was bootstrapped out-of-band (e.g. a `D1_INIT_SQL` exec from an admin endpoint) and/or **`wrangler d1 migrations apply`** aborted on a single bad migration leaving later ones pending. | Drop the upstream baseline schema into **`hosting/app-available/<slug>/.leco-runtime/<runtime_id>/d1-bootstrap-<BINDING>.sql`** (or **`d1-bootstrap.sql`** as a fallback) and redeploy. The runtime entrypoint applies the bootstrap, then runs a **resilient** migration loop that tolerates per-file failures by recording them in `d1_migrations` and retrying. See **§7 → D1 schema bootstrap + resilient migrations**. |
-| **`<slug>.lh/<path>`** returns the **frontend SPA shell** (HTML with *"You need to enable JavaScript to run this app."*) but production returns JSON for the same path | Path is Worker-served in production but no **`routing.entries[].upstream`** rule directs it at the local runtime — Traefik falls through to the catch-all **`/`** → frontend service. Common offenders: **`/health/json`**, **`/.well-known/*`**, **`/metrics`**, **`/sitemap.xml`**. | Add a longer-prefix rule pointing at the runtime in **`leco.yaml`**, e.g. **`{ prefix: /health/json, target: runtime, runtime: worker }`**. The Cloudflare Workers adapter's **`detect()`** now scans the Worker entrypoint (**`src/index.ts`** / **`worker.ts`**) for `pathname === '...'` / `pathname.startsWith('...')` / `app.get('...', …)` patterns and surfaces a hint with suggested rules during onboarding. Re-merge Traefik after editing (**`leco-app ecosystem-register --merge-traefik`**); the longer prefix automatically wins because the fragment generator derives router priorities from prefix length. |
-| **Worker `/health/json`** (or any feature board) reports many SaaS / LLM / payment / email services as **`down`** locally while production shows them healthy | The Worker references `env.OPENAI_API_KEY`, `env.STRIPE_SECRET_KEY`, etc., but no `.dev.vars` is wired into the runtime container, so the Worker's `hasEnvVar()` checks return `false`. LEco is healthy — those are operator-supplied secrets that ship as Wrangler secrets in production. | LEco now auto-generates **`hosting/app-available/<slug>/.dev.vars.example`** on every overlay materialization, listing every UPPER_SNAKE `env.<NAME>` referenced in Worker source that is NOT already declared in wrangler.toml `[vars]` or as a binding (grouped by vendor: LLM / Payments / Email / Cloudflare / Other). Copy it to `.dev.vars`, fill in real values, redeploy. The runtime adapter auto-bind-mounts `.dev.vars` at `/app/.dev.vars` whenever the file exists — no manifest field required. Run **`leco-app runtimes -f leco.app.yaml`** to see `wired: N/M (missing: …)` against the operator file. See **§7 → Operator-supplied secrets (`.dev.vars` auto-scan)**. |
+| **`<slug>.lh/<path>`** returns the **frontend SPA shell** (HTML with *"You need to enable JavaScript to run this app."*) but production returns JSON for the same path | Path is Worker-served in production but no **`routing.entries[].upstream`** rule directs it at the local runtime — Traefik falls through to the catch-all **`/`** → frontend service. Common offenders: **`/health/json`**, **`/.well-known/*`**, **`/metrics`**, **`/sitemap.xml`**. | Add a longer-prefix rule pointing at the runtime in **`leco.yaml`**, e.g. **`{ prefix: /health/json, target: runtime, runtime: worker }`**. The Cloudflare Workers adapter's **`detect()`** now scans the Worker entrypoint (**`src/index.ts`** / **`worker.ts`**) for `pathname === '...'` / `pathname.startsWith('...')` / `app.get('...', …)` patterns and surfaces a hint with suggested rules during onboarding. Re-merge Traefik after editing (**`leco-devops ecosystem-register --merge-traefik`**); the longer prefix automatically wins because the fragment generator derives router priorities from prefix length. |
+| **Worker `/health/json`** (or any feature board) reports many SaaS / LLM / payment / email services as **`down`** locally while production shows them healthy | The Worker references `env.OPENAI_API_KEY`, `env.STRIPE_SECRET_KEY`, etc., but no `.dev.vars` is wired into the runtime container, so the Worker's `hasEnvVar()` checks return `false`. LEco is healthy — those are operator-supplied secrets that ship as Wrangler secrets in production. | LEco now auto-generates **`hosting/app-available/<slug>/.dev.vars.example`** on every overlay materialization, listing every UPPER_SNAKE `env.<NAME>` referenced in Worker source that is NOT already declared in wrangler.toml `[vars]` or as a binding (grouped by vendor: LLM / Payments / Email / Cloudflare / Other). Copy it to `.dev.vars`, fill in real values, redeploy. The runtime adapter auto-bind-mounts `.dev.vars` at `/app/.dev.vars` whenever the file exists — no manifest field required. Run **`leco-devops runtimes -f leco.app.yaml`** to see `wired: N/M (missing: …)` against the operator file. See **§7 → Operator-supplied secrets (`.dev.vars` auto-scan)**. |
 | **Worker `/health/json`** still reports `browser` / `vectorize` / `analytics_engine_datasets` as **`down`** locally after secrets are filled in | Those bindings are *production-only* Cloudflare features (Browser Rendering, Vector embeddings store, Analytics Engine — none have a Miniflare equivalent). They will *always* be `down` locally. | Declare them under **`infrastructure.runtimes[].productionOnlyBindings`** in **`leco.yaml`** (e.g. `[browser, vectorize, analytics_engine_datasets, send_email]`). LEco surfaces them as `expected: production-only` informational badges so operators don't chase phantom red dots. Defaults to a conservative built-in list; set to `none` to suppress entirely. |
 
 ---
@@ -32,7 +32,7 @@ This document records **common failures** seen with **LEco DevOps Hosted apps** 
 For **React + API** on one hostname:
 
 - **`leco.yaml`** → **`infrastructure.routing.entries`**: **`hostname`**, **`apiPathPrefix`** (often **`/api`**), **`frontend`**, **`apiBackend`** (host + port).
-- **`leco-app traefik-fragment`** / merge produces **higher-priority** routers for **`Host(...) && PathPrefix(/api)`** → API container, and **lower-priority** **`Host(...)`** → UI container (`tools/deploy-cli/leco_app/traefik_fragment.py`).
+- **`leco-devops traefik-fragment`** / merge produces **higher-priority** routers for **`Host(...) && PathPrefix(/api)`** → API container, and **lower-priority** **`Host(...)`** → UI container (`tools/deploy-cli/leco_app/traefik_fragment.py`).
 - Traefik forwards the **full path** (including **`/api`**) to the backend; the API must mount routes under **`/api`** (same as direct `localhost:8001` usage).
 
 ---
@@ -44,13 +44,13 @@ For **React + API** on one hostname:
 3. **`additionalComposeFilesFromManifest`** includes **`docker-compose.leco-hosting.yml`** (or equivalent) so **frontend** and **api** services join **`lh-network`**.
 4. The hosting overlay clears upstream host publishes with **`ports: !reset []`** for any service that exposed ports in the upstream compose.
 5. **`docker compose … up -d`** uses **both** the upstream **`-f`** and the hosting overlay **`-f`** (LEco DevOps deploy does this when the profile is correct).
-6. **`hosting/traefik/dynamic.yml`** merged (Register / **`leco-app ecosystem-register --merge-traefik`**).
+6. **`hosting/traefik/dynamic.yml`** merged (Register / **`leco-devops ecosystem-register --merge-traefik`**).
 7. For **same-origin API** on `*.lh`, overlay env clears hardcoded **`localhost`** API base vars (framework-specific).
 8. After changing **dashboard** probe logic, **restart** the **`service-dashboard`** container.
 
 ### 3a. Automated onboarding pipeline (what LEco does for you)
 
-The dashboard **Register** flow and **`leco-app ecosystem-register`** run the
+The dashboard **Register** flow and **`leco-devops ecosystem-register`** run the
 steps below in order. When an app behaves like a "production-faithful" Worker
 stack (CV is the reference), none of these need operator intervention beyond
 declaring **`infrastructure.runtimes[]`** in **`leco.yaml`**.
@@ -68,7 +68,7 @@ declaring **`infrastructure.runtimes[]`** in **`leco.yaml`**.
    **`cloudflare/wrangler.toml`**) pick the right one. The wizard log surfaces
    the detected runtime, the URL paths the Worker entrypoint actually handles,
    and a **copy-pasteable** **`routing.entries[].upstream`** YAML block. The
-   same hint is emitted by **`leco-app runtimes`** (default behavior;
+   same hint is emitted by **`leco-devops runtimes`** (default behavior;
    **`--no-detect`** to skip).
 
 3. **`ensure_local_runtime_overlay`** *(only if `infrastructure.runtimes[]` declared)*
@@ -87,14 +87,14 @@ declaring **`infrastructure.runtimes[]`** in **`leco.yaml`**.
      operators can drop **`d1-bootstrap-<BINDING>.sql`** files the runtime
      applies once on first boot before migrations run.
 
-4. **`leco-app ecosystem-register --merge-traefik`** *(always)* — reads the
+4. **`leco-devops ecosystem-register --merge-traefik`** *(always)* — reads the
    effective **`routing.entries[].upstream[]`**, emits Traefik routers via
    **`traefik_fragment.py::_upstream_routing_fragment`** (priority = prefix
    length so **`/health/json`** outranks **`/api`** outranks **`/`** without
    manual priority math), and merges them into
    **`hosting/traefik/dynamic.yml`** atomically (**`.bak`** written first).
 
-5. **`leco-app deploy`** *(triggered by the wizard or the Hosted apps card)*
+5. **`leco-devops deploy`** *(triggered by the wizard or the Hosted apps card)*
    — **`docker compose -f <upstream> -f leco-hosting -f leco-runtime up -d`**.
    On first boot the runtime entrypoint applies bootstrap SQL, then loops
    **`wrangler d1 migrations apply`** with per-file failure tolerance, then
@@ -285,7 +285,7 @@ healthy. LEco closes this discoverability gap automatically:
    configuration (e.g. pointing at a non-default path).
 
 4. **Diagnostic surface.** Both the registration wizard log and
-   `leco-app runtimes -f leco.app.yaml` print
+   `leco-devops runtimes -f leco.app.yaml` print
    `expected .dev.vars secrets: N (wired: M, missing: …)` with the actual
    missing key names, plus the path of `.dev.vars` (when present) or the
    skeleton file (when not). Values are never logged — only key presence.
@@ -293,7 +293,7 @@ healthy. LEco closes this discoverability gap automatically:
 The flow for any new Worker app:
 ```bash
 # 1. Register the app — LEco scans the source and writes .dev.vars.example.
-leco-app ecosystem-register --merge-traefik
+leco-devops ecosystem-register --merge-traefik
 
 # 2. Copy the skeleton and fill in real secret values.
 cp hosting/app-available/<slug>/.dev.vars.example \
@@ -301,7 +301,7 @@ cp hosting/app-available/<slug>/.dev.vars.example \
 ${EDITOR} hosting/app-available/<slug>/.dev.vars
 
 # 3. Redeploy — the adapter auto-mounts .dev.vars; Wrangler picks it up.
-leco-app deploy
+leco-devops deploy
 ```
 
 ### Production-only bindings (informational badge)
@@ -326,7 +326,7 @@ infrastructure:
 ```
 
 LEco surfaces those as `expected: production-only` informational badges in
-`leco-app runtimes` output and the dashboard hosted-app card so operators
+`leco-devops runtimes` output and the dashboard hosted-app card so operators
 can tell at a glance which red dots are "missing API key" (actionable) vs
 "paid CF feature, will-never-work-locally" (expected). Defaults to a
 conservative built-in list — override with a custom list or set to
@@ -334,7 +334,7 @@ conservative built-in list — override with a custom list or set to
 
 ### Diagnostic command
 
-`leco-app runtimes -f leco.app.yaml` prints the adapter registry, the
+`leco-devops runtimes -f leco.app.yaml` prints the adapter registry, the
 declared runtimes for that manifest, the detection hint (Worker paths +
 suggested `routing.upstream` YAML), and the secret wiring snapshot
 (expected / wired / missing). Combine with
@@ -351,7 +351,7 @@ suggested `routing.upstream` YAML), and the secret wiring snapshot
 | Traefik routers (priority by prefix length) | `tools/deploy-cli/leco_app/traefik_fragment.py::_upstream_routing_fragment` |
 | Cloudflare Workers reference image | `infra/runtimes/cloudflare-workers/` |
 | Sample manifest pair | `hosting/samples/sample-cf-worker-runtime/` |
-| CLI: `leco-app runtimes` | `tools/deploy-cli/leco_app/cli.py::cmd_runtimes` |
+| CLI: `leco-devops runtimes` | `tools/deploy-cli/leco_app/cli.py::cmd_runtimes` |
 
 ### CV opted-in (reference)
 

@@ -219,7 +219,7 @@ def provision_from_manifest(
     """
     Parse wrangler from manifest and provision local adapters.
 
-    ``ignore_policy=True`` (e.g. ``leco-app provision-local-cf``) skips manifest/env policy
+    ``ignore_policy=True`` (e.g. ``leco-devops provision-local-cf``) skips manifest/env policy
     and runs whenever ``cloudflare.wranglerConfig`` resolves to a file.
     """
     from leco_app.schema import load_effective_manifest

@@ -48,7 +48,13 @@ SERVICE_MAP = [
         "service": "Ollama",
         "container": "ollama",
         "urls": ["http://ollama.lh"],
-        "notes": "LLM runtime",
+        "notes": "LLM runtime (GGUF models)",
+    },
+    {
+        "service": "AirLLM",
+        "container": "airllm",
+        "urls": ["http://airllm.lh"],
+        "notes": "Large HF model runtime (layer-by-layer loading, CPU / optional CUDA)",
     },
     {
         "service": "LEco DevOps",
@@ -1059,6 +1065,26 @@ def collect_overview():
     except Exception as exc:
         ollama_llm = {"ollama_reachable": False, "error": str(exc)[:200], "rows": []}
 
+    # Mirror of `ollama_llm` for the AirLLM shim. Kept here (not on the slower
+    # /api/airllm/models route) so the runtime grid can show one inline table per
+    # LLM backend without an extra round-trip per render. Shim is reached over
+    # lh-network at http://airllm:11435 by default.
+    airllm_llm = None
+    try:
+        from airllm_models import build_models_payload as build_airllm_payload
+
+        am = build_airllm_payload()
+        airllm_llm = {
+            "airllm_reachable": am.get("airllm_reachable"),
+            "airllm_base": am.get("airllm_base"),
+            "server_version": am.get("server_version"),
+            "installed_count": am.get("installed_count"),
+            "running_count": am.get("running_count"),
+            "rows": am.get("rows") or [],
+        }
+    except Exception as exc:
+        airllm_llm = {"airllm_reachable": False, "error": str(exc)[:200], "rows": []}
+
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "service_count": len(services),
@@ -1070,6 +1096,7 @@ def collect_overview():
         "system_status": system_status,
         "reference": collect_reference_status(),
         "ollama_llm": ollama_llm,
+        "airllm_llm": airllm_llm,
     }
 
 

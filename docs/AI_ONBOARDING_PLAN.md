@@ -502,21 +502,21 @@ dashboard/requirements.txt
 
 ## 11. CLI Integration
 
-The `leco-app` CLI also gets AI support via a `--ai` flag on existing commands:
+The `leco-devops` CLI also gets AI support via a `--ai` flag on existing commands:
 
 ```bash
 # Scaffold with AI analysis (reads source, generates smarter configs):
-leco-app scaffold botfeed -E /path/to/local-ecosystem \
+leco-devops scaffold botfeed -E /path/to/local-ecosystem \
   --source-path /Users/rmaurya/Working/GitHub/UtilityServer \
   --ai                           # uses default provider from ai-providers.yaml
   --ai-provider openai           # override provider
   --ai-model gpt-4o-mini         # override model
 
 # Init wizard with AI detection:
-leco-app init --ai               # AI enhances detection in the wizard
+leco-devops init --ai               # AI enhances detection in the wizard
 
 # Analyse only (no file generation — just print analysis JSON):
-leco-app ai-analyze /path/to/app --provider ollama --model qwen2.5-coder
+leco-devops ai-analyze /path/to/app --provider ollama --model qwen2.5-coder
 ```
 
 The CLI reads `config/ai-providers.yaml` for keys and defaults, same as the dashboard. The `ai-analyze` command is useful for debugging prompts and validating AI output without generating files.

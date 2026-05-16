@@ -98,7 +98,7 @@ class RuntimeAdapter(abc.ABC):
 
     #: Adapter type as it appears in :class:`LocalRuntimeSpec.type` / YAML.
     type: str = ""
-    #: Human label for the registration wizard and ``leco-app runtimes`` output.
+    #: Human label for the registration wizard and ``leco-devops runtimes`` output.
     label: str = ""
     #: One-line roadmap note for adapters that aren't fully implemented yet.
     roadmap: str = ""

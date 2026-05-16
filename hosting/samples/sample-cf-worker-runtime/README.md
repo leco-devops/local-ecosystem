@@ -23,7 +23,7 @@ container next to your compose stack.
 
 1. Operator drops this dir into `hosting/app-available/<slug>/`, points the
    `source` symlink at the upstream repo, and runs the **registration wizard**
-   (`leco-app ecosystem-register` or the dashboard Register flow).
+   (`leco-devops ecosystem-register` or the dashboard Register flow).
 2. LEco DevOps reads `infrastructure.runtimes[]`, looks up the
    **`cloudflare-workers`** adapter under `dashboard/leco_runtimes/`, and
    writes `docker-compose.leco-runtime.yml` containing one service per runtime.
@@ -56,7 +56,7 @@ The **registration wizard** also surfaces a *detection hint*: it scans the
 Worker entrypoint (`src/index.ts` / `worker.ts` / etc.) for `pathname === '…'`,
 `pathname.startsWith('…')`, and router-call patterns (`app.get('…')`,
 `router.post('…')`, …) and prints a copy-pasteable `routing.upstream` YAML
-block. Re-run it on schema changes with `leco-app runtimes -f leco.app.yaml`.
+block. Re-run it on schema changes with `leco-devops runtimes -f leco.app.yaml`.
 
 The same scan also enumerates **expected `.dev.vars` secrets** (every
 UPPER_SNAKE `env.<NAME>` referenced in the Worker source that is not already
@@ -93,7 +93,7 @@ so the schema shape stays stable:
 | `aws-lambda` | Roadmap | `leco/runtime-aws-lambda` |
 | `deno-deploy` | Roadmap | `leco/runtime-deno-deploy` |
 
-Run `leco-app runtimes -f leco.app.yaml` to see the registry and what your
+Run `leco-devops runtimes -f leco.app.yaml` to see the registry and what your
 manifest declares.
 
 ## See also

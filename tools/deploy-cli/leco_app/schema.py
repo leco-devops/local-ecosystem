@@ -216,7 +216,7 @@ class LocalRuntimeSpec(BaseModel):
         description=(
             "Informational list of binding/feature names this runtime depends on that LEco cannot simulate "
             "locally (e.g. ``[\"browser\", \"vectorize\", \"analytics_engine_datasets\"]``). LEco surfaces "
-            "these as ``expected: production-only`` badges in the dashboard / ``leco-app runtimes`` output "
+            "these as ``expected: production-only`` badges in the dashboard / ``leco-devops runtimes`` output "
             "so the operator does not chase phantom \"down\" markers in /health for paid Cloudflare features. "
             "Defaults to a conservative built-in list (see ``dashboard/leco_runtimes/cloudflare_workers.py``). "
             "Set to ``\"none\"`` to suppress the badge entirely."
@@ -433,7 +433,7 @@ class WranglerBindingPreview(BaseModel):
     note: str = Field(
         default=(
             "Each kv[] row → one local KV namespace; each r2[] → one R2 bucket; each d1[] → one D1 database. "
-            "leco-app reads wrangler.toml (infrastructure.cloudflare.wranglerConfig) to create them."
+            "leco-devops reads wrangler.toml (infrastructure.cloudflare.wranglerConfig) to create them."
         ),
     )
     wrangler_env: str = Field(default="", alias="wranglerEnv")

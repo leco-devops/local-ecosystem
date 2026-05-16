@@ -14,9 +14,9 @@ This file gives automation agents the minimum complete context to work safely an
 This repo is a local platform with:
 
 - Traefik edge routing on `*.lh`
-- Ecosystem stack services (Ollama, Open WebUI, n8n, Postgres)
+- Ecosystem stack services (Ollama, AirLLM, Open WebUI, n8n, Postgres)
 - LEco DevOps dashboard and APIs
-- LEco app toolchain (`leco-app` / `leco-devops`)
+- LEco app toolchain (`leco-devops`; Python package name remains `leco-app` on PyPI)
 - Optional Cloudflare-local and infra compose stacks
 
 ## Critical paths
@@ -26,7 +26,7 @@ This repo is a local platform with:
 - LEco CLI: `tools/deploy-cli/leco_app/`
 - Hosting layout: `hosting/app-available/` (optional **`docker-compose.leco-hosting.yml`** + **`additionalComposeFilesFromManifest`** for LEco-only compose merges beside `leco.app.yaml`); reference YAML packs: `hosting/samples/` (not scanned as staging apps)
 - Registry: `config/leco-registry.yaml`
-- Traefik routes: canonical `traefik/dynamic.yml`; runtime file provider dir `hosting/traefik/` (`01-stack-core.yml` = copy on each Traefik start; `dynamic.yml` = merge target for `leco-app` / dashboard). Use `ecosystem-stack/services/traefik.sh` **`heal`** / **`ensure-hosting-files`** when fixing global 404 or invalid empty `http` YAML.
+- Traefik routes: canonical `traefik/dynamic.yml`; runtime file provider dir `hosting/traefik/` (`01-stack-core.yml` = copy on each Traefik start; `dynamic.yml` = merge target for `leco-devops` / dashboard). Use `ecosystem-stack/services/traefik.sh` **`heal`** / **`ensure-hosting-files`** when fixing global 404 or invalid empty `http` YAML.
 - Primary docs: `README.md`, `docs/`
 
 ## Architecture docs (read first for large changes)
@@ -44,7 +44,7 @@ This repo is a local platform with:
 1. Do not break naming conventions:
    - Application/UI/CLI product name: `LEco DevOps`
    - Project/repository brand: `LEco DevOps Open Project`
-2. Keep CLI command names unchanged (`leco-app`, `leco-devops`) unless explicitly requested.
+2. Keep the published CLI entrypoint name **`leco-devops`** unchanged unless explicitly requested (Python import path remains `leco_app`).
 3. Prefer additive edits over broad rewrites in docs-heavy areas.
 4. When changing hosted app behavior, review and keep these modules aligned:
    - `dashboard/leco_detect.py`
@@ -52,6 +52,13 @@ This repo is a local platform with:
    - `dashboard/hosting_layout.py`
    - `dashboard/leco_registration.py`
    - `tools/deploy-cli/leco_app/schema.py`
+   - When changing AirLLM behavior, also update:
+     - `dashboard/airllm_models.py`
+     - `dashboard/ai_provider.py` (`AirLLMProvider`)
+     - `ecosystem-stack/services/airllm.sh`
+     - `ecosystem-stack/airllm/Dockerfile` + `requirements.txt` + `server.py`
+     - `traefik/dynamic.yml` `airllm-service` (points at `http://airllm:11435`)
+     - `docs/AIRLLM_INTEGRATION.md`
 5. When changing routing semantics, update all of:
    - `traefik/dynamic.yml` and merge target `hosting/traefik/dynamic.yml` behavior/docs
    - CLI route generation/merge code

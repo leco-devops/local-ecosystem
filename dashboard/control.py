@@ -484,9 +484,9 @@ def _leco_app_manifest_run(
     *,
     timeout: int,
 ) -> tuple[int, str]:
-    """Run LEco DevOps CLI (leco-app) with --manifest (deploy/stop/down)."""
+    """Run LEco DevOps CLI (leco-devops) with --manifest (deploy/stop/down)."""
     mp = meta["manifest_path"]
-    # leco-app runs in this container; cwd must be the manifest directory (exists here).
+    # leco-devops runs in this container; cwd must be the manifest directory (exists here).
     leco_cwd = str(Path(mp).resolve().parent)
     # Refresh the local-runtime overlay so its bind-mount paths reflect the
     # *current* host-side mapping (LECO_WORKSPACE_PARENT_HOST / LECO_PROJECT_ROOT_HOST).
@@ -506,7 +506,7 @@ def _leco_app_manifest_run(
 
 
 def _leco_autooffboard_after_teardown(meta: dict[str, Any], *, compose_volumes: bool = False) -> dict[str, Any]:
-    """Hosted offboard via leco-app ecosystem-unregister: local CF teardown, compose down, Traefik strip, registry (order fixed in CLI)."""
+    """Hosted offboard via leco-devops ecosystem-unregister: local CF teardown, compose down, Traefik strip, registry (order fixed in CLI)."""
     slug = str(meta.get("leco_slug") or "").strip()
     if not slug:
         return {"ok": False, "error": "missing leco_slug"}
@@ -534,7 +534,7 @@ def _leco_stack_action(meta: dict, action: str) -> dict:
         code, log = _leco_app_manifest_run(meta, "deploy", timeout=to)
         return {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
     if action == "recreate":
-        # leco-app has no force-recreate; use compose directly
+        # leco-devops has no force-recreate; use compose directly
         code, log = _leco_compose_run(meta, ["up", "-d", "--force-recreate"], timeout=to)
         return {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
     if action == "stop":

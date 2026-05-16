@@ -27,6 +27,11 @@ _DEFAULT_CONFIG: dict[str, Any] = {
             "default_model": "qwen2.5-coder",
             "timeout": 300,
         },
+        "airllm": {
+            "base_url": "http://airllm:11435",
+            "default_model": "Qwen/Qwen2.5-7B-Instruct",
+            "timeout": 600,
+        },
         "openai": {
             "api_key": "",
             "default_model": "gpt-4o-mini",
@@ -64,6 +69,7 @@ _DEFAULT_CONFIG: dict[str, Any] = {
 PROVIDER_META: dict[str, dict[str, Any]] = {
     "none": {"label": "No AI (deterministic only)", "needs_key": False, "needs_url": False, "privacy": "full"},
     "ollama": {"label": "Ollama (local)", "needs_key": False, "needs_url": True, "privacy": "full"},
+    "airllm": {"label": "AirLLM (local large models)", "needs_key": False, "needs_url": True, "privacy": "full"},
     "openai": {"label": "OpenAI", "needs_key": True, "needs_url": False, "privacy": "cloud"},
     "anthropic": {"label": "Anthropic", "needs_key": True, "needs_url": False, "privacy": "cloud"},
     "google": {"label": "Google (Gemini)", "needs_key": True, "needs_url": False, "privacy": "cloud"},

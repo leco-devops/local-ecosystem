@@ -71,7 +71,7 @@ ensure_hosting_files() {
   # Do not write http: {} — Traefik v3 rejects an empty http block. Use a no-op root mapping.
   if [ ! -f "$HOSTING_DYNAMIC" ]; then
     printf '%s\n' '{}' >"$HOSTING_DYNAMIC"
-    echo "ℹ️ Created hosting/traefik/dynamic.yml (empty merge stub; leco-app adds routes here)"
+    echo "ℹ️ Created hosting/traefik/dynamic.yml (empty merge stub; leco-devops adds routes here)"
   fi
   _normalize_hosting_dynamic_yaml "$HOSTING_DYNAMIC" || return 1
 }

@@ -19,7 +19,6 @@ dependencies = [
 ]
 
 [project.scripts]
-leco-app = "leco_app.cli:app"
 leco-devops = "leco_app.cli:app"
 
 [tool.setuptools.packages.find]

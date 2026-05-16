@@ -22,6 +22,7 @@ print_usage() {
   echo "./ecosystem-stack.sh reset [service]"
   echo "./ecosystem-stack.sh repair-network"
   echo "./ecosystem-stack.sh ollama-pull-models   # pull pinned models into running ollama"
+  echo "./ecosystem-stack.sh airllm-pull-models   # pull pinned models into AirLLM shim"
   echo "./ecosystem-stack.sh heal traefik         # repair hosting/traefik/* + restart Traefik if running"
 }
 
@@ -226,6 +227,10 @@ case "$ACTION" in
     ;;
   ollama-pull-models)
     source "$BASE_DIR/ecosystem-stack/services/ollama.sh"
+    pull_pinned_models
+    ;;
+  airllm-pull-models)
+    source "$BASE_DIR/ecosystem-stack/services/airllm.sh"
     pull_pinned_models
     ;;
   reset)

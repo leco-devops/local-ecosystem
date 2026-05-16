@@ -14,7 +14,7 @@ The platform provides a local cloud-like environment around `*.lh` hostnames:
 
 - Traefik as edge router and TLS termination.
 - LEco DevOps web UI for operations, docs, monitoring, and controls.
-- LEco CLI (`leco-app` / `leco-devops`) for app onboarding and lifecycle.
+- LEco CLI (`leco-devops`) for app onboarding and lifecycle.
 - Optional Cloudflare-local adapters (KV/R2/D1/Workers-style).
 - Shared Docker network (`lh-network`) and service orchestration via `ecosystem-stack`.
 
@@ -27,7 +27,7 @@ flowchart TD
   Dash["LEco DevOps UI/API (service-dashboard)"]
   AiStack["ecosystem-stack service scripts"]
   DockerApi["Docker daemon + socket"]
-  LecoCli["LEco CLI (leco-app/leco-devops)"]
+  LecoCli["LEco CLI (leco-devops)"]
   Registry["config/leco-registry.yaml"]
   Hosted["hosting/app-available"]
   CfLocal["cloudflare-local compose"]

@@ -1,4 +1,4 @@
-"""LEco DevOps CLI entrypoint (command: leco-app or leco-devops)."""
+"""LEco DevOps CLI entrypoint (command: ``leco-devops``)."""
 
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ from leco_app.traefik_dynamic_cleanup import manifest_traefik_keys, strip_traefi
 from leco_app.traefik_fragment import manifest_to_traefik_yaml
 
 app = typer.Typer(
-    name="leco-app",
+    name="leco-devops",
     help=f"{DISPLAY_NAME} — Docker Compose + optional Wrangler; manifests and Traefik hints (see README).",
     no_args_is_help=True,
 )
@@ -146,7 +146,7 @@ def _find_manifest(start: Path, explicit: Path | None) -> Path:
         else:
             typer.secho(
                 f"No {default_manifest_name()} found (walk up from {start}). "
-                "Run `leco-app init` or pass --manifest.",
+                "Run `leco-devops init` or pass --manifest.",
                 fg=typer.colors.RED,
                 err=True,
             )
@@ -210,7 +210,7 @@ def _deploy_from_manifest(mp: Path, *, strict_compose: bool = True) -> int:
     if not m.docker_compose:
         msg = (
             "Manifest has no dockerCompose — skipping Docker deploy "
-            "(add dockerCompose to leco.yaml infrastructure or leco.app.yaml, or use leco-app cf-deploy for Workers)."
+            "(add dockerCompose to leco.yaml infrastructure or leco.app.yaml, or use leco-devops cf-deploy for Workers)."
         )
         if strict_compose:
             typer.secho("Manifest has no dockerCompose section.", fg=typer.colors.RED, err=True)
@@ -361,7 +361,7 @@ def cmd_init(
     optional profile for URLs and lifecycle hooks (see README).
 
     Use ``--onboard`` with ``-E`` (or ``LECO_ECOSYSTEM_ROOT``) to register the app for Hosted apps and
-    merge ``routing.entries`` into ``hosting/traefik/dynamic.yml`` (same as ``leco-app onboard``).
+    merge ``routing.entries`` into ``hosting/traefik/dynamic.yml`` (same as ``leco-devops onboard``).
     """
     start = path.resolve()
     mp_existing = _try_find_manifest(start, manifest)
@@ -606,7 +606,7 @@ def cmd_init(
             )
 
     if (root / "docker" / "docker-dev.sh").is_file():
-        typer.echo("Tip: this repo has docker/docker-dev.sh — you can still use leco-app deploy with the manifest.")
+        typer.echo("Tip: this repo has docker/docker-dev.sh — you can still use leco-devops deploy with the manifest.")
 
     if wd.config_path:
         typer.echo("Wrangler bindings detected:")
@@ -700,7 +700,7 @@ def cmd_deploy(
     if code_cf != 0:
         typer.secho(
             "Local CF provision had failures (Docker deploy succeeded). "
-            "Fix adapters/DNS and run: leco-app provision-local-cf",
+            "Fix adapters/DNS and run: leco-devops provision-local-cf",
             fg=typer.colors.YELLOW,
             err=True,
         )
@@ -844,7 +844,7 @@ def cmd_offload(
 
     Mirrors the dashboard "staging" button.  Tears down all containers and volumes by default
     and removes Traefik dynamic routes.  Files in hosting/app-available/ are kept intact —
-    hit ``leco-app deploy`` or the dashboard Recreate button to bring the app back.
+    hit ``leco-devops deploy`` or the dashboard Recreate button to bring the app back.
 
     Traefik dynamic.yml is auto-detected from --ecosystem-root / LECO_ECOSYSTEM_ROOT when
     --traefik-dynamic is not explicitly given.
@@ -1002,7 +1002,7 @@ def cmd_traefik_fragment(
 
 
 # Mirror of dashboard/leco_runtimes/__init__.py REGISTRY for label/roadmap display.
-# Kept here as a static table so leco-app stays installable without the
+# Kept here as a static table so this CLI stays installable without the
 # dashboard package on PYTHONPATH; entries must be kept in sync.
 _RUNTIME_REGISTRY_DISPLAY: dict[str, tuple[str, str, bool]] = {
     "cloudflare-workers": (
@@ -1072,7 +1072,7 @@ def cmd_runtimes(
         for t, (label, rm, ready) in sorted(_RUNTIME_REGISTRY_DISPLAY.items())
     ]
 
-    # Detection hints come from dashboard/leco_runtimes — try-import so leco-app
+    # Detection hints come from dashboard/leco_runtimes — try-import so leco-devops
     # stays installable without the dashboard package on PYTHONPATH. When run
     # inside the service-dashboard container (the usual case during onboarding)
     # the dashboard repo is mounted at /project/dashboard and importable.
@@ -1290,7 +1290,7 @@ def cmd_ecosystem_register(
     if code != 0:
         typer.secho(
             "Local CF provision had failures — registry entry is still saved. "
-            "Fix adapters/DNS and run: leco-app provision-local-cf",
+            "Fix adapters/DNS and run: leco-devops provision-local-cf",
             fg=typer.colors.YELLOW,
             err=True,
         )
@@ -1574,8 +1574,8 @@ def cmd_scaffold(
     typer.echo(f"  2. Edit conf/varnish/default.vcl — paste your production VCL and apply Docker adaptations")
     typer.echo(f"  3. Edit leco-docker-preload.js — match config key names to your app's config.js exports")
     typer.echo(f"  4. Edit docker-compose.leco-hosting.yml — adjust LECO_* env vars and command scripts")
-    typer.echo(f"  5. Register: leco-app ecosystem-register --cwd {target_dir} -E {er}")
-    typer.echo(f"  6. Deploy: leco-app deploy --cwd {target_dir}")
+    typer.echo(f"  5. Register: leco-devops ecosystem-register --cwd {target_dir} -E {er}")
+    typer.echo(f"  6. Deploy: leco-devops deploy --cwd {target_dir}")
 
 
 @app.command("cf-deploy")

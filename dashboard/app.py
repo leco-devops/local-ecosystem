@@ -4,7 +4,8 @@ import os
 from flask import Flask, Response, abort, jsonify, make_response, redirect, render_template, request, stream_with_context, url_for
 
 from control import CONTROL_TOKEN, check_control_token, list_targets, run_action, run_action_streaming
-from ollama_models import build_models_payload, handle_inspect, handle_models_action, list_manifest_backups
+from ollama_models import build_models_payload as build_ollama_models_payload, handle_inspect as handle_ollama_inspect, handle_models_action as handle_ollama_models_action, list_manifest_backups as list_ollama_manifest_backups
+from airllm_models import build_models_payload as build_airllm_models_payload, handle_inspect as handle_airllm_inspect, handle_models_action as handle_airllm_models_action, list_manifest_backups as list_airllm_manifest_backups
 from docs_catalog import get_doc_catalog, get_doc_content
 from monitor import (
     collect_cloudflare_local_status,
@@ -13,6 +14,8 @@ from monitor import (
     collect_service_logs,
     list_managed_services,
 )
+from help_manual import get_help_content, get_help_tree, search_help
+from popular_models import load_airllm_catalog, load_ollama_catalog
 from service_hub import get_hub_detail, list_hub_slugs
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
@@ -451,7 +454,7 @@ def api_leco_save_yaml():
 
 @app.post("/api/leco/register")
 def api_leco_register():
-    """Run ``leco-app ecosystem-register`` using YAML already on disk (control token)."""
+    """Run ``leco-devops ecosystem-register`` using YAML already on disk (control token)."""
     from leco_registration import register_app_wizard
 
     data = request.get_json(silent=True) or {}
@@ -837,22 +840,23 @@ def api_leco_ai_analyze_write():
 # ---------------------------------------------------------------------------
 
 
+# Ollama API routes
 @app.get("/api/ollama/models")
 def api_ollama_models():
-    return jsonify(build_models_payload())
+    return jsonify(build_ollama_models_payload())
 
 
 @app.post("/api/ollama/models/action")
 def api_ollama_models_action():
     data = request.get_json(silent=True) or {}
-    body, status = handle_models_action(request, data)
+    body, status = handle_ollama_models_action(request, data)
     return jsonify(body), status
 
 
 @app.get("/api/ollama/model/inspect")
 def api_ollama_model_inspect():
     """Full /api/show payload for one model (modelfile, params, template). Requires control token header if set."""
-    body, status = handle_inspect(request)
+    body, status = handle_ollama_inspect(request)
     return jsonify(body), status
 
 
@@ -860,7 +864,66 @@ def api_ollama_model_inspect():
 def api_ollama_backups_list():
     if not check_control_token(request, None):
         return jsonify({"ok": False, "error": "unauthorized"}), 401
-    return jsonify(list_manifest_backups())
+    return jsonify(list_ollama_manifest_backups())
+
+
+# AirLLM API routes (mirrors Ollama routes)
+@app.get("/api/airllm/models")
+def api_airllm_models():
+    return jsonify(build_airllm_models_payload())
+
+
+@app.post("/api/airllm/models/action")
+def api_airllm_models_action():
+    data = request.get_json(silent=True) or {}
+    body, status = handle_airllm_models_action(request, data)
+    return jsonify(body), status
+
+
+@app.get("/api/airllm/model/inspect")
+def api_airllm_model_inspect():
+    """Full /api/show payload for one AirLLM model. Requires control token header if set."""
+    body, status = handle_airllm_inspect(request)
+    return jsonify(body), status
+
+
+@app.get("/api/airllm/backups")
+def api_airllm_backups_list():
+    if not check_control_token(request, None):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    return jsonify(list_airllm_manifest_backups())
+
+
+# Curated "Popular models" catalogs (JSON files in ecosystem-stack/config/).
+# Public reads: no Control token required — purely informational dropdown data.
+@app.get("/api/ollama/popular")
+def api_ollama_popular():
+    return jsonify(load_ollama_catalog())
+
+
+@app.get("/api/airllm/popular")
+def api_airllm_popular():
+    return jsonify(load_airllm_catalog())
+
+
+@app.get("/api/help/tree")
+def api_help_tree():
+    return jsonify(get_help_tree())
+
+
+@app.get("/api/help/content")
+def api_help_content():
+    node_id = (request.args.get("id") or "").strip()
+    payload, err = get_help_content(node_id)
+    if err:
+        return jsonify({"ok": False, "error": err}), 404
+    return jsonify(payload)
+
+
+@app.get("/api/help/search")
+def api_help_search():
+    q = (request.args.get("q") or "").strip()
+    return jsonify(search_help(q))
 
 
 @app.post("/api/control")
@@ -914,6 +977,12 @@ def api_control_stream():
 @app.get("/")
 def home():
     return _html_response("index.html", dashboard_boot=_dashboard_boot_dict())
+
+
+@app.get("/help")
+def help_center():
+    """Standalone Help & User Manual (tree nav + search + markdown topics)."""
+    return _html_response("help.html", dashboard_boot=_dashboard_boot_dict())
 
 
 @app.get("/hub")

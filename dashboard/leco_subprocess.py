@@ -1,4 +1,4 @@
-"""Run LEco DevOps CLI (leco-app / leco-devops) from the dashboard (pip install -e tools/deploy-cli)."""
+"""Run LEco DevOps CLI (`leco-devops`) from the dashboard (pip install -e tools/deploy-cli)."""
 
 from __future__ import annotations
 
@@ -14,10 +14,15 @@ PROJECT_ROOT = os.getenv("DASHBOARD_PROJECT_ROOT", "/project")
 
 
 def leco_app_argv0() -> list[str]:
-    raw = os.getenv("LECO_APP_CMD", "").strip()
+    """Resolve argv0 for the LEco DevOps CLI subprocess.
+
+    ``LECO_DEVOPS_CMD`` (preferred) or legacy ``LECO_APP_CMD`` may be a full
+    command prefix, e.g. ``/opt/venv/bin/leco-devops`` or ``python -m leco_app``.
+    """
+    raw = os.getenv("LECO_DEVOPS_CMD", "").strip() or os.getenv("LECO_APP_CMD", "").strip()
     if raw:
         return shlex.split(raw)
-    return ["leco-app"]
+    return ["leco-devops"]
 
 
 def run_leco_app(
@@ -28,7 +33,7 @@ def run_leco_app(
     extra_env: dict[str, str] | None = None,
 ) -> tuple[int, str, str]:
     """
-    Run leco-app with args (e.g. ["deploy", "--manifest", "/path/leco.app.yaml"]).
+    Run ``leco-devops`` with args (e.g. ["deploy", "--manifest", "/path/leco.app.yaml"]).
     Returns (exit_code, stdout, stderr).
     """
     argv = [*leco_app_argv0(), *args]
@@ -46,7 +51,7 @@ def run_leco_app(
             env=base,
         )
     except FileNotFoundError:
-        return 127, "", "LEco DevOps CLI not found (install tools/deploy-cli in the dashboard image or set LECO_APP_CMD)"
+        return 127, "", "LEco DevOps CLI not found (install tools/deploy-cli in the dashboard image or set LECO_DEVOPS_CMD / LECO_APP_CMD)"
     except subprocess.TimeoutExpired:
         return 124, "", f"timeout after {timeout}s: {' '.join(argv)}"
     out = (proc.stdout or "") + (proc.stderr or "")
@@ -61,7 +66,7 @@ def iter_run_leco_app(
     extra_env: dict[str, str] | None = None,
 ) -> Iterator[tuple[str, Any]]:
     """
-    Stream leco-app stdout+stderr line by line for live dashboard logs.
+    Stream ``leco-devops`` stdout+stderr line by line for live dashboard logs.
 
     Yields ("line", str) for each line (including newline when present), then ("end", exit_code:int).
     On missing CLI, yields one line and ("end", 127).
@@ -84,7 +89,7 @@ def iter_run_leco_app(
     except FileNotFoundError:
         yield (
             "line",
-            "LEco DevOps CLI not found (install tools/deploy-cli in the dashboard image or set LECO_APP_CMD)\n",
+            "LEco DevOps CLI not found (install tools/deploy-cli in the dashboard image or set LECO_DEVOPS_CMD / LECO_APP_CMD)\n",
         )
         yield ("end", 127)
         return
@@ -100,7 +105,7 @@ def iter_run_leco_app(
                     proc.wait(timeout=10)
                 except (subprocess.TimeoutExpired, OSError):
                     pass
-                yield ("line", f"\n[dashboard] leco-app timed out after {timeout}s\n")
+                yield ("line", f"\n[dashboard] leco-devops timed out after {timeout}s\n")
                 yield ("end", 124)
                 return
 
@@ -129,7 +134,7 @@ def run_ecosystem_register(
     timeout: int = 300,
     registry_manifest_relpath: str | None = None,
 ) -> tuple[int, str]:
-    """leco-app ecosystem-register -E PROJECT_ROOT --manifest ... --id ... --label ..."""
+    """leco-devops ecosystem-register -E PROJECT_ROOT --manifest ... --id ... --label ..."""
     eco = Path(PROJECT_ROOT).resolve()
     resolved = manifest_abs.resolve()
     args = [
@@ -179,7 +184,7 @@ def iter_ecosystem_register(
 
 
 def run_leco_deploy(manifest_abs: Path, *, timeout: int = 3600) -> tuple[int, str]:
-    """leco-app deploy --manifest … (docker compose up when manifest defines dockerCompose)."""
+    """leco-devops deploy --manifest … (docker compose up when manifest defines dockerCompose)."""
     resolved = manifest_abs.resolve()
     args = ["deploy", "--manifest", str(resolved)]
     code, _stdout, combined = run_leco_app(args, cwd=str(resolved.parent), timeout=timeout)

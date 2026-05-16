@@ -2,7 +2,7 @@
 
 This directory groups optional tooling. Each subfolder is its own project.
 
-## leco-app (Python CLI)
+## leco-devops (Python CLI)
 
 - **Path:** [`deploy-cli/`](deploy-cli/)
 - **Install:** `cd deploy-cli && pip install -e .` (run from repo root: `cd tools/deploy-cli`)

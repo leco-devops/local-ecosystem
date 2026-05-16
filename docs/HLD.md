@@ -27,7 +27,7 @@ flowchart LR
   User["Operator"]
   Ui["LEco DevOps UI"]
   Control["Control API"]
-  Cli["leco-app CLI"]
+  Cli["leco-devops CLI"]
   Registry["leco-registry.yaml"]
   Traefik["hosting/traefik/*.yml"]
   Docker["Docker engine"]

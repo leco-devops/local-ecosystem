@@ -75,6 +75,7 @@ Repair routing and network attachments anytime:
 | https://ai.lh | Open WebUI |
 | https://n8n.lh | n8n |
 | https://ollama.lh | Ollama |
+| https://airllm.lh | AirLLM (large HuggingFace models) |
 | http://r2.lh , http://kv.lh , http://d1.lh , http://workers.lh | Cloudflare-local (when started) |
 | http://minio-console.lh , http://autoscale.lh | CF-local related UIs |
 
@@ -145,6 +146,20 @@ Edit **`ecosystem-stack/config/ollama-pinned-models.txt`** (one model per line).
 ```bash
 ./ecosystem-stack/ecosystem-stack.sh ollama-pull-models
 ```
+
+## AirLLM (large HuggingFace models)
+
+[AirLLM](https://github.com/lyogavin/airllm) enables 70B/405B inference on modest hardware by streaming model layers from disk. It runs as a dedicated `airllm` Docker container on `lh-network` and exposes an **Ollama-compatible** API (`/api/tags`, `/api/pull`, `/api/generate`, `/api/chat`, …) so the existing dashboard, AI provider abstraction and Ollama-compatible clients all work without special-casing.
+
+- **URL**: `https://airllm.lh` (Traefik) or `http://airllm:11435` (intra-network) or `http://127.0.0.1:11435` (host)
+- **Pinned models**: `ecosystem-stack/config/airllm-pinned-models.txt` (HuggingFace ids, one per line)
+- **CLI**: `./ecosystem-stack/ecosystem-stack.sh airllm-pull-models` or `./leco-cli.sh airllm pull`
+- **Build**: `./leco-cli.sh airllm build` (or `AIRLLM_FORCE_BUILD=1` to rebuild after editing the shim)
+- **Dashboard**: Infrastructure → 6 · AirLLM (Large Models)
+
+AirLLM uses HuggingFace `safetensors`, not Ollama's GGUF, so its model registry is separate from Ollama. On macOS the container is CPU-only (Docker Desktop's Linux VM can't see Apple Silicon GPU); on Linux+CUDA hosts you can rebuild with a CUDA torch wheel and add `--gpus=all`.
+
+See **[docs/AIRLLM_INTEGRATION.md](docs/AIRLLM_INTEGRATION.md)** for full details.
 
 ---
 

@@ -16,7 +16,7 @@ def _safe_id(hostname: str) -> str:
 def _runtime_container_dns(app_slug: str, runtime_id: str) -> str:
     """Mirror :meth:`leco_runtimes.RuntimeBuildContext.runtime_container` shape.
 
-    Kept inline (instead of importing the dashboard package) so leco-app stays
+    Kept inline (instead of importing the dashboard package) so leco-devops stays
     a standalone CLI deployable without the dashboard module tree.
     """
     s = re.sub(r"[^a-z0-9-]+", "-", (app_slug or "").lower()).strip("-") or "x"

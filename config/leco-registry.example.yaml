@@ -2,7 +2,7 @@
 # LEco DevOps loads config/leco-registry.yaml (gitignored by default).
 #
 # Register from an app repo (LEco DevOps):
-#   leco-app ecosystem-register --ecosystem-root /path/to/local-ecosystem
+#   leco-devops ecosystem-register --ecosystem-root /path/to/local-ecosystem
 # Or set LECO_ECOSYSTEM_ROOT and run from the app directory.
 #
 # manifest: path relative to local-ecosystem repo root (sibling app: ../MyApp/leco.app.yaml).

@@ -24,6 +24,7 @@ AI_TARGETS = [
     {"id": "ai-traefik", "label": "Traefik", "script": "traefik", "container": "traefik"},
     {"id": "ai-open-webui", "label": "Open WebUI", "script": "webui", "container": "open-webui"},
     {"id": "ai-ollama", "label": "Ollama", "script": "ollama", "container": "ollama"},
+    {"id": "ai-airllm", "label": "AirLLM (large HF models)", "script": "airllm", "container": "airllm"},
     {"id": "ai-n8n", "label": "n8n", "script": "n8n", "container": "n8n"},
     {"id": "ai-postgres", "label": "PostgreSQL (n8n)", "script": "postgres", "container": "n8n_postgres", "reset_volume": "n8n_postgres_data"},
     {"id": "ai-dashboard", "label": "LEco DevOps", "script": "dashboard", "container": "service-dashboard"},

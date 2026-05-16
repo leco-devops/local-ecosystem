@@ -1,5 +1,5 @@
 """
-Dynamic Control targets for leco-app style compose projects.
+Dynamic Control targets for leco-devops style compose projects.
 
 Registry: config/leco-registry.yaml under PROJECT_ROOT (override DASHBOARD_LECO_REGISTRY).
 Manifest paths are relative to PROJECT_ROOT or absolute; must resolve under PROJECT_ROOT

@@ -31,7 +31,7 @@ Client → Traefik (my-app.lh) → Varnish (:80) → Express (:3000) → MongoDB
 **Option A — CLI scaffold (recommended):**
 
 ```bash
-leco-app scaffold myapp -E /path/to/local-ecosystem \
+leco-devops scaffold myapp -E /path/to/local-ecosystem \
   --source-path /abs/path/to/upstream/repo \
   --health-path /alb-health-check
 ```
@@ -52,8 +52,8 @@ This copies all template files, replaces `my-app` → `myapp` throughout (contai
 Or from the CLI:
 
 ```bash
-leco-app ecosystem-register --cwd hosting/app-available/myapp -E /path/to/local-ecosystem --merge-traefik
-leco-app deploy --cwd hosting/app-available/myapp
+leco-devops ecosystem-register --cwd hosting/app-available/myapp -E /path/to/local-ecosystem --merge-traefik
+leco-devops deploy --cwd hosting/app-available/myapp
 ```
 
 ## Key patterns
@@ -86,7 +86,7 @@ The dashboard **staging** button tears down all containers and volumes (`docker 
 From the CLI (mirrors the dashboard staging button):
 
 ```bash
-leco-app offload --cwd hosting/app-available/myapp -E /path/to/local-ecosystem
+leco-devops offload --cwd hosting/app-available/myapp -E /path/to/local-ecosystem
 ```
 
 ## Customisation checklist

@@ -4570,3 +4570,330 @@ button.dev-open-doc:hover {
   margin: 4px 0 0;
   line-height: 1.5;
 }
+
+/* Infrastructure jump nav + LLM model manager panels */
+.infra-jump-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 18px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  background: rgba(88, 28, 135, 0.12);
+}
+
+.infra-jump-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  color: #e2e8f0;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 12, 32, 0.65);
+}
+
+.infra-jump-link:hover {
+  border-color: #8b5cf6;
+  color: #f5f3ff;
+}
+
+.infra-jump-link--accent {
+  border-color: rgba(139, 92, 246, 0.65);
+  background: rgba(139, 92, 246, 0.2);
+}
+
+.infra-jump-link--help {
+  border-color: rgba(56, 189, 248, 0.5);
+  background: rgba(14, 116, 144, 0.2);
+}
+
+#infra-ollama,
+#infra-airllm,
+#infra-health,
+#infra-services,
+#infra-trends,
+#infra-cf,
+#infra-ai,
+#infra-inventory {
+  scroll-margin-top: 88px;
+}
+
+.llm-model-manager {
+  margin: 14px 0 16px;
+  padding: 12px 14px 14px;
+  border-radius: 12px;
+  border: 2px solid rgba(139, 92, 246, 0.55);
+  background: linear-gradient(135deg, rgba(88, 28, 135, 0.18), rgba(30, 27, 75, 0.35));
+  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.15);
+}
+
+.llm-model-manager__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(139, 92, 246, 0.35);
+}
+
+.llm-model-manager__title {
+  font-size: 14px;
+  color: #ddd6fe;
+}
+
+.llm-model-manager .ollama-models-toolbar {
+  margin-top: 0;
+}
+
+.llm-model-manager .ollama-pull-field {
+  margin-left: 0;
+  flex: 1 1 100%;
+}
+
+.llm-model-manager .ollama-pull-field input[type="text"] {
+  flex: 1 1 14rem;
+  min-width: 10rem;
+}
+
+/* Help & User Manual (/help) — full-page scroll (no inner article scroll) */
+html:has(body.help-page),
+body.help-page {
+  height: auto;
+  min-height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.help-page {
+  background: var(--bg, #0f0c20);
+  min-height: 100vh;
+}
+
+.help-page .wrap.help-wrap {
+  max-width: 1320px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 32px;
+}
+
+.help-page .help-layout {
+  flex: 1 1 auto;
+  align-items: start;
+}
+
+/* Override Docs-tab scroll boxes on Help only */
+.help-page .doc-article,
+.help-page .help-article {
+  min-height: auto;
+  max-height: none;
+  overflow: visible;
+}
+
+.help-page .doc-content,
+.help-page .help-content {
+  max-height: none;
+  overflow: visible;
+  padding-bottom: 48px;
+}
+
+.help-page .doc-sidebar,
+.help-page .help-sidebar {
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.help-wrap {
+  max-width: 1320px;
+}
+
+.help-header {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.help-header__lead {
+  max-width: 52rem;
+  margin: 4px 0 0;
+}
+
+.help-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.help-search-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin: 0 0 12px;
+}
+
+.help-search-input {
+  flex: 1 1 280px;
+  min-width: 200px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #4c3d7a;
+  background: #16132e;
+  color: #e2e8f0;
+  font-size: 14px;
+}
+
+.help-search-results {
+  margin-bottom: 12px;
+  border: 1px solid #4c3d7a;
+  border-radius: 10px;
+  background: #1f1a3d;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.help-search-results.is-hidden {
+  display: none;
+}
+
+.help-search-hit {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 14px;
+  border: none;
+  border-bottom: 1px solid rgba(76, 61, 122, 0.5);
+  background: transparent;
+  color: #e2e8f0;
+  cursor: pointer;
+}
+
+.help-search-hit:hover {
+  background: rgba(139, 92, 246, 0.15);
+}
+
+.help-search-hit strong {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.help-search-snippet {
+  display: block;
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 4px;
+  line-height: 1.45;
+}
+
+.help-layout {
+  margin-bottom: 24px;
+}
+
+.help-sidebar {
+  position: sticky;
+  top: 12px;
+}
+
+.help-breadcrumb {
+  padding: 8px 20px 0;
+}
+
+.help-toolbar {
+  font-size: 14px;
+}
+
+.help-tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.help-tree--nested {
+  margin: 4px 0 4px 8px;
+  padding-left: 8px;
+  border-left: 1px solid rgba(76, 61, 122, 0.6);
+}
+
+.help-tree__folder {
+  margin-bottom: 4px;
+}
+
+.help-tree__summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+  padding: 4px 0;
+  list-style: none;
+}
+
+.help-tree__summary::-webkit-details-marker {
+  display: none;
+}
+
+.help-tree__link {
+  margin-bottom: 4px;
+}
+
+.help-tree__link--active,
+.help-tree__link.doc-link--active {
+  border-color: #a78bfa !important;
+  background: #2e1065 !important;
+}
+
+.help-internal-link {
+  color: #a78bfa;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.help-content a:not(.help-internal-link) {
+  color: #93c5fd;
+}
+
+/* Mermaid / diagram blocks */
+.help-diagram,
+.help-mermaid {
+  margin: 20px 0 28px;
+  padding: 16px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(139, 92, 246, 0.45);
+  background: rgba(15, 12, 32, 0.75);
+  overflow-x: auto;
+  text-align: center;
+}
+
+.help-mermaid--done svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
+.help-mermaid-error {
+  text-align: left;
+  font-size: 12px;
+  color: #fca5a5;
+  white-space: pre-wrap;
+  background: rgba(127, 29, 29, 0.2);
+  padding: 10px;
+  border-radius: 8px;
+}
+
+.help-mermaid-slot {
+  display: none;
+}
+
+.help-content.prose .help-diagram + h2,
+.help-content.prose .help-diagram + h3 {
+  margin-top: 1.5em;
+}

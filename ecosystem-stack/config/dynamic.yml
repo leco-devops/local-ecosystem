@@ -59,6 +59,19 @@ http:
         - websecure
       tls: true
 
+    airllm-http:
+      rule: "Host(`airllm.lh`)"
+      service: airllm-service
+      entryPoints:
+        - web
+
+    airllm-https:
+      rule: "Host(`airllm.lh`)"
+      service: airllm-service
+      entryPoints:
+        - websecure
+      tls: true
+
     dashboard-http:
       rule: "Host(`localhost.lh`)"
       service: dashboard-service
@@ -257,6 +270,11 @@ http:
       loadBalancer:
         servers:
           - url: "http://ollama:11434"
+
+    airllm-service:
+      loadBalancer:
+        servers:
+          - url: "http://airllm:11435"
 
     dashboard-service:
       loadBalancer:

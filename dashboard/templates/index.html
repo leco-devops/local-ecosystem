@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>LEco DevOps</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/static/dashboard.css" />
+    <link rel="stylesheet" href="/static/dashboard.css?v=20260516" />
   </head>
   <body>
     <div class="wrap">
@@ -86,11 +86,23 @@
       <section id="infrastructureTab" class="tab-content">
         <h2 class="tab-heading">Infrastructure</h2>
         <p class="tab-lead muted small">
-          <strong>1 · Health</strong> (host &amp; Docker) → <strong>2 · Services</strong> (probed stack &amp; hubs) → <strong>3 · Trends</strong> →
-          <strong>4 · Cloudflare local</strong> → <strong>5 · Ollama</strong> → <strong>6 · AI onboarding</strong> → <strong>7 · Full inventory</strong>.
+          <strong>1 · Health</strong> → <strong>2 · Services</strong> → <strong>3 · Trends</strong> →
+          <strong>4 · Cloudflare local</strong> → <strong>5 · Ollama</strong> → <strong>6 · AirLLM</strong> → <strong>7 · AI onboarding</strong> → <strong>8 · Inventory</strong>.
+          Model install/load controls are in the purple <strong>Model manager</strong> panels in sections 5 and 6 (not only the service cards in section 2).
         </p>
+        <nav class="infra-jump-nav" aria-label="Infrastructure sections">
+          <a href="/?tab=infrastructureTab#infra-health" class="infra-jump-link">Health</a>
+          <a href="/?tab=infrastructureTab#infra-services" class="infra-jump-link">Services</a>
+          <a href="/?tab=infrastructureTab#infra-trends" class="infra-jump-link">Trends</a>
+          <a href="/?tab=infrastructureTab#infra-cf" class="infra-jump-link">CF local</a>
+          <a href="/?tab=infrastructureTab#infra-ollama" class="infra-jump-link infra-jump-link--accent">Ollama</a>
+          <a href="/?tab=infrastructureTab#infra-airllm" class="infra-jump-link infra-jump-link--accent">AirLLM</a>
+          <a href="/?tab=infrastructureTab#infra-ai" class="infra-jump-link">AI</a>
+          <a href="/?tab=infrastructureTab#infra-inventory" class="infra-jump-link">Inventory</a>
+          <a href="/help" class="infra-jump-link infra-jump-link--help">Help manual</a>
+        </nav>
 
-        <div class="infra-group">
+        <div class="infra-group" id="infra-health">
           <h3 class="infra-group__title">1 · Platform health</h3>
           <p class="infra-group__lead muted small">Cluster-level signals from the Docker API and LEco DevOps’s built-in health model.</p>
           <div class="infra-group__block">
@@ -103,7 +115,7 @@
           </div>
         </div>
 
-        <div class="infra-group">
+        <div class="infra-group" id="infra-services">
           <h3 class="infra-group__title">2 · Managed services</h3>
           <p class="infra-group__lead muted small">
             Per-service URLs, probes, metrics, and links to <a href="/hub">service hubs</a> (credentials, DB GUIs, connection strings).
@@ -114,7 +126,7 @@
           </div>
         </div>
 
-        <div class="infra-group">
+        <div class="infra-group" id="infra-trends">
           <h3 class="infra-group__title">3 · Utilization &amp; trends</h3>
           <p class="infra-group__lead muted small">Historical lines and current CPU/memory for the managed service map (same set as the cards above).</p>
           <div class="infra-group__block">
@@ -136,7 +148,7 @@
           </div>
         </div>
 
-        <div class="infra-group infra-group--cf">
+        <div class="infra-group infra-group--cf" id="infra-cf">
           <h3 class="infra-group__title">4 · Cloudflare local</h3>
           <p class="infra-group__lead muted small">
             R2, KV, D1, Workers, browser rendering, autoscaler — mirrors the Overview CF panel. Quick links are HTTP/HTTPS. Deeper detail:
@@ -148,7 +160,7 @@
           </div>
         </div>
 
-        <div class="infra-group">
+        <div class="infra-group infra-group--llm" id="infra-ollama">
           <h3 class="infra-group__title">5 · Ollama</h3>
           <p class="infra-group__lead muted small">Model inventory, RAM, pinned list, and pull/backup actions (same <strong>control token</strong> as Control).</p>
           <div class="infra-group__block">
@@ -158,15 +170,30 @@
             <p class="muted small">
               Pinned file: <code>ecosystem-stack/config/ollama-pinned-models.txt</code> on the <code>/project</code> mount. Listed from <code>GET /api/tags</code>.
             </p>
+            <div class="llm-model-manager" id="ollama-model-manager">
+              <div class="llm-model-manager__head">
+                <strong class="llm-model-manager__title">Model manager</strong>
+                <span class="muted small">Popular dropdown · Install · Load · Unload · Remove · <a href="/help?topic=ollama">Help</a></span>
+              </div>
             <div class="ollama-models-toolbar">
               <button type="button" id="ollamaPullAllBtn" class="ollama-act ollama-act--ops">Pull all pinned</button>
               <button type="button" id="ollamaModelsRefreshBtn" class="ollama-act ollama-act--safe">Refresh</button>
               <button type="button" id="ollamaBackupBtn" class="ollama-act ollama-act--safe" title="Save manifest JSON under .local-eco-backups">Backup manifest</button>
               <button type="button" id="ollamaUnloadAllBtn" class="ollama-act ollama-act--caution" title="keep_alive=0 for each running model">Unload all (RAM)</button>
               <label class="ollama-pull-field">
-                <span class="muted">Pull by name</span>
+                <span class="muted">Popular</span>
+                <select id="ollamaPopularSelect" class="ollama-backup-select" aria-label="Popular Ollama models">
+                  <option value="">Loading…</option>
+                </select>
+              </label>
+              <label class="ollama-pull-field">
+                <span class="muted">Model</span>
                 <input type="text" id="ollamaPullNameInput" placeholder="e.g. llama3.2:latest" autocomplete="off" />
-                <button type="button" id="ollamaPullNameBtn" class="ollama-act ollama-act--ops">Pull</button>
+                <button type="button" id="ollamaPullNameBtn" class="ollama-act ollama-act--ops" title="Install / pull the model">Install</button>
+                <button type="button" id="ollamaLoadNameBtn" class="ollama-act ollama-act--safe" title="Warm into RAM (keep_alive=-1) without pulling">Load</button>
+                <button type="button" id="ollamaUnloadNameBtn" class="ollama-act ollama-act--caution" title="Unload from RAM (keep_alive=0)">Unload</button>
+                <button type="button" id="ollamaRemoveNameBtn" class="ollama-act ollama-act--destructive" title="Delete model from disk">Remove</button>
+                <button type="button" id="ollamaShowCmdBtn" class="ollama-act ollama-act--safe" title="Show equivalent CLI commands without running them">Show CLI</button>
               </label>
             </div>
             <div class="ollama-backups-bar">
@@ -177,12 +204,66 @@
               <button type="button" id="ollamaRestoreBackupBtn" class="ollama-act ollama-act--ops">Restore pinned list</button>
               <button type="button" id="ollamaClearPinnedBtn" class="ollama-act ollama-act--destructive" title="Clears only the pinned file">Clear pinned</button>
             </div>
+            </div>
             <div id="ollamaModelsPanel" class="ollama-models-panel muted">Loading…</div>
           </div>
         </div>
 
-        <div class="infra-group" id="aiSettingsGroup">
-          <h3 class="infra-group__title">6 · AI-assisted onboarding</h3>
+        <div class="infra-group infra-group--llm" id="infra-airllm">
+          <h3 class="infra-group__title">6 · AirLLM (Large Models)</h3>
+          <p class="infra-group__lead muted small">
+            HuggingFace model inventory for AirLLM — layer-by-layer loading for 70B/405B models on limited VRAM.
+            Runs as the <code>airllm</code> Docker container on <code>lh-network</code>, exposing an Ollama-compatible API at <code>http://airllm:11435</code> (<code>https://airllm.lh</code> via Traefik).
+          </p>
+          <div class="infra-group__block">
+            <h4 class="infra-subhead">HF Models &amp; lifecycle</h4>
+            <p class="muted small" id="airllmModelsSummary">Loading…</p>
+            <p class="muted small" id="airllmModelsInsights"> </p>
+            <p class="muted small">
+              Pinned file: <code>ecosystem-stack/config/airllm-pinned-models.txt</code> on the <code>/project</code> mount.
+              Listed from AirLLM shim <code>GET /api/tags</code> at <code>http://airllm.lh</code>.
+            </p>
+            <div class="llm-model-manager" id="airllm-model-manager">
+              <div class="llm-model-manager__head">
+                <strong class="llm-model-manager__title">Model manager</strong>
+                <span class="muted small">HF ids · same actions as Ollama · <a href="/help?topic=airllm">Help</a></span>
+              </div>
+            <div class="ollama-models-toolbar">
+              <button type="button" id="airllmPullAllBtn" class="ollama-act ollama-act--ops">Pull all pinned</button>
+              <button type="button" id="airllmModelsRefreshBtn" class="ollama-act ollama-act--safe">Refresh</button>
+              <button type="button" id="airllmBackupBtn" class="ollama-act ollama-act--safe" title="Save manifest JSON under .local-eco-backups">Backup manifest</button>
+              <button type="button" id="airllmUnloadAllBtn" class="ollama-act ollama-act--caution" title="keep_alive=0 for loaded model">Unload from RAM</button>
+              <label class="ollama-pull-field">
+                <span class="muted">Popular</span>
+                <select id="airllmPopularSelect" class="ollama-backup-select" aria-label="Popular AirLLM models">
+                  <option value="">Loading…</option>
+                </select>
+              </label>
+              <label class="ollama-pull-field">
+                <span class="muted">HF model</span>
+                <input type="text" id="airllmPullNameInput" placeholder="e.g. Qwen/Qwen2.5-7B-Instruct" autocomplete="off" />
+                <button type="button" id="airllmPullNameBtn" class="ollama-act ollama-act--ops" title="Install / pull the HF model into AirLLM cache">Install</button>
+                <button type="button" id="airllmLoadNameBtn" class="ollama-act ollama-act--safe" title="Warm into RAM (keep_alive=-1) without pulling">Load</button>
+                <button type="button" id="airllmUnloadNameBtn" class="ollama-act ollama-act--caution" title="Unload from RAM (keep_alive=0)">Unload</button>
+                <button type="button" id="airllmRemoveNameBtn" class="ollama-act ollama-act--destructive" title="Delete model from disk">Remove</button>
+                <button type="button" id="airllmShowCmdBtn" class="ollama-act ollama-act--safe" title="Show equivalent CLI commands without running them">Show CLI</button>
+              </label>
+            </div>
+            <div class="ollama-backups-bar">
+              <select id="airllmBackupSelect" class="ollama-backup-select" aria-label="Backup file">
+                <option value="">Select backup manifest…</option>
+              </select>
+              <button type="button" id="airllmRefreshBackupsBtn" class="ollama-act ollama-act--safe">List backups</button>
+              <button type="button" id="airllmRestoreBackupBtn" class="ollama-act ollama-act--ops">Restore pinned list</button>
+              <button type="button" id="airllmClearPinnedBtn" class="ollama-act ollama-act--destructive" title="Clears only the pinned file">Clear pinned</button>
+            </div>
+            </div>
+            <div id="airllmModelsPanel" class="ollama-models-panel muted">Loading…</div>
+          </div>
+        </div>
+
+        <div class="infra-group" id="infra-ai">
+          <h3 class="infra-group__title">7 · AI-assisted onboarding</h3>
           <p class="infra-group__lead muted small">
             Configure AI provider for automatic application analysis during registration.
             Supports <strong>local</strong> (Ollama) or <strong>cloud</strong> (OpenAI, Anthropic, Google, OpenAI-compatible) providers.
@@ -197,6 +278,7 @@
                   <select id="aiProviderSelect" aria-label="AI provider">
                     <option value="none">No AI (deterministic only)</option>
                     <option value="ollama">Ollama (local SLM)</option>
+                    <option value="airllm">AirLLM (local large models)</option>
                     <option value="openai">OpenAI</option>
                     <option value="anthropic">Anthropic</option>
                     <option value="google">Google Gemini</option>
@@ -240,6 +322,7 @@
                   <span class="ai-settings__label">Local SLM (summarizer)</span>
                   <select id="aiHybridSlmSelect" aria-label="Local SLM">
                     <option value="ollama" selected>Ollama</option>
+                    <option value="airllm">AirLLM (large models)</option>
                     <option value="openai-compatible">OpenAI-compatible local</option>
                   </select>
                 </label>
@@ -271,7 +354,7 @@
           </div>
         </div>
 
-        <div class="infra-group infra-group--inventory">
+        <div class="infra-group infra-group--inventory" id="infra-inventory">
           <h3 class="infra-group__title">7 · Docker inventory</h3>
           <p class="infra-group__lead muted small">Every container on this Docker host (broader than the managed service map above).</p>
           <div class="infra-group__block">
@@ -412,7 +495,7 @@
       <section id="hostedAppsTab" class="tab-content">
         <h2 class="tab-heading">Hosted apps</h2>
         <p class="tab-lead muted small">
-          <strong>LEco DevOps</strong> — per-app monitoring, compose logs, and lifecycle controls for entries in <code>config/leco-registry.yaml</code> (<code>leco-app</code> / <code>leco-devops ecosystem-register</code>). <strong>Control → Remove</strong> or <strong>Reset</strong> on a hosted stack runs <code>leco-app ecosystem-unregister</code>, which runs <code>docker compose down</code> first (with <code>-v</code> on <strong>Reset</strong>), then Traefik strip, <code>leco.local-cf.yaml</code> cleanup, and registry row — same as <strong>Remove from ecosystem</strong>. If you stopped the stack only with <code>docker compose down</code> in a terminal, the app stays registered until you use <strong>Remove from ecosystem</strong>, the <strong>Routes</strong> tab, or <code>leco-app ecosystem-unregister</code>. Set the <strong>Control token</strong> on the Control tab when <code>DASHBOARD_CONTROL_TOKEN</code> is enabled.
+          <strong>LEco DevOps</strong> — per-app monitoring, compose logs, and lifecycle controls for entries in <code>config/leco-registry.yaml</code> (via <code>leco-devops ecosystem-register</code> and related commands). <strong>Control → Remove</strong> or <strong>Reset</strong> on a hosted stack runs <code>leco-devops ecosystem-unregister</code>, which runs <code>docker compose down</code> first (with <code>-v</code> on <strong>Reset</strong>), then Traefik strip, <code>leco.local-cf.yaml</code> cleanup, and registry row — same as <strong>Remove from ecosystem</strong>. If you stopped the stack only with <code>docker compose down</code> in a terminal, the app stays registered until you use <strong>Remove from ecosystem</strong>, the <strong>Routes</strong> tab, or <code>leco-devops ecosystem-unregister</code>. Set the <strong>Control token</strong> on the Control tab when <code>DASHBOARD_CONTROL_TOKEN</code> is enabled.
         </p>
         <p id="hostedAppsTokenHint" class="muted small is-hidden"></p>
         <details class="hosted-register-panel" id="hostedRegisterPanel">
@@ -423,7 +506,7 @@
               <code>docker-compose</code>, <code>wrangler.toml</code>, and other config signals). Use <strong>Generate YAML</strong>
               to write <code>leco.app.yaml</code> + the localhost profile from that scan (or regenerate). Edit the text areas,
               then <strong>Save YAML</strong> to persist. <strong>Register</strong> stays disabled until both files exist on disk;
-              it only runs <code>leco-app ecosystem-register</code> (no silent overwrite). Generate/Save/Register require the
+              it only runs <code>leco-devops ecosystem-register</code> (no silent overwrite). Generate/Save/Register require the
               <strong>control token</strong> when enabled. Read-only app roots materialize under <code>hosting/app-available/&lt;id&gt;/</code>
               (app id required). Path: repo-relative, <code>wsp:…</code>, or a host path when LEco DevOps was started with path hints.
               <strong>Label</strong> after Detect is guessed from <code>package.json</code> / Wrangler <code>name</code> / Compose top-level <code>name</code> when present (not from the folder name).
@@ -480,7 +563,7 @@
             </label>
             <label class="hosted-register-check muted small">
               <input type="checkbox" id="hostedRegDeployAfter" checked />
-              After register, run <strong><code>leco-app deploy</code></strong> when the manifest has <code>dockerCompose</code> (<code>docker compose up -d --build</code>). Workers-only apps (no compose in <code>leco.yaml</code>) skip deploy automatically. Uncheck if you only want registry + Traefik.
+              After register, run <strong><code>leco-devops deploy</code></strong> when the manifest has <code>dockerCompose</code> (<code>docker compose up -d --build</code>). Workers-only apps (no compose in <code>leco.yaml</code>) skip deploy automatically. Uncheck if you only want registry + Traefik.
             </label>
             <div class="ai-toggle-bar" id="aiToggleBar">
               <label class="ai-toggle">
@@ -669,7 +752,7 @@
                   </div>
                 </div>
                 <p class="muted small hosted-apps-staging-bar__hint">
-                  <strong>Register</strong> runs <code>leco-app ecosystem-register</code> (and optional deploy) using files under
+                  <strong>Register</strong> runs <code>leco-devops ecosystem-register</code> (and optional deploy) using files under
                   <code>hosting/app-available/&lt;id&gt;/</code> — same as the collapsible wizard below. Requires the
                   <strong>control token</strong> when enabled. <strong>Validate</strong> checks schemas and that compose / wrangler /
                   overlay paths exist on disk.
@@ -779,7 +862,7 @@
               </div>
               <pre id="hostedAppsLogPre" class="hosted-apps-log-pre"></pre>
               <h4 class="hosted-apps-subhead">Controls</h4>
-              <p class="muted small"><strong>LEco DevOps</strong> — deploy/stop/down use <code>leco-app</code> (or <code>leco-devops</code>) with your manifest; restart/recreate/pause still use <code>docker compose</code>. Streaming shows live compose output where applicable.</p>
+              <p class="muted small"><strong>LEco DevOps</strong> — deploy/stop/down use <code>leco-devops</code> with your manifest; restart/recreate/pause still use <code>docker compose</code>. Streaming shows live compose output where applicable.</p>
               <div id="hostedAppsControls" class="hosted-apps-controls"></div>
             </div>
           </div>
@@ -826,7 +909,7 @@
         </div>
         <h3 class="routes-subhead">Hosted apps (registry overlap)</h3>
         <p class="muted small">
-          Router/service keys derived from each app’s <code>leco.app.yaml</code> (same rules as LEco DevOps <code>leco-app traefik-fragment</code>). <strong>Remove from registry</strong> runs <code>leco-app ecosystem-unregister</code>: strips Traefik keys, cleans <code>leco.local-cf.yaml</code> when checked, removes the registry row.
+          Router/service keys derived from each app’s <code>leco.app.yaml</code> (same rules as LEco DevOps <code>leco-devops traefik-fragment</code>). <strong>Remove from registry</strong> runs <code>leco-devops ecosystem-unregister</code>: strips Traefik keys, cleans <code>leco.local-cf.yaml</code> when checked, removes the registry row.
         </p>
         <div id="traefikHostedHints" class="routes-hosted-hints"></div>
         <h3 class="routes-subhead">Quick route builder (URL / endpoint / masking / redirect)</h3>
@@ -878,7 +961,7 @@
         </p>
         <h3 class="routes-subhead">Merge YAML fragment</h3>
         <p class="muted small">
-          Load a fragment from a hosted app’s manifest via LEco DevOps <code>leco-app traefik-fragment</code>, or paste YAML manually. Top-level <code>http:</code> with <code>routers</code> / <code>services</code>; keys merge (overwrite on collision). Writes use an atomic replace.
+          Load a fragment from a hosted app’s manifest via LEco DevOps <code>leco-devops traefik-fragment</code>, or paste YAML manually. Top-level <code>http:</code> with <code>routers</code> / <code>services</code>; keys merge (overwrite on collision). Writes use an atomic replace.
         </p>
         <p class="routes-fragment-toolbar muted small">
           <label class="routes-fragment-slug-label">Registry id
@@ -982,6 +1065,7 @@
           <button type="button" class="project-footer__link" data-doc-open="open-source-license">License</button>
           <button type="button" class="project-footer__link" data-doc-open="open-source-contributing">Contributing</button>
           <button type="button" class="project-footer__link" data-doc-open="open-source-security">Security</button>
+          <a class="project-footer__link project-footer__link--anchor" href="/help">Help</a>
           <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab">Docs</a>
           <a class="project-footer__link project-footer__link--anchor" href="/?tab=developTab">Develop</a>
           <a class="project-footer__link project-footer__link--anchor" href="/hub">Service hubs</a>
@@ -1021,7 +1105,7 @@
           <h3 id="controlActionTitle" class="control-action-title">Running…</h3>
           <p id="controlActionLive" class="control-action-live">Starting…</p>
           <p class="muted small control-action-hint">
-            Live output streams as Docker, shell scripts, or <code>leco-app</code> print lines (Control actions, <strong>Register application</strong>, …). If this box stays empty for minutes behind <code>*.lh</code>, open LEco DevOps on
+            Live output streams as Docker, shell scripts, or <code>leco-devops</code> print lines (Control actions, <strong>Register application</strong>, …). If this box stays empty for minutes behind <code>*.lh</code>, open LEco DevOps on
             <strong>port 8090</strong> (direct to the container) or check <code>docker logs service-dashboard</code>.
           </p>
           <p id="controlActionSummary" class="control-action-summary is-hidden"></p>
@@ -1088,6 +1172,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
-    <script src="/static/dashboard.js?v=20260406"></script>
+    <script src="/static/dashboard.js?v=20260516"></script>
   </body>
 </html>

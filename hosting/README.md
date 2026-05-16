@@ -24,4 +24,4 @@ Manifest copies in `hosting/` are **snapshots**; changes in the sibling repo are
 
 ## Remove / reset from the dashboard
 
-**Hosted apps → Remove** (or **Reset**) runs **`leco-app ecosystem-unregister`**, which runs **local CF teardown** first when enabled, then **`docker compose down`** ( **`-v`** on **Reset** ), then Traefik key cleanup when configured, registry removal, and deletion of **`hosting/app-available/<slug>`** when the manifest lived under hosting. Compose **`down`** is skipped when the compose file is missing (same as **`leco-app down`**). See **`docs/LECO_APP_BLUEPRINT.md`**.
+**Hosted apps → Remove** (or **Reset**) runs **`leco-devops ecosystem-unregister`**, which runs **local CF teardown** first when enabled, then **`docker compose down`** ( **`-v`** on **Reset** ), then Traefik key cleanup when configured, registry removal, and deletion of **`hosting/app-available/<slug>`** when the manifest lived under hosting. Compose **`down`** is skipped when the compose file is missing (same as **`leco-devops down`**). See **`docs/LECO_APP_BLUEPRINT.md`**.

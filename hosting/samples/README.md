@@ -5,7 +5,7 @@ Reference **`leco.app.yaml`** + **`leco.yaml`** pairs and optional compose overl
 Copy a folder into **`hosting/app-available/<your-slug>/`** when you want a writable materialization, or use the paths only as documentation. The CLI **`scaffold`** command automates this with placeholder replacement:
 
 ```bash
-leco-app scaffold myapp -E /path/to/local-ecosystem --template sample-node-varnish-multiprocess --source-path /abs/path/to/source
+leco-devops scaffold myapp -E /path/to/local-ecosystem --template sample-node-varnish-multiprocess --source-path /abs/path/to/source
 ```
 
 | Folder | Purpose |

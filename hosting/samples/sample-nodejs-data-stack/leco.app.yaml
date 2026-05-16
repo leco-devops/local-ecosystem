@@ -18,7 +18,7 @@
 #   for the app image build (future automation / documentation).
 #
 # REGISTRY & DEPLOY
-#   leco-app deploy runs compose from merged manifest; name groups state and
+#   leco-devops deploy runs compose from merged manifest; name groups state and
 #   registry rows. Bump applicationVersion when you tag a release the dashboard
 #   should display.
 #

@@ -30,4 +30,4 @@ localhost:
   notes: |
     [BRIDGE — wrangler local CF sample]
     Includes wrangler.toml in this folder for a self-contained example. Merge path:
-    this bridge + leco.yaml → effective manifest for leco-app ecosystem-register.
+    this bridge + leco.yaml → effective manifest for leco-devops ecosystem-register.

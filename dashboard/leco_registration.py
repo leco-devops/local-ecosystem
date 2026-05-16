@@ -1,4 +1,4 @@
-"""Register via LEco DevOps (leco-app ecosystem-register); YAML is materialized separately."""
+"""Register via LEco DevOps (leco-devops ecosystem-register); YAML is materialized separately."""
 
 from __future__ import annotations
 
@@ -62,7 +62,7 @@ class RegisterPrepared:
 
 
 def effective_manifest_has_docker_compose(manifest_abs: Path) -> bool:
-    """Whether ``leco-app deploy`` would run compose (merged bridge + localhost profile)."""
+    """Whether ``leco-devops deploy`` would run compose (merged bridge + localhost profile)."""
     try:
         from leco_app.schema import load_effective_manifest
 
@@ -311,7 +311,7 @@ def register_app_wizard(
     deploy_stack: bool = False,
 ) -> dict[str, Any]:
     """
-    Run ``leco-app ecosystem-register`` using YAML already on disk.
+    Run ``leco-devops ecosystem-register`` using YAML already on disk.
     Use :mod:`leco_materialize` to generate or save files first.
     """
     prep = prepare_register_from_disk(path_rel, app_id, label)
@@ -327,7 +327,7 @@ def register_app_wizard(
         registry_manifest_relpath=prep.registry_manifest_relpath,
     )
     if code != 0:
-        raise OSError(log[-4000:] if log else f"leco-app ecosystem-register failed (exit {code})")
+        raise OSError(log[-4000:] if log else f"leco-devops ecosystem-register failed (exit {code})")
 
     if deploy_stack:
         if not effective_manifest_has_docker_compose(prep.manifest_abs):
@@ -487,7 +487,7 @@ def iterate_register_app_wizard(
         yield {"type": "done", "result": {"ok": False, "error": str(exc)}}
         return
 
-    yield {"type": "log", "text": "Running leco-app ecosystem-register (merge Traefik, local CF if enabled)…\n"}
+    yield {"type": "log", "text": "Running leco-devops ecosystem-register (merge Traefik, local CF if enabled)…\n"}
 
     combined: list[str] = []
     exit_code = 0
@@ -510,7 +510,7 @@ def iterate_register_app_wizard(
 
     log = "".join(combined)
     if exit_code != 0:
-        err = log[-4000:] if log else f"leco-app ecosystem-register failed (exit {exit_code})"
+        err = log[-4000:] if log else f"leco-devops ecosystem-register failed (exit {exit_code})"
         yield {"type": "done", "result": {"ok": False, "error": err}}
         return
 
@@ -521,13 +521,13 @@ def iterate_register_app_wizard(
     if not effective_manifest_has_docker_compose(prep.manifest_abs):
         skip = (
             "\n--- post-register deploy ---\n"
-            "Skipped: no dockerCompose in effective manifest (Workers-only — no `leco-app deploy`).\n"
+            "Skipped: no dockerCompose in effective manifest (Workers-only — no `leco-devops deploy`).\n"
         )
         yield {"type": "log", "text": skip}
         yield {"type": "done", "result": _register_result_dict(prep, log + skip)}
         return
 
-    yield {"type": "log", "text": "\n--- leco-app deploy (docker compose up) ---\n"}
+    yield {"type": "log", "text": "\n--- leco-devops deploy (docker compose up) ---\n"}
     dcombined: list[str] = []
     dcode = 0
     try:

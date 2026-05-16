@@ -186,6 +186,7 @@ check_compose_plugin() {
   docker compose version >/dev/null 2>&1
 }
 
+
 run_service_selection() {
   local -a selected=()
   local -a skipped=()

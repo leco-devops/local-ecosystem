@@ -19,7 +19,7 @@ This guide helps you **extend**, **debug**, and **ship** changes across the ecos
 | Ecosystem stack orchestration | `ecosystem-stack/core.sh`, `ecosystem-stack/ecosystem-stack.sh` | Start order, network repair, service scripts |
 | Per-service Docker scripts | `ecosystem-stack/services/*.sh` | `start` / `stop` / `build` for each container |
 | Traefik stack routes (git) | `traefik/dynamic.yml` | Canonical `*.lh` rules; copied to **`hosting/traefik/01-stack-core.yml`** on **`traefik.sh start`** (duplicate in `ecosystem-stack/config/dynamic.yml` if you use that tree) |
-| Traefik runtime merge file | `hosting/traefik/dynamic.yml` | Writable fragment merged by **`leco-app`** / dashboard Routes; empty stub **`{}`** only (Traefik v3 rejects **`http: {}`**) |
+| Traefik runtime merge file | `hosting/traefik/dynamic.yml` | Writable fragment merged by **`leco-devops`** / dashboard Routes; empty stub **`{}`** only (Traefik v3 rejects **`http: {}`**) |
 | Traefik hosting repair | `ecosystem-stack/services/traefik.sh` **`heal`** / **`ensure-hosting-files`** | Fixes copies + YAML stub; **`dashboard.sh`** runs **`heal`** after start unless **`DASHBOARD_SKIP_TRAEFIK_HEAL=1`** |
 | Compose overlay (hosting-only) | `hosting/app-available/<slug>/docker-compose.leco-hosting.yml` + **`additionalComposeFilesFromManifest`** | Merge Traefik **`lh-network`** / public URL env without editing the upstream app repo (`tools/deploy-cli/leco_app/compose_runner.py`) |
 | Hosted apps — issues & fixes | [HOSTED_APPS_TRAEFIK_RUNBOOK.md](HOSTED_APPS_TRAEFIK_RUNBOOK.md) | 502, **`lh-network`**, DNS names, dashboard **`*.lh`** probes, same-origin **`/api`** |
@@ -111,8 +111,8 @@ Requires Traefik routing `*.lh` to backends on port 80.
 
 When changing registration, materialization, or compose behavior, treat these as one system:
 
-- **Effective manifest:** bridge (`leco.app.yaml`) + profile **`infrastructure`** (`leco.yaml`). Dashboard listing and control paths must resolve compose the same way as **`leco-app`** (`dashboard/leco_control.py`, `tools/deploy-cli/leco_app/schema.py`).
+- **Effective manifest:** bridge (`leco.app.yaml`) + profile **`infrastructure`** (`leco.yaml`). Dashboard listing and control paths must resolve compose the same way as **`leco-devops`** (`dashboard/leco_control.py`, `tools/deploy-cli/leco_app/schema.py`).
 - **Read-only `wsp:` paths:** **`source`** symlink target and **`configRefs`** sync live in **`dashboard/leco_detect.py`**, **`dashboard/leco_materialize.py`**, **`dashboard/hosting_layout.py`**.
-- **Teardown:** **`dashboard/control.py`** + **`dashboard/hosted_offboard.py`** — offboard after **`leco-app down`** even on failure.
+- **Teardown:** **`dashboard/control.py`** + **`dashboard/hosted_offboard.py`** — offboard after **`leco-devops down`** even on failure.
 
 Operator-facing map: **[LECO_APP_BLUEPRINT.md](LECO_APP_BLUEPRINT.md)**. Dashboard **Docs** catalog: **`dashboard/docs_catalog.py`** (`leco-app-blueprint` id).

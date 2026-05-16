@@ -74,12 +74,12 @@ def offboard_hosted_app(
         "clean_local_cf": clean_local_cf,
         "exit_code": code,
         "leco_log": log[-16000:] if log else "",
-        "traefik": {"via": "leco-app ecosystem-unregister"},
-        "local_cf": {"via": "leco-app ecosystem-unregister"},
+        "traefik": {"via": "leco-devops ecosystem-unregister"},
+        "local_cf": {"via": "leco-devops ecosystem-unregister"},
         "registry_removed": ok,
     }
     if not ok:
-        result["error"] = log[-2000:] if log else f"leco-app exited {code}"
+        result["error"] = log[-2000:] if log else f"leco-devops exited {code}"
         if manifest_rel_uses_hosting_layout(manifest_rel):
             hr = remove_hosting_for_slug(eco, nid)
             result["hosting_fallback"] = hr

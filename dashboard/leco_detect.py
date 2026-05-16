@@ -1113,7 +1113,7 @@ def _infer_compose_routing_entries(
     Default routing for compose apps with separate UI + API containers:
       - Single hostname ``<slug>.lh`` with ``apiPathPrefix`` (default ``/api``): Traefik sends
         ``PathPrefix`` traffic to the API container and the rest to the frontend (same pattern
-        as ``leco-app traefik-fragment`` split mode and default ``urls``).
+        as ``leco-devops traefik-fragment`` split mode and default ``urls``).
     """
     loaded = _load_compose_services_for_localhost(localhost, root, manifest)
     if not loaded:
@@ -1256,7 +1256,7 @@ def ensure_docker_compose_in_manifest(manifest: dict[str, Any], orig_root: Path)
     """
     If manifest has no dockerCompose, walk up from the manifest logical root for compose
     (e.g. registered from .../cloudflare with root ``..`` → repo root, or root ``.`` with compose in parent).
-    ``composeFile`` is relative to :func:`hosting_layout.compute_source_target` (same as leco-app ``resolved_root``).
+    ``composeFile`` is relative to :func:`hosting_layout.compute_source_target` (same as leco-devops ``resolved_root``).
     """
     if manifest_has_docker_compose(manifest):
         return
@@ -1529,7 +1529,7 @@ def build_default_manifest_and_localhost(
         ],
         "lifecycle": {"prepare": [], "build": [], "preStart": []},
         "notes": (
-            "Next: open Hosted apps → Register (or run leco-app ecosystem-register) so "
+            "Next: open Hosted apps → Register (or run leco-devops ecosystem-register) so "
             "config/leco-registry.yaml lists this app — the tab then shows Deploy / Remove and the manifest summary. "
             "Optional hosting-only compose: docker-compose.leco-hosting.yml beside leco.app.yaml + "
             "infrastructure.dockerCompose.additionalComposeFilesFromManifest."
@@ -1576,7 +1576,7 @@ def enrich_infrastructure_wrangler_binding_preview(infrastructure: dict[str, Any
     infrastructure["wranglerBindingPreview"] = {
         "note": (
             "Each kv[] row becomes one local KV namespace; each r2[] one R2 bucket; each d1[] one D1 database. "
-            "leco-app reads wrangler.toml (cloudflare.wranglerConfig) — this block is an informational mirror."
+            "leco-devops reads wrangler.toml (cloudflare.wranglerConfig) — this block is an informational mirror."
         ),
         "wranglerEnv": wenv or "",
         "kv": [{"binding": r.binding, "cfId": r.cf_id} for r in plan.kv],

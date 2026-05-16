@@ -2,15 +2,15 @@
 
 This CLI is part of the **LEco DevOps Open Project** and is released under the **MIT License** (see [../../LICENSE](../../LICENSE)).
 
-**LEco DevOps** is the product name for this tooling. The command-line programs are **`leco-app`** and **`leco-devops`** (same tool). They inspect an application repository, write a small manifest (`leco.app.yaml`), and run **Docker Compose** and optionally **Wrangler** lifecycle commands. The CLI is **orthogonal** to the local-ecosystem core: third-party apps stay in their own repos and compose files.
+**LEco DevOps** is the product name for this tooling. The published CLI command is **`leco-devops`** (the PyPI distribution / import package remains **`leco-app`** / `leco_app`). It inspects an application repository, writes a small manifest (`leco.app.yaml`), and runs **Docker Compose** and optionally **Wrangler** lifecycle commands. The CLI is **orthogonal** to the local-ecosystem core: third-party apps stay in their own repos and compose files.
 
 ## Resource model (one package per app)
 
 - **One manifest per application** lists what that app uses: compose file, optional Wrangler config, optional Traefik routing hints, health URLs.
-- By default the CLI **does not** start MinIO/Valkey for you — that is **local-ecosystem’s** shared **`cloudflare-local`** stack. When policy allows (see below), **`leco-app deploy`**, **`leco-app init`** (prompt or `--provision-local-cf`), **`leco-app ecosystem-register`**, and **`leco-app onboard`** **create or refresh** KV/R2/D1 **names** on those shared adapters from your **wrangler.toml** bindings. Your **`wrangler.toml` is never modified.** Output: **`leco.local-cf.yaml`** next to the manifest (adapter bases + local names). Override bases with **`LECO_LOCAL_KV_URL`**, **`LECO_LOCAL_R2_URL`**, **`LECO_LOCAL_D1_URL`** (written to **`leco.local-cf.yaml`**). For HTTP calls from **service-dashboard**, set **`LECO_LOCAL_KV_INTERNAL_URL`** (e.g. `http://kv-adapter:8082`) so provision hits adapters on **`lh-network`**; **`dashboard.sh`** sets these by default. Use **`LECO_LOCAL_CF_INSECURE_SSL=1`** only if you must skip TLS verify.
+- By default the CLI **does not** start MinIO/Valkey for you — that is **local-ecosystem’s** shared **`cloudflare-local`** stack. When policy allows (see below), **`leco-devops deploy`**, **`leco-devops init`** (prompt or `--provision-local-cf`), **`leco-devops ecosystem-register`**, and **`leco-devops onboard`** **create or refresh** KV/R2/D1 **names** on those shared adapters from your **wrangler.toml** bindings. Your **`wrangler.toml` is never modified.** Output: **`leco.local-cf.yaml`** next to the manifest (adapter bases + local names). Override bases with **`LECO_LOCAL_KV_URL`**, **`LECO_LOCAL_R2_URL`**, **`LECO_LOCAL_D1_URL`** (written to **`leco.local-cf.yaml`**). For HTTP calls from **service-dashboard**, set **`LECO_LOCAL_KV_INTERNAL_URL`** (e.g. `http://kv-adapter:8082`) so provision hits adapters on **`lh-network`**; **`dashboard.sh`** sets these by default. Use **`LECO_LOCAL_CF_INSECURE_SSL=1`** only if you must skip TLS verify.
 - **Per-app adapters (Docker Desktop under your project):** set **`cloudflare.dedicatedLocalAdapters: true`** in **`leco.yaml`** / profile (merged with **`leco.app.yaml`**). Merge **`docker-compose.leco-dedicated-cf.example.yml`** from **`hosting/samples/sample-cloudflare-application/`** via **`additionalComposeFiles`**, set **`LECO_CF_ROOT`** in **`.env`** to the absolute path of this repo’s **`cloudflare-local`** directory, and **`docker compose up`** so **`leco-local-{kv,r2,d1}-adapter`** (and Valkey/MinIO) run **inside your compose project** and join **`lh-network`**. Provision/teardown then use **`http://leco-local-kv-adapter:8082`** (R2 **8081**, D1 **8083**) unless you override **`LECO_DEDICATED_*_ADAPTER_URL`**. **`leco.local-cf.yaml`** stores the same bases for your app containers.
 - **Apps without** `cloudflare.wranglerConfig` never hit these adapters (compose-only or non-Workers stacks).
-- **`leco-app provision-local-cf`** always attempts provisioning when a wrangler path exists (ignores manifest **`provisionLocalResources`** and **`LECO_PROVISION_LOCAL_CF`** so you can repair a stack manually).
+- **`leco-devops provision-local-cf`** always attempts provisioning when a wrangler path exists (ignores manifest **`provisionLocalResources`** and **`LECO_PROVISION_LOCAL_CF`** so you can repair a stack manually).
 
 ### Local CF provision policy (generic defaults)
 
@@ -36,7 +36,7 @@ From the **local-ecosystem repository root**:
 ```bash
 cd tools/deploy-cli
 pip install -e .
-leco-app --help    # or: leco-devops --help
+leco-devops --help
 ```
 
 Python **3.11+** required.
@@ -48,48 +48,48 @@ Python **3.11+** required.
 ```bash
 cd /path/to/your/app   # directory containing leco.app.yaml (or use -f)
 export LECO_ECOSYSTEM_ROOT=/path/to/local-ecosystem
-leco-app onboard         # compose up, leco-registry.yaml, merge routing.entries → traefik/dynamic.yml
-# or: leco-app onboard -f ./cloudflare/leco.app.yaml -E /path/to/local-ecosystem
+leco-devops onboard         # compose up, leco-registry.yaml, merge routing.entries → traefik/dynamic.yml
+# or: leco-devops onboard -f ./cloudflare/leco.app.yaml -E /path/to/local-ecosystem
 ```
 
 **Iterating on manifests only:**
 
 ```bash
 cd /path/to/your/app
-leco-app init              # existing leco.app.yaml + leco.yaml → validate & deploy; else wizard, then deploy
+leco-devops init              # existing leco.app.yaml + leco.yaml → validate & deploy; else wizard, then deploy
 # or
-leco-app init -y           # defaults only (compose + wrangler detection)
+leco-devops init -y           # defaults only (compose + wrangler detection)
 # minimal manifest without compose (TTY confirm):
-leco-app init --manifest-only
+leco-devops init --manifest-only
 
-leco-app detect            # JSON scan: compose, wrangler, archetype (for LEco DevOps / scripts)
-leco-app run-hooks --phase prepare   # run merged profile lifecycle.prepare commands
+leco-devops detect            # JSON scan: compose, wrangler, archetype (for LEco DevOps / scripts)
+leco-devops run-hooks --phase prepare   # run merged profile lifecycle.prepare commands
 
 # During init, if you add Traefik routes: press Enter on an empty hostname to stop adding routes.
 # Choose "split route" for React + API: generates frontend + apiBackend in leco.app.yaml and
 # traefik-fragment output with Host+PathPrefix(/api) → backend, Host → UI. Put those containers on lh-network.
 
-leco-app init --onboard -E /path/to/local-ecosystem   # after deploy: register + Traefik merge (same as parts of onboard)
-leco-app deploy            # docker compose up -d --build; then local KV/R2/D1 from wrangler if policy allows
-leco-app deploy --no-provision-local-cf   # compose only
-leco-app status
-leco-app logs -f
-leco-app down              # compose down only
+leco-devops init --onboard -E /path/to/local-ecosystem   # after deploy: register + Traefik merge (same as parts of onboard)
+leco-devops deploy            # docker compose up -d --build; then local KV/R2/D1 from wrangler if policy allows
+leco-devops deploy --no-provision-local-cf   # compose only
+leco-devops status
+leco-devops logs -f
+leco-devops down              # compose down only
 
 # Staging / offload: strip Traefik routes + compose down -v (auto-detects traefik/dynamic.yml from -E)
-leco-app offload --cwd hosting/app-available/myapp -E /path/to/local-ecosystem
+leco-devops offload --cwd hosting/app-available/myapp -E /path/to/local-ecosystem
 # Or with explicit Traefik path:
-leco-app offload --traefik-dynamic /path/to/local-ecosystem/hosting/traefik/dynamic.yml
+leco-devops offload --traefik-dynamic /path/to/local-ecosystem/hosting/traefik/dynamic.yml
 
 # Scaffold a new app from the multi-process Node+Varnish template:
-leco-app scaffold myapp -E /path/to/local-ecosystem --source-path /abs/path/to/source
+leco-devops scaffold myapp -E /path/to/local-ecosystem --source-path /abs/path/to/source
 
-leco-app traefik-fragment  # print YAML to paste into traefik/dynamic.yml
-leco-app traefik-fragment -o /tmp/traefik-snippet.yml
+leco-devops traefik-fragment  # print YAML to paste into traefik/dynamic.yml
+leco-devops traefik-fragment -o /tmp/traefik-snippet.yml
 
-leco-app cf-secrets-checklist --env staging
-leco-app cf-deploy --env staging
-leco-app cf-deploy --env production --confirm-production
+leco-devops cf-secrets-checklist --env staging
+leco-devops cf-deploy --env staging
+leco-devops cf-deploy --env production --confirm-production
 ```
 
 State/metadata: `~/.local/share/leco/apps/<slug>/` (override with `XDG_DATA_HOME`).
@@ -115,8 +115,8 @@ Written next to the app root (or path given to `--out`). Uses **camelCase** keys
 | `cloudflare.localCfPublicPrefix` | Optional short label (e.g. `cv`): provision + `leco.local-cf.yaml` use `https://{prefix}-kv.lh`, `-r2.lh`, `-d1.lh`; **`ecosystem-register --merge-traefik`** adds Host routes to the shared adapters. Browser bindings stay shared. |
 | `routing.entries` | Traefik fragment: legacy backend **or** split `frontend` + `apiBackend` **or** v3 prefix list under `upstream[]` ({prefix, target, runtime?, service?}). Priority is derived from prefix length (longer wins). |
 | `infrastructure.runtimes` | Optional list of local edge-runtime declarations (v3). Each entry: `id`, `type` (`cloudflare-workers` / `cloudflare-pages` / `vercel` / `aws-lambda` / `deno-deploy` — only `cloudflare-workers` is fully implemented today), and adapter-specific fields: `config`, `sourceDir`, `port`, `devVarsFile` (auto-detected when literally `.dev.vars`), `image`, plus (Cloudflare Workers only) `stripBindings` (TOML tables to strip from a sanitized in-container wrangler.toml) and `productionOnlyBindings` (informational badges for paid CF features that have no local equivalent — Browser Rendering, Vectorize, Hyperdrive, Analytics Engine, Email Routing producer, mTLS certs). LEco DevOps materializes them into a generated `docker-compose.leco-runtime.yml` beside `leco.app.yaml` and auto-writes a `.dev.vars.example` skeleton next to it listing every expected secret the Worker source references but wrangler.toml doesn't declare. See `docs/DEPLOY_CLI.md` and `hosting/samples/sample-cf-worker-runtime/`. |
-| `traefikCleanup` | Optional explicit router/service keys for `leco-app offload` when names differ from fragment defaults |
-| `healthcheckUrls` | URLs probed by `leco-app status` |
+| `traefikCleanup` | Optional explicit router/service keys for `leco-devops offload` when names differ from fragment defaults |
+| `healthcheckUrls` | URLs probed by `leco-devops status` |
 | `lecoAppVersion` | Use `"2"` when using `localHostProfile` / `localhost` |
 | `localHostProfile` | Optional path to sidecar profile (default filename `leco.yaml`; relative to manifest dir). `localhost.yaml` / `leco.localhost.yaml` still work |
 | `localhost` | Optional inline same schema as the sidecar file (merged over file) |

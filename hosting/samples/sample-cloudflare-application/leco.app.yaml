@@ -33,6 +33,6 @@ localhost:
   notes: |
     [BRIDGE — Cloudflare application]
     Pair with leco.yaml: infrastructure.cloudflare + wranglerBindingPreview describe
-    Wrangler bindings; leco-app still provisions from wrangler.toml only. Add
+    Wrangler bindings; leco-devops still provisions from wrangler.toml only. Add
     infrastructure.dockerCompose here in leco.yaml if the same repo runs containers
     next to the Worker.

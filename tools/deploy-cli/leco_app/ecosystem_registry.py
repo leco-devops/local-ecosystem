@@ -162,7 +162,7 @@ def _remove_hosting_for_slug(eco_root: Path, slug: str) -> None:
             else:
                 p.unlink()
         except OSError as exc:
-            print(f"leco-app: hosting cleanup ({label}): {exc}", file=sys.stderr)
+            print(f"leco-devops: hosting cleanup ({label}): {exc}", file=sys.stderr)
 
     _rm(available, "app-available")
 

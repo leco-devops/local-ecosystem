@@ -150,6 +150,23 @@ class OllamaProvider(AIProvider):
         self.default_model = default_model
         self.timeout = max(10, timeout)
 
+
+class AirLLMProvider(OllamaProvider):
+    """Local AirLLM shim — same protocol as Ollama, different base URL.
+
+    AirLLM serves HuggingFace models using layer-by-layer loading,
+    enabling large models (70B/405B) on limited VRAM.
+    """
+
+    provider_name = "airllm"
+
+    def __init__(self, base_url: str = "http://airllm:11435", default_model: str = "Qwen/Qwen2.5-7B-Instruct", timeout: int = 600):
+        super().__init__(base_url=base_url, default_model=default_model, timeout=timeout)
+
+    def default_token_budget(self) -> int:
+        # AirLLM is optimized for large models; can handle more tokens
+        return 16_000
+
     def default_token_budget(self) -> int:
         return 12_000
 
@@ -823,6 +840,12 @@ def create_provider(config: dict) -> AIProvider | None:
         return OllamaProvider(
             base_url=pcfg.get("base_url", "http://ollama:11434"),
             default_model=pcfg.get("default_model", config.get("default_model", "qwen2.5-coder")),
+            timeout=pcfg.get("timeout", global_timeout),
+        )
+    elif name == "airllm":
+        return AirLLMProvider(
+            base_url=pcfg.get("base_url", "http://airllm:11435"),
+            default_model=pcfg.get("default_model", config.get("default_model", "Qwen/Qwen2.5-7B-Instruct")),
             timeout=pcfg.get("timeout", global_timeout),
         )
     elif name == "openai":

@@ -45,7 +45,7 @@ Most **`ecosystem-stack/services/*.sh`** scripts support:
 
 **Hosted apps / read-only `wsp:` paths:** Sibling repos are mounted read-only at **`/workspace-parent`**. **Register** cannot write `leco.app.yaml` there. The dashboard **materializes** under **`hosting/app-available/<slug>/`** (writable `/project`), adds a **`source`** symlink to the real app tree so compose/wrangler paths keep working, and registers **`hosting/app-available/<slug>/leco.app.yaml`** in **`config/leco-registry.yaml`**. See **`hosting/README.md`** and **`docs/LECO_APP_BLUEPRINT.md`**. **Zip upload:** `POST /api/hosted/upload-zip` (multipart **`file`**, form **`app_id`** or **`slug`**, control token in header or form) extracts into **`hosting/app-available/<slug>/`** with zip-slip checks, max **200 MiB**, then **deletes the uploaded zip**. Use **Detect** / **Register** with path **`hosting/app-available/<slug>`** (or materialize flow) after uploading.
 
-**Hosted apps — Remove / Reset:** the dashboard runs **`leco-app ecosystem-unregister`**, which runs **local CF teardown** first when enabled (so in-project **`leco-local-*`** adapters are still up), then **`docker compose down`** ( **`down -v`** on **Reset** ) when the manifest has compose and the compose file exists, then Traefik cleanup when applicable, registry removal, and removal of **`hosting/app-available`** when the manifest was under hosting. If **`down`** fails, unregister still proceeds. Extra compose files: **`infrastructure.dockerCompose.additionalComposeFiles`** in **`leco.yaml`** — see **`docs/DEPLOY_CLI.md`**.
+**Hosted apps — Remove / Reset:** the dashboard runs **`leco-devops ecosystem-unregister`**, which runs **local CF teardown** first when enabled (so in-project **`leco-local-*`** adapters are still up), then **`docker compose down`** ( **`down -v`** on **Reset** ) when the manifest has compose and the compose file exists, then Traefik cleanup when applicable, registry removal, and removal of **`hosting/app-available`** when the manifest was under hosting. If **`down`** fails, unregister still proceeds. Extra compose files: **`infrastructure.dockerCompose.additionalComposeFiles`** in **`leco.yaml`** — see **`docs/DEPLOY_CLI.md`**.
 
 **Cloudflare-local (`cloudflare-local.sh`):** wraps **`docker compose`**; see script for **`recreate`**, **`backup`**, etc.
 
@@ -175,7 +175,7 @@ Traefik reads **`/etc/traefik-dynamic`** (repo: **`hosting/traefik/`**), configu
 |------|------|
 | **`traefik/dynamic.yml`** | Canonical stack routes in **git**. Edited here for platform services. |
 | **`hosting/traefik/01-stack-core.yml`** | **Copy** of the above, rewritten on every **`traefik.sh start`** — must not be a symlink (see SETUP.md). |
-| **`hosting/traefik/dynamic.yml`** | **Writable** merge layer for **`leco-app`** / LEco DevOps Routes; empty document should be **`{}`**, not **`http: {}`** (Traefik v3 rejects the latter). |
+| **`hosting/traefik/dynamic.yml`** | **Writable** merge layer for **`leco-devops`** / LEco DevOps Routes; empty document should be **`{}`**, not **`http: {}`** (Traefik v3 rejects the latter). |
 
 1. Change platform routes in **`traefik/dynamic.yml`**, then **`./ecosystem-stack/ecosystem-stack.sh restart traefik`** (or any **`traefik.sh start`**) so **`01-stack-core.yml`** is recopied.
 2. Hosted-app merges go to **`hosting/traefik/dynamic.yml`**; saves usually **reload without** restarting Traefik.

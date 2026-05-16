@@ -60,7 +60,7 @@ def run_registry_and_provision(
     if code != 0:
         echo(
             "Local CF provision had failures — registry entry is still saved. "
-            "Fix adapters/DNS and run: leco-app provision-local-cf",
+            "Fix adapters/DNS and run: leco-devops provision-local-cf",
             fg=typer.colors.YELLOW,
             err=True,
         )

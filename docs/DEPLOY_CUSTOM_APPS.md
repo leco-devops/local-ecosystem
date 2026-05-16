@@ -273,9 +273,9 @@ Use `proxy_pass http://backend:PORT;` in a custom `nginx.conf`, mount it in the 
 
 ---
 
-## 10. **LEco DevOps** (`leco-app` / `leco-devops`)
+## 10. **LEco DevOps** (`leco-devops`)
 
-For **third-party** repos (many apps, no edits to `ecosystem-stack` / `core.sh`), use **LEco DevOps** in `tools/deploy-cli/`: the **`leco-app`** and **`leco-devops`** commands write `leco.app.yaml`, run `docker compose` deploy/stop/logs/status, optional **`wrangler deploy`**, and print **Traefik** YAML fragments for manual paste.
+For **third-party** repos (many apps, no edits to `ecosystem-stack` / `core.sh`), use **LEco DevOps** in `tools/deploy-cli/`: the **`leco-devops`** command writes `leco.app.yaml`, runs `docker compose` deploy/stop/logs/status, optional **`wrangler deploy`**, and prints **Traefik** YAML fragments for manual paste.
 
 **Install:** `cd tools/deploy-cli` (from repo root), then `pip install -e .` — not from `tools/` alone.
 

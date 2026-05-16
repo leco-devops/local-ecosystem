@@ -1,0 +1,93 @@
+{
+  "_comment": "Curated Ollama (GGUF) model picks shown in the LEco DevOps dashboard 'Popular models' dropdown and by `leco-cli.sh ollama popular`. Edit freely — names must match Ollama registry IDs. Sizes are approximate disk footprint at the default quantization.",
+  "models": [
+    {
+      "name": "llama3.2:1b",
+      "label": "Llama 3.2 · 1B (Q4)",
+      "family": "llama",
+      "size": "~1.3 GB",
+      "tags": ["tiny", "instruct", "smoke-test"],
+      "description": "Smallest Meta Llama 3.2 instruct — great for smoke tests, low-RAM laptops."
+    },
+    {
+      "name": "llama3.2:3b",
+      "label": "Llama 3.2 · 3B (Q4)",
+      "family": "llama",
+      "size": "~2.0 GB",
+      "tags": ["small", "instruct"],
+      "description": "Balanced general-purpose model; fast on CPU."
+    },
+    {
+      "name": "llama3.1:8b",
+      "label": "Llama 3.1 · 8B (Q4)",
+      "family": "llama",
+      "size": "~4.7 GB",
+      "tags": ["medium", "instruct", "default"],
+      "description": "Daily-driver Meta Llama 3.1 instruct."
+    },
+    {
+      "name": "qwen2.5:0.5b",
+      "label": "Qwen 2.5 · 0.5B (Q4)",
+      "family": "qwen",
+      "size": "~0.4 GB",
+      "tags": ["tiny", "multilingual"],
+      "description": "Tiny Qwen 2.5 instruct; useful for tests + low-end devices."
+    },
+    {
+      "name": "qwen2.5:7b",
+      "label": "Qwen 2.5 · 7B (Q4)",
+      "family": "qwen",
+      "size": "~4.7 GB",
+      "tags": ["medium", "multilingual"],
+      "description": "General-purpose Qwen 2.5; strong reasoning / multilingual."
+    },
+    {
+      "name": "qwen2.5-coder:7b",
+      "label": "Qwen 2.5 Coder · 7B (Q4)",
+      "family": "qwen",
+      "size": "~4.7 GB",
+      "tags": ["code"],
+      "description": "Code-focused Qwen 2.5 — completion, refactor, code review."
+    },
+    {
+      "name": "deepseek-r1:1.5b",
+      "label": "DeepSeek R1 · 1.5B (Q4)",
+      "family": "deepseek",
+      "size": "~1.1 GB",
+      "tags": ["tiny", "reasoning"],
+      "description": "Smallest distilled DeepSeek R1 reasoning model."
+    },
+    {
+      "name": "deepseek-r1:7b",
+      "label": "DeepSeek R1 · 7B (Q4)",
+      "family": "deepseek",
+      "size": "~4.7 GB",
+      "tags": ["medium", "reasoning"],
+      "description": "Medium DeepSeek R1 distilled; better reasoning than Llama at 7B."
+    },
+    {
+      "name": "phi3:3.8b",
+      "label": "Phi-3 Mini · 3.8B (Q4)",
+      "family": "phi",
+      "size": "~2.3 GB",
+      "tags": ["small", "instruct"],
+      "description": "Microsoft Phi-3 Mini instruct; efficient quality/size tradeoff."
+    },
+    {
+      "name": "mistral:7b",
+      "label": "Mistral 7B (Q4)",
+      "family": "mistral",
+      "size": "~4.1 GB",
+      "tags": ["medium", "instruct"],
+      "description": "Classic Mistral 7B Instruct."
+    },
+    {
+      "name": "nomic-embed-text",
+      "label": "Nomic Embed Text (embeddings)",
+      "family": "embeddings",
+      "size": "~0.3 GB",
+      "tags": ["embeddings"],
+      "description": "Open-source text embedding model — use for RAG / vector stores."
+    }
+  ]
+}
