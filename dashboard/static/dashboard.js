@@ -41,7 +41,7 @@ const LS_ACTIVE_TAB_KEY = "dashboard_active_tab";
 const LS_REFRESH_RATE_KEY = "dashboard_refresh_rate_ms";
 const REFRESH_RATE_OPTIONS = new Set(["5000", "10000", "30000", "60000", "0"]);
 /** Bump when cache shape changes so stale / corrupted entries are dropped. */
-const CACHE_SCHEMA_VERSION = 6;
+const CACHE_SCHEMA_VERSION = 7;
 const LS_PRELOADER_COLLAPSED_KEY = "dashboard_preloader_collapsed";
 const GLOBAL_PRELOADER_MIN_VISIBLE_MS = 220;
 const OVERVIEW_HOSTED_APPS_CACHE_MS = 90 * 1000;
@@ -57,6 +57,33 @@ const TAB_LABELS = {
   developTab: "Develop",
   logsTab: "Logs",
 };
+/** Overview CF bar chart + KPI — mirrors cloudflare-local stack (cf-leco-service-registry.json). */
+const CF_LOCAL_OVERVIEW_SERVICES = [
+  { key: "r2", label: "R2", color: "#22d3ee" },
+  { key: "kv", label: "KV", color: "#a78bfa" },
+  { key: "d1", label: "D1", color: "#34d399" },
+  { key: "workers", label: "Wrk", color: "#fbbf24" },
+  { key: "browser", label: "Br", color: "#fb923c" },
+  { key: "autoscale", label: "Au", color: "#f472b6" },
+  { key: "valkey", label: "Vk", color: "#818cf8" },
+  { key: "minio", label: "MinIO", color: "#c084fc", altKeys: ["s3"] },
+];
+const CF_LOCAL_OVERVIEW_TOTAL = CF_LOCAL_OVERVIEW_SERVICES.length;
+
+function cfServiceReachable(svc, entry) {
+  if (!svc || !entry) return false;
+  if (svc[entry.key]?.reachable) return true;
+  for (const alt of entry.altKeys || []) {
+    if (svc[alt]?.reachable) return true;
+  }
+  return false;
+}
+
+function countCfLocalReachable(cf) {
+  const svc = cf?.services || {};
+  return CF_LOCAL_OVERVIEW_SERVICES.filter((entry) => cfServiceReachable(svc, entry)).length;
+}
+
 const globalPreloaderState = {
   root: null,
   summary: null,
@@ -2247,10 +2274,23 @@ function bucketEngineContainerNames(containers) {
   return by;
 }
 
+/** Chart counts from enumerated containers (matches tooltips), not Docker daemon globals. */
+function countEngineContainersForChart(containers, dockerCounts) {
+  const names = bucketEngineContainerNames(containers);
+  const running = names.running.length;
+  const paused = names.paused.length;
+  const stopped = names.stopped.length;
+  const daemonStopped = Number(dockerCounts?.containers_stopped || 0);
+  const ghostStopped = Math.max(0, daemonStopped - stopped);
+  return { running, paused, stopped, names, ghostStopped };
+}
+
 function destroyOverviewChartsIfStale() {
   const c = overviewCharts.cpu;
-  if (!c) return;
-  if (c.data.datasets.length >= 3) return;
+  const cfStale =
+    overviewCharts.cf && overviewCharts.cf.data?.labels?.length !== CF_LOCAL_OVERVIEW_TOTAL;
+  if (!c && !cfStale) return;
+  if (c && c.data.datasets.length >= 3 && !cfStale) return;
   try {
     Object.values(overviewCharts).forEach((ch) => ch?.destroy?.());
   } catch (_) {
@@ -2384,12 +2424,12 @@ function ensureOverviewCharts() {
     overviewCharts.cf = new Chart(cfEl, {
       type: "bar",
       data: {
-        labels: ["R2", "KV", "D1", "Wrk", "Br", "Au"],
+        labels: CF_LOCAL_OVERVIEW_SERVICES.map((s) => s.label),
         datasets: [
           {
             label: "Reachable",
-            data: [0, 0, 0, 0, 0, 0],
-            backgroundColor: ["#a78bfa", "#a78bfa", "#a78bfa", "#a78bfa", "#a78bfa", "#a78bfa"],
+            data: CF_LOCAL_OVERVIEW_SERVICES.map(() => 0),
+            backgroundColor: CF_LOCAL_OVERVIEW_SERVICES.map((s) => s.color),
             borderRadius: 4,
             minBarLength: 8,
           },
@@ -2439,12 +2479,19 @@ function ensureOverviewCharts() {
                 const key = keys[idx];
                 const names = chart._engineNames?.[key] ?? [];
                 const max = 35;
+                const lines = [];
                 if (names.length === 0) {
-                  return "No containers listed";
+                  lines.push("No containers in this state (listed)");
+                } else {
+                  lines.push(...names.slice(0, max).map((n) => `• ${n}`));
+                  if (names.length > max) {
+                    lines.push(`• … +${names.length - max} more`);
+                  }
                 }
-                const lines = names.slice(0, max).map((n) => `• ${n}`);
-                if (names.length > max) {
-                  lines.push(`• … +${names.length - max} more`);
+                if (key === "stopped" && chart._engineGhostStopped > 0) {
+                  lines.push(
+                    `• Docker reports ${chart._engineGhostStopped} extra stopped (removed/unlisted)`,
+                  );
                 }
                 return lines.join("\n");
               },
@@ -2716,7 +2763,7 @@ function renderOverviewKpi(data, cf, lastPt) {
   const d = data.docker_overview?.counts || {};
   const host = data.docker_overview?.host || {};
   const svc = cf?.services || {};
-  const cfUp = [svc.r2, svc.kv, svc.d1, svc.workers, svc.browser, svc.autoscale].filter((x) => x?.reachable).length;
+  const cfUp = countCfLocalReachable(cf);
   // Prefer live docker_totals from this overview response so KPIs match Infrastructure / Deep metrics.
   const dockCpu = dt.cpu_percent ?? lastPt?.docker?.cpu_percent;
   const dockRam = dt.memory_percent ?? lastPt?.docker?.memory_percent;
@@ -2755,7 +2802,7 @@ function renderOverviewKpi(data, cf, lastPt) {
       <div class="kpi-label">URL probes</div>
     </div>
     <div class="kpi-cell">
-      <div class="kpi-value">${cfUp}/6</div>
+      <div class="kpi-value">${cfUp}/${CF_LOCAL_OVERVIEW_TOTAL}</div>
       <div class="kpi-label">CF local</div>
     </div>
     <div class="kpi-cell">
@@ -2778,7 +2825,7 @@ function renderOverviewChips(data, cf) {
   const s = data.system_status || {};
   const alerts = (s.alerts || []).length;
   const svc = cf?.services || {};
-  const cfUp = [svc.r2, svc.kv, svc.d1, svc.workers, svc.browser, svc.autoscale].filter((x) => x?.reachable).length;
+  const cfUp = countCfLocalReachable(cf);
   const parts = [
     `<span class="chip">Reference — all <code>*.lh</code> links</span>`,
     `<span class="chip">Infrastructure — engine &amp; tables</span>`,
@@ -2788,8 +2835,8 @@ function renderOverviewChips(data, cf) {
   if (alerts > 0) {
     parts.unshift(`<span class="chip chip--warn">${alerts} alert(s) — see Infrastructure</span>`);
   }
-  if (cfUp < 6) {
-    parts.unshift(`<span class="chip chip--bad">CF local ${cfUp}/6</span>`);
+  if (cfUp < CF_LOCAL_OVERVIEW_TOTAL) {
+    parts.unshift(`<span class="chip chip--bad">CF local ${cfUp}/${CF_LOCAL_OVERVIEW_TOTAL}</span>`);
   }
   const uc = data.update_catalog || {};
   const ucUpd = uc.updates || {};
@@ -2912,29 +2959,19 @@ function updateOverviewDashboard(data, cf, metricsData) {
   overviewCharts.url.update();
 
   const cfSvc = cf?.services || {};
-  const keys = [
-    { k: "r2", l: "R2" },
-    { k: "kv", l: "KV" },
-    { k: "d1", l: "D1" },
-    { k: "workers", l: "Wrk" },
-    { k: "browser", l: "Br" },
-    { k: "autoscale", l: "Au" },
-  ];
-  const upVals = keys.map(({ k }) => (cfSvc[k]?.reachable ? 100 : 0));
-  const cfPaletteUp = ["#22d3ee", "#a78bfa", "#34d399", "#fbbf24", "#fb923c", "#f472b6"];
-  const colors = keys.map(({ k }, i) =>
-    cfSvc[k]?.reachable ? cfPaletteUp[i % cfPaletteUp.length] : "#fb7185",
+  const upVals = CF_LOCAL_OVERVIEW_SERVICES.map((entry) => (cfServiceReachable(cfSvc, entry) ? 100 : 0));
+  const colors = CF_LOCAL_OVERVIEW_SERVICES.map((entry) =>
+    cfServiceReachable(cfSvc, entry) ? entry.color : "#fb7185",
   );
+  overviewCharts.cf.data.labels = CF_LOCAL_OVERVIEW_SERVICES.map((s) => s.label);
   overviewCharts.cf.data.datasets[0].data = upVals;
   overviewCharts.cf.data.datasets[0].backgroundColor = colors;
   overviewCharts.cf.update();
 
-  const counts = data.docker_overview?.counts || {};
-  const run = Number(counts.containers_running || 0);
-  const paused = Number(counts.containers_paused || 0);
-  const stopped = Number(counts.containers_stopped || 0);
-  overviewCharts.engine.data.datasets[0].data = [run, paused, stopped];
-  overviewCharts.engine._engineNames = bucketEngineContainerNames(data.containers);
+  const eng = countEngineContainersForChart(data.containers, data.docker_overview?.counts);
+  overviewCharts.engine.data.datasets[0].data = [eng.running, eng.paused, eng.stopped];
+  overviewCharts.engine._engineNames = eng.names;
+  overviewCharts.engine._engineGhostStopped = eng.ghostStopped;
   overviewCharts.engine.update();
 
   const topSvc = [...(data.services || [])]
@@ -4147,6 +4184,7 @@ function renderCloudflareLocal(cf, services) {
       <div class="row"><span>Browser</span><span class="pill ${badgeColor(!!svc.browser?.reachable)}">${badgeText(!!svc.browser?.reachable)}</span></div>
       <div class="row"><span>Autoscaler</span><span class="pill ${badgeColor(!!svc.autoscale?.reachable)}">${badgeText(!!svc.autoscale?.reachable)}</span></div>
       <div class="row"><span>Valkey (KV backend)</span><span class="pill ${badgeColor(!!svc.valkey?.reachable)}">${badgeText(!!svc.valkey?.reachable)}</span></div>
+      <div class="row"><span>MinIO (R2 backend)</span><span class="pill ${badgeColor(!!svc.minio?.reachable)}">${badgeText(!!svc.minio?.reachable)}</span></div>
     `)}
     ${wrapCfLocalCard(`
       <strong>Resource Counts</strong>

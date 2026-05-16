@@ -425,6 +425,7 @@ CLOUDFLARE_ENDPOINTS = {
     "autoscale": "http://autoscaler:8084",
     "workers": "http://workers-runtime:8787",
     "browser": "http://browser-rendering-local:8085",
+    "minio": "http://minio:9000",
 }
 
 VALKEY_HOST = "valkey"
@@ -1246,6 +1247,15 @@ def _fetch_json(url):
         return False, {"ok": False, "error": str(exc)}
 
 
+def _probe_http_ok(url):
+    try:
+        res = requests.get(url, timeout=3)
+        res.raise_for_status()
+        return True, {"ok": True, "status_code": res.status_code}
+    except Exception as exc:
+        return False, {"ok": False, "error": str(exc)}
+
+
 def collect_cloudflare_local_status():
     specs = [
         ("r2_ok", "r2_health", f"{CLOUDFLARE_ENDPOINTS['r2']}/health"),
@@ -1275,6 +1285,14 @@ def collect_cloudflare_local_status():
     as_ok, as_status = out["as_ok"], out["as_status"]
     w_ok, w_health = out["w_ok"], out["w_health"]
     br_ok, br_health = out["br_ok"], out["br_health"]
+    minio_ok, minio_health = _probe_http_ok(f"{CLOUDFLARE_ENDPOINTS['minio']}/minio/health/live")
+    if not minio_ok:
+        minio_c = get_container(get_docker_client(), "minio")
+        if minio_c is not None:
+            st = (minio_c.status or "").lower()
+            if st in ("running", "restarting"):
+                minio_ok = True
+                minio_health = {"ok": True, "via": "container_status", "status": minio_c.status}
     buckets_ok, buckets_data = out["buckets_ok"], out["buckets_data"]
     namespaces_ok, ns_data = out["namespaces_ok"], out["ns_data"]
     dbs_ok, dbs_data = out["dbs_ok"], out["dbs_data"]
@@ -1302,6 +1320,9 @@ def collect_cloudflare_local_status():
             "workers": {"reachable": w_ok, "health": w_health},
             "browser": {"reachable": br_ok, "health": br_health},
             "valkey": {"reachable": valkey_ok},
+            "minio": {"reachable": minio_ok, "health": minio_health if minio_ok else {}},
+            # Alias for overview chart label "S3" (MinIO S3 API backend for R2).
+            "s3": {"reachable": minio_ok, "health": minio_health if minio_ok else {}},
         },
         "counts": {
             "buckets": len(buckets_data.get("buckets", [])) if buckets_ok else 0,
