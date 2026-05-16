@@ -114,6 +114,15 @@
         <div class="infra-group" id="infra-health">
           <h3 class="infra-group__title">1 · Platform health</h3>
           <p class="infra-group__lead muted small">Cluster-level signals from the Docker API and LEco DevOps’s built-in health model.</p>
+          <div class="infra-quickstart-bar" id="infraQuickstartBar" aria-label="Start platform stacks">
+            <strong>Start stacks</strong>
+            <span class="muted small">Brings managed containers up (may take several minutes). Same actions as Control → bulk bars.</span>
+            <div class="infra-quickstart-bar__btns">
+              <button type="button" class="ctrl-bulk ctrl-bulk--start" data-infra-quickstart="stack-ecosystem-all" data-infra-quickstart-action="start" data-infra-quickstart-label="Start ecosystem stack">Start ecosystem</button>
+              <button type="button" class="ctrl-bulk ctrl-bulk--deploy" data-infra-quickstart="stack-cf-all" data-infra-quickstart-action="deploy" data-infra-quickstart-label="Start Cloudflare local">Start Cloudflare local</button>
+              <button type="button" class="ctrl-bulk ctrl-bulk--deploy" data-infra-quickstart="stack-infra-all" data-infra-quickstart-action="deploy" data-infra-quickstart-label="Start infra stack">Start infra add-ons</button>
+            </div>
+          </div>
           <div class="infra-group__block">
             <h4 class="infra-subhead">System status</h4>
             <div id="systemStatus" class="grid-mini"></div>
@@ -166,6 +175,10 @@
           <div class="infra-group__block">
             <h4 class="infra-subhead">Reachability &amp; resources</h4>
             <div id="cloudflareLocal" class="grid-mini"></div>
+          </div>
+          <div class="infra-group__block">
+            <h4 class="infra-subhead">Stack containers</h4>
+            <div id="cloudflareLocalContainers" class="cf-stack-containers"></div>
           </div>
         </div>
 
@@ -466,10 +479,14 @@
           <code>DASHBOARD_INJECT_CONTROL_TOKEN_UI</code> is on: the token is prefilled from the server on load (trusted local only; see <strong>DEPLOYMENT.md</strong>).
         </p>
 
+        <div class="control-policies-bar muted small" id="controlPoliciesBar">
+          <strong>Default policies</strong> — each service can be set to <strong>start</strong> (included in bulk ops), <strong>stop</strong> (skipped on bulk start), or <strong>offloaded</strong> (excluded from all bulk automation). Use the segmented control on each card. Policies affect <strong>Start all / Stop all / Restart all</strong> and <code>ecosystem-stack.sh start</code>.
+        </div>
+
         <div class="control-bulk-bar" id="controlBulkBar" aria-label="Bulk ecosystem actions">
           <div class="control-bulk-bar__head">
             <strong>All ecosystem stack services</strong>
-            <span class="muted small">Uses <code>bulk_ecosystem</code> in <code>ecosystem-stack/core.sh</code>. Bulk <strong>stop</strong>, <strong>restart</strong>, <strong>redeploy</strong>, <strong>pause</strong>, <strong>remove</strong>, <strong>reset</strong>, and <strong>recreate</strong> skip LEco DevOps and, by default, <strong>Traefik</strong> and <strong>Postgres</strong> so routing and the shared DB stay up. Override skips with <code>ECOSYSTEM_BULK_PLATFORM_SKIP</code> (space-separated names). To stop or redeploy Traefik, Postgres, or LEco DevOps itself, use the shell — see <strong>DEPLOYMENT.md</strong> (section <em>Core infra — shell</em>).</span>
+            <span class="muted small">Uses <code>bulk_ecosystem</code> in <code>ecosystem-stack/core.sh</code>. Bulk <strong>stop</strong>, <strong>restart</strong>, <strong>redeploy</strong>, <strong>pause</strong>, <strong>remove</strong>, <strong>reset</strong>, and <strong>recreate</strong> skip LEco DevOps and, by default, <strong>Traefik</strong> and <strong>Postgres</strong> so routing and the shared DB stay up. Override skips with <code>ECOSYSTEM_BULK_PLATFORM_SKIP</code> (space-separated names). Per-service <strong>default policies</strong> further filter which targets bulk actions include. To stop or redeploy Traefik, Postgres, or LEco DevOps itself, use the shell — see <strong>DEPLOYMENT.md</strong> (section <em>Core infra — shell</em>).</span>
           </div>
           <div class="control-bulk-bar__btns">
             <button type="button" class="ctrl-bulk ctrl-bulk--start" data-bulk-action="start" data-bulk-label="Start all">Start all</button>

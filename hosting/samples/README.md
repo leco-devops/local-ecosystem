@@ -20,4 +20,6 @@ leco-devops scaffold myapp -E /path/to/local-ecosystem --template sample-node-va
 | **`sample-node-varnish-multiprocess/`** | Multi-process Node.js + Varnish HTTP cache + MongoDB + Redis. Full 7-file template: runtime config preloader (`leco-docker-preload.js`), `conf/varnish/` custom service config, hosting overlay with apt-get/npm commands, shared node_modules volume. |
 | **`sample-cf-worker-runtime/`** | Local edge runtime: declares an **`infrastructure.runtimes[]`** entry (`type: cloudflare-workers`) and **`routing.entries[].upstream[]`** so `<slug>.lh/api/*` hits a locally-run Cloudflare Worker instead of a classic backend — production-faithful 404s, no upstream changes. |
 
+**Cloudflare binding coverage:** see [docs/CF_LECO_SERVICE_MAP.md](../../docs/CF_LECO_SERVICE_MAP.md) for which Wrangler bindings are implemented, partially bridged, or production-only locally.
+
 See also **`../app-available/README.md`** for the materialization layout, **`../app-available/cvision/`** for a working overlay example, and **[docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md](../../docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md)** for Traefik troubleshooting.

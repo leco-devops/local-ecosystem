@@ -2772,11 +2772,23 @@ function updateOverviewDashboard(data, cf, metricsData) {
   overviewCharts.svcBar.update();
 }
 
+const CF_STACK_CONTAINERS = new Set([
+  "minio",
+  "valkey",
+  "r2-adapter",
+  "kv-adapter",
+  "d1-adapter",
+  "workers-runtime",
+  "browser-rendering-local",
+  "autoscaler",
+  "autoscale-demo",
+]);
+
 function renderInfrastructurePanel(data, cf, opts = {}) {
   if (!document.getElementById("systemStatus")) return;
   renderSystemStatus(data.system_status);
   renderDockerOverview(data.docker_overview);
-  renderCloudflareLocal(cf);
+  renderCloudflareLocal(cf, data.services || []);
   if (!opts.skipTrendCharts) {
     updateCharts(data);
   }
@@ -3822,6 +3834,7 @@ function renderSystemStatus(s) {
       <div class="row"><span>Services</span><span>${s.services_running}/${s.services_total} running</span></div>
       <div class="row"><span>URLs</span><span>${s.healthy_urls}/${s.total_urls} healthy</span></div>
       <div class="row"><span>Paused / Missing</span><span>${s.services_paused} / ${s.services_missing}</span></div>
+      ${s.services_missing_names && s.services_missing_names.length ? `<ul class="missing-svc-list muted small">${s.services_missing_names.map((n) => `<li>${escapeHtml(n)}</li>`).join("")}</ul>` : ""}
       ${alerts}
     </div>
     <div class="card">
@@ -3886,7 +3899,45 @@ function renderDockerOverview(d) {
   `;
 }
 
-function renderCloudflareLocal(cf) {
+function cfContainerStatusPill(info) {
+  if (!info?.exists) return `<span class="pill bad">missing</span>`;
+  const st = info.status || "unknown";
+  if (st === "running") return `<span class="pill ok">running</span>`;
+  if (st === "paused") return `<span class="pill warn">paused</span>`;
+  return `<span class="pill bad">${escapeHtml(st)}</span>`;
+}
+
+function renderCloudflareLocalContainers(services) {
+  const el = document.getElementById("cloudflareLocalContainers");
+  if (!el) return;
+  const rows = (services || []).filter((s) => CF_STACK_CONTAINERS.has(s.container));
+  if (!rows.length) {
+    el.innerHTML =
+      '<p class="muted small">No stack data yet. Use <strong>Start Cloudflare local</strong> above or Control → Cloudflare local → Deploy.</p>';
+    return;
+  }
+  const running = rows.filter((s) => s.container_info?.status === "running").length;
+  el.innerHTML = `
+    <p class="muted small" style="margin:0 0 8px">${running}/${rows.length} compose containers running · <a href="/?tab=controlTab">Control tab</a> for per-service actions</p>
+    <table class="cf-stack-table muted small">
+      <thead><tr><th>Container</th><th>Service</th><th>Docker</th><th>HTTP probe</th></tr></thead>
+      <tbody>
+        ${rows
+          .map((s) => {
+            const probe = (s.url_checks || []).some((u) => u.ok)
+              ? '<span class="pill ok">ok</span>'
+              : (s.url_checks || []).length
+                ? '<span class="pill bad">fail</span>'
+                : '<span class="pill na">n/a</span>';
+            return `<tr><td><code>${escapeHtml(s.container)}</code></td><td>${escapeHtml(s.service)}</td><td>${cfContainerStatusPill(s.container_info)}</td><td>${probe}</td></tr>`;
+          })
+          .join("")}
+      </tbody>
+    </table>`;
+}
+
+function renderCloudflareLocal(cf, services) {
+  renderCloudflareLocalContainers(services);
   if (!cf || !cf.services) {
     document.getElementById("cloudflareLocal").innerHTML = "<div class='card'>Cloudflare local status unavailable</div>";
     return;
@@ -3899,6 +3950,11 @@ function renderCloudflareLocal(cf) {
 
   document.getElementById("cloudflareLocal").innerHTML = `
     ${wrapCfLocalCard(`
+      <strong>Start stack</strong>
+      <p class="muted small" style="margin:0 0 8px">Starts all services in <code>cloudflare-local/docker-compose.yml</code> (MinIO, Valkey, adapters, Workers demo, browser, autoscaler).</p>
+      <button type="button" class="ctrl-bulk ctrl-bulk--deploy" data-infra-quickstart="stack-cf-all" data-infra-quickstart-action="deploy" data-infra-quickstart-label="Start Cloudflare local">Start Cloudflare local stack</button>
+    `)}
+    ${wrapCfLocalCard(`
       <strong>Service Reachability</strong>
       <div class="row"><span>R2</span><span class="pill ${badgeColor(!!svc.r2?.reachable)}">${badgeText(!!svc.r2?.reachable)}</span></div>
       <div class="row"><span>KV</span><span class="pill ${badgeColor(!!svc.kv?.reachable)}">${badgeText(!!svc.kv?.reachable)}</span></div>
@@ -3906,6 +3962,7 @@ function renderCloudflareLocal(cf) {
       <div class="row"><span>Workers</span><span class="pill ${badgeColor(!!svc.workers?.reachable)}">${badgeText(!!svc.workers?.reachable)}</span></div>
       <div class="row"><span>Browser</span><span class="pill ${badgeColor(!!svc.browser?.reachable)}">${badgeText(!!svc.browser?.reachable)}</span></div>
       <div class="row"><span>Autoscaler</span><span class="pill ${badgeColor(!!svc.autoscale?.reachable)}">${badgeText(!!svc.autoscale?.reachable)}</span></div>
+      <div class="row"><span>Valkey (KV backend)</span><span class="pill ${badgeColor(!!svc.valkey?.reachable)}">${badgeText(!!svc.valkey?.reachable)}</span></div>
     `)}
     ${wrapCfLocalCard(`
       <strong>Resource Counts</strong>
@@ -3930,7 +3987,8 @@ function renderCloudflareLocal(cf) {
       ${cfDualUrlRow("Browser", "http://browser.lh")}
       ${cfDualUrlRow("Autoscaler", "http://autoscale.lh")}
       ${cfDualUrlRow("MinIO UI", "http://minio-console.lh")}
-      <div class="row muted small" style="margin-top:6px"><a href="/hub">Service hubs</a> · credentials &amp; DB GUIs</div>
+      ${cfDualUrlRow("S3 API (SDK/CLI)", "http://s3.lh")}
+      <div class="row muted small" style="margin-top:6px">Valkey TCP: <code>valkey.lh:6380</code> · <a href="/docs?module=cf-leco-service-map">CF ↔ LEco map</a> · <a href="/hub">Service hubs</a></div>
     `)}
   `;
 }
@@ -4680,6 +4738,22 @@ function partitionControlTargets(targets) {
   return out;
 }
 
+function controlPolicyBadgeHtml(policy) {
+  if (!policy || policy === "start") return "";
+  const cls = policy === "offloaded" ? "control-policy-badge--offloaded" : "control-policy-badge--stop";
+  return `<span class="control-policy-badge ${cls}">Default: ${escapeHtml(policy)}</span>`;
+}
+
+function controlPolicySelectorHtml(targetId, currentPolicy) {
+  const pol = currentPolicy || "start";
+  const opts = ["start", "stop", "offloaded"];
+  const btns = opts.map((o) => {
+    const active = o === pol ? " control-policy-btn--active" : "";
+    return `<button type="button" class="control-policy-btn${active}" data-policy-target="${escapeAttr(targetId)}" data-policy-value="${escapeAttr(o)}">${escapeHtml(o)}</button>`;
+  }).join("");
+  return `<div class="control-policy-selector" data-policy-for="${escapeAttr(targetId)}">${btns}</div>`;
+}
+
 function controlTargetCardHtml(SB, t) {
   const brand = SB.getBrandForControlTarget(t);
   const { safe, danger } = SB.partitionControlActions(t.actions);
@@ -4716,19 +4790,23 @@ function controlTargetCardHtml(SB, t) {
             <div class="control-actions__label">Destructive</div>
             ${dangerBtns}
           </aside>`;
+  const policyBadge = controlPolicyBadgeHtml(t.default_policy);
+  const policySelector = t.id.startsWith("stack-") ? "" : controlPolicySelectorHtml(t.id, t.default_policy);
+  const offloadedClass = t.default_policy === "offloaded" ? " control-card--offloaded" : "";
   return `
-          <div class="control-card" data-brand="${escapeHtml(brand)}">
+          <div class="control-card${offloadedClass}" data-brand="${escapeHtml(brand)}">
             <div class="control-card__head">
               <div class="control-card__iconcol">
                 <span class="control-card__emoji" aria-hidden="true">${SB.emojiFor(brand)}</span>
                 ${SB.iconHtml(brand)}
               </div>
               <div class="control-card__titles">
-                <h3>${escapeHtml(t.label)}</h3>
+                <h3>${escapeHtml(t.label)}${policyBadge}</h3>
                 <div class="control-meta">${escapeHtml(t.group)}${t.container ? ` · <code>${escapeHtml(t.container)}</code>` : ""}</div>
               </div>
             </div>
             <p class="control-card__runtime ${rtClass}" title="${rtLabel}"><span class="control-runtime-dot" aria-hidden="true"></span><span class="control-runtime-text">${rtLabel}</span></p>
+            ${policySelector}
             <div class="${wrapClass}">
               <div class="control-actions control-actions--primary">${primaryBtns}</div>
               ${aside}
@@ -7631,6 +7709,47 @@ async function loadControlTargets() {
         ),
       );
     });
+
+    grid.querySelectorAll("button.control-policy-btn").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const tid = btn.getAttribute("data-policy-target");
+        const val = btn.getAttribute("data-policy-value");
+        if (!tid || !val) return;
+        const body = { policies: {} };
+        body.policies[tid] = val;
+        const tok = controlToken();
+        if (tok) body.token = tok;
+        try {
+          const res = await fetch("/api/control/default-policies", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          if (res.ok) {
+            const sel = btn.closest(".control-policy-selector");
+            if (sel) {
+              sel.querySelectorAll(".control-policy-btn").forEach((b) => b.classList.remove("control-policy-btn--active"));
+              btn.classList.add("control-policy-btn--active");
+            }
+            const card = btn.closest(".control-card");
+            if (card) {
+              card.classList.toggle("control-card--offloaded", val === "offloaded");
+              const badge = card.querySelector(".control-policy-badge");
+              if (badge) {
+                if (val === "start") { badge.remove(); }
+                else {
+                  badge.textContent = "Default: " + val;
+                  badge.className = "control-policy-badge " + (val === "offloaded" ? "control-policy-badge--offloaded" : "control-policy-badge--stop");
+                }
+              } else if (val !== "start") {
+                const h3 = card.querySelector("h3");
+                if (h3) h3.insertAdjacentHTML("beforeend", controlPolicyBadgeHtml(val));
+              }
+            }
+          }
+        } catch (_) { /* silent */ }
+      });
+    });
   } catch (e) {
     if (grid) grid.innerHTML = `<div class="muted">Failed to load targets: ${escapeHtml(String(e.message || e))}</div>`;
   }
@@ -8781,6 +8900,30 @@ function initControlInfraBulkBar() {
   });
 }
 
+function initInfraQuickstartBar() {
+  if (document.body.dataset.infraQuickstartWired === "1") return;
+  document.body.dataset.infraQuickstartWired = "1";
+  document.body.addEventListener("click", async (ev) => {
+    const btn = ev.target.closest("[data-infra-quickstart]");
+    if (!btn) return;
+    const target = btn.getAttribute("data-infra-quickstart");
+    const action = btn.getAttribute("data-infra-quickstart-action");
+    const lbl = btn.getAttribute("data-infra-quickstart-label") || action;
+    if (!target || !action) return;
+    ev.preventDefault();
+    const isCf = target === "stack-cf-all";
+    const ok = await showAppConfirm({
+      title: lbl,
+      message: isCf
+        ? "Starts the full cloudflare-local compose stack on lh-network."
+        : "Starts Docker services via the Control API. This can take several minutes and uses significant CPU/RAM.",
+      confirmText: "Start",
+    });
+    if (!ok) return;
+    runControlAction(target, action, lbl);
+  });
+}
+
 function initControlBulkBar() {
   const bar = document.getElementById("controlBulkBar");
   if (bar && bar.dataset.wired !== "1") {
@@ -8829,6 +8972,7 @@ async function bootstrap() {
   initTabs();
   initHostMetricsPanelRefresh();
   initControlBulkBar();
+  initInfraQuickstartBar();
   initHostedAppsLogToolbar();
   initHostedAppsStagingActions();
   initHostedRegisterWizard();

@@ -64,6 +64,11 @@ This repo is a local platform with:
      - `ecosystem-stack/airllm/Dockerfile` + `requirements.txt` + `server.py`
      - `traefik/dynamic.yml` `airllm-service` (points at `http://airllm:11435`)
      - `docs/AIRLLM_INTEGRATION.md`
+   - When changing Cloudflare-local or binding behavior, also update:
+     - `docs/CF_LECO_SERVICE_MAP.md`
+     - `ecosystem-stack/config/cf-leco-service-registry.json`
+     - `dashboard/control_targets.py` (CF_TARGETS)
+     - `dashboard/monitor.py` (SERVICE_MAP, CLOUDFLARE_ENDPOINTS, collect_cloudflare_local_status)
 5. When changing routing semantics, update all of:
    - `traefik/dynamic.yml` and merge target `hosting/traefik/dynamic.yml` behavior/docs
    - CLI route generation/merge code

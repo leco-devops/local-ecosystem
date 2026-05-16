@@ -39,6 +39,8 @@ All services attach to the external Docker network **`lh-network`** (created by 
 
 ## LEco DevOps integration
 
+For the full CF product → LEco service mapping, see [CF_LECO_SERVICE_MAP.md](../../docs/CF_LECO_SERVICE_MAP.md).
+
 **localhost.lh** (LEco DevOps):
 
 - Probes adapter health and resource counts via `GET /api/cloudflare-local`.

@@ -28,6 +28,7 @@ AI_TARGETS = [
     {"id": "ai-n8n", "label": "n8n", "script": "n8n", "container": "n8n"},
     {"id": "ai-postgres", "label": "PostgreSQL (n8n)", "script": "postgres", "container": "n8n_postgres", "reset_volume": "n8n_postgres_data"},
     {"id": "ai-dashboard", "label": "LEco DevOps", "script": "dashboard", "container": "service-dashboard"},
+    {"id": "ai-update-catalog", "label": "Update catalog", "script": "update-catalog", "container": "leco-update-catalog"},
     {"id": "ai-cloudflare-local", "label": "Cloudflare local (compose)", "script": "cloudflare-local", "container": None},
     {"id": "ai-infra", "label": "Infra stack (MySQL, Redis, Mailpit, …)", "script": "infra", "container": None},
 ]

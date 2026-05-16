@@ -12,3 +12,5 @@ apps: []
 #  - id: leco
 #    label: CrawlerVision
 #    manifest: ../CrawlerVision/cloudflare/leco.app.yaml
+#
+# Cloudflare binding mapping: docs/CF_LECO_SERVICE_MAP.md

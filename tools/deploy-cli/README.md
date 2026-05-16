@@ -23,7 +23,7 @@ Precedence toward **skipping** local KV/R2/D1 creation:
 
 Otherwise, when a wrangler config path is set, hooks run by default. Internal plan types live in **`leco_app.resource_plan`**; **wrangler.toml** is mapped in **`leco_app.wrangler_cf_resources`** only—add new binding kinds or backends there and in **`local_cf_provision`** without app-specific logic.
 
-**Not provisioned locally** (use real Cloudflare or other local-ecosystem services): Wrangler **browser**, **queues**, **Durable Objects**, **Hyperdrive**, **Vectorize**, **assets** hosting, etc.—only **KV / R2 / D1** tables in wrangler are mirrored to kv.lh / r2.lh / d1.lh today.
+**Not provisioned locally today:** only **KV / R2 / D1** tables in wrangler are mirrored to kv.lh / r2.lh / d1.lh. Browser Rendering, Hyperdrive, and Email Routing have partial local substitutes (Wrangler bridges planned). Queues, Durable Objects, Vectorize, and assets hosting are on the roadmap. See **[docs/CF_LECO_SERVICE_MAP.md](../../docs/CF_LECO_SERVICE_MAP.md)** for the full binding → local service matrix.
 
 - **Multiple Workers** locally = multiple **projects** (separate manifests / compose files), not one command spawning many Workers unless your compose defines that.
 

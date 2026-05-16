@@ -103,7 +103,7 @@ SERVICE_MAP = [
         ],
         "connection_strings": [
             "S3-style API (adapter): http://r2.lh and https://r2.lh",
-            "Direct MinIO S3 API: http://s3.lh and https://s3.lh (same keys as MinIO console)",
+            "Web UI: minio-console.lh. S3 API: s3.lh (aws-cli/SDK; browsers redirect to minio-console.lh, not :9001).",
         ],
         "insights": [
             "Bucket and object counts appear in Cloudflare local panel when reachable.",
@@ -198,7 +198,7 @@ SERVICE_MAP = [
             "Console login: minioadmin / minioadmin (dev defaults from compose).",
         ],
         "connection_strings": [
-            "Console: http://minio-console.lh · S3 API: http://s3.lh / https://s3.lh",
+            "Web UI: http://minio-console.lh · S3 API: http://s3.lh (not for browser bookmarks — use console host)",
         ],
         "management_links": [
             {"label": "Open console", "url": "http://minio-console.lh"},
@@ -233,6 +233,36 @@ SERVICE_MAP = [
             {"label": "Panel", "url": "http://browser.lh/panel"},
             {"label": "Health JSON", "url": "http://browser.lh/health"},
             {"label": "Service hub", "url": "http://localhost.lh/hub/browser"},
+        ],
+    },
+    {
+        "service": "Valkey",
+        "container": "valkey",
+        "urls": ["http://localhost.lh/hub/valkey"],
+        "notes": "Redis-compatible store backing KV adapter · TCP valkey.lh:6380 (published 6380→6379)",
+        "hub_slug": "valkey",
+        "credentials": [
+            "No password by default. Published as valkey.lh:6380 → container :6379.",
+        ],
+        "connection_strings": [
+            "redis://valkey.lh:6380/0",
+            "redis-cli -h valkey.lh -p 6380",
+        ],
+        "insights": [
+            "Reserved for KV adapter (KV_REDIS_URL). For app queues/cache use infra Redis at redis.lh:6379.",
+        ],
+        "management_links": [
+            {"label": "Service hub", "url": "http://localhost.lh/hub/valkey"},
+        ],
+    },
+    {
+        "service": "Autoscale demo",
+        "container": "autoscale-demo",
+        "urls": [],
+        "notes": "Nginx target for autoscaler — internal only, no user-facing URL",
+        "management_links": [
+            {"label": "Autoscaler panel", "url": "http://autoscale.lh/panel"},
+            {"label": "Autoscaler hub", "url": "http://localhost.lh/hub/autoscale"},
         ],
     },
     {
@@ -396,6 +426,9 @@ CLOUDFLARE_ENDPOINTS = {
     "workers": "http://workers-runtime:8787",
     "browser": "http://browser-rendering-local:8085",
 }
+
+VALKEY_HOST = "valkey"
+VALKEY_PORT = 6379
 
 
 def to_float(value):
@@ -838,6 +871,7 @@ def build_system_status(services, docker_overview):
     running_services = 0
     paused_services = 0
     missing_services = 0
+    missing_service_names: list[str] = []
     total_urls = 0
     healthy_urls = 0
     total_error_lines = 0
@@ -860,6 +894,7 @@ def build_system_status(services, docker_overview):
             paused_services += 1
         if not info.get("exists", False):
             missing_services += 1
+            missing_service_names.append(service.get("container") or service.get("service", "?"))
 
         total_urls += len(checks)
         healthy_urls += sum(1 for check in checks if check.get("ok"))
@@ -884,7 +919,9 @@ def build_system_status(services, docker_overview):
     if not docker_overview.get("docker_available"):
         alerts.append("Docker API is unavailable.")
     if missing_services:
-        alerts.append(f"{missing_services} managed service container(s) are missing.")
+        names_preview = ", ".join(missing_service_names[:10])
+        suffix = f" (+{missing_services - 10} more)" if missing_services > 10 else ""
+        alerts.append(f"{missing_services} managed service container(s) are missing: {names_preview}{suffix}.")
     if network_mismatches:
         alerts.append(f"Container(s) missing lh-network: {', '.join(network_mismatches)}")
     if unhealthy_urls:
@@ -904,6 +941,7 @@ def build_system_status(services, docker_overview):
         "services_total": total_services,
         "services_paused": paused_services,
         "services_missing": missing_services,
+        "services_missing_names": missing_service_names,
         "healthy_urls": healthy_urls,
         "total_urls": total_urls,
         "unhealthy_urls": unhealthy_urls,
@@ -978,17 +1016,24 @@ def collect_overview():
                 nm = (c.name or "").lstrip("/")
                 if nm:
                     by_name[nm] = c
-                ports = c.attrs.get("NetworkSettings", {}).get("Ports", {})
-                state = c.attrs.get("State", {})
-                containers.append(
-                    {
-                        "name": c.name,
-                        "image": c.image.tags[0] if c.image.tags else c.image.short_id,
-                        "status": c.status,
-                        "restart_count": state.get("RestartCount", 0),
-                        "ports": ports,
-                    }
-                )
+                try:
+                    ports = c.attrs.get("NetworkSettings", {}).get("Ports", {})
+                    state = c.attrs.get("State", {})
+                    try:
+                        image_ref = c.image.tags[0] if c.image.tags else c.image.short_id
+                    except Exception:
+                        image_ref = getattr(c.image, "short_id", None) or str(c.image)
+                    containers.append(
+                        {
+                            "name": c.name,
+                            "image": image_ref,
+                            "status": c.status,
+                            "restart_count": state.get("RestartCount", 0),
+                            "ports": ports,
+                        }
+                    )
+                except Exception:
+                    continue
         except Exception:
             pass
 
@@ -1234,6 +1279,19 @@ def collect_cloudflare_local_status():
     namespaces_ok, ns_data = out["namespaces_ok"], out["ns_data"]
     dbs_ok, dbs_data = out["dbs_ok"], out["dbs_data"]
 
+    valkey_ok = False
+    try:
+        import socket as _sock
+        s = _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM)
+        s.settimeout(2)
+        s.connect((VALKEY_HOST, VALKEY_PORT))
+        s.sendall(b"PING\r\n")
+        resp = s.recv(64)
+        s.close()
+        valkey_ok = b"PONG" in resp
+    except Exception:
+        valkey_ok = False
+
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "services": {
@@ -1243,6 +1301,7 @@ def collect_cloudflare_local_status():
             "autoscale": {"reachable": as_ok, "status": as_status},
             "workers": {"reachable": w_ok, "health": w_health},
             "browser": {"reachable": br_ok, "health": br_health},
+            "valkey": {"reachable": valkey_ok},
         },
         "counts": {
             "buckets": len(buckets_data.get("buckets", [])) if buckets_ok else 0,

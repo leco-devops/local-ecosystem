@@ -46,6 +46,8 @@ D1_PUBLIC_URL=http://d1-adapter:8083 ./ecosystem-stack/services/cloudflare-local
 | http://autoscale.lh | Autoscaler API |
 | http://minio-console.lh | MinIO UI |
 
+Full binding mapping: [docs/CF_LECO_SERVICE_MAP.md](../../docs/CF_LECO_SERVICE_MAP.md).
+
 ## Workers runtime
 
 - Source: `cloudflare-local/adapters/workers-runtime/worker.js` (service-worker style for Miniflare 2).

@@ -314,6 +314,8 @@ Some Cloudflare-platform features genuinely have no local equivalent:
 is filled in, the Worker's `/health/json` will keep reporting these as
 `down` because Miniflare returns `null`/`undefined` for them.
 
+See [CF_LECO_SERVICE_MAP.md](CF_LECO_SERVICE_MAP.md) for which bindings have local implementations vs production-only badges.
+
 Declare them under `infrastructure.runtimes[].productionOnlyBindings` in
 `leco.yaml`:
 

@@ -78,6 +78,7 @@ COPY dashboard/traefik_dynamic_file.py .
 COPY dashboard/local_cf_teardown.py .
 COPY dashboard/hosted_offboard.py .
 COPY dashboard/control.py .
+COPY dashboard/service_policies.py .
 COPY dashboard/ollama_models.py .
 COPY dashboard/templates ./templates
 COPY dashboard/static ./static

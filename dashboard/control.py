@@ -423,9 +423,17 @@ def _stack_ecosystem_all(action: str):
     core_sh = os.path.join(PROJECT_ROOT, "ecosystem-stack", "core.sh")
     if not os.path.isfile(core_sh):
         return {"ok": False, "error": f"missing {core_sh}"}
+
+    from service_policies import targets_for_bulk_action
+    policy_info = targets_for_bulk_action(action)
+    skipped = policy_info.get("skip", [])
+
     src = f"source {shlex.quote(core_sh)} && bulk_ecosystem {shlex.quote(action)}"
     code, log = _run(["/bin/bash", "-c", src], cwd=PROJECT_ROOT, timeout=3600)
-    return {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
+    result: dict[str, Any] = {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
+    if skipped:
+        result["policy_skipped"] = skipped
+    return result
 
 
 def _stack_infra_all(action: str):

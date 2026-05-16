@@ -8,6 +8,7 @@ This document is the architecture entry point for the project.
 - LEco toolchain details: [`LECO_TOOLING.md`](LECO_TOOLING.md)
 - Agent operating guide: [`../AGENTS.md`](../AGENTS.md)
 - Versioning and releases: [`VERSIONING.md`](VERSIONING.md) · [`RELEASE_NOTES.md`](RELEASE_NOTES.md) · [`../CHANGELOG.md`](../CHANGELOG.md)
+- Cloudflare ↔ LEco service map: [`CF_LECO_SERVICE_MAP.md`](CF_LECO_SERVICE_MAP.md)
 
 ## System context
 

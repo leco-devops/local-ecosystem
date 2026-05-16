@@ -160,7 +160,37 @@ def api_host_metrics_injected():
 
 @app.get("/api/control/targets")
 def api_control_targets():
-    return jsonify(list_targets())
+    from service_policies import load_policies
+
+    data = list_targets()
+    policies = load_policies()
+    for t in data.get("targets", []):
+        t["default_policy"] = policies.get(t["id"], "start")
+    return jsonify(data)
+
+
+@app.get("/api/control/default-policies")
+def api_control_default_policies():
+    from service_policies import load_policies
+
+    return jsonify({"ok": True, "policies": load_policies()})
+
+
+@app.put("/api/control/default-policies")
+def api_control_set_default_policies():
+    from service_policies import VALID_POLICIES, save_policies
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    updates = data.get("policies")
+    if not isinstance(updates, dict):
+        return jsonify({"ok": False, "error": "policies dict required"}), 400
+    clean = {k: v for k, v in updates.items() if isinstance(v, str) and v in VALID_POLICIES}
+    if not clean:
+        return jsonify({"ok": False, "error": "no valid policies"}), 400
+    saved = save_policies(clean)
+    return jsonify({"ok": True, "policies": saved})
 
 
 @app.get("/api/hosted-apps")

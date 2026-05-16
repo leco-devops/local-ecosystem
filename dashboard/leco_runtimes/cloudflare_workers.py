@@ -42,7 +42,14 @@ DEFAULT_PORT = 8787
 # so we strip them from the in-container view of the config. Operators who
 # want real Browser Rendering / etc. locally can override this list per-app via
 # ``infrastructure.runtimes[].stripBindings`` (a passthrough field).
+#
+# When ``LECO_LOCAL_BROWSER_URL`` is set (or the browser-rendering-local stack
+# is healthy), browser is removed from this list so the Wrangler bridge can
+# forward to the local Playwright/CDP service at browser.lh.
 DEFAULT_LOCAL_UNSUPPORTED_BINDINGS: tuple[str, ...] = ("browser",)
+
+import os as _os
+_LECO_LOCAL_BROWSER_URL = _os.environ.get("LECO_LOCAL_BROWSER_URL", "").strip()
 
 # Top-level wrangler.toml sections whose features Wrangler local cannot fully
 # simulate (today). Surfaced informationally in the dashboard / CLI so an
@@ -50,14 +57,24 @@ DEFAULT_LOCAL_UNSUPPORTED_BINDINGS: tuple[str, ...] = ("browser",)
 # production-only behavior rather than a LEco misconfiguration. Apps can
 # override with ``infrastructure.runtimes[].productionOnlyBindings`` to refine
 # the badge text per environment.
+#
+# CF ↔ LEco local substitutes (see docs/CF_LECO_SERVICE_MAP.md):
+#   browser      → browser.lh (Wrangler bridge via LECO_LOCAL_BROWSER_URL)
+#   hyperdrive   → postgres.lh:5432 / infra mysql (.dev.vars DSN shim)
+#   send_email   → Mailpit SMTP (mailpit:1025 inside Docker)
 INFORMATIONAL_PRODUCTION_ONLY_BINDINGS: tuple[str, ...] = (
-    "browser",      # Cloudflare Browser Rendering (paid platform feature)
     "vectorize",    # Vector embeddings store (no Miniflare equivalent)
-    "hyperdrive",   # Connection pooler for managed DBs (cloud-only)
     "analytics_engine_datasets",  # Cloudflare Analytics Engine (cloud-only)
-    "send_email",   # Cloudflare Email Routing producer (cloud-only)
     "mtls_certificates",
 )
+
+# Bindings that have local partial substitutes — not in the production-only
+# badge list when the local service is available.
+_BRIDGE_BINDINGS_WITH_LOCAL_SUBSTITUTE: dict[str, str] = {
+    "browser": "browser.lh (Playwright/CDP)",
+    "hyperdrive": "postgres.lh:5432 or infra mysql (.dev.vars DSN)",
+    "send_email": "Mailpit SMTP (mailpit:1025)",
+}
 
 _TOML_TABLE_HEADER_RE = re.compile(r"^\s*\[\[?(?P<name>[A-Za-z_][A-Za-z0-9_.\- ]*)\]\]?\s*(#.*)?$")
 
@@ -462,13 +479,18 @@ class CloudflareWorkersAdapter(RuntimeAdapter):
         """Effective list of TOML sections to strip from the in-container wrangler.toml.
 
         Defaults to :data:`DEFAULT_LOCAL_UNSUPPORTED_BINDINGS` (currently
-        ``browser``). Operators can override per-app with
+        ``browser``). When ``LECO_LOCAL_BROWSER_URL`` is set, ``browser`` is
+        removed from the default strip list so the Wrangler bridge can forward
+        to browser.lh. Operators can override per-app with
         ``infrastructure.runtimes[].stripBindings`` — either a list of names
         (e.g. ``["browser", "ai"]``) or ``"none"`` / ``[]`` to disable stripping.
         """
         raw = spec.get("stripBindings", None)
         if raw is None:
-            return set(DEFAULT_LOCAL_UNSUPPORTED_BINDINGS)
+            defaults = set(DEFAULT_LOCAL_UNSUPPORTED_BINDINGS)
+            if _LECO_LOCAL_BROWSER_URL:
+                defaults.discard("browser")
+            return defaults
         if isinstance(raw, str):
             s = raw.strip().lower()
             if s in {"", "none", "off", "false"}:
@@ -476,7 +498,10 @@ class CloudflareWorkersAdapter(RuntimeAdapter):
             return {p.strip().lower() for p in s.split(",") if p.strip()}
         if isinstance(raw, list):
             return {str(x).strip().lower() for x in raw if str(x).strip()}
-        return set(DEFAULT_LOCAL_UNSUPPORTED_BINDINGS)
+        defaults = set(DEFAULT_LOCAL_UNSUPPORTED_BINDINGS)
+        if _LECO_LOCAL_BROWSER_URL:
+            defaults.discard("browser")
+        return defaults
 
 
 _WORKER_PATH_PATTERNS = (

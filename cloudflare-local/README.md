@@ -13,6 +13,8 @@ This stack emulates Cloudflare-like local services using only Docker:
 
 Documentation: [DevOps guide (deploy, KV, R2, D1, Workers)](../docs/DEVOPS_GUIDE.md) · [Custom apps (Traefik, NGINX, Node, Workers)](../docs/DEPLOY_CUSTOM_APPS.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/USER_MANUAL.md](docs/USER_MANUAL.md) · [docs/IMPLEMENTATION_GUIDE.md](docs/IMPLEMENTATION_GUIDE.md)
 
+**Cloudflare ↔ LEco service map:** [docs/CF_LECO_SERVICE_MAP.md](../docs/CF_LECO_SERVICE_MAP.md) — binding coverage, reuse rules, and adapter roadmap.
+
 ## Start
 
 ```bash

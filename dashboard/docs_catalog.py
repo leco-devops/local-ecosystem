@@ -111,6 +111,13 @@ DOC_MODULES = [
         "blurb": "REST API and Workers bindings; not runnable in local Miniflare.",
     },
     {
+        "id": "cf-leco-service-map",
+        "title": "Cloudflare ↔ LEco service map",
+        "category": "Cloudflare Local",
+        "rel_path": "docs/CF_LECO_SERVICE_MAP.md",
+        "blurb": "Binding coverage, reuse rules, dual-path architecture, and adapter roadmap.",
+    },
+    {
         "id": "project-changelog",
         "title": "Changelog",
         "category": "Project",

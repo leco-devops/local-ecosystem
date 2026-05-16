@@ -1,0 +1,416 @@
+{
+  "_comment": "Cloudflare product ↔ LEco service mapping. Source of truth for docs/CF_LECO_SERVICE_MAP.md and optional dashboard panel.",
+  "version": 1,
+  "services": [
+    {
+      "cf_product": "Workers KV",
+      "cf_binding": "kv_namespaces",
+      "status": "implemented",
+      "reuse_strategy": "extend-provision",
+      "local_module": "cloudflare-local/adapters/kv-adapter",
+      "compose_service": "kv-adapter",
+      "backend": "valkey",
+      "leco": {
+        "control_id": "cf-kv-adapter",
+        "hub_slug": "kv",
+        "traefik_hosts": ["kv.lh"],
+        "probe_url": "http://kv-adapter:8082/health",
+        "provision": "local_cf_provision.kv",
+        "service_map": "KV (Cloudflare local)"
+      },
+      "hosted_app": {
+        "wrangler_table": "kv_namespaces",
+        "runtime": "cloudflare-workers (Miniflare file state OR shared kv.lh)",
+        "dedicated_compose": "hosting/samples/sample-cloudflare-application/docker-compose.leco-dedicated-cf.example.yml"
+      }
+    },
+    {
+      "cf_product": "R2 Object Storage",
+      "cf_binding": "r2_buckets",
+      "status": "implemented",
+      "reuse_strategy": "extend-provision",
+      "local_module": "cloudflare-local/adapters/r2-adapter",
+      "compose_service": "r2-adapter",
+      "backend": "minio",
+      "leco": {
+        "control_id": "cf-r2-adapter",
+        "hub_slug": "r2",
+        "traefik_hosts": ["r2.lh"],
+        "probe_url": "http://r2-adapter:8081/health",
+        "provision": "local_cf_provision.r2",
+        "service_map": "R2 (Cloudflare local)"
+      },
+      "hosted_app": {
+        "wrangler_table": "r2_buckets",
+        "runtime": "cloudflare-workers (Miniflare file state OR shared r2.lh)",
+        "dedicated_compose": "hosting/samples/sample-cloudflare-application/docker-compose.leco-dedicated-cf.example.yml"
+      }
+    },
+    {
+      "cf_product": "D1 Database",
+      "cf_binding": "d1_databases",
+      "status": "implemented",
+      "reuse_strategy": "extend-provision",
+      "local_module": "cloudflare-local/adapters/d1-adapter",
+      "compose_service": "d1-adapter",
+      "backend": "sqlite",
+      "leco": {
+        "control_id": "cf-d1-adapter",
+        "hub_slug": "d1",
+        "traefik_hosts": ["d1.lh"],
+        "probe_url": "http://d1-adapter:8083/health",
+        "provision": "local_cf_provision.d1",
+        "service_map": "D1 (Cloudflare local)"
+      },
+      "hosted_app": {
+        "wrangler_table": "d1_databases",
+        "runtime": "cloudflare-workers (Miniflare SQLite + optional d1-bootstrap*.sql)",
+        "dedicated_compose": "hosting/samples/sample-cloudflare-application/docker-compose.leco-dedicated-cf.example.yml"
+      }
+    },
+    {
+      "cf_product": "Workers (Compute)",
+      "cf_binding": null,
+      "status": "implemented",
+      "reuse_strategy": "extend-runtime",
+      "local_module": "dashboard/leco_runtimes/cloudflare_workers.py",
+      "compose_service": "workers-runtime (stack demo only)",
+      "backend": null,
+      "leco": {
+        "control_id": "cf-workers-runtime",
+        "hub_slug": "workers",
+        "traefik_hosts": ["workers.lh"],
+        "probe_url": "http://workers-runtime:8787/health",
+        "provision": null,
+        "service_map": "Workers (Miniflare)"
+      },
+      "hosted_app": {
+        "wrangler_table": null,
+        "runtime": "leco/runtime-cloudflare-workers (per-app Wrangler)",
+        "dedicated_compose": null
+      },
+      "notes": "Stack workers-runtime is a smoke-test only. Real apps use per-app Miniflare via infra/runtimes/cloudflare-workers/."
+    },
+    {
+      "cf_product": "Browser Rendering",
+      "cf_binding": "browser",
+      "status": "partial",
+      "reuse_strategy": "extend-runtime",
+      "local_module": "cloudflare-local/adapters/browser-rendering-local",
+      "compose_service": "browser-rendering-local",
+      "backend": "playwright / chromium",
+      "leco": {
+        "control_id": "cf-browser-rendering-local",
+        "hub_slug": "browser",
+        "traefik_hosts": ["browser.lh"],
+        "probe_url": "http://browser-rendering-local:8085/health",
+        "provision": null,
+        "service_map": "Browser rendering (local)"
+      },
+      "hosted_app": {
+        "wrangler_table": null,
+        "runtime": "Listed in productionOnlyBindings — Wrangler bridge planned",
+        "dedicated_compose": null
+      },
+      "notes": "HTTP service runs locally; Wrangler [browser] binding still stripped by default. Phase B wires the bridge."
+    },
+    {
+      "cf_product": "MinIO (S3 backend)",
+      "cf_binding": null,
+      "status": "implemented",
+      "reuse_strategy": "register-only",
+      "local_module": null,
+      "compose_service": "minio",
+      "backend": null,
+      "leco": {
+        "control_id": "cf-minio",
+        "hub_slug": "minio",
+        "traefik_hosts": ["minio-console.lh", "s3.lh"],
+        "probe_url": null,
+        "provision": null,
+        "service_map": "MinIO Console"
+      },
+      "hosted_app": null,
+      "notes": "Backend for R2 adapter. s3.lh provides direct S3 API; minio-console.lh is the web UI."
+    },
+    {
+      "cf_product": "Valkey (KV backend)",
+      "cf_binding": null,
+      "status": "implemented",
+      "reuse_strategy": "register-only",
+      "local_module": null,
+      "compose_service": "valkey",
+      "backend": null,
+      "leco": {
+        "control_id": "cf-valkey",
+        "hub_slug": "valkey",
+        "traefik_hosts": [],
+        "probe_url": null,
+        "provision": null,
+        "service_map": "Valkey"
+      },
+      "hosted_app": null,
+      "notes": "TCP-only (valkey.lh:6380). Backend for KV adapter. Do NOT reuse for Queues — use infra Redis."
+    },
+    {
+      "cf_product": "Autoscaler",
+      "cf_binding": null,
+      "status": "implemented",
+      "reuse_strategy": "register-only",
+      "local_module": "cloudflare-local/autoscaler",
+      "compose_service": "autoscaler",
+      "backend": "docker socket",
+      "leco": {
+        "control_id": "cf-autoscaler",
+        "hub_slug": "autoscale",
+        "traefik_hosts": ["autoscale.lh"],
+        "probe_url": "http://autoscaler:8084/status",
+        "provision": null,
+        "service_map": "Autoscaler"
+      },
+      "hosted_app": null,
+      "notes": "Ops demo. Scales Docker containers by CPU labels."
+    },
+    {
+      "cf_product": "Autoscale Demo",
+      "cf_binding": null,
+      "status": "implemented",
+      "reuse_strategy": "register-only",
+      "local_module": null,
+      "compose_service": "autoscale-demo",
+      "backend": null,
+      "leco": {
+        "control_id": "cf-autoscale-demo",
+        "hub_slug": null,
+        "traefik_hosts": [],
+        "probe_url": null,
+        "provision": null,
+        "service_map": "Autoscale demo"
+      },
+      "hosted_app": null,
+      "notes": "Internal nginx target for autoscaler. No user-facing URL."
+    },
+    {
+      "cf_product": "Queues",
+      "cf_binding": "queues",
+      "status": "planned",
+      "reuse_strategy": "new-adapter-on-existing-backend",
+      "local_module": null,
+      "compose_service": null,
+      "backend": "infra redis (redis.lh:6379)",
+      "leco": {
+        "control_id": null,
+        "hub_slug": null,
+        "traefik_hosts": ["queues.lh"],
+        "probe_url": null,
+        "provision": "local_cf_provision.queues",
+        "service_map": null
+      },
+      "hosted_app": {
+        "wrangler_table": "queues",
+        "runtime": null,
+        "dedicated_compose": null
+      },
+      "notes": "Phase C. Clone kv-adapter Flask pattern; backend is infra Redis (NOT Valkey)."
+    },
+    {
+      "cf_product": "Durable Objects",
+      "cf_binding": "durable_objects",
+      "status": "planned",
+      "reuse_strategy": "extend-runtime",
+      "local_module": null,
+      "compose_service": null,
+      "backend": "miniflare (per-app)",
+      "leco": {
+        "control_id": null,
+        "hub_slug": null,
+        "traefik_hosts": [],
+        "probe_url": null,
+        "provision": null,
+        "service_map": null
+      },
+      "hosted_app": {
+        "wrangler_table": "durable_objects",
+        "runtime": "Miniflare upgrade in leco/runtime-cloudflare-workers",
+        "dedicated_compose": null
+      },
+      "notes": "Phase E. Upgrade Wrangler/Miniflare in existing Workers runtime image."
+    },
+    {
+      "cf_product": "Vectorize",
+      "cf_binding": "vectorize",
+      "status": "production-only",
+      "reuse_strategy": "planned",
+      "local_module": null,
+      "compose_service": null,
+      "backend": null,
+      "leco": {
+        "control_id": null,
+        "hub_slug": null,
+        "traefik_hosts": [],
+        "probe_url": null,
+        "provision": null,
+        "service_map": null
+      },
+      "hosted_app": {
+        "wrangler_table": "vectorize",
+        "runtime": "productionOnlyBindings badge",
+        "dedicated_compose": null
+      },
+      "notes": "Phase D. Optional mock adapter if sample Workers require it."
+    },
+    {
+      "cf_product": "Hyperdrive",
+      "cf_binding": "hyperdrive",
+      "status": "partial",
+      "reuse_strategy": "extend-runtime",
+      "local_module": null,
+      "compose_service": null,
+      "backend": "n8n_postgres (postgres.lh:5432) / infra mysql",
+      "leco": {
+        "control_id": null,
+        "hub_slug": null,
+        "traefik_hosts": [],
+        "probe_url": null,
+        "provision": null,
+        "service_map": null
+      },
+      "hosted_app": {
+        "wrangler_table": "hyperdrive",
+        "runtime": ".dev.vars DSN shim — no pooler container",
+        "dedicated_compose": null
+      },
+      "notes": "Phase B. Document connection string in .dev.vars pointing at postgres.lh or infra mysql."
+    },
+    {
+      "cf_product": "Email Routing (send_email)",
+      "cf_binding": "send_email",
+      "status": "partial",
+      "reuse_strategy": "extend-runtime",
+      "local_module": null,
+      "compose_service": null,
+      "backend": "infra mailpit (mail.lh)",
+      "leco": {
+        "control_id": null,
+        "hub_slug": null,
+        "traefik_hosts": [],
+        "probe_url": null,
+        "provision": null,
+        "service_map": null
+      },
+      "hosted_app": {
+        "wrangler_table": null,
+        "runtime": "SMTP env in Worker runtime compose pointing at mailpit",
+        "dedicated_compose": null
+      },
+      "notes": "Phase B. Map to Mailpit SMTP; no new CF adapter."
+    },
+    {
+      "cf_product": "Analytics Engine",
+      "cf_binding": "analytics_engine_datasets",
+      "status": "production-only",
+      "reuse_strategy": "planned",
+      "local_module": null,
+      "compose_service": null,
+      "backend": null,
+      "leco": {
+        "control_id": null,
+        "hub_slug": null,
+        "traefik_hosts": [],
+        "probe_url": null,
+        "provision": null,
+        "service_map": null
+      },
+      "hosted_app": {
+        "wrangler_table": "analytics_engine_datasets",
+        "runtime": "productionOnlyBindings badge",
+        "dedicated_compose": null
+      },
+      "notes": "No local adapter planned. Badge only."
+    },
+    {
+      "cf_product": "mTLS Certificates",
+      "cf_binding": "mtls_certificates",
+      "status": "production-only",
+      "reuse_strategy": "planned",
+      "local_module": null,
+      "compose_service": null,
+      "backend": null,
+      "leco": {
+        "control_id": null,
+        "hub_slug": null,
+        "traefik_hosts": [],
+        "probe_url": null,
+        "provision": null,
+        "service_map": null
+      },
+      "hosted_app": {
+        "wrangler_table": "mtls_certificates",
+        "runtime": "productionOnlyBindings badge",
+        "dedicated_compose": null
+      },
+      "notes": "Cloud-only."
+    },
+    {
+      "cf_product": "Pages",
+      "cf_binding": null,
+      "status": "planned",
+      "reuse_strategy": "extend-runtime",
+      "local_module": "dashboard/leco_runtimes/cloudflare_pages.py (stub)",
+      "compose_service": null,
+      "backend": null,
+      "leco": {
+        "control_id": null,
+        "hub_slug": null,
+        "traefik_hosts": [],
+        "probe_url": null,
+        "provision": null,
+        "service_map": null
+      },
+      "hosted_app": {
+        "wrangler_table": null,
+        "runtime": "Planned: infra/runtimes/cloudflare-pages/ (wrangler pages dev)",
+        "dedicated_compose": null
+      },
+      "notes": "Phase F. Extend Workers Dockerfile + entrypoint; implement cloudflare_pages.py."
+    },
+    {
+      "cf_product": "Workers AI",
+      "cf_binding": "ai",
+      "status": "production-only",
+      "reuse_strategy": "planned",
+      "local_module": null,
+      "compose_service": null,
+      "backend": "ollama / airllm (ecosystem AI, not CF binding)",
+      "leco": {
+        "control_id": null,
+        "hub_slug": null,
+        "traefik_hosts": [],
+        "probe_url": null,
+        "provision": null,
+        "service_map": null
+      },
+      "hosted_app": null,
+      "notes": "Ecosystem AI (Ollama/AirLLM) is separate from Vectorize. Document as ecosystem AI, not CF binding."
+    },
+    {
+      "cf_product": "Images / Stream",
+      "cf_binding": null,
+      "status": "production-only",
+      "reuse_strategy": "planned",
+      "local_module": null,
+      "compose_service": null,
+      "backend": null,
+      "leco": {
+        "control_id": null,
+        "hub_slug": null,
+        "traefik_hosts": [],
+        "probe_url": null,
+        "provision": null,
+        "service_map": null
+      },
+      "hosted_app": null,
+      "notes": "No local adapter planned."
+    }
+  ]
+}

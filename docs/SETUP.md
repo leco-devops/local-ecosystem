@@ -255,6 +255,8 @@ Seed and smoke tests:
 
 Details: **[cloudflare-local/README.md](../cloudflare-local/README.md)** and **[cloudflare-local/docs/USER_MANUAL.md](../cloudflare-local/docs/USER_MANUAL.md)**.
 
+Cloudflare ↔ LEco binding mapping: **[CF_LECO_SERVICE_MAP.md](CF_LECO_SERVICE_MAP.md)**.
+
 Browser rendering (local): **[cloudflare-local/adapters/browser-rendering-local/README.md](../cloudflare-local/adapters/browser-rendering-local/README.md)** · **[cloudflare-local/docs/BROWSER_RENDERING_LOCAL.md](../cloudflare-local/docs/BROWSER_RENDERING_LOCAL.md)**.
 
 ---

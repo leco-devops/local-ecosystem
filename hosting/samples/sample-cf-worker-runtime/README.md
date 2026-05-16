@@ -93,6 +93,18 @@ so the schema shape stays stable:
 | `aws-lambda` | Roadmap | `leco/runtime-aws-lambda` |
 | `deno-deploy` | Roadmap | `leco/runtime-deno-deploy` |
 
+### Wrangler binding mapping
+
+| Wrangler binding | Local (LEco) | Status |
+|------------------|--------------|--------|
+| `[[kv_namespaces]]` | kv.lh (provision via `leco-devops`) | implemented |
+| `[[r2_buckets]]` | r2.lh | implemented |
+| `[[d1_databases]]` | d1.lh | implemented |
+| `[browser]` | browser.lh (stack) — Wrangler bridge planned | partial |
+| `[[queues]]` | planned (infra Redis backend) | planned |
+
+Full mapping: [docs/CF_LECO_SERVICE_MAP.md](../../../docs/CF_LECO_SERVICE_MAP.md).
+
 Run `leco-devops runtimes -f leco.app.yaml` to see the registry and what your
 manifest declares.
 

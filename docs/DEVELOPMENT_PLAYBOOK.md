@@ -11,6 +11,7 @@ This guide helps you **extend**, **debug**, and **ship** changes across the ecos
 - Low-level design: [LLD.md](LLD.md)
 - LEco toolchain details: [LECO_TOOLING.md](LECO_TOOLING.md)
 - Agent context and guardrails: [../AGENTS.md](../AGENTS.md)
+- Cloudflare ↔ LEco service map: [CF_LECO_SERVICE_MAP.md](CF_LECO_SERVICE_MAP.md) — binding coverage, reuse rules, adapter roadmap
 
 ## Versioning and releases
 

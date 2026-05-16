@@ -3,7 +3,7 @@ PROJECT_ROOT="$(cd "$CORE_DIR/.." && pwd)"
 SERVICES_DIR="$CORE_DIR/services"
 NETWORK_NAME="${NETWORK_NAME:-lh-network}"
 NETWORK_CONTAINERS="traefik open-webui ollama airllm n8n_postgres n8n service-dashboard leco-update-catalog minio valkey r2-adapter kv-adapter d1-adapter browser-rendering-local workers-runtime autoscaler autoscale-demo mysql redis mailpit telegram-gateway cache-nginx cache-varnish adminer redis-commander"
-START_ORDER="traefik postgres ollama airllm webui n8n dashboard cloudflare-local infra"
+START_ORDER="traefik postgres ollama airllm webui n8n dashboard update-catalog cloudflare-local infra"
 
 get_services() {
   for file in $SERVICES_DIR/*.sh; do

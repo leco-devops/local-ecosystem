@@ -7,6 +7,9 @@ services:
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
+      # Browser GET on the S3 API (s3.lh → :9000) otherwise redirects to Host:9001 (unreachable via Traefik).
+      MINIO_SERVER_URL: http://s3.lh
+      MINIO_BROWSER_REDIRECT_URL: http://minio-console.lh
     volumes:
       - minio_data:/data
     networks:

@@ -49,6 +49,8 @@ Most **`ecosystem-stack/services/*.sh`** scripts support:
 
 **Cloudflare-local (`cloudflare-local.sh`):** wraps **`docker compose`**; see script for **`recreate`**, **`backup`**, etc.
 
+Full Cloudflare ↔ LEco service mapping: **[CF_LECO_SERVICE_MAP.md](CF_LECO_SERVICE_MAP.md)**.
+
 ---
 
 ## 3. Starting everything

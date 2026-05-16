@@ -76,15 +76,20 @@ infrastructure:
     # Informational: list paid Cloudflare-platform features this Worker
     # depends on in production that have no local equivalent. LEco surfaces
     # them as `expected: production-only` badges in `leco-devops runtimes` and
-    # the dashboard, so you don't chase phantom "down" markers on
-    # /health/json for things like Browser Rendering. Defaults to a
-    # conservative built-in list (`browser`, `vectorize`, `hyperdrive`,
-    # `analytics_engine_datasets`, `send_email`, `mtls_certificates`).
+    # the dashboard. Defaults to: vectorize, analytics_engine_datasets,
+    # mtls_certificates. Bindings with local substitutes (browser → browser.lh,
+    # hyperdrive → postgres.lh, send_email → Mailpit) are no longer in the
+    # default badge list when the local service is available.
     # Set to `none` to suppress the badge entirely.
     # productionOnlyBindings:
-    # - browser
     # - vectorize
     # - analytics_engine_datasets
+    #
+    # Local binding bridges (see docs/CF_LECO_SERVICE_MAP.md):
+    #   browser    → browser.lh (set LECO_LOCAL_BROWSER_URL to enable bridge)
+    #   hyperdrive → add DSN to .dev.vars: HYPERDRIVE_URL=postgres://user:pass@postgres.lh:5432/db
+    #   send_email → Mailpit SMTP: mailpit:1025 (Docker) or mailpit.lh:1025 (host)
+    # Full binding mapping: docs/CF_LECO_SERVICE_MAP.md
 
   routing:
     entries:

@@ -90,7 +90,7 @@ If **`wrangler.toml`** (or **`cloudflare/wrangler.toml`**) exists, **`init`** ca
 
 Skips also apply when **`LECO_PROVISION_LOCAL_CF`** is `0`/`false`/`no`/`off`, or when the manifest sets **`cloudflare.provisionLocalResources: false`**. See **`tools/deploy-cli/README.md`** for extension points (new wrangler binding kinds).
 
-**Wrangler bindings not mirrored** to local adapters today include browser rendering, queues, Durable Objects, Hyperdrive, etc.—use production Cloudflare or other local-ecosystem services as documented for those products.
+**Wrangler bindings not mirrored** to local adapters today include Queues, Durable Objects, and Vectorize. Browser Rendering, Hyperdrive, and Email Routing have partial local substitutes (Wrangler bridge planned). See **[CF_LECO_SERVICE_MAP.md](CF_LECO_SERVICE_MAP.md)** for the full binding → local service matrix and roadmap.
 
 Production deploys use:
 

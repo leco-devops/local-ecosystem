@@ -8,7 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- (none yet)
+- **CF ↔ LEco service map:** `docs/CF_LECO_SERVICE_MAP.md`, `ecosystem-stack/config/cf-leco-service-registry.json`, Docs catalog entry, and cross-links across help/samples.
+- **Control default policies:** per-target `start` / `stop` / `offloaded` with API, example JSON, and Infrastructure **Start stacks** shortcuts.
+- **Infrastructure:** Cloudflare-local stack container table, Valkey probe, and `update-catalog` in ecosystem start order.
+
+### Changed
+
+- **Wrangler local bindings:** browser/hyperdrive/email documented as partial bridges; narrowed `productionOnlyBindings` defaults in Workers adapter.
+- **MinIO:** `MINIO_BROWSER_REDIRECT_URL` so `s3.lh` browsers redirect to `minio-console.lh` instead of `:9001`.
+
+### Fixed
+
+- **Platform health:** container scan no longer stops at `leco-update-catalog` image 404 (false “missing” services).
+- **Missing services list:** Operational Health now names which managed containers are down.
 
 ## [0.3.0] - 2026-05-16
 
