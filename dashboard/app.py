@@ -25,6 +25,7 @@ from ecosystem_updates import (
 from help_manual import get_help_content, get_help_tree, search_help
 from popular_models import load_airllm_catalog, load_ollama_catalog
 from service_hub import get_hub_detail, list_hub_slugs
+from version_info import load_version_payload
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
@@ -62,12 +63,20 @@ def _dashboard_boot_dict() -> dict:
     proj_host = (
         os.getenv("DASHBOARD_PROJECT_ROOT_HOST") or os.getenv("LECO_PROJECT_ROOT_HOST") or ""
     ).strip()
+    ver = load_version_payload()
     return {
         "token_required": bool(CONTROL_TOKEN),
         "prefill_control_token": prefill,
         "workspace_parent_host": wsp_host or None,
         "project_root_host": proj_host or None,
+        "platform_version": ver.get("version"),
+        "application": ver.get("application"),
     }
+
+
+@app.get("/api/version")
+def api_version():
+    return jsonify(load_version_payload())
 
 
 @app.get("/api/overview")

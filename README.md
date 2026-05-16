@@ -29,6 +29,9 @@ You access services by name (**`https://n8n.lh`**, **`https://ai.lh`**, …) ins
 | **[docs/LECO_TOOLING.md](docs/LECO_TOOLING.md)** | LEco toolchain map: CLI, manifests, registry, and dashboard interaction |
 | **[docs/SETUP.md](docs/SETUP.md)** | **Complete first-time setup** — DNS, Docker, TLS, stack start, macOS host CPU metrics, optional Cloudflare-local |
 | **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** | **Deployment and operations** — start/stop, updates, bulk vs Control API behavior, troubleshooting |
+| **[docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md)** | **Release notes** — current version, history, upgrade notes |
+| **[CHANGELOG.md](CHANGELOG.md)** | Full changelog ([Keep a Changelog](https://keepachangelog.com/)) |
+| **[docs/VERSIONING.md](docs/VERSIONING.md)** | Versioning policy, `VERSION` / `version.json`, release workflow |
 | **[docs/DEVELOPMENT_PLAYBOOK.md](docs/DEVELOPMENT_PLAYBOOK.md)** | Extending services, LEco DevOps APIs, Traefik routes |
 | **[docs/LECO_APP_BLUEPRINT.md](docs/LECO_APP_BLUEPRINT.md)** | LEco apps: bridge vs profile (v3), hosting symlinks, compose extras, teardown semantics |
 | **[docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md](docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md)** | Hosted apps behind Traefik: 502, `lh-network`, DNS names, dashboard probes, same-origin `/api`, local edge runtimes (Workers / Pages / Vercel / Lambda / Deno) |

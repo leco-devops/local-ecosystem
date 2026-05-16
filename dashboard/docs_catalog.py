@@ -111,6 +111,27 @@ DOC_MODULES = [
         "blurb": "REST API and Workers bindings; not runnable in local Miniflare.",
     },
     {
+        "id": "project-changelog",
+        "title": "Changelog",
+        "category": "Project",
+        "rel_path": "CHANGELOG.md",
+        "blurb": "Keep a Changelog history for the LEco DevOps Open Project.",
+    },
+    {
+        "id": "project-release-notes",
+        "title": "Release notes",
+        "category": "Project",
+        "rel_path": "docs/RELEASE_NOTES.md",
+        "blurb": "Release index, current version, and upgrade pointers.",
+    },
+    {
+        "id": "project-versioning",
+        "title": "Versioning policy",
+        "category": "Project",
+        "rel_path": "docs/VERSIONING.md",
+        "blurb": "SemVer, VERSION/version.json, release workflow, and file manifests.",
+    },
+    {
         "id": "dev-playbook",
         "title": "Development playbook",
         "category": "Extending the platform",

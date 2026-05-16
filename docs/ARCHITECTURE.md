@@ -7,6 +7,7 @@ This document is the architecture entry point for the project.
 - AI-assisted onboarding plan: [`AI_ONBOARDING_PLAN.md`](AI_ONBOARDING_PLAN.md)
 - LEco toolchain details: [`LECO_TOOLING.md`](LECO_TOOLING.md)
 - Agent operating guide: [`../AGENTS.md`](../AGENTS.md)
+- Versioning and releases: [`VERSIONING.md`](VERSIONING.md) · [`RELEASE_NOTES.md`](RELEASE_NOTES.md) · [`../CHANGELOG.md`](../CHANGELOG.md)
 
 ## System context
 

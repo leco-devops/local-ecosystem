@@ -786,6 +786,10 @@ function instrumentBackendFetchPreloader() {
     }
   }
   window.__dashboardBoot = boot;
+  const verEl = document.getElementById("footerPlatformVersion");
+  if (verEl && boot.platform_version) {
+    verEl.textContent = `v${boot.platform_version}`;
+  }
   if (boot.prefill_control_token) {
     try {
       localStorage.setItem("dashboard_control_token", String(boot.prefill_control_token));

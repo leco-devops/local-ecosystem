@@ -128,6 +128,11 @@ HELP_TREE: list[dict] = [
                 "title": "Technical docs (Docs tab)",
                 "file": "11-further-reading.md",
             },
+            {
+                "id": "releases-versioning",
+                "title": "Releases & versioning",
+                "file": "17-releases-versioning.md",
+            },
         ],
     },
 ]

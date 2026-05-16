@@ -19,6 +19,16 @@ Open **Docs** (`/?tab=docsTab`) for canonical technical references:
 - AirLLM integration
 - Development playbook
 - Hosted apps Traefik runbook
+- **Changelog**, **Release notes**, **Versioning policy** (category **Project**)
+
+## Releases & versioning
+
+| Resource | Where |
+|----------|--------|
+| Current version | Footer on every dashboard page · `GET /api/version` |
+| Release index | [Releases & versioning](help:releases-versioning) · Docs → *Release notes* |
+| Full history | `CHANGELOG.md` · Docs → *Changelog* |
+| Maintainer workflow | `docs/VERSIONING.md` · `tools/release/bump-version.sh` |
 
 ## In the repository
 
@@ -32,6 +42,10 @@ Open **Docs** (`/?tab=docsTab`) for canonical technical references:
 | `hosting/README.md` | Writable hosting, wsp:, zip |
 | `docs/DEPLOYMENT.md` | Stack deployment |
 | `docs/DEVELOPMENT_PLAYBOOK.md` | Maintainer daily commands |
+| `CHANGELOG.md` | Changelog |
+| `docs/RELEASE_NOTES.md` | Release index |
+| `docs/VERSIONING.md` | SemVer and release workflow |
+| `releases/` | Per-version release notes |
 | `AGENTS.md` | Agent/automation guardrails |
 
 ## Bookmarks

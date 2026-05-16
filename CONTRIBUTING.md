@@ -14,6 +14,7 @@ Thanks for contributing.
 2. Create a focused branch from your latest default branch state.
 3. Keep changes scoped and include tests or verification notes.
 4. Open a pull request with a clear summary and a test plan.
+5. For user-visible changes, add a bullet under `[Unreleased]` in **[CHANGELOG.md](CHANGELOG.md)** (see **[docs/VERSIONING.md](docs/VERSIONING.md)**).
 
 ## Local development
 

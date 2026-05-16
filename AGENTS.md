@@ -77,6 +77,7 @@ This repo is a local platform with:
 - Python syntax: `python3 -m compileall -q dashboard tools/deploy-cli/leco_app`
 - Check for regressions in docs links from `README.md` and `dashboard/docs_catalog.py`
 - If adding docs, ensure paths are repo-root relative and loadable via `/api/docs/content`
+- User-visible changes: add `[Unreleased]` bullet in `CHANGELOG.md`; see `docs/VERSIONING.md` for releases
 - Hosted apps / Traefik behavior: see `docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md` when changing `dashboard/leco_detect.py`, `dashboard/monitor.py`, or hosting overlays
 
 ## High-value follow-up conventions

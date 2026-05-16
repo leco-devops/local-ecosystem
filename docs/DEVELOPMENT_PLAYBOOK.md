@@ -12,6 +12,15 @@ This guide helps you **extend**, **debug**, and **ship** changes across the ecos
 - LEco toolchain details: [LECO_TOOLING.md](LECO_TOOLING.md)
 - Agent context and guardrails: [../AGENTS.md](../AGENTS.md)
 
+## Versioning and releases
+
+- **Current version:** [`VERSION`](../VERSION) · [`version.json`](../version.json)
+- **Changelog:** [CHANGELOG.md](../CHANGELOG.md)
+- **Release index:** [RELEASE_NOTES.md](RELEASE_NOTES.md)
+- **Policy:** [VERSIONING.md](VERSIONING.md) · per-release files in [`releases/`](../releases/)
+- **Bump script:** `./tools/release/bump-version.sh X.Y.Z`
+- **Dashboard API:** `GET /api/version`
+
 ## 1. Repository map (where things live)
 
 | Area | Path | Purpose |
