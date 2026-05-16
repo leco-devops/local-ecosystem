@@ -38,6 +38,32 @@ http:
       entryPoints:
       - websecure
       tls: true
+    n8n-assist-http:
+      rule: Host(`n8n.lh`) && PathPrefix(`/assist`)
+      service: dashboard-service
+      entryPoints:
+      - web
+      priority: 100
+    n8n-assist-https:
+      rule: Host(`n8n.lh`) && PathPrefix(`/assist`)
+      service: dashboard-service
+      entryPoints:
+      - websecure
+      tls: true
+      priority: 100
+    ai-assist-http:
+      rule: Host(`ai.lh`) && PathPrefix(`/assist`)
+      service: dashboard-service
+      entryPoints:
+      - web
+      priority: 100
+    ai-assist-https:
+      rule: Host(`ai.lh`) && PathPrefix(`/assist`)
+      service: dashboard-service
+      entryPoints:
+      - websecure
+      tls: true
+      priority: 100
     ollama-http:
       rule: Host(`ollama.lh`)
       service: ollama-service
@@ -148,6 +174,19 @@ http:
       entryPoints:
       - websecure
       tls: true
+    minio-console-assist-http:
+      rule: Host(`minio-console.lh`) && PathPrefix(`/assist`)
+      service: dashboard-service
+      entryPoints:
+      - web
+      priority: 100
+    minio-console-assist-https:
+      rule: Host(`minio-console.lh`) && PathPrefix(`/assist`)
+      service: dashboard-service
+      entryPoints:
+      - websecure
+      tls: true
+      priority: 100
     workers-http:
       rule: Host(`workers.lh`)
       service: workers-service
@@ -214,6 +253,19 @@ http:
       entryPoints:
       - websecure
       tls: true
+    adminer-assist-http:
+      rule: Host(`adminer.lh`) && PathPrefix(`/assist`)
+      service: dashboard-service
+      entryPoints:
+      - web
+      priority: 100
+    adminer-assist-https:
+      rule: Host(`adminer.lh`) && PathPrefix(`/assist`)
+      service: dashboard-service
+      entryPoints:
+      - websecure
+      tls: true
+      priority: 100
     redis-ui-http:
       rule: Host(`redis-ui.lh`)
       service: redis-commander-service

@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **UI credential vault (local dev):** gitignored `config/ui-credentials.yaml`, registry JSON, Infrastructure **UI access** panel, hub actions, login-assist routes, and reset/apply for MinIO, MySQL, and PostgreSQL.
 - **CF ↔ LEco service map:** `docs/CF_LECO_SERVICE_MAP.md`, `ecosystem-stack/config/cf-leco-service-registry.json`, Docs catalog entry, and cross-links across help/samples.
 - **Control default policies:** per-target `start` / `stop` / `offloaded` with API, example JSON, and Infrastructure **Start stacks** shortcuts.
 - **Infrastructure:** Cloudflare-local stack container table, Valkey probe, and `update-catalog` in ecosystem start order.
@@ -19,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **UI access:** Reset & Apply recreates n8n Postgres DB (owners live in DB, not only `n8n_data`), provisions n8n/Open WebUI accounts (`Localdev1`), fixes MinIO console `MINIO_SERVER_URL` for server-side login, and improves magic-link/assist errors. n8n auto-login re-syncs owner via `user-management:reset` when vault password mismatches; Auto-login opens in a new tab.
 - **Platform health:** container scan no longer stops at `leco-update-catalog` image 404 (false “missing” services).
 - **Missing services list:** Operational Health now names which managed containers are down.
 

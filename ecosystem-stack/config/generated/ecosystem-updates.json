@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "generated_at": "2026-05-16T07:03:24Z",
+  "generated_at": "2026-05-16T12:48:51Z",
   "services": [
     {
       "id": "traefik",
@@ -68,8 +68,7 @@
       "latest": {
         "tag": "0.9.5",
         "updated": "2026-05-10T18:14:07Z",
-        "full": "0.9.5",
-        "html_url": "https://github.com/open-webui/open-webui/releases/tag/v0.9.5"
+        "full": "ghcr.io/open-webui/open-webui:0.9.5"
       }
     },
     {
@@ -122,161 +121,6 @@
       "latest": {
         "full": "local/service-dashboard:latest"
       }
-    },
-    {
-      "id": "local-ecosystem",
-      "label": "LEco DevOps Open Project",
-      "container": "git",
-      "source": "github",
-      "repo": "rmaurya/local-ecosystem",
-      "running_image": "local:0.3.0",
-      "upgrade_help": "ecosystem-updates",
-      "upgrade_steps": [
-        "git pull && ./ecosystem-stack/ecosystem-stack.sh restart dashboard",
-        "See docs/RELEASE_NOTES.md and CHANGELOG.md"
-      ],
-      "status": "skipped",
-      "note": "Repository not found or not accessible (private)."
-    }
-  ],
-  "docker_services": [
-    {
-      "id": "traefik",
-      "label": "Traefik",
-      "container": "traefik",
-      "running_image": null,
-      "status": "not_running",
-      "upgrade_help": "deploy-rebuild",
-      "upgrade_steps": [
-        "Edit traefik/dynamic.yml in git if stack routes changed",
-        "./ecosystem-stack/ecosystem-stack.sh heal traefik"
-      ],
-      "source": "docker_hub",
-      "latest": {
-        "tag": "v1.0.0",
-        "updated": "2016-07-06T14:39:02.186778Z",
-        "full": "traefik:v1.0.0"
-      }
-    },
-    {
-      "id": "ollama",
-      "label": "Ollama",
-      "container": "ollama",
-      "running_image": null,
-      "status": "not_running",
-      "upgrade_help": "deploy-rebuild",
-      "upgrade_steps": [
-        "./ecosystem-stack/ecosystem-stack.sh restart ollama",
-        "Models persist in Docker volume ollama"
-      ],
-      "source": "docker_hub",
-      "latest": {
-        "tag": "0.0.13",
-        "updated": "2023-08-04T04:30:07.039025Z",
-        "full": "ollama/ollama:0.0.13"
-      }
-    },
-    {
-      "id": "airllm",
-      "label": "AirLLM shim",
-      "container": "airllm",
-      "running_image": null,
-      "status": "not_running",
-      "upgrade_help": "deploy-rebuild",
-      "upgrade_steps": [
-        "./leco-cli.sh airllm build",
-        "./leco-cli.sh airllm start"
-      ],
-      "source": "local_image",
-      "latest": {
-        "full": "local-airllm:latest"
-      }
-    },
-    {
-      "id": "webui",
-      "label": "Open WebUI",
-      "container": "open-webui",
-      "running_image": null,
-      "status": "not_running",
-      "upgrade_help": "deploy-rebuild",
-      "upgrade_steps": [
-        "./ecosystem-stack/ecosystem-stack.sh restart webui"
-      ],
-      "source": "docker_hub",
-      "latest": {
-        "tag": "0.9.5",
-        "updated": "2026-05-10T18:14:07Z",
-        "full": "0.9.5",
-        "html_url": "https://github.com/open-webui/open-webui/releases/tag/v0.9.5"
-      }
-    },
-    {
-      "id": "n8n",
-      "label": "n8n",
-      "container": "n8n",
-      "running_image": null,
-      "status": "not_running",
-      "upgrade_help": "deploy-rebuild",
-      "upgrade_steps": [
-        "./ecosystem-stack/ecosystem-stack.sh restart n8n"
-      ],
-      "source": "docker_hub",
-      "latest": {
-        "tag": "0.1.2",
-        "updated": "2019-06-23T15:34:57.369403Z",
-        "full": "n8nio/n8n:0.1.2"
-      }
-    },
-    {
-      "id": "postgres",
-      "label": "PostgreSQL (n8n)",
-      "container": "n8n_postgres",
-      "running_image": null,
-      "status": "not_running",
-      "upgrade_help": "deploy-rebuild",
-      "upgrade_steps": [
-        "Back up n8n data before major Postgres upgrades",
-        "./ecosystem-stack/ecosystem-stack.sh restart postgres"
-      ],
-      "source": "docker_hub",
-      "latest": {
-        "tag": "9.1.16",
-        "updated": "2015-06-03T02:21:53Z",
-        "full": "postgres:9.1.16"
-      }
-    },
-    {
-      "id": "dashboard",
-      "label": "LEco DevOps dashboard",
-      "container": "service-dashboard",
-      "running_image": null,
-      "status": "not_running",
-      "upgrade_help": "deploy-rebuild",
-      "upgrade_steps": [
-        "./ecosystem-stack/ecosystem-stack.sh restart dashboard",
-        "Or: bash ./ecosystem-stack/services/dashboard.sh deploy"
-      ],
-      "source": "local_image",
-      "latest": {
-        "full": "local/service-dashboard:latest"
-      }
-    }
-  ],
-  "github_repos": [
-    {
-      "id": "local-ecosystem",
-      "label": "LEco DevOps Open Project",
-      "container": "git",
-      "source": "github",
-      "repo": "rmaurya/local-ecosystem",
-      "running_image": "local:0.3.0",
-      "upgrade_help": "ecosystem-updates",
-      "upgrade_steps": [
-        "git pull && ./ecosystem-stack/ecosystem-stack.sh restart dashboard",
-        "See docs/RELEASE_NOTES.md and CHANGELOG.md"
-      ],
-      "status": "skipped",
-      "note": "Repository not found or not accessible (private)."
     }
   ],
   "service_updates_available": 0,

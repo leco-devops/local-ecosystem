@@ -1388,6 +1388,29 @@ button.ctrl-bulk--unpause {
   border: 1px solid rgba(129, 140, 248, 0.5);
   background-color: #1a1f36;
   box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.app-modal-dialog--form {
+  max-width: min(520px, 100%);
+}
+
+.app-modal-dialog--copy {
+  max-width: min(560px, 100%);
+}
+
+.app-modal-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, rgba(76, 29, 149, 0.55), rgba(30, 27, 75, 0.9));
+  border-bottom: 1px solid rgba(167, 139, 250, 0.35);
+  font-size: 13px;
+  font-weight: 600;
+  color: #c4b5fd;
+  letter-spacing: 0.02em;
 }
 
 .app-modal-inner {
@@ -1409,6 +1432,61 @@ button.ctrl-bulk--unpause {
   text-align: center;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.app-modal-message--form,
+.app-modal-message--copy {
+  text-align: left;
+}
+
+.app-modal-message__lead {
+  margin: 0 0 14px;
+  text-align: center;
+}
+
+.app-modal-message--form .app-modal-message__lead,
+.app-modal-message--copy .app-modal-message__lead {
+  text-align: left;
+}
+
+.app-modal-field {
+  display: block;
+  margin-bottom: 12px;
+}
+
+.app-modal-field-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #a5b4fc;
+  text-transform: capitalize;
+}
+
+.app-modal-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: 1px solid rgba(129, 140, 248, 0.45);
+  background: rgba(15, 23, 42, 0.85);
+  color: #f1f5f9;
+  font-size: 14px;
+}
+
+.app-modal-input:focus {
+  outline: 2px solid rgba(167, 139, 250, 0.55);
+  outline-offset: 1px;
+}
+
+.app-modal-input--readonly {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.app-modal-copy-btn {
+  margin-top: 10px;
+  width: 100%;
 }
 
 .app-modal-bar {
@@ -4810,7 +4888,7 @@ body.help-page {
 
 .help-page .help-layout {
   flex: 1 1 auto;
-  align-items: start;
+  align-items: stretch;
 }
 
 /* Override Docs-tab scroll boxes on Help only */
@@ -4830,9 +4908,9 @@ body.help-page {
 
 .help-page .doc-sidebar,
 .help-page .help-sidebar {
-  max-height: calc(100vh - 24px);
-  overflow-y: auto;
-  overflow-x: hidden;
+  max-height: none;
+  overflow: visible;
+  align-self: stretch;
 }
 
 .help-wrap {
@@ -5110,6 +5188,86 @@ body.help-page {
 .overview-update-catalog {
   padding: 10px 12px 14px;
   font-size: 13px;
+}
+
+.ui-access-panel {
+  margin-top: 8px;
+}
+
+.ui-access-panel--prominent {
+  min-height: 48px;
+}
+
+.ui-access-banner {
+  padding: 8px 10px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+.ui-access-banner--warn {
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  color: #fde68a;
+}
+
+.ui-access-control-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 10px 12px;
+  margin: 0 0 14px;
+  border-radius: 8px;
+  background: rgba(30, 27, 75, 0.35);
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  font-size: 13px;
+}
+
+.overview-ui-access__list {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  font-size: 13px;
+}
+
+.overview-ui-access__warn {
+  color: #fde68a;
+  font-size: 12px;
+  margin: 0 0 6px;
+}
+
+.ui-access-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.ui-access-table th,
+.ui-access-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(167, 139, 250, 0.2);
+  text-align: left;
+  vertical-align: top;
+}
+
+.ui-access-table th {
+  color: #c4b5fd;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ui-access-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.hub-ui-access__btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .uc-grid {

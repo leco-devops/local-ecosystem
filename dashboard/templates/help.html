@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Help &amp; User Manual — LEco DevOps</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/static/dashboard.css?v=20260525" />
+    <link rel="stylesheet" href="/static/dashboard.css?v=20260530" />
   </head>
   <body class="help-page">
     <div class="wrap help-wrap">
@@ -49,11 +49,13 @@
       {% include "_site_footer.html" %}
     </div>
 
+    {% include "_app_modal.html" %}
+
     <script type="application/json" id="dashboard-boot-config">{{ dashboard_boot | tojson }}</script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.3/dist/mermaid.min.js"></script>
-    <script src="/static/dashboard.js?v=20260525"></script>
-    <script src="/static/help.js?v=20260525"></script>
+    <script src="/static/dashboard.js?v=20260533"></script>
+    <script src="/static/help.js?v=20260530"></script>
   </body>
 </html>

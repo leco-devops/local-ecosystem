@@ -26,6 +26,7 @@ This repo is a local platform with:
 - LEco CLI: `tools/deploy-cli/leco_app/`
 - Hosting layout: `hosting/app-available/` (optional **`docker-compose.leco-hosting.yml`** + **`additionalComposeFilesFromManifest`** for LEco-only compose merges beside `leco.app.yaml`); reference YAML packs: `hosting/samples/` (not scanned as staging apps)
 - Registry: `config/leco-registry.yaml`
+- UI credential vault (local dev): `ecosystem-stack/config/ui-login-registry.json`, `config/ui-credentials.yaml` (gitignored), `dashboard/ui_credentials.py`, `dashboard/ui_credential_reset.py` — see `docs/UI_CREDENTIAL_VAULT.md`
 - Traefik routes: canonical `traefik/dynamic.yml`; runtime file provider dir `hosting/traefik/` (`01-stack-core.yml` = copy on each Traefik start; `dynamic.yml` = merge target for `leco-devops` / dashboard). Use `ecosystem-stack/services/traefik.sh` **`heal`** / **`ensure-hosting-files`** when fixing global 404 or invalid empty `http` YAML.
 - Primary docs: `README.md`, `docs/`
 

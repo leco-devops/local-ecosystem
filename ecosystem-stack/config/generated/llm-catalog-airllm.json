@@ -1,7 +1,7 @@
 {
   "ok": true,
   "backend": "airllm",
-  "generated_at": "2026-05-16T07:03:24Z",
+  "generated_at": "2026-05-16T12:48:51Z",
   "model_count": 19,
   "new_online_count": 9,
   "new_online": [
@@ -37,7 +37,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 4579767
+      "hf_downloads": 4625639
     },
     {
       "name": "Qwen/Qwen2.5-0.5B-Instruct",
@@ -66,7 +66,7 @@
         "smoke-test"
       ],
       "online_seen": true,
-      "hf_downloads": 5276422
+      "hf_downloads": 5034332
     },
     {
       "name": "Qwen/Qwen2.5-1.5B-Instruct",
@@ -89,7 +89,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 12432884
+      "hf_downloads": 12900413
     },
     {
       "name": "Qwen/Qwen2.5-14B-Instruct",
@@ -112,7 +112,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 2527415
+      "hf_downloads": 2516818
     },
     {
       "name": "Qwen/Qwen2.5-3B-Instruct",
@@ -135,7 +135,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 8522838
+      "hf_downloads": 8578814
     },
     {
       "name": "Qwen/Qwen2.5-72B-Instruct",
@@ -186,7 +186,7 @@
         "default"
       ],
       "online_seen": true,
-      "hf_downloads": 12388361
+      "hf_downloads": 12555167
     },
     {
       "name": "Qwen/Qwen2.5-Coder-7B-Instruct",
@@ -210,7 +210,7 @@
         "code"
       ],
       "online_seen": true,
-      "hf_downloads": 2431879
+      "hf_downloads": 2431683
     },
     {
       "name": "Qwen/Qwen3-4B-Instruct-2507",
@@ -233,7 +233,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 10925023
+      "hf_downloads": 9310136
     },
     {
       "name": "RedHatAI/Llama-3.2-1B-Instruct-FP8-dynamic",
@@ -256,7 +256,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 2229665
+      "hf_downloads": 2267402
     },
     {
       "name": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
@@ -279,7 +279,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 2810497
+      "hf_downloads": 2801489
     },
     {
       "name": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
@@ -380,7 +380,7 @@
         "gated"
       ],
       "online_seen": true,
-      "hf_downloads": 9785417
+      "hf_downloads": 10029057
     },
     {
       "name": "meta-llama/Llama-3.2-1B-Instruct",
@@ -403,7 +403,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 7607194
+      "hf_downloads": 7630664
     },
     {
       "name": "meta-llama/Llama-3.2-3B-Instruct",
@@ -430,7 +430,7 @@
         "gated"
       ],
       "online_seen": true,
-      "hf_downloads": 2427594
+      "hf_downloads": 2427304
     },
     {
       "name": "mistralai/Mistral-7B-Instruct-v0.2",
@@ -453,7 +453,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 3266574
+      "hf_downloads": 3266123
     },
     {
       "name": "mistralai/Mistral-7B-Instruct-v0.3",

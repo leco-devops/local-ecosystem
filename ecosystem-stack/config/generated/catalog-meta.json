@@ -1,7 +1,6 @@
 {
-  "generated_at": "2026-05-16T07:03:24Z",
-  "interval_hours": 24.0,
-  "schedule_mode": "interval",
+  "generated_at": "2026-05-16T12:48:51Z",
+  "interval_hours": 6,
   "ollama_online_count": 39,
   "hf_fetched": 40
 }

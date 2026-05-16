@@ -75,6 +75,24 @@
   padding: 14px 16px;
 }
 
+.hub-panel--ui-access {
+  border-color: rgba(167, 139, 250, 0.45);
+  background: rgba(30, 27, 75, 0.35);
+  margin-bottom: 18px;
+}
+
+.hub-panel__title {
+  margin: 0 0 8px;
+  font-size: 1.1rem;
+  font-weight: 650;
+  color: #c4b5fd;
+}
+
+.hub-panel__lede {
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+
 .hub-section {
   margin: 0 0 14px;
   border: 1px solid rgba(100, 116, 139, 0.35);

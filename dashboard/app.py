@@ -25,6 +25,21 @@ from ecosystem_updates import (
 from help_manual import get_help_content, get_help_tree, search_help
 from popular_models import load_airllm_catalog, load_ollama_catalog
 from service_hub import get_hub_detail, list_hub_slugs
+from ui_login_assist import (
+    apply_cookies_to_flask_response,
+    build_assist_public_url,
+    try_server_side_login,
+)
+from ui_credentials import (
+    build_assist_context,
+    catalog_for_ui,
+    credentials_for_ui,
+    get_registry_entry,
+    make_launch_token,
+    save_credentials,
+    verify_launch_token,
+)
+from ui_credential_reset import apply_reset
 from version_info import load_version_payload
 from ai_news import fetch_all_news, filter_news, refine_query_with_llm
 
@@ -1113,7 +1128,145 @@ def hub_detail(slug: str):
     hub = get_hub_detail(slug)
     if not hub:
         abort(404)
-    return _html_response("service_hub.html", hub=hub, dashboard_boot=_dashboard_boot_dict())
+    ui_entry = get_registry_entry(slug)
+    return _html_response(
+        "service_hub.html",
+        hub=hub,
+        ui_access=ui_entry,
+        dashboard_boot=_dashboard_boot_dict(),
+    )
+
+
+@app.get("/api/ui-credentials/catalog")
+def api_ui_credentials_catalog():
+    return jsonify(catalog_for_ui())
+
+
+@app.get("/api/ui-credentials/<slug>")
+def api_ui_credentials_get(slug: str):
+    entry = get_registry_entry(slug)
+    if not entry:
+        return jsonify({"ok": False, "error": "unknown service"}), 404
+    from ui_credential_reset import _container_running
+
+    container = str(entry.get("container") or "").strip()
+    return jsonify(
+        {
+            "ok": True,
+            "slug": slug,
+            "label": entry.get("label"),
+            "login_url": entry.get("login_url"),
+            "auth_type": entry.get("auth_type"),
+            "can_auto_login": entry.get("auth_type") in ("form_post", "json_post"),
+            "can_reset": (entry.get("reset_handler") or "none") != "none",
+            "container": container or None,
+            "container_running": _container_running(container) if container else None,
+            "credentials": credentials_for_ui(slug),
+        }
+    )
+
+
+@app.put("/api/ui-credentials/<slug>")
+def api_ui_credentials_put(slug: str):
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    if not get_registry_entry(slug):
+        return jsonify({"ok": False, "error": "unknown service"}), 404
+    values = data.get("values") or data.get("credentials") or data
+    if not isinstance(values, dict):
+        return jsonify({"ok": False, "error": "values object required"}), 400
+    try:
+        saved = save_credentials(slug, values)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    return jsonify({"ok": True, "slug": slug, "credentials": saved})
+
+
+@app.post("/api/ui-credentials/<slug>/reset")
+def api_ui_credentials_reset(slug: str):
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    if not get_registry_entry(slug):
+        return jsonify({"ok": False, "error": "unknown service"}), 404
+    result = apply_reset(slug)
+    status = 200 if result.get("ok") else 500
+    return jsonify({"ok": result.get("ok"), **result}), status
+
+
+@app.post("/api/ui-credentials/<slug>/launch-token")
+def api_ui_credentials_launch_token(slug: str):
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    try:
+        token = make_launch_token(slug)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    entry = get_registry_entry(slug) or {}
+    return jsonify(
+        {
+            "ok": True,
+            "slug": slug,
+            "token": token,
+            "assist_url": build_assist_public_url(slug, token),
+            "login_url": entry.get("login_url") or "",
+            "expires_in_sec": 60,
+        }
+    )
+
+
+@app.get("/assist/login/<slug>")
+def assist_login(slug: str):
+    token = (request.args.get("token") or "").strip()
+    if not verify_launch_token(slug, token):
+        abort(403)
+    entry = get_registry_entry(slug)
+    if not entry:
+        abort(404)
+    if (entry.get("auth_type") or "") == "json_post":
+        result = try_server_side_login(slug)
+        if result.ok and result.mode == "cookie" and result.cookies:
+            resp = redirect(str(entry.get("login_url") or "/"))
+            apply_cookies_to_flask_response(
+                resp, result.cookies, login_url=str(entry.get("login_url") or "")
+            )
+            return resp
+        if result.ok and result.mode == "local_storage" and result.token:
+            return _html_response(
+                "login_assist_token.html",
+                assist={
+                    "label": entry.get("label") or slug,
+                    "login_url": entry.get("login_url") or "/",
+                    "token": result.token,
+                    "storage_key": result.storage_key,
+                },
+            )
+        detail = result.error or "Login API rejected credentials or service unreachable."
+        if "401" in detail or "Wrong username" in detail or "incorrect" in detail.lower():
+            detail += (
+                " Run Reset & apply on Service hubs → UI access (default password Localdev1), "
+                "then Auto-login again."
+            )
+        if "502" in detail or "Bad Gateway" in detail:
+            detail += " Run: ./ecosystem-stack/services/traefik.sh heal && restart dashboard."
+        if "network error" in detail.lower():
+            detail += " For MinIO: use Reset & apply to recreate the minio container."
+        return _html_response(
+            "login_assist_error.html",
+            assist={
+                "label": entry.get("label") or slug,
+                "login_url": entry.get("login_url") or "/",
+                "summary": "Server-side login did not succeed.",
+                "detail": detail,
+                "control_url": "/?tab=controlTab",
+            },
+        )
+    ctx = build_assist_context(slug)
+    if not ctx:
+        abort(404)
+    return _html_response("login_assist.html", assist=ctx)
 
 
 if __name__ == "__main__":

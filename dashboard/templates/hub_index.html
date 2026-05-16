@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Service hubs — LEco DevOps</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/static/dashboard.css" />
+    <link rel="stylesheet" href="/static/dashboard.css?v=20260530" />
     <link rel="stylesheet" href="/static/service_hub.css" />
   </head>
   <body>
@@ -27,6 +27,19 @@
         </p>
       </header>
 
+      <section class="hub-panel hub-panel--ui-access" id="hub-ui-access">
+        <h2 class="hub-panel__title">UI access (local dev)</h2>
+        <p class="hub-panel__lede muted small">
+          Store login credentials for MinIO console, Adminer, n8n, and Open WebUI (control panels with sign-in only).
+          <strong>Auto-login</strong> opens a short-lived magic link (~60s).
+          <strong>Reset &amp; apply</strong> restores compose defaults or wipes app volumes when needed.
+          Requires the control token on the <a href="/?tab=controlTab">Control</a> tab when <code>DASHBOARD_CONTROL_TOKEN</code> is set.
+        </p>
+        <div id="uiAccessPanel" class="ui-access-panel ui-access-panel--prominent">
+          <p class="muted small">Loading UI access catalog…</p>
+        </div>
+      </section>
+
       <section class="hub-panel">
         <ul class="hub-index-list hub-index-list--detailed">
           {% for h in hubs %}
@@ -46,7 +59,8 @@
       {% set footer_doc_mode = 'anchors' %}
       {% include "_site_footer.html" %}
     </div>
+    {% include "_app_modal.html" %}
     <script type="application/json" id="dashboard-boot-config">{{ dashboard_boot | tojson }}</script>
-    <script src="/static/dashboard.js"></script>
+    <script src="/static/dashboard.js?v=20260533"></script>
   </body>
 </html>

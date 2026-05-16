@@ -79,6 +79,11 @@ COPY dashboard/local_cf_teardown.py .
 COPY dashboard/hosted_offboard.py .
 COPY dashboard/control.py .
 COPY dashboard/service_policies.py .
+COPY dashboard/ui_credentials.py .
+COPY dashboard/ui_credential_reset.py .
+COPY dashboard/ui_login_assist.py .
+COPY dashboard/ui_provision.py .
+COPY ecosystem-stack/config/ui-login-registry.json /app/ecosystem-stack/config/ui-login-registry.json
 COPY dashboard/ollama_models.py .
 COPY dashboard/templates ./templates
 COPY dashboard/static ./static

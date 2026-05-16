@@ -118,6 +118,13 @@ DOC_MODULES = [
         "blurb": "Binding coverage, reuse rules, dual-path architecture, and adapter roadmap.",
     },
     {
+        "id": "ui-credential-vault",
+        "title": "UI credential vault (local dev)",
+        "category": "Operations",
+        "rel_path": "docs/UI_CREDENTIAL_VAULT.md",
+        "blurb": "Store UI logins, signed-in assist links, and reset/apply for MinIO, Adminer, and registry services.",
+    },
+    {
         "id": "project-changelog",
         "title": "Changelog",
         "category": "Project",

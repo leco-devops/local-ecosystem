@@ -17,9 +17,5 @@
 # Qwen/Qwen2.5-72B-Instruct
 # meta-llama/Meta-Llama-3.1-70B-Instruct  # Requires HF_TOKEN for gated access
 #
-# To pull manually:
-#   ./ecosystem-stack/ecosystem-stack.sh airllm-pull-models
-#
-# Or via API:
-#   curl -X POST http://airllm.lh/api/pull -H 'Content-Type: application/json' \
-#     -d '{"name": "Qwen/Qwen2.5-7B-Instruct"}'
+
+Qwen/Qwen2.5-0.5B-Instruct

@@ -1475,11 +1475,8 @@ function shouldOpenLinkInNewTab(href) {
     if (u.protocol !== "http:" && u.protocol !== "https:") return false;
     if (isDashboardSpaUrl(href)) return false;
     if (u.origin === window.location.origin && isDashboardSubAppPath(u.pathname)) {
-      // Hub/help pages: stay in-tab for /hub and /help navigation.
-      if (!document.getElementById("overviewTab") && isDashboardSubAppPath(window.location.pathname)) {
-        return false;
-      }
-      return true;
+      // /hub and /help are same-origin dashboard sub-apps — never open in a new tab.
+      return false;
     }
     if (!isDashboardLocalHostname(u.hostname)) return true;
     return false;
@@ -1489,8 +1486,8 @@ function shouldOpenLinkInNewTab(href) {
 }
 
 /**
- * Use on dashboard-generated <a href>: new tab for Help, hubs, other *.lh services, and external sites;
- * same tab for SPA links (/?tab=…) on the dashboard origin.
+ * Use on dashboard-generated <a href>: new tab for other *.lh service UIs and external sites;
+ * same tab for SPA (/?tab=…), /hub, and /help on the dashboard origin.
  */
 function externalNavigationAttrs(href) {
   return shouldOpenLinkInNewTab(href) ? ' target="_blank" rel="noopener noreferrer"' : "";
@@ -2713,12 +2710,12 @@ async function saveUpdateCatalogSchedule() {
       return;
     }
     if (!res.ok || !data.ok) {
-      alert(data.error || "Failed to save schedule");
+      await showAppAlert(data.error || "Failed to save schedule", "Update catalog");
       return;
     }
     await loadOverview();
   } catch (e) {
-    alert(String(e));
+    await showAppAlert(String(e), "Update catalog");
   }
 }
 
@@ -2745,12 +2742,12 @@ async function markUpdateCatalogRead() {
       return;
     }
     if (!res.ok || !data.ok) {
-      alert(data.error || "Failed to mark as read");
+      await showAppAlert(data.error || "Failed to mark as read", "Update catalog");
       return;
     }
     await loadOverview();
   } catch (e) {
-    alert(String(e));
+    await showAppAlert(String(e), "Update catalog");
   }
 }
 
@@ -2980,6 +2977,282 @@ function updateOverviewDashboard(data, cf, metricsData) {
   overviewCharts.svcBar.data.labels = topSvc.map((x) => x.service);
   overviewCharts.svcBar.data.datasets[0].data = topSvc.map((x) => Number(x.metrics?.cpu_percent || 0));
   overviewCharts.svcBar.update();
+}
+
+function uiAccessControlHeaders(json = true) {
+  const h = { "X-Control-Token": controlToken() };
+  if (json) h["Content-Type"] = "application/json";
+  return h;
+}
+
+function resolveAssistUrl(data, loginUrlHint) {
+  const raw = String(data?.assist_url || "").trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  const base = String(loginUrlHint || data?.login_url || "").trim();
+  if (base) {
+    try {
+      return new URL(raw.startsWith("/") ? raw : `/${raw}`, base).href;
+    } catch (_) {
+      /* fall through */
+    }
+  }
+  try {
+    return new URL(raw, window.location.origin).href;
+  } catch (_) {
+    return raw;
+  }
+}
+
+async function fetchUiLaunchUrl(slug, loginUrlHint) {
+  const res = await fetch(`/api/ui-credentials/${encodeURIComponent(slug)}/launch-token`, {
+    method: "POST",
+    headers: uiAccessControlHeaders(),
+    body: JSON.stringify({ token: controlToken() }),
+  });
+  const data = await res.json();
+  if (!data.ok) {
+    throw new Error(data.error || "Could not create login assist token. Save control token on Control tab.");
+  }
+  return resolveAssistUrl(data, loginUrlHint);
+}
+
+async function openUiSignedIn(slug, loginUrlHint, row) {
+  if (row?.container && row.container_running === false) {
+    await showAppAlert(
+      `${row.label || slug} is not running. Start it from Control → Ecosystem services, then try Auto-login again.`,
+      "Auto-login",
+    );
+    return;
+  }
+  try {
+    const url = await fetchUiLaunchUrl(slug, loginUrlHint);
+    window.open(url, "_blank", "noopener,noreferrer");
+  } catch (e) {
+    await showAppAlert(String(e.message || e), "Auto-login");
+  }
+}
+
+async function copyUiMagicLink(slug, btn, loginUrlHint) {
+  try {
+    const url = await fetchUiLaunchUrl(slug, loginUrlHint);
+    if (!navigator.clipboard) {
+      await showAppCopyLinkModal(url, "Magic link");
+      return;
+    }
+    await navigator.clipboard.writeText(url);
+    if (btn) {
+      const prev = btn.textContent;
+      btn.textContent = "Copied";
+      setTimeout(() => {
+        btn.textContent = prev;
+      }, 1400);
+    }
+  } catch (e) {
+    await showAppAlert(String(e.message || e), "Magic link");
+  }
+}
+
+function uiAccessActionButtons(row) {
+  const btns = [];
+  if (row.can_auto_login) {
+    btns.push(
+      `<button type="button" class="ollama-act ollama-act--safe" data-ui-auto-login="${escapeAttr(row.slug)}">Auto-login</button>`,
+    );
+    btns.push(
+      `<button type="button" class="ollama-act ollama-act--safe" data-ui-copy-link="${escapeAttr(row.slug)}">Copy magic link</button>`,
+    );
+  }
+  btns.push(
+    `<a class="ollama-act ollama-act--safe" href="${escapeAttr(row.login_url)}"${externalNavigationAttrs(row.login_url)}>Open manual</a>`,
+  );
+  btns.push(`<button type="button" class="ollama-act ollama-act--safe" data-ui-edit="${escapeAttr(row.slug)}">Edit</button>`);
+  if (row.can_reset) {
+    btns.push(
+      `<button type="button" class="ollama-act ollama-act--caution" data-ui-reset="${escapeAttr(row.slug)}">Reset &amp; apply</button>`,
+    );
+  }
+  return btns.join(" ");
+}
+
+function bindUiAccessButtons(root, rows) {
+  root.querySelectorAll("[data-ui-auto-login]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const slug = btn.getAttribute("data-ui-auto-login");
+      const row = rows.find((r) => r.slug === slug);
+      openUiSignedIn(slug, row?.login_url, row);
+    });
+  });
+  root.querySelectorAll("[data-ui-copy-link]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const slug = btn.getAttribute("data-ui-copy-link");
+      const row = rows.find((r) => r.slug === slug);
+      copyUiMagicLink(slug, btn, row?.login_url);
+    });
+  });
+  root.querySelectorAll("[data-ui-edit]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const slug = btn.getAttribute("data-ui-edit");
+      const row = rows.find((r) => r.slug === slug);
+      if (row) promptEditUiCredentials(slug, row.label, row.credentials);
+    });
+  });
+  root.querySelectorAll("[data-ui-reset]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const slug = btn.getAttribute("data-ui-reset");
+      const row = rows.find((r) => r.slug === slug);
+      if (row) resetUiCredentials(slug, row.label);
+    });
+  });
+  applyExternalLinkAttrs(root);
+}
+
+function renderOverviewUiAccess(catalog) {
+  const el = document.getElementById("overviewUiAccess");
+  if (!el) return;
+  const rows = catalog?.services || [];
+  const actionable = rows.filter((r) => r.can_auto_login || r.can_reset);
+  if (!actionable.length) {
+    el.innerHTML = "<p class='muted small'>No UI logins in registry.</p>";
+    return;
+  }
+  const tokenNote =
+    catalog.token_required && !controlToken()
+      ? "<p class='overview-ui-access__warn'>Set control token on Control tab first.</p>"
+      : "";
+  el.innerHTML = `${tokenNote}<ul class="overview-ui-access__list">${actionable
+    .map(
+      (r) =>
+        `<li><strong>${escapeHtml(r.label)}</strong> <span class="muted small">(${escapeHtml(r.slug)})</span></li>`,
+    )
+    .join("")}</ul><p class="muted small"><a href="/hub#hub-ui-access">Service hubs → UI access</a> for Auto-login, Copy magic link, Edit, Reset.</p>`;
+}
+
+async function resetUiCredentials(slug, label) {
+  const ok = await showAppConfirm({
+    title: `Reset ${label}`,
+    message:
+      "Restore compose defaults, apply on the service, and restart if needed. This cannot be undone.",
+    confirmText: "Reset & apply",
+    cancelText: "Cancel",
+    danger: true,
+  });
+  if (!ok) return;
+  const res = await fetch(`/api/ui-credentials/${encodeURIComponent(slug)}/reset`, {
+    method: "POST",
+    headers: uiAccessControlHeaders(),
+    body: JSON.stringify({ token: controlToken() }),
+  });
+  const data = await res.json();
+  await showAppAlert(
+    data.ok
+      ? `${label}: ${data.message || "reset OK"}${data.restarted ? " (container restarted)" : ""}`
+      : data.error || data.message || "Reset failed",
+    data.ok ? "Reset complete" : "Reset failed",
+  );
+  loadUiAccessPanel();
+}
+
+async function promptEditUiCredentials(slug, label, credMeta) {
+  const values = credMeta?.values || {};
+  const keys = Object.keys(values);
+  if (!keys.length) {
+    await showAppAlert("No editable fields for this service.", "Edit credentials");
+    return;
+  }
+  const fields = keys.map((k) => ({
+    key: k,
+    label: k,
+    value: values[k] || "",
+    secret: /password|secret/i.test(k),
+  }));
+  const next = await showAppCredentialsForm({
+    title: "Edit credentials",
+    serviceLabel: label,
+    fields,
+  });
+  if (!next) return;
+  try {
+    const res = await fetch(`/api/ui-credentials/${encodeURIComponent(slug)}`, {
+      method: "PUT",
+      headers: uiAccessControlHeaders(),
+      body: JSON.stringify({ token: controlToken(), values: next }),
+    });
+    const data = await res.json();
+    if (!data.ok) await showAppAlert(data.error || "Save failed", "Edit credentials");
+    loadUiAccessPanel();
+  } catch (e) {
+    await showAppAlert(String(e), "Edit credentials");
+  }
+}
+
+async function loadUiAccessPanel() {
+  try {
+    const res = await fetch("/api/ui-credentials/catalog");
+    const data = await res.json();
+    renderOverviewUiAccess(data);
+    const el = document.getElementById("uiAccessPanel");
+    if (!el) return;
+    const rows = data.services || [];
+    if (!rows.length) {
+      el.innerHTML =
+        "<p class='muted small'>No UI login registry entries. Ensure <code>ecosystem-stack/config/ui-login-registry.json</code> is mounted at <code>/project</code> and restart the dashboard.</p>";
+      return;
+    }
+    const tokenBanner =
+      data.token_required && !controlToken()
+        ? `<div class="ui-access-banner ui-access-banner--warn">Control token required for auto-login and reset. Set it on the <a href="/?tab=controlTab">Control</a> tab, click Save, then try again.</div>`
+        : `<div class="ui-access-banner muted small">Magic links expire in ~60s. Local dev only — not for production.</div>`;
+    el.innerHTML = `${tokenBanner}
+      <table class="ui-access-table">
+        <thead><tr><th>Service</th><th>Login</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${rows
+            .map((row) => {
+              const cred = row.credentials || {};
+              const status = cred.is_custom ? "custom" : "defaults";
+              const containerPill =
+                row.container && row.container_running === false
+                  ? '<span class="pill warn" title="Start from Control tab">stopped</span>'
+                  : row.container && row.container_running === true
+                    ? '<span class="pill ok">running</span>'
+                    : "";
+              const user =
+                cred.values?.username || cred.values?.email || cred.values?.driver || "—";
+              return `<tr>
+                <td><strong>${escapeHtml(row.label)}</strong><br><code class="muted small">${escapeHtml(row.slug)}</code></td>
+                <td><code class="small">${escapeHtml(row.login_url)}</code><br><span class="muted small">${escapeHtml(String(user))}</span></td>
+                <td><span class="pill ${status === "custom" ? "warn" : "ok"}">${escapeHtml(status)}</span> ${containerPill}</td>
+                <td class="ui-access-actions">${uiAccessActionButtons(row)}</td>
+              </tr>`;
+            })
+            .join("")}
+        </tbody>
+      </table>`;
+    bindUiAccessButtons(el, rows);
+  } catch (e) {
+    el.innerHTML = `<p class='muted'>${escapeHtml(String(e))}</p>`;
+  }
+}
+
+function initHubUiAccess() {
+  const root = document.getElementById("hubUiAccess");
+  if (!root) return;
+  const slug = root.getAttribute("data-hub-slug");
+  if (!slug) return;
+  fetch(`/api/ui-credentials/${encodeURIComponent(slug)}`)
+    .then((r) => r.json())
+    .then((row) => {
+      if (!row.ok) {
+        root.innerHTML = "";
+        return;
+      }
+      root.innerHTML = `<div class="hub-ui-access__btns">${uiAccessActionButtons(row)}</div>`;
+      bindUiAccessButtons(root, [row]);
+    })
+    .catch(() => {
+      root.innerHTML = "";
+    });
 }
 
 const CF_STACK_CONTAINERS = new Set([
@@ -3240,17 +3513,56 @@ async function loadOllamaModelsPanel() {
 
 let _appModalResolve = null;
 
+const APP_MODAL_HTML = `<div id="appModalOverlay" class="app-modal-overlay" hidden>
+  <div class="app-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="appModalTitle">
+    <div class="app-modal-brand" aria-hidden="true">
+      <img src="/static/favicon.svg" alt="" width="28" height="28" />
+      <span>LEco DevOps</span>
+    </div>
+    <div class="app-modal-inner">
+      <h3 id="appModalTitle" class="app-modal-title">Confirm</h3>
+      <div id="appModalMessage" class="app-modal-message"></div>
+      <div class="app-modal-bar">
+        <button type="button" id="appModalCancel" class="ctrl-overlay-btn ctrl-overlay-btn--caution">Cancel</button>
+        <button type="button" id="appModalPrimary" class="ctrl-overlay-btn ctrl-overlay-btn--ops">Continue</button>
+      </div>
+    </div>
+  </div>
+</div>`;
+
+function ensureAppModalDom() {
+  if (document.getElementById("appModalMessage")) return;
+  const tpl = document.createElement("template");
+  tpl.innerHTML = APP_MODAL_HTML.trim();
+  document.body.appendChild(tpl.content.firstElementChild);
+}
+
+function _appModalNodes() {
+  ensureAppModalDom();
+  initAppModal();
+  const overlay = document.getElementById("appModalOverlay");
+  const cancel = document.getElementById("appModalCancel");
+  const primary = document.getElementById("appModalPrimary");
+  const titleEl = document.getElementById("appModalTitle");
+  const messageEl = document.getElementById("appModalMessage");
+  if (!overlay || !cancel || !primary || !titleEl || !messageEl) return null;
+  return { overlay, cancel, primary, titleEl, messageEl };
+}
+
 function initAppModal() {
+  ensureAppModalDom();
   const overlay = document.getElementById("appModalOverlay");
   if (!overlay || overlay.dataset.wired === "1") return;
   overlay.dataset.wired = "1";
   const cancel = document.getElementById("appModalCancel");
   const primary = document.getElementById("appModalPrimary");
+  if (!cancel || !primary) return;
 
   const finish = (value) => {
     const fn = _appModalResolve;
     _appModalResolve = null;
     overlay.classList.remove("app-modal-overlay--inspect");
+    _appModalResetFormState();
     overlay.hidden = true;
     if (typeof fn === "function") fn(value);
   };
@@ -3258,18 +3570,34 @@ function initAppModal() {
   cancel.addEventListener("click", () => finish(false));
   primary.addEventListener("click", () => {
     const mode = overlay.dataset.mode || "confirm";
-    finish(mode === "alert" ? undefined : true);
+    if (mode === "alert") finish(undefined);
+    else finish(true);
   });
   overlay.addEventListener("click", (e) => {
-    if (e.target === overlay && overlay.dataset.mode === "confirm") finish(false);
+    const mode = overlay.dataset.mode || "confirm";
+    if (e.target === overlay && (mode === "confirm" || mode === "prompt")) finish(false);
   });
   document.addEventListener("keydown", (e) => {
     if (overlay.hidden) return;
     if (e.key !== "Escape") return;
     e.preventDefault();
-    if (overlay.dataset.mode === "alert") finish(undefined);
+    const mode = overlay.dataset.mode || "confirm";
+    if (mode === "alert") finish(undefined);
     else finish(false);
   });
+}
+
+function _appModalDialogEl() {
+  return document.querySelector("#appModalOverlay .app-modal-dialog");
+}
+
+function _appModalResetFormState() {
+  const dialog = _appModalDialogEl();
+  dialog?.classList.remove("app-modal-dialog--form", "app-modal-dialog--copy");
+  const msg = document.getElementById("appModalMessage");
+  if (msg) {
+    msg.classList.remove("app-modal-message--form", "app-modal-message--copy");
+  }
 }
 
 function _appModalSetPrimaryVariant(btn, variant) {
@@ -3280,12 +3608,12 @@ function _appModalSetPrimaryVariant(btn, variant) {
 }
 
 function showAppAlert(message, title = "Notice") {
-  initAppModal();
-  const overlay = document.getElementById("appModalOverlay");
-  const cancel = document.getElementById("appModalCancel");
-  const primary = document.getElementById("appModalPrimary");
-  document.getElementById("appModalTitle").textContent = title;
-  document.getElementById("appModalMessage").textContent = message;
+  const nodes = _appModalNodes();
+  if (!nodes) return Promise.resolve();
+  const { overlay, cancel, primary, titleEl, messageEl } = nodes;
+  _appModalResetFormState();
+  titleEl.textContent = title;
+  messageEl.textContent = message;
   overlay.dataset.mode = "alert";
   cancel.classList.add("is-hidden");
   primary.textContent = "OK";
@@ -3303,15 +3631,145 @@ function showAppAlert(message, title = "Notice") {
  * "Show CLI" modal that needs <pre> blocks for copyable command snippets.
  */
 function showAppHtmlAlert(htmlMessage, title = "Notice") {
-  initAppModal();
-  const overlay = document.getElementById("appModalOverlay");
-  const cancel = document.getElementById("appModalCancel");
-  const primary = document.getElementById("appModalPrimary");
-  document.getElementById("appModalTitle").textContent = title;
-  document.getElementById("appModalMessage").innerHTML = htmlMessage;
+  const nodes = _appModalNodes();
+  if (!nodes) return Promise.resolve();
+  const { overlay, cancel, primary, titleEl, messageEl } = nodes;
+  _appModalResetFormState();
+  titleEl.textContent = title;
+  messageEl.innerHTML = htmlMessage;
   overlay.dataset.mode = "alert";
   cancel.classList.add("is-hidden");
   primary.textContent = "Close";
+  _appModalSetPrimaryVariant(primary, "primary");
+  return new Promise((resolve) => {
+    _appModalResolve = () => resolve();
+    overlay.hidden = false;
+    primary.focus();
+  });
+}
+
+function showAppPrompt({
+  title = "Input",
+  message = "",
+  label = "",
+  defaultValue = "",
+  placeholder = "",
+  confirmText = "Save",
+  cancelText = "Cancel",
+  password = false,
+} = {}) {
+  const nodes = _appModalNodes();
+  if (!nodes) return Promise.resolve(null);
+  const { overlay, cancel, primary, titleEl, messageEl: msgEl } = nodes;
+  _appModalResetFormState();
+  _appModalDialogEl()?.classList.add("app-modal-dialog--form");
+  msgEl.classList.add("app-modal-message--form");
+  titleEl.textContent = title;
+  const inputId = "appModalFieldInput";
+  msgEl.innerHTML = `${message ? `<p class="app-modal-message__lead">${escapeHtml(message)}</p>` : ""}
+    <label class="app-modal-field" for="${inputId}">
+      <span class="app-modal-field-label">${escapeHtml(label || "Value")}</span>
+      <input id="${inputId}" class="app-modal-input" type="${password ? "password" : "text"}" autocomplete="off" />
+    </label>`;
+  const input = document.getElementById(inputId);
+  input.value = defaultValue || "";
+  input.placeholder = placeholder || "";
+  overlay.dataset.mode = "prompt";
+  cancel.classList.remove("is-hidden");
+  cancel.textContent = cancelText;
+  primary.textContent = confirmText;
+  _appModalSetPrimaryVariant(primary, "primary");
+  return new Promise((resolve) => {
+    _appModalResolve = (ok) => resolve(ok ? input.value : null);
+    overlay.hidden = false;
+    input.focus();
+    if (!password) input.select();
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        primary.click();
+      }
+    });
+  });
+}
+
+function showAppCredentialsForm({ title = "Edit credentials", serviceLabel = "", fields = [] } = {}) {
+  const nodes = _appModalNodes();
+  if (!nodes) return Promise.resolve(null);
+  const { overlay, cancel, primary, titleEl, messageEl: msgEl } = nodes;
+  _appModalResetFormState();
+  _appModalDialogEl()?.classList.add("app-modal-dialog--form");
+  msgEl.classList.add("app-modal-message--form");
+  titleEl.textContent = title;
+  const lead = serviceLabel
+    ? `<p class="app-modal-message__lead muted small">${escapeHtml(serviceLabel)} — leave secrets blank to keep current values.</p>`
+    : `<p class="app-modal-message__lead muted small">Leave secrets blank to keep current values.</p>`;
+  msgEl.innerHTML =
+    lead +
+    fields
+      .map((f) => {
+        const isSecret = !!f.secret;
+        const val = String(f.value || "");
+        const showVal = isSecret && val.includes("•") ? "" : val;
+        return `<label class="app-modal-field">
+      <span class="app-modal-field-label">${escapeHtml(f.label || f.key)}</span>
+      <input class="app-modal-input" type="${isSecret ? "password" : "text"}" data-field-key="${escapeAttr(f.key)}" value="${escapeAttr(showVal)}" autocomplete="off" placeholder="${isSecret ? "Leave blank to keep" : ""}" />
+    </label>`;
+      })
+      .join("");
+  overlay.dataset.mode = "prompt";
+  cancel.classList.remove("is-hidden");
+  cancel.textContent = "Cancel";
+  primary.textContent = "Save";
+  _appModalSetPrimaryVariant(primary, "primary");
+  const inputs = [...msgEl.querySelectorAll("[data-field-key]")];
+  return new Promise((resolve) => {
+    _appModalResolve = (ok) => {
+      if (!ok) {
+        resolve(null);
+        return;
+      }
+      const next = {};
+      inputs.forEach((inp) => {
+        const v = inp.value.trim();
+        if (v) next[inp.getAttribute("data-field-key")] = v;
+      });
+      resolve(next);
+    };
+    overlay.hidden = false;
+    inputs[0]?.focus();
+  });
+}
+
+async function showAppCopyLinkModal(url, title = "Magic link") {
+  const nodes = _appModalNodes();
+  if (!nodes) return;
+  const { overlay, cancel, primary, titleEl, messageEl: msgEl } = nodes;
+  _appModalResetFormState();
+  _appModalDialogEl()?.classList.add("app-modal-dialog--copy");
+  msgEl.classList.add("app-modal-message--copy");
+  titleEl.textContent = title;
+  msgEl.innerHTML = `<p class="app-modal-message__lead">Copy this link (expires in ~60s):</p>
+    <input type="text" class="app-modal-input app-modal-input--readonly" readonly value="${escapeAttr(url)}" id="appModalCopyField" />
+    <button type="button" class="ollama-act ollama-act--safe app-modal-copy-btn" id="appModalCopyBtn">Copy to clipboard</button>`;
+  const copyBtn = document.getElementById("appModalCopyBtn");
+  const field = document.getElementById("appModalCopyField");
+  copyBtn?.addEventListener("click", () => {
+    const text = field?.value || url;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(() => {
+        copyBtn.textContent = "Copied";
+        setTimeout(() => {
+          copyBtn.textContent = "Copy to clipboard";
+        }, 1400);
+      });
+    } else {
+      field?.select();
+    }
+  });
+  overlay.dataset.mode = "alert";
+  cancel.classList.add("is-hidden");
+  primary.textContent = "Done";
   _appModalSetPrimaryVariant(primary, "primary");
   return new Promise((resolve) => {
     _appModalResolve = () => resolve();
@@ -3327,12 +3785,12 @@ function showAppConfirm({
   cancelText = "Cancel",
   danger = false,
 } = {}) {
-  initAppModal();
-  const overlay = document.getElementById("appModalOverlay");
-  const cancel = document.getElementById("appModalCancel");
-  const primary = document.getElementById("appModalPrimary");
-  document.getElementById("appModalTitle").textContent = title;
-  document.getElementById("appModalMessage").textContent = message;
+  const nodes = _appModalNodes();
+  if (!nodes) return Promise.resolve(false);
+  const { overlay, cancel, primary, titleEl, messageEl } = nodes;
+  _appModalResetFormState();
+  titleEl.textContent = title;
+  messageEl.textContent = message;
   overlay.dataset.mode = "confirm";
   cancel.classList.remove("is-hidden");
   cancel.textContent = cancelText;
@@ -9179,13 +9637,17 @@ function initControlBulkBar() {
 }
 
 async function bootstrapHubChrome() {
+  initAppModal();
   applySavedRefreshRate();
   applyExternalLinkAttrs();
   document.getElementById("refreshNow")?.addEventListener("click", () => {
     loadOverview();
+    loadUiAccessPanel();
   });
   document.getElementById("refreshRate")?.addEventListener("change", scheduleRefresh);
   await loadOverview();
+  await loadUiAccessPanel();
+  initHubUiAccess();
   scheduleRefresh();
 }
 
@@ -9273,6 +9735,7 @@ async function bootstrap() {
   document.getElementById("referenceFilter")?.addEventListener("input", applyReferenceFilter);
 
   await loadOverview();
+  loadUiAccessPanel();
   applyExternalLinkAttrs();
   const { tab: requestedTab, doc: requestedDoc, app: requestedApp, hash: requestedHash } =
     parseDashboardLocation();

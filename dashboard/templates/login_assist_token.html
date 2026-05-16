@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Signing in — {{ assist.label }}</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <p class="muted small">Signing in to {{ assist.label }}…</p>
+    <script>
+      (function () {
+        const key = {{ assist.storage_key | tojson }};
+        const token = {{ assist.token | tojson }};
+        const target = {{ assist.login_url | tojson }};
+        try {
+          localStorage.setItem(key, token);
+        } catch (_) {
+          /* ignore */
+        }
+        window.location.replace(target);
+      })();
+    </script>
+  </body>
+</html>

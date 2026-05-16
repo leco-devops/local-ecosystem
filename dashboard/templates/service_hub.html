@@ -30,7 +30,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ hub.service }} — Service hub</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/static/dashboard.css" />
+    <link rel="stylesheet" href="/static/dashboard.css?v=20260530" />
     <link rel="stylesheet" href="/static/service_hub.css" />
   </head>
   <body>
@@ -42,7 +42,8 @@
       <header class="hub-page-heading">
         <div class="hub-page-heading__title-row">
           <h2 class="hub-page-heading__title">{{ hub.service }}</h2>
-          <a class="hub-back-link hub-back-link--inline" href="/hub">← Back to all hubs</a>
+          <a class="hub-back-link hub-back-link--inline" href="/hub">← All hubs</a>
+          <a class="hub-back-link hub-back-link--inline hub-back-link--secondary" href="/hub#hub-ui-access">UI access</a>
         </div>
         <p class="hub-page-heading__lede muted">
           <strong>About this service.</strong>
@@ -76,6 +77,14 @@
             <li><a href="{{ u.url }}"{{ hub_link_blank_attr(u.url) }}>{{ u.label }}</a> — <code>{{ u.url }}</code></li>
           {% endfor %}
         </ul>
+      </section>
+      {% endif %}
+
+      {% if ui_access %}
+      <section class="hub-section hub-section--ui-access">
+        <h2>UI access</h2>
+        <p class="muted small">Local dev only — <strong>Auto-login</strong>, <strong>Copy magic link</strong>, edit credentials, and <strong>Reset &amp; apply</strong> (control token required when set). <a href="/hub#hub-ui-access">All services</a>.</p>
+        <div id="hubUiAccess" class="hub-ui-access" data-hub-slug="{{ hub.slug }}"></div>
       </section>
       {% endif %}
 
@@ -126,7 +135,8 @@
       {% set footer_doc_mode = 'anchors' %}
       {% include "_site_footer.html" %}
     </div>
+    {% include "_app_modal.html" %}
     <script type="application/json" id="dashboard-boot-config">{{ dashboard_boot | tojson }}</script>
-    <script src="/static/dashboard.js"></script>
+    <script src="/static/dashboard.js?v=20260533"></script>
   </body>
 </html>

@@ -31,30 +31,61 @@ SERVICE_MAP = [
         "container": "traefik",
         "urls": ["http://traefik.lh"],
         "notes": "Reverse proxy and LEco DevOps",
+        "hub_slug": "traefik",
+        "management_links": [
+            {"label": "Dashboard", "url": "http://traefik.lh"},
+            {"label": "Service hub", "url": "http://localhost.lh/hub/traefik"},
+        ],
     },
     {
         "service": "Open WebUI",
         "container": "open-webui",
         "urls": ["http://ai.lh"],
         "notes": "AI chat user interface",
+        "hub_slug": "webui",
+        "credentials": [
+            "First signup creates the admin user. Suggested local dev: admin@local.lh / localdev (edit in UI access vault to match your instance).",
+        ],
+        "management_links": [
+            {"label": "Open WebUI", "url": "http://ai.lh"},
+            {"label": "Service hub", "url": "http://localhost.lh/hub/webui"},
+        ],
     },
     {
         "service": "n8n",
         "container": "n8n",
         "urls": ["http://n8n.lh"],
         "notes": "Workflow automation",
+        "hub_slug": "n8n",
+        "credentials": [
+            "Owner account is created on first visit. Suggested local dev: admin@local.lh / localdev (edit in UI access vault to match your instance).",
+        ],
+        "management_links": [
+            {"label": "Open n8n", "url": "http://n8n.lh"},
+            {"label": "Service hub", "url": "http://localhost.lh/hub/n8n"},
+        ],
     },
     {
         "service": "Ollama",
         "container": "ollama",
         "urls": ["http://ollama.lh"],
         "notes": "LLM runtime (GGUF models)",
+        "hub_slug": "ollama",
+        "management_links": [
+            {"label": "Web UI", "url": "http://ollama.lh"},
+            {"label": "Service hub", "url": "http://localhost.lh/hub/ollama"},
+        ],
     },
     {
         "service": "AirLLM",
         "container": "airllm",
         "urls": ["http://airllm.lh"],
         "notes": "Large HF model runtime (layer-by-layer loading, CPU / optional CUDA)",
+        "hub_slug": "airllm",
+        "management_links": [
+            {"label": "API / UI", "url": "http://airllm.lh"},
+            {"label": "Service hub", "url": "http://localhost.lh/hub/airllm"},
+        ],
     },
     {
         "service": "LEco DevOps",
