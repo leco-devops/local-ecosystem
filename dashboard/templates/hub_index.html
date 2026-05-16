@@ -17,40 +17,34 @@
       <header class="hub-page-heading">
         <h2 class="hub-page-heading__title">Service hubs</h2>
         <p class="hub-page-heading__lede muted">
-          Credentials, connection strings, GUIs, and live container status for each managed service.
+          Each hub is a <strong>single-service operations page</strong> for the local ecosystem: what the service does,
+          how it fits the platform, live Docker status, credentials, connection strings, and every <code>*.lh</code> URL
+          you can open from the browser.
+        </p>
+        <p class="hub-page-heading__lede muted small">
+          Use hubs when you need passwords, JDBC/Redis URLs, MinIO keys, or CF-local adapter endpoints without digging
+          through compose files. Status and metrics refresh with the dashboard toolbar.
         </p>
       </header>
 
       <section class="hub-panel">
-        <ul class="hub-index-list">
+        <ul class="hub-index-list hub-index-list--detailed">
           {% for h in hubs %}
-            <li>
-              <a href="/hub/{{ h.slug }}">{{ h.service }}</a>
-              <code>{{ h.container }}</code>
+            <li class="hub-index-item">
+              <div class="hub-index-item__head">
+                <a class="hub-index-item__title" href="/hub/{{ h.slug }}">{{ h.service }}</a>
+                <code class="hub-index-item__container">{{ h.container }}</code>
+              </div>
+              {% if h.notes %}
+                <p class="hub-index-item__purpose muted small">{{ h.notes }}</p>
+              {% endif %}
             </li>
           {% endfor %}
         </ul>
       </section>
 
-      <footer class="project-footer" aria-label="Project links">
-        <p class="project-footer__brand">
-          <strong>LEco DevOps Open Project</strong> · Application: <strong>LEco DevOps</strong>
-        </p>
-        <p class="project-footer__copy muted small">
-          MIT License · Copyright (c) 2026 Rajneesh Maurya · Individual open-source maintainer
-        </p>
-        <div class="project-footer__links">
-          <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab&doc=ecosystem-readme">README</a>
-          <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab&doc=devops-setup">Setup</a>
-          <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab&doc=devops-deployment">Deployment</a>
-          <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab&doc=open-source-license">License</a>
-          <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab&doc=open-source-contributing">Contributing</a>
-          <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab&doc=open-source-security">Security</a>
-          <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab">Docs</a>
-          <a class="project-footer__link project-footer__link--anchor" href="/?tab=developTab">Develop</a>
-          <a class="project-footer__link project-footer__link--anchor" href="/hub">Service hubs</a>
-        </div>
-      </footer>
+      {% set footer_doc_mode = 'anchors' %}
+      {% include "_site_footer.html" %}
     </div>
     <script type="application/json" id="dashboard-boot-config">{{ dashboard_boot | tojson }}</script>
     <script src="/static/dashboard.js"></script>

@@ -22,7 +22,12 @@ def list_hub_slugs() -> list[dict]:
         slug = item.get("hub_slug")
         if not slug:
             continue
-        out.append({"slug": slug, "service": item["service"], "container": item["container"]})
+        out.append({
+            "slug": slug,
+            "service": item["service"],
+            "container": item["container"],
+            "notes": item.get("notes") or "",
+        })
     return sorted(out, key=lambda x: x["service"].lower())
 
 

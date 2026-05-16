@@ -26,6 +26,7 @@ from help_manual import get_help_content, get_help_tree, search_help
 from popular_models import load_airllm_catalog, load_ollama_catalog
 from service_hub import get_hub_detail, list_hub_slugs
 from version_info import load_version_payload
+from ai_news import fetch_all_news, filter_news, refine_query_with_llm
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
@@ -990,6 +991,27 @@ def api_update_catalog_mark_read():
     if not check_control_token(request, data):
         return jsonify({"ok": False, "error": "unauthorized"}), 401
     return jsonify(mark_all_read())
+
+
+@app.get("/api/ai-news")
+def api_ai_news():
+    force = request.args.get("refresh", "").strip().lower() in ("1", "true", "yes")
+    category = (request.args.get("category") or "").strip() or None
+    tags_raw = (request.args.get("tags") or "").strip()
+    tags = [t.strip() for t in tags_raw.split(",") if t.strip()] if tags_raw else None
+    q = (request.args.get("q") or "").strip() or None
+    payload = fetch_all_news(force=force)
+    items = filter_news(payload, category=category, tags=tags, q=q)
+    return jsonify({**payload, "filtered_count": len(items), "filtered_items": items})
+
+
+@app.post("/api/ai-news/refine")
+def api_ai_news_refine():
+    data = request.get_json(silent=True) or {}
+    query = str(data.get("query") or data.get("interest") or "").strip()
+    if not query:
+        return jsonify({"ok": False, "error": "query is required"}), 400
+    return jsonify(refine_query_with_llm(query))
 
 
 @app.post("/api/control")

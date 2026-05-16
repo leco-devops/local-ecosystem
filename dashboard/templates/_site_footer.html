@@ -1,0 +1,40 @@
+{# Unified site footer. footer_doc_mode: "buttons" (main dashboard) | "anchors" (hub/help). #}
+{% set doc_mode = footer_doc_mode|default('anchors') %}
+{% set ver = dashboard_boot.platform_version if dashboard_boot is defined and dashboard_boot.platform_version else none %}
+<footer class="project-footer" aria-label="Project links">
+  <p class="project-footer__brand">
+    <strong>LEco DevOps Open Project</strong> · Application: <strong>LEco DevOps</strong>
+  </p>
+  <p class="project-footer__copy muted small">
+    MIT License · Copyright (c) 2026 Rajneesh Maurya
+    {% if ver %}· Platform <span id="footerPlatformVersion">v{{ ver }}</span>{% else %}· Platform <span id="footerPlatformVersion">v—</span>{% endif %}
+    {% if ver %}
+      · <a class="project-footer__release-link" href="/?tab=docsTab&amp;doc=project-release-notes">Release notes (v{{ ver }})</a>
+    {% endif %}
+  </p>
+  <div class="project-footer__links">
+    {% if doc_mode == 'buttons' %}
+      <button type="button" class="project-footer__link" data-doc-open="project-release-notes">Releases</button>
+      <button type="button" class="project-footer__link" data-doc-open="project-changelog">Changelog</button>
+      <button type="button" class="project-footer__link" data-doc-open="ecosystem-readme">README</button>
+      <button type="button" class="project-footer__link" data-doc-open="devops-setup">Setup</button>
+      <button type="button" class="project-footer__link" data-doc-open="devops-deployment">Deployment</button>
+      <button type="button" class="project-footer__link" data-doc-open="open-source-license">License</button>
+      <button type="button" class="project-footer__link" data-doc-open="open-source-contributing">Contributing</button>
+      <button type="button" class="project-footer__link" data-doc-open="open-source-security">Security</button>
+    {% else %}
+      <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab&amp;doc=project-release-notes">Releases (v{{ ver or '—' }})</a>
+      <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab&amp;doc=project-changelog">Changelog</a>
+      <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab&amp;doc=ecosystem-readme">README</a>
+      <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab&amp;doc=devops-setup">Setup</a>
+      <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab&amp;doc=devops-deployment">Deployment</a>
+      <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab&amp;doc=open-source-license">License</a>
+      <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab&amp;doc=open-source-contributing">Contributing</a>
+      <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab&amp;doc=open-source-security">Security</a>
+    {% endif %}
+    <a class="project-footer__link project-footer__link--anchor" href="/help">Help</a>
+    <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab">Docs</a>
+    <a class="project-footer__link project-footer__link--anchor" href="/?tab=developTab">Develop</a>
+    <a class="project-footer__link project-footer__link--anchor" href="/hub">Service hubs</a>
+  </div>
+</footer>

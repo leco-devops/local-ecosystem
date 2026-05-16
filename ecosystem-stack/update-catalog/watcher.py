@@ -139,10 +139,91 @@ def _github_latest_release(repo_path: str) -> dict | None:
         r.raise_for_status()
         data = r.json()
         tag = str(data.get("tag_name") or "").lstrip("v")
-        return {"tag": tag or "latest", "updated": data.get("published_at"), "full": f"ghcr.io/{repo_path}:{tag}"}
+        return {
+            "tag": tag or "latest",
+            "updated": data.get("published_at"),
+            "full": tag or "latest",
+            "html_url": data.get("html_url"),
+        }
     except requests.RequestException as exc:
         LOG.warning("GitHub releases %s: %s", repo_path, exc)
         return None
+
+
+def _read_local_version(rel_path: str) -> str | None:
+    path = PROJECT_ROOT / rel_path
+    try:
+        line = path.read_text(encoding="utf-8").strip().splitlines()[0].strip()
+        return line.lstrip("v") if line else None
+    except (OSError, IndexError):
+        return None
+
+
+def check_github_repos(cfg: dict) -> list[dict]:
+    """Check public GitHub repos for releases newer than local VERSION file."""
+    rows: list[dict] = []
+    for item in cfg.get("github_repos") or []:
+        if not isinstance(item, dict):
+            continue
+        repo = str(item.get("repo") or "").strip()
+        if not repo or "/" not in repo:
+            continue
+        label = str(item.get("label") or repo)
+        local_ver = _read_local_version(str(item.get("version_file") or "VERSION"))
+        row: dict[str, Any] = {
+            "id": str(item.get("id") or repo.replace("/", "-")),
+            "label": label,
+            "container": "git",
+            "source": "github",
+            "repo": repo,
+            "running_image": f"local:{local_ver}" if local_ver else "local:unknown",
+            "upgrade_help": str(item.get("upgrade_help") or "ecosystem-updates"),
+            "upgrade_steps": list(item.get("upgrade_steps") or []),
+            "status": "unknown",
+        }
+        api_repo = f"https://api.github.com/repos/{repo}"
+        try:
+            r = SESSION.get(api_repo, timeout=20)
+            if r.status_code == 404:
+                row["status"] = "skipped"
+                row["note"] = "Repository not found or not accessible (private)."
+                rows.append(row)
+                continue
+            if r.status_code == 403:
+                row["status"] = "skipped"
+                row["note"] = "GitHub API rate limit or forbidden; skipped."
+                rows.append(row)
+                continue
+            r.raise_for_status()
+            repo_meta = r.json()
+            if repo_meta.get("private") and item.get("skip_if_private", True):
+                row["status"] = "skipped"
+                row["note"] = "Private repository; skipped."
+                rows.append(row)
+                continue
+        except requests.RequestException as exc:
+            row["status"] = "check_failed"
+            row["note"] = str(exc)[:120]
+            rows.append(row)
+            continue
+
+        latest = _github_latest_release(repo)
+        row["latest"] = latest
+        if not latest:
+            row["status"] = "no_releases"
+            row["note"] = "No published GitHub release; compare with default branch manually."
+        elif not local_ver:
+            row["status"] = "update_available"
+            row["note"] = f"Latest release: {latest.get('tag')}"
+        else:
+            remote_tag = str(latest.get("tag") or "").lstrip("v")
+            if remote_tag and remote_tag != local_ver:
+                row["status"] = "update_available"
+                row["note"] = f"Release {remote_tag} vs local {local_ver}"
+            else:
+                row["status"] = "up_to_date"
+        rows.append(row)
+    return rows
 
 
 def check_stack_services(cfg: dict) -> list[dict]:
@@ -378,7 +459,9 @@ def merge_airllm_catalog(seed_models: list[dict], online: list[dict]) -> dict:
     }
 
 
-def build_updates_payload(services: list[dict], ollama: dict, airllm: dict) -> dict:
+def build_updates_payload(
+    services: list[dict], ollama: dict, airllm: dict, github_repos: list[dict] | None = None
+) -> dict:
     model_alerts = []
     for name in ollama.get("new_online") or []:
         model_alerts.append(
@@ -390,11 +473,15 @@ def build_updates_payload(services: list[dict], ollama: dict, airllm: dict) -> d
                 "help": "ollama",
             }
         )
-    svc_updates = [s for s in services if s.get("status") == "update_available"]
+    github_repos = github_repos or []
+    all_services = list(services) + list(github_repos)
+    svc_updates = [s for s in all_services if s.get("status") == "update_available"]
     return {
         "ok": True,
         "generated_at": iso_now(),
-        "services": services,
+        "services": all_services,
+        "docker_services": services,
+        "github_repos": github_repos,
         "service_updates_available": len(svc_updates),
         "model_alerts": model_alerts,
         "ollama_new_count": ollama.get("new_online_count", 0),
@@ -438,7 +525,9 @@ def write_help_markdown(updates: dict, ollama: dict, airllm: dict) -> None:
         "| Service | Status | Running | Latest | Upgrade |",
         "|---------|--------|---------|--------|---------|",
     ]
-    for s in updates.get("services") or []:
+    for s in updates.get("docker_services") or updates.get("services") or []:
+        if s.get("source") == "github":
+            continue
         st = s.get("status", "")
         run = _md_escape(s.get("running_image") or "—")
         lat = _md_escape((s.get("latest") or {}).get("full") or "—")
@@ -447,6 +536,17 @@ def write_help_markdown(updates: dict, ollama: dict, airllm: dict) -> None:
         svc_lines.append(
             f"| {s.get('label')} | **{st}** | `{run}` | `{lat}` | {up} |"
         )
+    gh = updates.get("github_repos") or []
+    if gh:
+        svc_lines.append("\n## GitHub repository releases\n")
+        svc_lines.append("| Project | Status | Local | Latest release | Notes |")
+        svc_lines.append("|---------|--------|-------|----------------|-------|")
+        for s in gh:
+            st = s.get("status", "")
+            run = _md_escape(s.get("running_image") or "—")
+            lat = _md_escape((s.get("latest") or {}).get("tag") or "—")
+            note = _md_escape(s.get("note") or "—")
+            svc_lines.append(f"| {s.get('label')} | **{st}** | `{run}` | `{lat}` | {note} |")
     svc_lines.append("\n## New Ollama library entries\n")
     new_o = ollama.get("new_online") or []
     if new_o:
@@ -485,11 +585,12 @@ def run_once() -> None:
     airllm_seed = read_json(AIRLLM_SEED, {}).get("models") or []
 
     services = check_stack_services(cfg)
+    github_rows = check_github_repos(cfg)
     ollama_online = fetch_ollama_online()
     hf_online = fetch_hf_instruct()
     ollama_cat = merge_ollama_catalog(ollama_seed, ollama_online)
     airllm_cat = merge_airllm_catalog(airllm_seed, hf_online)
-    updates = build_updates_payload(services, ollama_cat, airllm_cat)
+    updates = build_updates_payload(services, ollama_cat, airllm_cat, github_rows)
 
     sched = read_json(SCHEDULE_JSON, {"mode": "interval", "interval_hours": cfg.get("check_interval_hours", INTERVAL_HOURS)})
     meta = {

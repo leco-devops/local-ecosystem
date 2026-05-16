@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>LEco DevOps</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/static/dashboard.css?v=20260524" />
+    <link rel="stylesheet" href="/static/dashboard.css?v=20260526" />
   </head>
   <body>
     <div class="wrap">
@@ -1015,6 +1015,41 @@
           Start with <strong>Local ecosystem</strong> below for the root README, or open <strong>Docs</strong> for every guide
           (DevOps, Cloudflare local, development playbook).
         </p>
+        <article class="dash-panel dash-panel--wide ai-news-panel" id="aiNewsPanel">
+          <header class="dash-panel__head">
+            <span class="dash-panel__title">AI news (live)</span>
+            <button type="button" class="btn btn--sm btn--ghost" id="aiNewsRefresh">Refresh feeds</button>
+          </header>
+          <p class="muted small ai-news-panel__lede">
+            Consolidated headlines from configured RSS sources. Filter by category and tags, or describe what you care about —
+            a <strong>local Ollama</strong> model suggests categories, tags, and keywords.
+          </p>
+          <div class="ai-news-filters">
+            <label class="ai-news-filters__row">
+              <span class="muted small">Category</span>
+              <select id="aiNewsCategory" class="uc-input"><option value="">All</option></select>
+            </label>
+            <label class="ai-news-filters__row">
+              <span class="muted small">Tags (comma)</span>
+              <input id="aiNewsTags" type="text" class="uc-input" placeholder="ollama, open-source" />
+            </label>
+            <label class="ai-news-filters__row ai-news-filters__row--grow">
+              <span class="muted small">Search</span>
+              <input id="aiNewsSearch" type="search" class="uc-input" placeholder="Keywords in title or summary" />
+            </label>
+            <button type="button" class="btn btn--sm" id="aiNewsApply">Apply filters</button>
+          </div>
+          <div class="ai-news-llm">
+            <label class="ai-news-filters__row ai-news-filters__row--grow">
+              <span class="muted small">Interest (local LLM)</span>
+              <input id="aiNewsInterest" type="text" class="uc-input" placeholder="e.g. local LLM releases and Ollama updates" />
+            </label>
+            <button type="button" class="btn btn--sm btn--ghost" id="aiNewsRefine">Suggest filters</button>
+          </div>
+          <p id="aiNewsRefineHint" class="muted small ai-news-refine-hint"></p>
+          <p id="aiNewsMeta" class="muted small"></p>
+          <ul id="aiNewsList" class="ai-news-list"></ul>
+        </article>
         <div id="developCards" class="dev-grid"></div>
       </section>
 
@@ -1060,28 +1095,8 @@
         </table>
       </section>
 
-      <footer class="project-footer" aria-label="Project links">
-        <p class="project-footer__brand">
-          <strong>LEco DevOps Open Project</strong> · Application: <strong>LEco DevOps</strong>
-        </p>
-        <p class="project-footer__copy muted small">
-          MIT License · Copyright (c) 2026 Rajneesh Maurya · Platform <span id="footerPlatformVersion">v—</span>
-        </p>
-        <div class="project-footer__links">
-          <button type="button" class="project-footer__link" data-doc-open="project-release-notes">Releases</button>
-          <button type="button" class="project-footer__link" data-doc-open="project-changelog">Changelog</button>
-          <button type="button" class="project-footer__link" data-doc-open="ecosystem-readme">README</button>
-          <button type="button" class="project-footer__link" data-doc-open="devops-setup">Setup</button>
-          <button type="button" class="project-footer__link" data-doc-open="devops-deployment">Deployment</button>
-          <button type="button" class="project-footer__link" data-doc-open="open-source-license">License</button>
-          <button type="button" class="project-footer__link" data-doc-open="open-source-contributing">Contributing</button>
-          <button type="button" class="project-footer__link" data-doc-open="open-source-security">Security</button>
-          <a class="project-footer__link project-footer__link--anchor" href="/help">Help</a>
-          <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab">Docs</a>
-          <a class="project-footer__link project-footer__link--anchor" href="/?tab=developTab">Develop</a>
-          <a class="project-footer__link project-footer__link--anchor" href="/hub">Service hubs</a>
-        </div>
-      </footer>
+      {% set footer_doc_mode = 'buttons' %}
+      {% include "_site_footer.html" %}
     </div>
 
     <div id="hostedChartExpandOverlay" class="hosted-chart-expand-overlay" hidden>
@@ -1183,6 +1198,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
-    <script src="/static/dashboard.js?v=20260525"></script>
+    <script src="/static/dashboard.js?v=20260526"></script>
   </body>
 </html>

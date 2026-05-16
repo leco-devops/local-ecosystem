@@ -79,6 +79,11 @@ HELP_TREE: list[dict] = [
         ],
     },
     {
+        "id": "ai-news",
+        "title": "AI news aggregator",
+        "file": "18-ai-news.md",
+    },
+    {
         "id": "cli",
         "title": "LEco CLI reference",
         "children": [

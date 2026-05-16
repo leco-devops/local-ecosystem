@@ -624,6 +624,15 @@ function resolveFetchPreloaderMeta(input, init) {
     };
   }
 
+  if (pathname === "/api/ai-news" || pathname.startsWith("/api/ai-news/")) {
+    return {
+      label: "AI news · live RSS headlines",
+      detail: `Filtered feeds · ${httpLine}`,
+      path: fullPath,
+      tabId: "developTab",
+    };
+  }
+
   if (pathname.startsWith("/api/ai/")) {
     const tail = pathname.replace(/^\/api\/ai\/?/, "") || "api";
     return {
@@ -1858,6 +1867,112 @@ async function loadDocContent(id, opts = {}) {
   } catch (e) {
     content.innerHTML = `<p class='muted'>${escapeHtml(String(e))}</p>`;
   }
+}
+
+let aiNewsCategoriesLoaded = false;
+
+async function loadAiNewsPanel(refresh = false) {
+  const list = document.getElementById("aiNewsList");
+  const meta = document.getElementById("aiNewsMeta");
+  if (!list) return;
+  const cat = document.getElementById("aiNewsCategory")?.value || "";
+  const tags = document.getElementById("aiNewsTags")?.value || "";
+  const q = document.getElementById("aiNewsSearch")?.value || "";
+  const params = new URLSearchParams();
+  if (refresh) params.set("refresh", "1");
+  if (cat) params.set("category", cat);
+  if (tags) params.set("tags", tags);
+  if (q) params.set("q", q);
+  list.innerHTML = `<li class="muted small">Loading AI news…</li>`;
+  try {
+    const res = await fetch(`/api/ai-news?${params.toString()}`, {
+      dashboardStatus: refresh ? "AI news · refresh feeds" : "AI news · load headlines",
+      dashboardTab: "developTab",
+    });
+    const data = await res.json();
+    if (!aiNewsCategoriesLoaded) {
+      const sel = document.getElementById("aiNewsCategory");
+      if (sel && data.categories) {
+        for (const c of data.categories) {
+          const o = document.createElement("option");
+          o.value = c;
+          o.textContent = c;
+          sel.appendChild(o);
+        }
+        aiNewsCategoriesLoaded = true;
+      }
+    }
+    const items = data.filtered_items || data.items || [];
+    if (meta) {
+      meta.textContent = `${items.length} shown · ${data.item_count || 0} total · ${data.feeds_configured || 0} feeds · updated ${data.generated_at || "—"}`;
+    }
+    if (!items.length) {
+      list.innerHTML = `<li class="muted small">No headlines match filters.</li>`;
+      return;
+    }
+    list.innerHTML = items
+      .map((it) => {
+        const tagsHtml = (it.tags || [])
+          .slice(0, 6)
+          .map((t) => `<span class="ai-news-tag">${escapeHtml(t)}</span>`)
+          .join("");
+        const when = it.published_at ? escapeHtml(formatCatalogWhen(it.published_at)) : "";
+        return `<li class="ai-news-item">
+          <a class="ai-news-item__title" href="${escapeAttr(it.url || "#")}" target="_blank" rel="noopener noreferrer">${escapeHtml(it.title || "")}</a>
+          <span class="ai-news-item__meta muted small">${escapeHtml(it.source_title || "")}${when ? ` · ${when}` : ""} · ${escapeHtml(it.category || "")}</span>
+          ${it.summary ? `<p class="ai-news-item__summary muted small">${escapeHtml(it.summary)}</p>` : ""}
+          <div class="ai-news-item__tags">${tagsHtml}</div>
+        </li>`;
+      })
+      .join("");
+  } catch (e) {
+    list.innerHTML = `<li class="muted small">${escapeHtml(String(e))}</li>`;
+  }
+}
+
+function initAiNewsPanel() {
+  if (document.getElementById("aiNewsPanel")?.dataset.wired === "1") return;
+  const panel = document.getElementById("aiNewsPanel");
+  if (!panel) return;
+  panel.dataset.wired = "1";
+  document.getElementById("aiNewsRefresh")?.addEventListener("click", () => void loadAiNewsPanel(true));
+  document.getElementById("aiNewsApply")?.addEventListener("click", () => void loadAiNewsPanel(false));
+  document.getElementById("aiNewsSearch")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") void loadAiNewsPanel(false);
+  });
+  document.getElementById("aiNewsRefine")?.addEventListener("click", async () => {
+    const interest = document.getElementById("aiNewsInterest")?.value?.trim() || "";
+    const hint = document.getElementById("aiNewsRefineHint");
+    if (!interest) {
+      if (hint) hint.textContent = "Enter an interest description first.";
+      return;
+    }
+    if (hint) hint.textContent = "Asking local LLM for filter suggestions…";
+    try {
+      const res = await fetch("/api/ai-news/refine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: interest }),
+        dashboardStatus: "AI news · LLM filter suggestions",
+        dashboardTab: "developTab",
+      });
+      const data = await res.json();
+      const cats = (data.categories || []).join(", ");
+      const tags = (data.tags || []).join(", ");
+      const kw = (data.keywords || []).join(" ");
+      if (data.categories?.[0]) document.getElementById("aiNewsCategory").value = data.categories[0];
+      if (tags) document.getElementById("aiNewsTags").value = tags;
+      if (kw) document.getElementById("aiNewsSearch").value = kw;
+      if (hint) {
+        hint.textContent = data.fallback
+          ? `Heuristic filters (LLM unavailable): categories [${cats}] tags [${tags}]`
+          : `LLM suggested: categories [${cats}] tags [${tags}] keywords [${kw}]`;
+      }
+      void loadAiNewsPanel(false);
+    } catch (e) {
+      if (hint) hint.textContent = String(e);
+    }
+  });
 }
 
 function renderDevelopCards() {
@@ -3654,6 +3769,7 @@ function activateTab(tabId, opts = {}) {
     }
     if (tabId === "developTab") {
       renderDevelopCards();
+      loadAiNewsPanel();
     }
     if (tabId === "overviewTab" && lastOverviewData) {
       updateOverviewDashboard(lastOverviewData, lastCloudflareData, lastMetricsData || { points: [] });
@@ -8725,6 +8841,7 @@ async function bootstrap() {
   initOllamaModelsPanel();
   initAiSettingsPanel();
   initAiWizardToggle();
+  initAiNewsPanel();
   await initLogsPanel();
   initLogEvents();
   applySavedRefreshRate();

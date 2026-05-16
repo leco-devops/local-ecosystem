@@ -44,7 +44,10 @@
           <h2 class="hub-page-heading__title">{{ hub.service }}</h2>
           <a class="hub-back-link hub-back-link--inline" href="/hub">← Back to all hubs</a>
         </div>
-        <p class="hub-page-heading__lede muted">{{ hub.notes }}</p>
+        <p class="hub-page-heading__lede muted">
+          <strong>About this service.</strong>
+          {{ hub.notes or "Operations hub for credentials, URLs, and live status for this container." }}
+        </p>
         <p class="hub-meta muted small">Container <code>{{ hub.container }}</code> · {{ hub.generated_at }}</p>
       </header>
 
@@ -120,25 +123,8 @@
         <p class="muted small">Errors in last window: {{ (hub.logs or {}).get('error_lines', 0) }} ({{ (hub.logs or {}).get('error_rate_per_min', 0) }}/min)</p>
       </section>
 
-      <footer class="project-footer" aria-label="Project links">
-        <p class="project-footer__brand">
-          <strong>LEco DevOps Open Project</strong> · Application: <strong>LEco DevOps</strong>
-        </p>
-        <p class="project-footer__copy muted small">
-          MIT License · Copyright (c) 2026 Rajneesh Maurya · Individual open-source maintainer
-        </p>
-        <div class="project-footer__links">
-          <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab&doc=ecosystem-readme">README</a>
-          <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab&doc=devops-setup">Setup</a>
-          <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab&doc=devops-deployment">Deployment</a>
-          <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab&doc=open-source-license">License</a>
-          <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab&doc=open-source-contributing">Contributing</a>
-          <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab&doc=open-source-security">Security</a>
-          <a class="project-footer__link project-footer__link--anchor" href="/?tab=docsTab">Docs</a>
-          <a class="project-footer__link project-footer__link--anchor" href="/?tab=developTab">Develop</a>
-          <a class="project-footer__link project-footer__link--anchor" href="/hub">Service hubs</a>
-        </div>
-      </footer>
+      {% set footer_doc_mode = 'anchors' %}
+      {% include "_site_footer.html" %}
     </div>
     <script type="application/json" id="dashboard-boot-config">{{ dashboard_boot | tojson }}</script>
     <script src="/static/dashboard.js"></script>

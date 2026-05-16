@@ -78,5 +78,19 @@
         "Or: bash ./ecosystem-stack/services/dashboard.sh deploy"
       ]
     }
+  ],
+  "github_repos": [
+    {
+      "id": "local-ecosystem",
+      "label": "LEco DevOps Open Project",
+      "repo": "rmaurya/local-ecosystem",
+      "version_file": "VERSION",
+      "skip_if_private": true,
+      "upgrade_help": "ecosystem-updates",
+      "upgrade_steps": [
+        "git pull && ./ecosystem-stack/ecosystem-stack.sh restart dashboard",
+        "See docs/RELEASE_NOTES.md and CHANGELOG.md"
+      ]
+    }
   ]
 }
