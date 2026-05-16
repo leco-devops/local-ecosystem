@@ -28,6 +28,9 @@ hosting/traefik/01-stack-core.yml
 # Per-machine selection recorded by ecosystem-stack/install-foundation.sh
 ecosystem-stack/config/install-selection.env
 
+# Dashboard "mark updates read" state (per machine)
+ecosystem-stack/config/generated/update-catalog-read-state.json
+
 # leco-cli wrapper logs (per-run JSONL emitted by tools/leco-cli.sh)
 .leco-cli-logs/
 
