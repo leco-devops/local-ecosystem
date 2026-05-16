@@ -1407,25 +1407,194 @@ function escapeAttr(s) {
   return String(s || "").replaceAll("&", "&amp;").replaceAll('"', "&quot;");
 }
 
+const DASHBOARD_APP_HOSTNAMES = new Set([
+  "localhost",
+  "127.0.0.1",
+  "::1",
+  "localhost.lh",
+  "dashboard.lh",
+]);
+
 function isDashboardLocalHostname(hostname) {
-  const h = String(hostname || "").toLowerCase();
-  return h === "localhost.lh" || h === "localhost" || h === "127.0.0.1" || h === "::1";
+  return DASHBOARD_APP_HOSTNAMES.has(String(hostname || "").toLowerCase());
+}
+
+/** Separate HTML pages (not the main tab SPA at /). */
+function isDashboardSubAppPath(pathname) {
+  const p = String(pathname || "");
+  return p === "/help" || p.startsWith("/help/") || p === "/hub" || p.startsWith("/hub/");
+}
+
+/** Main dashboard SPA: / with ?tab= / ?doc= / ?app= and optional #infra-* hash. */
+function isDashboardSpaUrl(href) {
+  if (!href || href.startsWith("#")) return false;
+  try {
+    const u = new URL(href, window.location.href);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+    const path = u.pathname.replace(/\/+$/, "") || "/";
+    if (path !== "/") return false;
+    if (u.origin === window.location.origin) return true;
+    return isDashboardLocalHostname(u.hostname);
+  } catch {
+    return false;
+  }
+}
+
+/** True when the link should open in a new browser tab. */
+function shouldOpenLinkInNewTab(href) {
+  if (!href || href.startsWith("#")) return false;
+  try {
+    const u = new URL(href, window.location.href);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+    if (isDashboardSpaUrl(href)) return false;
+    if (u.origin === window.location.origin && isDashboardSubAppPath(u.pathname)) {
+      // Hub/help pages: stay in-tab for /hub and /help navigation.
+      if (!document.getElementById("overviewTab") && isDashboardSubAppPath(window.location.pathname)) {
+        return false;
+      }
+      return true;
+    }
+    if (!isDashboardLocalHostname(u.hostname)) return true;
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 /**
- * Use on dashboard-generated <a href>: new tab for other *.lh services and external sites;
- * same tab for this app (localhost.lh, or direct http://localhost:port).
+ * Use on dashboard-generated <a href>: new tab for Help, hubs, other *.lh services, and external sites;
+ * same tab for SPA links (/?tab=…) on the dashboard origin.
  */
 function externalNavigationAttrs(href) {
-  if (!href || href.startsWith("#")) return "";
-  try {
-    const u = new URL(href, window.location.href);
-    if (u.protocol !== "http:" && u.protocol !== "https:") return "";
-    if (isDashboardLocalHostname(u.hostname)) return "";
-    return ' target="_blank" rel="noopener noreferrer"';
-  } catch {
-    return "";
+  return shouldOpenLinkInNewTab(href) ? ' target="_blank" rel="noopener noreferrer"' : "";
+}
+
+function applyExternalLinkAttrs(root = document) {
+  const scope = root?.querySelectorAll ? root : document;
+  scope.querySelectorAll("a[href]").forEach((a) => {
+    const href = a.getAttribute("href");
+    if (!href || a.target === "_blank") return;
+    if (shouldOpenLinkInNewTab(href)) {
+      a.setAttribute("target", "_blank");
+      a.setAttribute("rel", "noopener noreferrer");
+    }
+  });
+}
+
+function parseDashboardLocation(loc = window.location) {
+  const qs = new URLSearchParams(loc.search || "");
+  return {
+    tab: String(qs.get("tab") || "overviewTab").trim(),
+    doc: String(qs.get("doc") || "").trim(),
+    app: String(qs.get("app") || "").trim(),
+    hash: loc.hash || "",
+  };
+}
+
+function buildDashboardLocation(tabId, opts = {}) {
+  const params = new URLSearchParams();
+  if (tabId) params.set("tab", tabId);
+  const docId =
+    opts.docId !== undefined
+      ? opts.docId
+      : tabId === "docsTab"
+        ? window.__docCurrentId || ""
+        : "";
+  const appSlug =
+    opts.appSlug !== undefined
+      ? opts.appSlug
+      : tabId === "hostedAppsTab"
+        ? hostedSelectedSlug || ""
+        : "";
+  if (docId && tabId === "docsTab") params.set("doc", docId);
+  if (appSlug && tabId === "hostedAppsTab") params.set("app", appSlug);
+  const search = params.toString();
+  let url = "/" + (search ? `?${search}` : "");
+  const hash = opts.hash ?? "";
+  if (hash) url += hash.startsWith("#") ? hash : `#${hash}`;
+  return url;
+}
+
+function syncDashboardUrl(tabId, opts = {}) {
+  if (!document.getElementById("overviewTab") || opts.skipUrl) return;
+  const url = buildDashboardLocation(tabId, {
+    docId: opts.docId,
+    appSlug: opts.appSlug,
+    hash:
+      opts.hash !== undefined
+        ? opts.hash
+        : tabId === "infrastructureTab"
+          ? window.location.hash
+          : "",
+  });
+  const current = window.location.pathname + window.location.search + window.location.hash;
+  if (current === url) return;
+  const method = opts.replace ? "replaceState" : "pushState";
+  window.history[method]({ dashboardTab: tabId }, "", url);
+}
+
+function handleDashboardLinkClick(e) {
+  if (!document.getElementById("overviewTab")) return;
+  const a = e.target.closest("a[href]");
+  if (!a || a.target === "_blank") return;
+  if (e.defaultPrevented) return;
+  if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  const href = a.getAttribute("href");
+  if (!href || href.startsWith("javascript:")) return;
+  if (href.startsWith("#")) return;
+
+  if (shouldOpenLinkInNewTab(href)) {
+    if (!a.target) {
+      e.preventDefault();
+      try {
+        window.open(new URL(href, window.location.href).href, "_blank", "noopener,noreferrer");
+      } catch {
+        /* ignore */
+      }
+    }
+    return;
   }
+
+  let u;
+  try {
+    u = new URL(href, window.location.href);
+  } catch {
+    return;
+  }
+  if (!isDashboardSpaUrl(u)) return;
+
+  e.preventDefault();
+  const tab = String(u.searchParams.get("tab") || "overviewTab").trim();
+  const doc = String(u.searchParams.get("doc") || "").trim();
+  const app = String(u.searchParams.get("app") || "").trim();
+  const hash = u.hash || "";
+  if (!document.getElementById(tab)) return;
+  activateTab(tab, {
+    preferredDocId: doc || null,
+    hostedSlug: app || null,
+    hash,
+  });
+  if (hash && tab === "infrastructureTab") {
+    requestAnimationFrame(() => scrollInfraHashAnchor(hash));
+  }
+}
+
+function initDashboardUrlRouting() {
+  if (!document.getElementById("overviewTab")) return;
+  document.body.addEventListener("click", handleDashboardLinkClick, true);
+  window.addEventListener("popstate", () => {
+    const { tab, doc, app, hash } = parseDashboardLocation();
+    if (!document.getElementById(tab)) return;
+    activateTab(tab, {
+      preferredDocId: doc || null,
+      hostedSlug: app || null,
+      hash,
+      skipUrl: true,
+    });
+    if (hash && tab === "infrastructureTab") {
+      requestAnimationFrame(() => scrollInfraHashAnchor(hash));
+    }
+  });
 }
 
 function hostedMainUrlProbeSummary(app) {
@@ -1835,6 +2004,7 @@ async function loadDocContent(id, opts = {}) {
   const content = document.getElementById("docContent");
   const toolbar = document.getElementById("docToolbar");
   if (!content || !id) return;
+  window.__docCurrentId = id;
   setDocSidebarActive(id);
   content.innerHTML = "<p class='muted'>Loading…</p>";
   try {
@@ -1864,6 +2034,9 @@ async function loadDocContent(id, opts = {}) {
       <button type="button" id="docReloadBtn">Reload</button>`;
     document.getElementById("docReloadBtn")?.addEventListener("click", () => loadDocContent(id));
     if (opts.hash) scrollDocToHash(content, opts.hash);
+    if (activeTab === "docsTab" && !opts.skipUrl) {
+      syncDashboardUrl("docsTab", { docId: id, replace: !!opts.replace });
+    }
   } catch (e) {
     content.innerHTML = `<p class='muted'>${escapeHtml(String(e))}</p>`;
   }
@@ -3792,16 +3965,27 @@ function activateTab(tabId, opts = {}) {
       } else {
         loadOllamaModelsPanel();
       }
-      scrollInfraHashAnchor();
     }
   } finally {
     endGlobalPreloader(switchToken);
   }
+  if (!opts.skipUrl) {
+    syncDashboardUrl(tabId, {
+      replace: !!opts.replace,
+      docId: opts.preferredDocId ?? (tabId === "docsTab" ? window.__docCurrentId || "" : undefined),
+      appSlug: opts.hostedSlug,
+      hash: opts.hash,
+    });
+  }
+  if (tabId === "infrastructureTab") {
+    scrollInfraHashAnchor(opts.hash);
+  }
 }
 
 /** Scroll to #infra-ollama / #infra-airllm when opening Infrastructure with a hash. */
-function scrollInfraHashAnchor() {
-  const hash = (window.location.hash || "").replace(/^#/, "");
+function scrollInfraHashAnchor(hashOverride) {
+  const raw = hashOverride ?? window.location.hash ?? "";
+  const hash = String(raw).replace(/^#/, "");
   if (!hash || !hash.startsWith("infra-")) return;
   requestAnimationFrame(() => {
     const el = document.getElementById(hash);
@@ -3988,7 +4172,7 @@ function renderCloudflareLocal(cf, services) {
       ${cfDualUrlRow("Autoscaler", "http://autoscale.lh")}
       ${cfDualUrlRow("MinIO UI", "http://minio-console.lh")}
       ${cfDualUrlRow("S3 API (SDK/CLI)", "http://s3.lh")}
-      <div class="row muted small" style="margin-top:6px">Valkey TCP: <code>valkey.lh:6380</code> · <a href="/docs?module=cf-leco-service-map">CF ↔ LEco map</a> · <a href="/hub">Service hubs</a></div>
+      <div class="row muted small" style="margin-top:6px">Valkey TCP: <code>valkey.lh:6380</code> · <a href="/?tab=docsTab&amp;doc=cf-leco-service-map">CF ↔ LEco map</a> · <a href="/hub">Service hubs</a></div>
     `)}
   `;
 }
@@ -5024,6 +5208,7 @@ function renderHostedAppsSidebar() {
       renderHostedAppsSidebar();
       resetHostedAppsDetailForLoading(hostedSelectedSlug);
       refreshHostedAppsPanel();
+      syncDashboardUrl("hostedAppsTab", { appSlug: hostedSelectedSlug });
     });
   });
 }
@@ -5146,6 +5331,10 @@ async function loadHostedAppsList() {
     }
     if (empty) empty.classList.add("is-hidden");
     if (detail) detail.classList.remove("is-hidden");
+    const qsApp = String(new URLSearchParams(window.location.search).get("app") || "").trim();
+    if (qsApp && hostedAppsList.some((a) => a.id === qsApp)) {
+      hostedSelectedSlug = qsApp;
+    }
     const still = hostedAppsList.some((a) => a.id === hostedSelectedSlug);
     if (!still) hostedSelectedSlug = hostedAppsList[0].id;
     renderHostedAppsSidebar();
@@ -8953,6 +9142,7 @@ function initControlBulkBar() {
 
 async function bootstrapHubChrome() {
   applySavedRefreshRate();
+  applyExternalLinkAttrs();
   document.getElementById("refreshNow")?.addEventListener("click", () => {
     loadOverview();
   });
@@ -8970,6 +9160,7 @@ async function bootstrap() {
   }
   initAppModal();
   initTabs();
+  initDashboardUrlRouting();
   initHostMetricsPanelRefresh();
   initControlBulkBar();
   initInfraQuickstartBar();
@@ -9044,21 +9235,29 @@ async function bootstrap() {
   document.getElementById("referenceFilter")?.addEventListener("input", applyReferenceFilter);
 
   await loadOverview();
-  const qs = new URLSearchParams(window.location.search || "");
-  const requestedTab = String(qs.get("tab") || "").trim();
-  const requestedDoc = String(qs.get("doc") || "").trim();
-  if (requestedTab && document.getElementById(requestedTab)) {
+  applyExternalLinkAttrs();
+  const { tab: requestedTab, doc: requestedDoc, app: requestedApp, hash: requestedHash } =
+    parseDashboardLocation();
+  const hasTabParam = new URLSearchParams(window.location.search || "").has("tab");
+  if (hasTabParam && document.getElementById(requestedTab)) {
     activateTab(requestedTab, {
       preferredDocId: requestedTab === "docsTab" ? requestedDoc || null : null,
+      hostedSlug: requestedApp || null,
+      hash: requestedHash,
+      replace: true,
     });
   } else if (requestedDoc) {
-    activateTab("docsTab", { preferredDocId: requestedDoc });
+    activateTab("docsTab", { preferredDocId: requestedDoc, replace: true });
   } else {
     try {
       const savedTab = localStorage.getItem(LS_ACTIVE_TAB_KEY);
-      if (savedTab && document.getElementById(savedTab)) activateTab(savedTab);
+      if (savedTab && document.getElementById(savedTab)) {
+        activateTab(savedTab, { replace: true });
+      } else {
+        syncDashboardUrl(activeTab, { replace: true });
+      }
     } catch (_) {
-      /* ignore */
+      syncDashboardUrl(activeTab, { replace: true });
     }
   }
   scheduleRefresh();

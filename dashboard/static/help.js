@@ -121,6 +121,9 @@ function decorateHelpLinks(root) {
       loadHelpTopic(id);
     });
   });
+  if (typeof applyExternalLinkAttrs === "function") {
+    applyExternalLinkAttrs(root);
+  }
 }
 
 const LIVE_CATALOG_APIS = {
@@ -315,6 +318,9 @@ async function runHelpSearch(q) {
 
 function initHelpPage() {
   initMermaidOnce();
+  if (typeof applyExternalLinkAttrs === "function") {
+    applyExternalLinkAttrs();
+  }
   loadHelpTree();
   const inp = document.getElementById("helpSearchInput");
   const clearBtn = document.getElementById("helpSearchClear");
