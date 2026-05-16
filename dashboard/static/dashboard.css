@@ -4897,3 +4897,68 @@ body.help-page {
 .help-content.prose .help-diagram + h3 {
   margin-top: 1.5em;
 }
+
+.help-live-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  background: rgba(14, 116, 144, 0.15);
+  font-size: 13px;
+}
+
+.help-badge-new {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(34, 197, 94, 0.25);
+  color: #86efac;
+  vertical-align: middle;
+}
+
+.help-catalog-wrap {
+  overflow-x: auto;
+  margin: 16px 0 24px;
+}
+
+.help-catalog-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.help-catalog-table th,
+.help-catalog-table td {
+  border: 1px solid rgba(76, 61, 122, 0.6);
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.help-catalog-table th {
+  background: rgba(88, 28, 135, 0.25);
+  color: #e2e8f0;
+  font-weight: 600;
+}
+
+.help-catalog-table tr:nth-child(even) td {
+  background: rgba(15, 12, 32, 0.35);
+}
+
+.help-catalog-spec {
+  max-width: 220px;
+  color: #cbd5e1;
+}
+
+.help-catalog-cmd {
+  font-size: 11px;
+  white-space: nowrap;
+}

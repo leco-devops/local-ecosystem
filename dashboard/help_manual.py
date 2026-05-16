@@ -58,6 +58,16 @@ HELP_TREE: list[dict] = [
         ],
     },
     {
+        "id": "updates",
+        "title": "Updates & LLM catalogs",
+        "children": [
+            {"id": "update-catalog-service", "title": "Update catalog service", "file": "14-update-catalog-service.md"},
+            {"id": "ecosystem-updates", "title": "Stack & model updates (live)", "file": "generated/14-ecosystem-updates.md"},
+            {"id": "llm-catalog-ollama", "title": "Ollama LLM catalog (live table)", "file": "generated/15-llm-catalog-ollama.md"},
+            {"id": "llm-catalog-airllm", "title": "AirLLM LLM catalog (live table)", "file": "generated/16-llm-catalog-airllm.md"},
+        ],
+    },
+    {
         "id": "hosting",
         "title": "Hosting & onboarding",
         "children": [
@@ -171,6 +181,31 @@ def get_help_content(node_id: str) -> tuple[dict | None, str | None]:
         return None, "topic has no content file (folder only)"
     path = HELP_DIR / str(rel)
     if not path.is_file():
+        if str(rel).startswith("generated/"):
+            stub = (
+                f"# {node.get('title', 'Updates')}\n\n"
+                "_Catalog not generated yet._\n\n"
+                "Run:\n\n"
+                "```bash\n"
+                "./ecosystem-stack/services/update-catalog.sh run-once\n"
+                "```\n\n"
+                "Or start the background watcher:\n\n"
+                "```bash\n"
+                "./ecosystem-stack/services/update-catalog.sh start\n"
+                "```\n\n"
+                "See [Update catalog service](help:update-catalog-service).\n"
+            )
+            leaves = _flatten_tree(HELP_TREE)
+            crumb = next((x["breadcrumb"] for x in leaves if x["id"] == node_id), node.get("title", ""))
+            return {
+                "ok": True,
+                "id": node_id,
+                "title": node.get("title", ""),
+                "breadcrumb": crumb,
+                "path": str(path.relative_to(PROJECT_ROOT)) if path.is_relative_to(PROJECT_ROOT) else str(path),
+                "markdown": stub,
+                "generated_stub": True,
+            }, None
         return None, f"missing help file: {path}"
     try:
         markdown = path.read_text(encoding="utf-8")

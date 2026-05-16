@@ -24,6 +24,7 @@ flowchart LR
 | Section | What you will learn |
 |--------|---------------------|
 | **Architecture & diagrams** | Stack, hosting, data flows (illustrated) |
+| **Updates & LLM catalogs** | Auto-checked stack versions + Ollama/AirLLM model tables |
 | **Requirements** | Docker, disk, RAM, macOS vs Linux notes |
 | **Installation** | Stack, CLI, DNS (`*.lh`) |
 | **Daily operations** | Dashboard tabs, Control, Infrastructure |

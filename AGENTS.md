@@ -52,7 +52,12 @@ This repo is a local platform with:
    - `dashboard/hosting_layout.py`
    - `dashboard/leco_registration.py`
    - `tools/deploy-cli/leco_app/schema.py`
-   - When changing AirLLM behavior, also update:
+   - When changing update-catalog / LLM catalogs, also update:
+ - `ecosystem-stack/update-catalog/watcher.py`
+ - `ecosystem-stack/config/llm-catalog-*-seed.json`
+ - `ecosystem-stack/services/update-catalog.sh`
+ - `dashboard/ecosystem_updates.py`
+ - When changing AirLLM behavior, also update:
      - `dashboard/airllm_models.py`
      - `dashboard/ai_provider.py` (`AirLLMProvider`)
      - `ecosystem-stack/services/airllm.sh`

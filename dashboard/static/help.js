@@ -123,6 +123,76 @@ function decorateHelpLinks(root) {
   });
 }
 
+const LIVE_CATALOG_APIS = {
+  "ecosystem-updates": "/api/ecosystem/updates",
+  "llm-catalog-ollama": "/api/llm-catalog/ollama",
+  "llm-catalog-airllm": "/api/llm-catalog/airllm",
+};
+
+function renderCatalogTable(models, backend) {
+  if (!models?.length) return "<p class='muted'>No models in catalog.</p>";
+  const rows = models
+    .map((m) => {
+      const name = escapeHtml(m.name || "");
+      const pub = escapeHtml(m.publisher || "");
+      const niche = escapeHtml((m.niche || []).join(", "));
+      const spec = escapeHtml(m.specialty || "");
+      const size = escapeHtml(m.size_disk || "");
+      const inst = escapeHtml(m.install_cli || "");
+      const flag = m.discovered_online ? " <span class='help-badge-new'>new</span>" : "";
+      return `<tr>
+        <td><code>${name}</code>${flag}</td>
+        <td>${pub}</td>
+        <td>${niche}</td>
+        <td class="help-catalog-spec">${spec}</td>
+        <td>${size}</td>
+        <td><code class="help-catalog-cmd">${inst}</code></td>
+      </tr>`;
+    })
+    .join("");
+  return `<div class="help-catalog-wrap"><table class="help-catalog-table">
+      <thead><tr>
+        <th>Model</th><th>Publisher</th><th>Niche</th><th>Specialty</th><th>Size</th><th>Install</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+}
+
+async function augmentLiveCatalogTopic(id, contentEl) {
+  const api = LIVE_CATALOG_APIS[id];
+  if (!api || !contentEl) return;
+  try {
+    const res = await fetch(api);
+    const data = await res.json();
+    const ts = escapeHtml(data.generated_at || "");
+    const banner = document.createElement("div");
+    banner.className = "help-live-banner";
+    let summary = `Live data · generated <strong>${ts}</strong>`;
+    if (id === "ecosystem-updates") {
+      const n = data.service_updates_available || 0;
+      const m = (data.model_alerts || []).length;
+      summary += ` · <strong>${n}</strong> stack update(s) · <strong>${m}</strong> new Ollama alert(s)`;
+    } else {
+      summary += ` · <strong>${data.model_count || (data.models || []).length}</strong> models`;
+    }
+    banner.innerHTML = `${summary}
+      <button type="button" class="ollama-act ollama-act--safe help-live-refresh">Refresh page</button>`;
+    contentEl.prepend(banner);
+    banner.querySelector(".help-live-refresh")?.addEventListener("click", () => loadHelpTopic(id, { pushState: false }));
+
+    if (id === "llm-catalog-ollama" || id === "llm-catalog-airllm") {
+      const host = document.createElement("div");
+      host.className = "help-live-catalog-host";
+      host.innerHTML = renderCatalogTable(data.models || [], data.backend || id);
+      const tables = contentEl.querySelectorAll("table");
+      if (tables.length) tables[tables.length - 1].replaceWith(host.firstElementChild || host);
+      else contentEl.appendChild(host);
+    }
+  } catch (_) {
+    /* markdown table from generated file is enough */
+  }
+}
+
 function parseHelpMarkdown(raw) {
   const { stripped, blocks } = extractMermaidBlocks(raw);
   let html =
@@ -165,6 +235,7 @@ async function loadHelpTopic(id, opts = {}) {
     content.classList.add("prose");
     decorateHelpLinks(content);
     await renderHelpMermaid(content);
+    await augmentLiveCatalogTopic(id, content);
     if (crumb) crumb.textContent = data.breadcrumb || data.title || "";
     if (toolbar) {
       toolbar.innerHTML = `<span><strong>${escapeHtml(data.title || "")}</strong></span>

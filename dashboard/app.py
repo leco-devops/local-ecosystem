@@ -14,6 +14,7 @@ from monitor import (
     collect_service_logs,
     list_managed_services,
 )
+from ecosystem_updates import load_catalog_meta, load_ecosystem_updates, load_llm_catalog
 from help_manual import get_help_content, get_help_tree, search_help
 from popular_models import load_airllm_catalog, load_ollama_catalog
 from service_hub import get_hub_detail, list_hub_slugs
@@ -924,6 +925,26 @@ def api_help_content():
 def api_help_search():
     q = (request.args.get("q") or "").strip()
     return jsonify(search_help(q))
+
+
+@app.get("/api/ecosystem/updates")
+def api_ecosystem_updates():
+    return jsonify(load_ecosystem_updates())
+
+
+@app.get("/api/llm-catalog/ollama")
+def api_llm_catalog_ollama():
+    return jsonify(load_llm_catalog("ollama"))
+
+
+@app.get("/api/llm-catalog/airllm")
+def api_llm_catalog_airllm():
+    return jsonify(load_llm_catalog("airllm"))
+
+
+@app.get("/api/ecosystem/catalog-meta")
+def api_catalog_meta():
+    return jsonify(load_catalog_meta())
 
 
 @app.post("/api/control")

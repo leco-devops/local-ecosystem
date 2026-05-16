@@ -1,0 +1,82 @@
+{
+  "_comment": "Stack images checked by leco-update-catalog. local_image=true skips Docker Hub and suggests rebuild from repo.",
+  "check_interval_hours": 6,
+  "services": [
+    {
+      "id": "traefik",
+      "label": "Traefik",
+      "container": "traefik",
+      "image_repo": "traefik",
+      "upgrade_help": "deploy-rebuild",
+      "upgrade_steps": [
+        "Edit traefik/dynamic.yml in git if stack routes changed",
+        "./ecosystem-stack/ecosystem-stack.sh heal traefik"
+      ]
+    },
+    {
+      "id": "ollama",
+      "label": "Ollama",
+      "container": "ollama",
+      "image_repo": "ollama/ollama",
+      "upgrade_help": "deploy-rebuild",
+      "upgrade_steps": [
+        "./ecosystem-stack/ecosystem-stack.sh restart ollama",
+        "Models persist in Docker volume ollama"
+      ]
+    },
+    {
+      "id": "airllm",
+      "label": "AirLLM shim",
+      "container": "airllm",
+      "local_image": "local-airllm:latest",
+      "upgrade_help": "deploy-rebuild",
+      "upgrade_steps": [
+        "./leco-cli.sh airllm build",
+        "./leco-cli.sh airllm start"
+      ]
+    },
+    {
+      "id": "webui",
+      "label": "Open WebUI",
+      "container": "open-webui",
+      "image_repo": "ghcr.io/open-webui/open-webui",
+      "upgrade_help": "deploy-rebuild",
+      "upgrade_steps": [
+        "./ecosystem-stack/ecosystem-stack.sh restart webui"
+      ]
+    },
+    {
+      "id": "n8n",
+      "label": "n8n",
+      "container": "n8n",
+      "image_repo": "n8nio/n8n",
+      "upgrade_help": "deploy-rebuild",
+      "upgrade_steps": [
+        "./ecosystem-stack/ecosystem-stack.sh restart n8n"
+      ]
+    },
+    {
+      "id": "postgres",
+      "label": "PostgreSQL (n8n)",
+      "container": "n8n_postgres",
+      "image_repo": "postgres",
+      "tag_filter": "16",
+      "upgrade_help": "deploy-rebuild",
+      "upgrade_steps": [
+        "Back up n8n data before major Postgres upgrades",
+        "./ecosystem-stack/ecosystem-stack.sh restart postgres"
+      ]
+    },
+    {
+      "id": "dashboard",
+      "label": "LEco DevOps dashboard",
+      "container": "service-dashboard",
+      "local_image": "local/service-dashboard:latest",
+      "upgrade_help": "deploy-rebuild",
+      "upgrade_steps": [
+        "./ecosystem-stack/ecosystem-stack.sh restart dashboard",
+        "Or: bash ./ecosystem-stack/services/dashboard.sh deploy"
+      ]
+    }
+  ]
+}
