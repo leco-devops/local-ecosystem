@@ -61,4 +61,4 @@ flowchart LR
 4. Pull a small Ollama model → [Ollama](help:ollama)
 5. (Optional) Build and start AirLLM → [AirLLM](help:airllm)
 
-When something fails, start with [Common issues](help:ts-common) or [502 / routing](help:ts-502).
+When something fails, start with [Common issues](help:ts-common), [502 / routing](help:ts-502), or [503 / Varnish backend](help:ts-503) for Node+Varnish apps.

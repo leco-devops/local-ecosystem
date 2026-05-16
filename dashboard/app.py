@@ -1,5 +1,6 @@
 import json
 import os
+from pathlib import Path
 
 from flask import Flask, Response, abort, jsonify, make_response, redirect, render_template, request, stream_with_context, url_for
 
@@ -290,6 +291,81 @@ def api_hosted_insights(slug: str):
     return jsonify(insights_for_slug(slug))
 
 
+@app.get("/api/hosted-apps/<slug>/data-import/discover")
+def api_hosted_data_import_discover(slug: str):
+    from hosted_data_import import data_import_summary_for_slug
+    from leco_control import leco_meta_for_slug
+
+    meta = leco_meta_for_slug(slug.strip())
+    if not meta:
+        return jsonify({"ok": False, "error": "unknown or invalid app slug"}), 404
+    summary = data_import_summary_for_slug(
+        slug.strip(),
+        manifest_path=meta["manifest_path"],
+        compose_tail=meta.get("compose_tail"),
+    )
+    return jsonify({"ok": True, "slug": slug.strip(), **summary})
+
+
+@app.post("/api/hosted-apps/<slug>/data-import/stream")
+def api_hosted_data_import_stream(slug: str):
+    from control import check_control_token
+    from hosted_data_import import iterate_data_import_stream
+    from leco_control import leco_meta_for_slug
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    meta = leco_meta_for_slug(slug.strip())
+    if not meta:
+        return jsonify({"ok": False, "error": "unknown or invalid app slug"}), 404
+
+    reimport = bool(data.get("reimport", True))
+    dry_run = bool(data.get("dry_run", False))
+    raw_sel = data.get("selected_ids")
+    selected_ids: list[str] | None = None
+    if raw_sel is not None:
+        if isinstance(raw_sel, list):
+            selected_ids = [str(x).strip() for x in raw_sel if str(x).strip()]
+        else:
+            selected_ids = []
+    from hosted_apps import compose_ps_result
+
+    rows, _code = compose_ps_result(meta)
+
+    @stream_with_context
+    def ndjson():
+        try:
+            for ev in iterate_data_import_stream(
+                slug.strip(),
+                manifest_path=meta["manifest_path"],
+                compose_tail=meta.get("compose_tail"),
+                compose_root=meta.get("root") or str(Path(meta["manifest_path"]).parent),
+                compose_ps=rows,
+                reimport=reimport,
+                dry_run=dry_run,
+                selected_ids=selected_ids,
+            ):
+                yield json.dumps(ev, ensure_ascii=False) + "\n"
+        except GeneratorExit:
+            raise
+        except Exception as exc:
+            yield json.dumps(
+                {"type": "done", "result": {"ok": False, "error": str(exc)}},
+                ensure_ascii=False,
+            ) + "\n"
+
+    return Response(
+        ndjson(),
+        mimetype="text/plain; charset=utf-8",
+        headers={
+            "Cache-Control": "no-store, no-transform",
+            "X-Accel-Buffering": "no",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
 @app.post("/api/hosted-apps/<slug>/validate-configuration")
 def api_hosted_validate_configuration(slug: str):
     """Schema + on-disk path checks for manifest + profile (no control token)."""
@@ -399,6 +475,19 @@ def api_leco_detect():
     out["manifest_yaml_preview"] = my
     out["localhost_yaml_preview"] = ly
     out["registration_yaml_status"] = registration_yaml_status(p, preview_id)
+    manifest_on_disk = root / "leco.app.yaml"
+    if manifest_on_disk.is_file():
+        try:
+            from hosted_data_import import build_import_plan
+
+            seed = build_import_plan(manifest_on_disk.resolve())
+            out["seed_data"] = {
+                "present": bool(seed.get("present")),
+                "item_count": len(seed.get("items") or []),
+                "warnings": list(seed.get("warnings") or [])[:5],
+            }
+        except Exception:
+            pass
     return jsonify({"ok": True, **out})
 
 

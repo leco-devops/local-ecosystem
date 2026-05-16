@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote_plus, urlparse, urlunparse
 
+from port_utils import MONGO_CONTAINER_PORT
+
 
 def _yaml_load_file(path: Path) -> Any:
     import yaml
@@ -132,6 +134,57 @@ def compose_paths_from_tail(compose_tail: list[str] | None) -> list[Path]:
     return out
 
 
+def _manifest_compose_paths_fallback(manifest_path: Path) -> list[Path]:
+    """Resolve compose files from leco.app.yaml + leco.yaml when leco_app is unavailable."""
+    mp = manifest_path.resolve()
+    parent = mp.parent.resolve()
+    paths: list[Path] = []
+    try:
+        raw = _yaml_load_file(mp) or {}
+    except Exception:
+        raw = {}
+    refs = raw.get("configRefs") or raw.get("config_refs") or {}
+    cf = str(refs.get("dockerComposeFile") or refs.get("docker_compose_file") or "").strip()
+    if cf:
+        er = Path(cf)
+        cand = er.resolve() if er.is_absolute() else (parent / er).resolve()
+        if cand.is_file():
+            paths.append(cand)
+    profile = str(raw.get("localHostProfile") or raw.get("local_host_profile") or "leco.yaml").strip()
+    lp = parent / profile
+    if lp.is_file():
+        try:
+            prof = _yaml_load_file(lp) or {}
+        except Exception:
+            prof = {}
+        infra = prof.get("infrastructure") or {}
+        dc = infra.get("dockerCompose") or infra.get("docker_compose") or {}
+        cfm = str(dc.get("composeFileFromManifest") or dc.get("compose_file_from_manifest") or "").strip()
+        if cfm:
+            er = Path(cfm)
+            cand = er.resolve() if er.is_absolute() else (parent / er).resolve()
+            if cand.is_file() and cand not in paths:
+                paths.append(cand)
+        compose_file = str(dc.get("composeFile") or dc.get("compose_file") or "").strip()
+        if compose_file and not paths:
+            er = Path(compose_file)
+            cand = er.resolve() if er.is_absolute() else (parent / er).resolve()
+            if cand.is_file():
+                paths.append(cand)
+        for key in ("additionalComposeFilesFromManifest", "additional_compose_files_from_manifest"):
+            for extra in dc.get(key) or []:
+                es = str(extra).strip()
+                if not es:
+                    continue
+                er = Path(es)
+                cand = er.resolve() if er.is_absolute() else (parent / er).resolve()
+                if cand.is_file() and cand not in paths:
+                    paths.append(cand)
+    if not paths and (parent / "docker-compose.yml").is_file():
+        paths.append((parent / "docker-compose.yml").resolve())
+    return paths
+
+
 def list_compose_file_paths(
     manifest_path: Path,
     *,
@@ -140,43 +193,58 @@ def list_compose_file_paths(
     """Resolve compose ``-f`` paths in deploy order (same rules as compose_runner)."""
     mp = manifest_path.resolve()
     tail_paths = compose_paths_from_tail(compose_tail)
+    paths: list[Path] = list(tail_paths)
     try:
         from leco_app.schema import load_effective_manifest
     except ImportError:
-        return tail_paths
+        for p in _manifest_compose_paths_fallback(mp):
+            if p.is_file() and p not in paths:
+                paths.append(p)
+        return [p for p in paths if p.is_file()]
     try:
         m = load_effective_manifest(mp)
     except Exception:
-        return tail_paths
+        for p in _manifest_compose_paths_fallback(mp):
+            if p.is_file() and p not in paths:
+                paths.append(p)
+        return [p for p in paths if p.is_file()]
     if not m.docker_compose:
-        return tail_paths
+        for p in _manifest_compose_paths_fallback(mp):
+            if p.is_file() and p not in paths:
+                paths.append(p)
+        return [p for p in paths if p.is_file()]
     dc = m.docker_compose
     root = m.resolved_root(mp)
     manifest_parent = mp.parent.resolve()
-    paths: list[Path] = []
+    resolved: list[Path] = []
     cfm = (dc.compose_file_from_manifest or "").strip()
     if cfm:
         er = Path(cfm)
-        paths.append(er.resolve() if er.is_absolute() else (manifest_parent / er).resolve())
+        resolved.append(er.resolve() if er.is_absolute() else (manifest_parent / er).resolve())
     elif (dc.compose_file or "").strip():
         rel = Path(dc.compose_file.strip())
-        paths.append(rel.resolve() if rel.is_absolute() else (root / rel).resolve())
+        resolved.append(rel.resolve() if rel.is_absolute() else (root / rel).resolve())
     for extra in dc.additional_compose_files or []:
         es = str(extra).strip()
         if not es:
             continue
         er = Path(es)
         cand = er.resolve() if er.is_absolute() else (root / er).resolve()
-        if cand.is_file() and cand not in paths:
-            paths.append(cand)
+        if cand.is_file() and cand not in resolved:
+            resolved.append(cand)
     for extra in dc.additional_compose_files_from_manifest or []:
         es = str(extra).strip()
         if not es:
             continue
         er = Path(es)
         cand = er.resolve() if er.is_absolute() else (manifest_parent / er).resolve()
-        if cand.is_file() and cand not in paths:
-            paths.append(cand)
+        if cand.is_file() and cand not in resolved:
+            resolved.append(cand)
+    if not resolved:
+        resolved = _manifest_compose_paths_fallback(mp)
+    for p in resolved:
+        if p.is_file() and p not in paths:
+            paths.append(p)
     for p in compose_paths_from_tail(compose_tail):
         if p.is_file() and p not in paths:
             paths.append(p)
@@ -200,12 +268,48 @@ def _load_dotenv_file(path: Path) -> dict[str, str]:
     return out
 
 
+def _merge_compose_service_specs(
+    base: dict[str, Any],
+    overlay: dict[str, Any],
+    *,
+    compose_file: str,
+) -> dict[str, Any]:
+    """Merge overlay onto base like ``docker compose -f a -f b`` (preserve unset keys)."""
+    out = dict(base)
+    for key, val in overlay.items():
+        if key == "environment":
+            prev = out.get("environment")
+            if isinstance(prev, dict) and isinstance(val, dict):
+                out["environment"] = {**prev, **val}
+            elif isinstance(prev, list) and isinstance(val, list):
+                seen = set(prev)
+                out["environment"] = list(prev) + [x for x in val if x not in seen]
+            else:
+                out["environment"] = val
+        elif key == "networks" and isinstance(val, dict):
+            prev = out.get("networks")
+            if isinstance(prev, dict):
+                out["networks"] = {**prev, **val}
+            else:
+                out["networks"] = val
+        elif key == "depends_on" and isinstance(val, dict):
+            prev = out.get("depends_on")
+            if isinstance(prev, dict):
+                out["depends_on"] = {**prev, **val}
+            else:
+                out["depends_on"] = val
+        else:
+            out[key] = val
+    out["_compose_file"] = compose_file
+    return out
+
+
 def load_merged_compose_services(
     manifest_path: Path,
     *,
     compose_tail: list[str] | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """Shallow-merge ``services:`` from all compose files for this manifest."""
+    """Merge ``services:`` from all compose files (overlay patches, not full replace)."""
     merged: dict[str, dict[str, Any]] = {}
     for cf in list_compose_file_paths(manifest_path, compose_tail=compose_tail):
         try:
@@ -217,11 +321,17 @@ def load_merged_compose_services(
         services = raw.get("services")
         if not isinstance(services, dict):
             continue
+        cf_str = str(cf)
         for name, spec in services.items():
-            if isinstance(spec, dict):
-                entry = dict(spec)
-                entry["_compose_file"] = str(cf)
-                merged[str(name)] = entry
+            if not isinstance(spec, dict):
+                continue
+            entry = dict(spec)
+            sname = str(name)
+            if sname in merged:
+                merged[sname] = _merge_compose_service_specs(merged[sname], entry, compose_file=cf_str)
+            else:
+                entry["_compose_file"] = cf_str
+                merged[sname] = entry
     return merged
 
 
@@ -338,12 +448,7 @@ def _extract_credentials(kind: str, env: dict[str, str], service_name: str) -> d
             db = creds.get("database") or "admin"
             auth = f"{user}:{pw}@" if user and pw else ""
             host = "mongo" if sn in ("mongo", "mongodb") else service_name
-            creds["connection_string"] = f"mongodb://{auth}{host}:27017/{db}?authSource=admin"
-            creds["connection_string_host"] = (
-                f"mongodb://{auth}127.0.0.1:27017/{db}?authSource=admin"
-                if auth
-                else f"mongodb://127.0.0.1:27017/{db}"
-            )
+            creds["connection_string"] = f"mongodb://{auth}{host}:{MONGO_CONTAINER_PORT}/{db}?authSource=admin"
     elif kind == "minio":
         creds["user"] = env.get("MINIO_ROOT_USER", env.get("MINIO_ACCESS_KEY", "minioadmin"))
         creds["password"] = env.get("MINIO_ROOT_PASSWORD", env.get("MINIO_SECRET_KEY", "minioadmin"))
@@ -373,11 +478,13 @@ def _management_uis_for_data_store(
     if kind == "mail":
         return [{"label": "Mailpit", "url": "http://mail.lh"}]
     if kind == "mongodb":
-        port = _host_port_from_publish(spec) or "27017"
+        host_port = _host_port_from_publish(spec)
+        if not host_port:
+            return []
         return [
             {
                 "label": "MongoDB Compass (host)",
-                "url": _build_host_mongodb_uri(creds, port),
+                "url": _build_host_mongodb_uri(creds, host_port),
             },
         ]
     return []
@@ -396,6 +503,70 @@ def _host_port_from_publish(spec: dict[str, Any]) -> str | None:
             if candidate.isdigit():
                 return candidate
     return None
+
+
+def _database_from_mongo_uri(uri: str) -> str:
+    """Extract database name from a mongodb:// URI path (without leading slash)."""
+    try:
+        parsed = urlparse(uri)
+        path = (parsed.path or "").strip("/")
+        if path and path != "admin":
+            return path.split("/")[0]
+    except Exception:
+        pass
+    return ""
+
+
+def _mongodb_database_from_services(
+    services: dict[str, dict[str, Any]],
+    mongo_service_name: str,
+) -> str:
+    """Read MONGO_INITDB_DATABASE / LECO_MONGO_DATABASE from compose env."""
+    spec = services.get(mongo_service_name) or {}
+    cf = Path(str(spec.get("_compose_file") or "."))
+    env = _env_dict_from_spec(spec, cf.parent)
+    for key in ("MONGO_INITDB_DATABASE", "MONGO_DATABASE"):
+        val = (env.get(key) or "").strip()
+        if val:
+            return val
+    for _sname, sspec in services.items():
+        cf2 = Path(str(sspec.get("_compose_file") or "."))
+        app_env = _env_dict_from_spec(sspec, cf2.parent)
+        val = (app_env.get("LECO_MONGO_DATABASE") or "").strip()
+        if val:
+            return val
+    return ""
+
+
+def _resolve_mongodb_database(
+    creds: dict[str, str],
+    hints: list[str],
+    *,
+    services: dict[str, dict[str, Any]] | None = None,
+    mongo_service_name: str = "",
+) -> str:
+    """Prefer DB from URI hints, compose env, creds, then admin."""
+    for raw in hints:
+        if not raw or not str(raw).startswith("mongodb://"):
+            continue
+        db = _database_from_mongo_uri(str(raw))
+        if db:
+            return db
+    if services and mongo_service_name:
+        env_db = _mongodb_database_from_services(services, mongo_service_name)
+        if env_db:
+            return env_db
+    db = (creds.get("database") or "").strip()
+    return db if db else "admin"
+
+
+def _mongodb_host_access_note(spec: dict[str, Any]) -> str:
+    if _host_port_from_publish(spec):
+        return ""
+    return (
+        "Not published to the Mac host — use Docker DNS from app containers "
+        "or: docker exec -it <container> mongosh <database>"
+    )
 
 
 def _build_host_mongodb_uri(creds: dict[str, str], port: str) -> str:
@@ -499,6 +670,8 @@ def _build_connection_endpoints(
     creds: dict[str, str],
     hints: list[str],
     existing: list[str],
+    *,
+    services: dict[str, dict[str, Any]] | None = None,
 ) -> list[dict[str, str]]:
     endpoints: list[dict[str, str]] = []
     host_port = _host_port_from_publish(spec)
@@ -516,25 +689,38 @@ def _build_connection_endpoints(
     if kind == "mongodb":
         user = (creds.get("user") or "").strip()
         password = (creds.get("password") or "").strip()
-        database = (creds.get("database") or "").strip() or "admin"
-        dp = effective_port or "27017"
+        database = _resolve_mongodb_database(
+            creds,
+            hints,
+            services=services,
+            mongo_service_name=service_name,
+        )
+        creds_for_uri = {**creds, "database": database}
         if user and password:
-            docker_uri = f"mongodb://{user}:{password}@{docker_host}:27017/{database}?authSource=admin"
+            docker_uri = (
+                f"mongodb://{user}:{password}@{docker_host}:{MONGO_CONTAINER_PORT}"
+                f"/{database}?authSource=admin"
+            )
         elif user:
-            docker_uri = f"mongodb://{user}@{docker_host}:27017/{database}?authSource=admin"
+            docker_uri = (
+                f"mongodb://{user}@{docker_host}:{MONGO_CONTAINER_PORT}/{database}?authSource=admin"
+            )
         else:
-            docker_uri = f"mongodb://{docker_host}:27017/{database}"
+            docker_uri = f"mongodb://{docker_host}:{MONGO_CONTAINER_PORT}/{database}"
         _add_connection_endpoint(endpoints, "docker", docker_uri)
-        _add_connection_endpoint(endpoints, "host", _build_host_mongodb_uri(creds, dp))
+        if host_port:
+            _add_connection_endpoint(
+                endpoints, "host", _build_host_mongodb_uri(creds_for_uri, host_port)
+            )
     elif kind == "mysql":
         user = creds.get("user") or "root"
         pw = creds.get("password") or ""
         db = creds.get("database") or ""
         u, p = quote_plus(user), quote_plus(pw)
         _add_connection_endpoint(endpoints, "docker", f"mysql://{u}:{p}@{docker_host}:3306/{db}")
-        if effective_port:
+        if host_port:
             _add_connection_endpoint(
-                endpoints, "host", f"mysql://{u}:{p}@127.0.0.1:{effective_port}/{db}"
+                endpoints, "host", f"mysql://{u}:{p}@127.0.0.1:{host_port}/{db}"
             )
         if sn in ("mysql", "db", "database", "mariadb"):
             _add_connection_endpoint(endpoints, "host_lh", f"mysql://{u}:{p}@mysql.lh:3306/{db}")
@@ -546,9 +732,9 @@ def _build_connection_endpoints(
         _add_connection_endpoint(
             endpoints, "docker", f"postgresql://{u}:{p}@{docker_host}:5432/{db}"
         )
-        if effective_port:
+        if host_port:
             _add_connection_endpoint(
-                endpoints, "host", f"postgresql://{u}:{p}@127.0.0.1:{effective_port}/{db}"
+                endpoints, "host", f"postgresql://{u}:{p}@127.0.0.1:{host_port}/{db}"
             )
         if "postgres" in sn:
             _add_connection_endpoint(
@@ -559,21 +745,21 @@ def _build_connection_endpoints(
         port = creds.get("port") or "6379"
         if pw:
             docker_uri = f"redis://:{quote_plus(pw)}@{docker_host}:{port}"
-            host_uri = f"redis://:{quote_plus(pw)}@127.0.0.1:{effective_port or port}"
+            host_uri = f"redis://:{quote_plus(pw)}@127.0.0.1:{host_port}"
             lh_uri = f"redis://:{quote_plus(pw)}@redis.lh:{port}"
         else:
             docker_uri = f"redis://{docker_host}:{port}"
-            host_uri = f"redis://127.0.0.1:{effective_port or port}"
+            host_uri = f"redis://127.0.0.1:{host_port}"
             lh_uri = f"redis://redis.lh:{port}"
         _add_connection_endpoint(endpoints, "docker", docker_uri)
-        if effective_port or host_port:
+        if host_port:
             _add_connection_endpoint(endpoints, "host", host_uri)
         if sn in ("redis", "valkey"):
             _add_connection_endpoint(endpoints, "host_lh", lh_uri)
     elif kind == "minio":
         _add_connection_endpoint(endpoints, "docker", f"http://{docker_host}:9000")
-        if effective_port:
-            _add_connection_endpoint(endpoints, "host", f"http://127.0.0.1:{effective_port}")
+        if host_port:
+            _add_connection_endpoint(endpoints, "host", f"http://127.0.0.1:{host_port}")
         _add_connection_endpoint(endpoints, "host_lh", "http://s3.lh")
         _add_connection_endpoint(endpoints, "host_lh", "http://minio-console.lh", label="MinIO console (*.lh)")
 
@@ -582,9 +768,9 @@ def _build_connection_endpoints(
             continue
         if _is_docker_internal_data_uri(uri):
             _add_connection_endpoint(endpoints, "docker", uri)
-            if effective_port and kind in default_ports:
+            if host_port and kind in default_ports:
                 _add_connection_endpoint(
-                    endpoints, "host", _data_uri_for_host(uri, effective_port)
+                    endpoints, "host", _data_uri_for_host(uri, host_port)
                 )
         elif uri.startswith("http://") or uri.startswith("https://"):
             parsed = urlparse(uri)
@@ -616,7 +802,13 @@ def _collect_connection_hints_from_compose(
         "mongodb": [],
     }
     uri_keys = {
-        "mongodb": ("MONGO_URI", "MONGODB_URI", "MONGODB_URL", "MONGO_URL"),
+        "mongodb": (
+            "MONGO_URI",
+            "MONGODB_URI",
+            "MONGODB_URL",
+            "MONGO_URL",
+            "LECO_MONGO_URI",
+        ),
         "redis": ("REDIS_URL", "REDIS_URI", "REDIS_DSN"),
         "mysql": ("MYSQL_URL", "DATABASE_URL", "MYSQL_DSN"),
         "postgres": ("POSTGRES_URL", "DATABASE_URL", "POSTGRES_URI", "PG_URL"),
@@ -653,27 +845,28 @@ def _enrich_data_store_items(
             if hp not in conns:
                 conns.insert(0, hp)
 
+        kind_hints = hints.get(kind, [])
         endpoints = _build_connection_endpoints(
             kind,
             name,
             spec,
             creds,
-            hints.get(kind, []),
+            kind_hints,
             conns,
+            services=services,
         )
-        effective_port = host_port or {
-            "mongodb": "27017",
-            "redis": "6379",
-            "mysql": "3306",
-            "postgres": "5432",
-            "minio": "9000",
-        }.get(kind, "")
+        if kind == "mongodb":
+            db = _resolve_mongodb_database(
+                creds, kind_hints, services=services, mongo_service_name=name
+            )
+            if db and db != "admin":
+                creds["database"] = db
 
         mgmt = list(item.get("management_uis") or [])
-        if kind == "mongodb" and effective_port:
+        if kind == "mongodb" and host_port:
             compass = {
                 "label": "MongoDB Compass (host)",
-                "url": _build_host_mongodb_uri(creds, effective_port),
+                "url": _build_host_mongodb_uri(creds, host_port),
             }
             mgmt = [compass] + [
                 m
@@ -693,6 +886,12 @@ def _enrich_data_store_items(
         item["connection_endpoints"] = endpoints
         item["connection_strings"] = _endpoints_to_flat_strings(endpoints)
         item["management_uis"] = mgmt
+        if kind == "mongodb":
+            ha_note = _mongodb_host_access_note(spec)
+            if ha_note:
+                existing = str(item.get("notes") or "").strip()
+                item["notes"] = f"{existing} · {ha_note}".strip(" · ") if existing else ha_note
+            item["host_access"] = "published" if host_port else "not_published"
 
 
 def _ps_status_map(compose_rows: list[dict[str, Any]] | None) -> dict[str, str]:

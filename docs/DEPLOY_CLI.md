@@ -330,7 +330,7 @@ leco-devops scaffold myapp -E /path/to/local-ecosystem \
 leco-devops scaffold myapp -E /path/to/local-ecosystem --template sample-compose-only
 ```
 
-Available templates are listed in `hosting/samples/`. The default template is **`sample-node-varnish-multiprocess`** (multi-process Node.js + Varnish + MongoDB + Redis). After scaffolding, edit the generated files (especially `docker-compose.yml` source paths and `conf/varnish/default.vcl`), then register and deploy.
+Available templates are listed in `hosting/samples/`. The default template is **`sample-node-varnish-multiprocess`** (multi-process Node.js + Varnish + MongoDB + Redis). It includes **`server` healthchecks**, **`varnish` → `server: service_healthy`**, and **`LECO_DISABLE_VARNISH_NCSA`** to avoid Varnish **503** on restart. After scaffolding, edit the generated files (especially `docker-compose.yml` source paths, health path, and `conf/varnish/default.vcl`), then register and deploy. See **`docs/help/09-503-varnish-backend.md`**.
 
 The `init` wizard also detects `conf/` directories, `leco-docker-preload.js`, and `docker-compose.leco-hosting.yml` hosting overlays — it will offer to add the overlay to `additionalComposeFilesFromManifest` automatically.
 

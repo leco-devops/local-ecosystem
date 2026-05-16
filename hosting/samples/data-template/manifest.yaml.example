@@ -1,0 +1,15 @@
+# Optional import plan — copy to manifest.yaml and edit.
+version: 1
+imports:
+  - id: mongo-primary
+    kind: mongodb
+    service: mongo
+    database: myapp
+    path: mongo/myapp
+    drop_before_import: true
+  - id: mysql-primary
+    kind: mysql
+    service: db
+    database: myapp
+    path: mysql/myapp.sql
+    drop_before_import: true

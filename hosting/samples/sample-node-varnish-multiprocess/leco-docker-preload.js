@@ -23,6 +23,9 @@
  *   LECO_REDIS_HOST          — e.g. redis
  *   LECO_REDIS_PORT          — e.g. 6379
  *   LECO_VARNISH_HOST        — e.g. varnish  (Docker service name)
+ *   LECO_DISABLE_VARNISH_NCSA — set "true" when Varnish runs in a separate container;
+ *                               apps that spawn `sudo varnishncsa` on the host must skip
+ *                               that in Docker (see docker-compose.leco-hosting.yml)
  *   LECO_OWN_DOMAINS         — e.g. my-app.lh  (comma-separated hostnames)
  *   LECO_CHROME_USER_DATA_DIR — e.g. /mnt/tmpfs-user-data
  *

@@ -12,7 +12,8 @@ Install: `cd tools/deploy-cli && pip install -e .`
 |---------|---------|
 | `detect` | Scan directory → JSON (wizard/CI) |
 | `init` | Interactive manifest stub |
-| `scaffold` | Copy sample → `hosting/app-available/<slug>` |
+| `scaffold` | Copy sample → `hosting/app-available/<slug>` (includes `data/` README template) |
+| `import-data` | Import `data/` dumps into running compose / local CF (`--dry-run`, `--reimport`) |
 | `deploy` | `docker compose up -d --build` |
 | `onboard` | deploy + register + traefik |
 | `ecosystem-register` | Registry + optional CF provision + Traefik |

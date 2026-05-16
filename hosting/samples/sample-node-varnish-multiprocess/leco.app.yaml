@@ -61,7 +61,7 @@ localhost:
       mongo, redis, varnish, server, worker, cron
 
     Files:
-      docker-compose.yml              — base stack (services, volumes, networks)
-      docker-compose.leco-hosting.yml — overlay (lh-network, preloader, env vars)
+      docker-compose.yml              — base stack (services, volumes, networks, server healthcheck)
+      docker-compose.leco-hosting.yml — overlay (lh-network, LECO_DISABLE_VARNISH_NCSA, preloader)
       leco-docker-preload.js          — runtime config patcher (Module._load)
-      conf/varnish/default.vcl        — production VCL adapted for Docker
+      conf/varnish/default.vcl        — production VCL adapted for Docker (backend = <slug>-server:3000)

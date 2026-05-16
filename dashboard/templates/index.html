@@ -825,6 +825,27 @@
                   <p class="muted small">Loading attached services…</p>
                 </div>
               </section>
+              <section
+                id="hostedAppsSeedData"
+                class="hosted-seed-data"
+                aria-label="Seed data import"
+              >
+                <header class="hosted-seed-data__head">
+                  <h4 class="hosted-apps-subhead">Seed data</h4>
+                  <p id="hostedAppsSeedDataSub" class="hosted-seed-data__sub muted small">Loading…</p>
+                </header>
+                <div id="hostedAppsSeedDataBody" class="hosted-seed-data__body">
+                  <p class="muted small">Loading seed data…</p>
+                </div>
+                <div class="hosted-seed-data__actions">
+                  <button type="button" id="hostedDataImportBtn" class="ctrl-act ctrl-act--safe">
+                    Import data
+                  </button>
+                  <button type="button" id="hostedDataImportDryBtn" class="ctrl-act ctrl-act--ops">
+                    Dry-run plan
+                  </button>
+                </div>
+              </section>
               <div
                 id="hostedAppsResourceLedger"
                 class="hosted-resource-ledger"
@@ -1169,6 +1190,12 @@
           <div id="controlActionSpinner" class="control-action-spinner" aria-hidden="true"></div>
           <h3 id="controlActionTitle" class="control-action-title">Running…</h3>
           <p id="controlActionLive" class="control-action-live">Starting…</p>
+          <div id="controlActionProgress" class="control-action-progress is-hidden" aria-hidden="true">
+            <div class="control-action-progress__track" aria-hidden="true">
+              <div id="controlActionProgressFill" class="control-action-progress__fill" style="width: 0%"></div>
+            </div>
+            <p id="controlActionProgressMeta" class="control-action-progress__meta muted small"></p>
+          </div>
           <p class="muted small control-action-hint">
             Live output streams as Docker, shell scripts, or <code>leco-devops</code> print lines (Control actions, <strong>Register application</strong>, …). If this box stays empty for minutes behind <code>*.lh</code>, open LEco DevOps on
             <strong>port 8090</strong> (direct to the container) or check <code>docker logs service-dashboard</code>.

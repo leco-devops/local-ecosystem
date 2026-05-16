@@ -78,6 +78,13 @@ with Traefik reverse proxy on *.lh hostnames. Key patterns:
 6. **Multi-process apps**: Multiple containers run the same codebase with different \
    entry scripts. They share a `node_modules` volume so `npm install` runs once.
 
+7. **Varnish in Docker**: Traefik → `<slug>-varnish:80` → `<slug>-server:3000`. \
+   Generated compose MUST include: (a) `server` healthcheck on the app port + health path, \
+   (b) `varnish` `depends_on: server: condition: service_healthy`, \
+   (c) `LECO_VARNISH_HOST=varnish` and `LECO_DISABLE_VARNISH_NCSA=true` on the primary \
+   Node service so the app does not spawn host-side `sudo varnishncsa` inside the server \
+   container. VCL backends use Docker `container_name` (e.g. `botfeed-server`), not `127.0.0.1`.
+
 ## Your Task
 
 Analyze the provided source files and extract structured facts about the application. \
@@ -131,15 +138,15 @@ EXAMPLE_ANALYSIS = {
         },
         "VARNISH_HOST": {
             "current_value": "127.0.0.1",
-            "docker_value": "botfeed-varnish",
-            "description": "Varnish cache hostname",
+            "docker_value": "varnish",
+            "description": "Varnish Docker service name (PURGE/BAN from app container)",
         },
     },
     "environment_vars": ["NODE_ENV", "PORT", "MONGODB_URI", "REDIS_HOST"],
     "entry_scripts": ["server.js", "requestQueue.js", "worker.js", "cron.js"],
     "node_version": "20",
     "uses_chromium": True,
-    "notes": "Express app with Puppeteer-based web scraping. 4 separate processes share MongoDB and Redis. Varnish caches HTTP responses with ESI support. Uses custom tracking parameter stripping in VCL.",
+    "notes": "Express app with Puppeteer-based web scraping. 4 separate processes share MongoDB and Redis. Varnish caches HTTP responses. Hosting overlay sets LECO_DISABLE_VARNISH_NCSA=true (no host varnishncsa in server container). Server healthcheck /alb-health-check; varnish waits for healthy server.",
 }
 
 

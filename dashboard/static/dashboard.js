@@ -7,6 +7,10 @@ let metricsTimer = null;
 let activeTab = "overviewTab";
 let hostedAppsList = [];
 let hostedSelectedSlug = "";
+/** Latest hosted app snapshot for detail panel (seed import confirm, dump CLI). */
+let hostedLastDetailSnap = null;
+/** Per-slug seed import checkbox state: { [slug]: { [importId]: boolean } }. */
+const hostedSeedImportPrefs = {};
 let hostedAppCharts = { cpu: null, mem: null, net: null };
 let hostedLogStreamAbort = null;
 let hostedLogStreamStarted = false;
@@ -3803,6 +3807,37 @@ function showAppConfirm({
   });
 }
 
+/** Confirm dialog with HTML body (caller must escape untrusted strings). */
+function showAppHtmlConfirm({
+  title = "Confirm",
+  htmlMessage = "",
+  confirmText = "Continue",
+  cancelText = "Cancel",
+  danger = false,
+  formLayout = true,
+} = {}) {
+  const nodes = _appModalNodes();
+  if (!nodes) return Promise.resolve(false);
+  const { overlay, cancel, primary, titleEl, messageEl } = nodes;
+  _appModalResetFormState();
+  titleEl.textContent = title;
+  messageEl.innerHTML = htmlMessage;
+  if (formLayout) {
+    _appModalDialogEl()?.classList.add("app-modal-dialog--form");
+    messageEl.classList.add("app-modal-message--form");
+  }
+  overlay.dataset.mode = "confirm";
+  cancel.classList.remove("is-hidden");
+  cancel.textContent = cancelText;
+  primary.textContent = confirmText;
+  _appModalSetPrimaryVariant(primary, danger ? "danger" : "ops");
+  return new Promise((resolve) => {
+    _appModalResolve = resolve;
+    overlay.hidden = false;
+    primary.focus();
+  });
+}
+
 /**
  * Show a copy-pasteable list of CLI commands for a given backend+model.
  * Modal-only — does NOT execute anything. Used by the "Show CLI" buttons in
@@ -5764,6 +5799,8 @@ function resetHostedAppsDetailForLoading(slug) {
   if (ledgerEl) ledgerEl.innerHTML = '<p class="muted small">Loading resource ledger…</p>';
   const attachedEl = document.getElementById("hostedAppsAttachedServicesBody");
   if (attachedEl) attachedEl.innerHTML = '<p class="muted small">Loading attached services…</p>';
+  const seedEl = document.getElementById("hostedAppsSeedDataBody");
+  if (seedEl) seedEl.innerHTML = '<p class="muted small">Loading seed data…</p>';
   if (localEl) localEl.innerHTML = '<p class="muted small">Loading local profile…</p>';
   if (cfEl) cfEl.innerHTML = '<p class="muted small">Loading Cloudflare bindings…</p>';
 }
@@ -6063,6 +6100,491 @@ function copyHostedAttachedText(text) {
   if (!t) return;
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(t).catch(() => {});
+  }
+}
+
+function formatBytes(n) {
+  const b = Number(n) || 0;
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KiB`;
+  return `${(b / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
+function hostedSeedDataStoresFromSnap(snap) {
+  const groups = snap?.attached_services?.groups || [];
+  const out = [];
+  groups.forEach((grp) => {
+    (grp.items || []).forEach((item) => {
+      const kind = String(item.kind || "").toLowerCase();
+      if (kind === "mongodb" || kind === "mysql" || kind === "postgres" || kind === "redis") {
+        out.push(item);
+      }
+    });
+  });
+  return out;
+}
+
+function hostedSeedEndpoint(item, scope) {
+  const eps = Array.isArray(item.connection_endpoints) ? item.connection_endpoints : [];
+  return eps.find((e) => String(e.scope || "") === scope) || null;
+}
+
+/** Database name from Attached services only; otherwise a neutral placeholder. */
+function hostedSeedMongoDatabase(item) {
+  const creds = item.credentials && typeof item.credentials === "object" ? item.credentials : {};
+  if (creds.database) return String(creds.database);
+  const hostUri = hostedSeedEndpoint(item, "host")?.uri || "";
+  const m = String(hostUri).match(/\/([^/?]+)(?:\?|$)/);
+  if (m && m[1] && m[1] !== "" && m[1] !== "admin") return m[1];
+  return "<database>";
+}
+
+/** URI safe for copy-paste in docs/commands — never embed username/password. */
+function hostedSeedUriWithoutSecrets(uri) {
+  const raw = String(uri || "").trim();
+  if (!raw) return "mongodb://127.0.0.1:<host-port>/<database>";
+  try {
+    const u = new URL(raw);
+    u.username = "";
+    u.password = "";
+    let out = u.toString();
+    if (out.endsWith("/")) out = out.slice(0, -1);
+    return out;
+  } catch (_) {
+    return raw.replace(/\/\/[^@]+@/, "//");
+  }
+}
+
+function buildHostedSeedDumpSnippets(slug, snap) {
+  const dataRel = `hosting/app-available/${slug}/data`;
+  const snippets = [];
+  const stores = hostedSeedDataStoresFromSnap(snap);
+
+  stores.forEach((item) => {
+    const kind = String(item.kind || "").toLowerCase();
+    const name = String(item.name || item.id || kind);
+    const hostEp = hostedSeedEndpoint(item, "host");
+    const container = String(item.container || `${slug}-${name}`).trim();
+
+    if (kind === "mongodb") {
+      const db = hostedSeedMongoDatabase(item);
+      const restoreBase = hostedSeedUriWithoutSecrets(hostEp?.uri);
+      const restoreWithDb =
+        db !== "<database>" && !restoreBase.includes(`/${db}`)
+          ? `${restoreBase.replace(/\/$/, "")}/${db}`
+          : restoreBase;
+      const dbFlag = db === "<database>" ? "--db=<database>" : `--db=${db}`;
+      const restorePath = db === "<database>" ? "<database>" : db;
+      const restoreAll = restoreBase;
+      snippets.push({
+        id: `mongo-pipe-one-${name}`,
+        title: `MongoDB · ${name} — one database (pipe)`,
+        lines: [
+          `# Single DB — omit --db on mongodump to dump the whole server (see next block).`,
+          `mongodump --uri="mongodb://localhost:27017" ${dbFlag} --archive \\`,
+          `  | mongorestore --uri="${restoreWithDb}" --archive --drop`,
+        ],
+      });
+      snippets.push({
+        id: `mongo-pipe-all-${name}`,
+        title: `MongoDB · ${name} — full server / all databases (pipe)`,
+        lines: [
+          `# All DBs on the source instance (admin, config, app DBs, …). Target: host root URI (no /database path).`,
+          `mongodump --uri="mongodb://localhost:27017" --archive \\`,
+          `  | mongorestore --uri="${restoreAll}" --archive --drop`,
+          `# If auth is required, add URI options or env — do not commit passwords.`,
+        ],
+      });
+      snippets.push({
+        id: `mongo-folder-one-${name}`,
+        title: `MongoDB · ${name} — one database → ${dataRel}/mongo/`,
+        lines: [
+          `mkdir -p ${dataRel}/mongo`,
+          `mongodump --uri="mongodb://localhost:27017" ${dbFlag} --out="${dataRel}/mongo"`,
+          `# Creates ${dataRel}/mongo/<database>/ — Import data auto-detects each subfolder.`,
+        ],
+      });
+      snippets.push({
+        id: `mongo-folder-all-${name}`,
+        title: `MongoDB · ${name} — full server → ${dataRel}/mongo/`,
+        lines: [
+          `mkdir -p ${dataRel}/mongo`,
+          `mongodump --uri="mongodb://localhost:27017" --out="${dataRel}/mongo"`,
+          `# Creates ${dataRel}/mongo/<database>/ for every DB — Import data runs one step per folder.`,
+        ],
+      });
+      snippets.push({
+        id: `mongo-exec-one-${name}`,
+        title: `MongoDB · ${name} — one database (docker exec)`,
+        lines: [
+          `mongodump --uri="mongodb://localhost:27017" ${dbFlag} --out=/tmp/seed`,
+          `docker cp /tmp/seed ${container}:/tmp/seed`,
+          `docker exec ${container} mongorestore --drop --db=${restorePath} /tmp/seed/${restorePath}`,
+        ],
+      });
+      snippets.push({
+        id: `mongo-exec-all-${name}`,
+        title: `MongoDB · ${name} — full server (docker exec)`,
+        lines: [
+          `mongodump --uri="mongodb://localhost:27017" --out=/tmp/seed`,
+          `docker cp /tmp/seed ${container}:/tmp/seed`,
+          `docker exec ${container} mongorestore --drop /tmp/seed`,
+        ],
+      });
+    } else if (kind === "mysql") {
+      const creds = item.credentials || {};
+      const db = creds.database || "<database>";
+      snippets.push({
+        id: `mysql-${name}`,
+        title: `MySQL · ${name}`,
+        lines: [
+          `# -p prompts for password (never put passwords in shell history)`,
+          `mysqldump -h 127.0.0.1 -P <source-port> -u <user> -p ${db} > ${dataRel}/mysql/${db}.sql`,
+          `docker exec -i ${container} mysql -u<user> -p ${db} < ${dataRel}/mysql/${db}.sql`,
+          `# Host connection: see Attached services (copy URI there).`,
+        ],
+      });
+    } else if (kind === "postgres") {
+      const creds = item.credentials || {};
+      const db = creds.database || "<database>";
+      snippets.push({
+        id: `pg-${name}`,
+        title: `PostgreSQL · ${name}`,
+        lines: [
+          `pg_dump -h localhost -U <user> -W ${db} > ${dataRel}/postgres/${db}.sql`,
+          `docker exec -i ${container} psql -U <user> -d ${db} < ${dataRel}/postgres/${db}.sql`,
+        ],
+      });
+    } else if (kind === "redis") {
+      const hostUri = hostedSeedUriWithoutSecrets(hostEp?.uri || "redis://127.0.0.1:<host-port>");
+      snippets.push({
+        id: `redis-${name}`,
+        title: `Redis · ${name}`,
+        lines: [
+          `redis-cli -u "${hostUri}" --rdb /tmp/dump.rdb`,
+          `cp /tmp/dump.rdb ${dataRel}/redis/dump.rdb`,
+          `# Then use Import data, or FLUSHALL + copy RDB into ${container}`,
+        ],
+      });
+    }
+  });
+
+  if (!snippets.length) {
+    snippets.push({
+      id: "mongo-pipe-one-example",
+      title: "MongoDB — one database (pipe)",
+      lines: [
+        `mongodump --uri="mongodb://localhost:27017" --db=<source-database> --archive \\`,
+        `  | mongorestore --uri="mongodb://127.0.0.1:<host-port>/<target-database>" --archive --drop`,
+      ],
+    });
+    snippets.push({
+      id: "mongo-pipe-all-example",
+      title: "MongoDB — full server / all databases (pipe)",
+      lines: [
+        `mongodump --uri="mongodb://localhost:27017" --archive \\`,
+        `  | mongorestore --uri="mongodb://127.0.0.1:<host-port>" --archive --drop`,
+      ],
+    });
+    snippets.push({
+      id: "mongo-folder-example",
+      title: "MongoDB — dump to data/mongo/ (one DB or full server)",
+      lines: [
+        `mkdir -p ${dataRel}/mongo`,
+        `# One database:`,
+        `mongodump --uri="mongodb://localhost:27017" --db=<source-database> --out="${dataRel}/mongo"`,
+        `# Or all databases (omit --db):`,
+        `mongodump --uri="mongodb://localhost:27017" --out="${dataRel}/mongo"`,
+        `# Replace placeholders from Hosted apps → Attached services.`,
+      ],
+    });
+  }
+
+  return snippets;
+}
+
+function hostedSeedItemId(it) {
+  return String(it.id || `${it.kind || "item"}:${it.path || it.label || ""}`);
+}
+
+function hostedSeedIsItemChecked(slug, it) {
+  const id = hostedSeedItemId(it);
+  const prefs = hostedSeedImportPrefs[slug];
+  if (prefs && Object.prototype.hasOwnProperty.call(prefs, id)) {
+    return !!prefs[id];
+  }
+  return true;
+}
+
+function collectHostedSeedSelectedIds() {
+  const tbody = document.getElementById("hostedSeedImportTbody");
+  if (!tbody) return [];
+  return [...tbody.querySelectorAll(".hosted-seed-import-cb:checked")]
+    .map((cb) => cb.getAttribute("data-import-id"))
+    .filter(Boolean);
+}
+
+function updateHostedSeedSelectSummary() {
+  const el = document.getElementById("hostedSeedSelectSummary");
+  const tbody = document.getElementById("hostedSeedImportTbody");
+  if (!el || !tbody) return;
+  const boxes = [...tbody.querySelectorAll(".hosted-seed-import-cb")];
+  const checked = boxes.filter((b) => b.checked);
+  let bytes = 0;
+  checked.forEach((b) => {
+    bytes += Number(b.getAttribute("data-size-bytes")) || 0;
+  });
+  el.textContent = `${checked.length} of ${boxes.length} selected · ~${formatBytes(bytes)} to import`;
+}
+
+function bindHostedSeedImportSelection(slug) {
+  const tbody = document.getElementById("hostedSeedImportTbody");
+  const selectAll = document.getElementById("hostedSeedSelectAll");
+  if (!tbody || !slug) return;
+
+  const syncPrefs = () => {
+    if (!hostedSeedImportPrefs[slug]) hostedSeedImportPrefs[slug] = {};
+    tbody.querySelectorAll(".hosted-seed-import-cb").forEach((cb) => {
+      const id = cb.getAttribute("data-import-id");
+      if (id) hostedSeedImportPrefs[slug][id] = cb.checked;
+    });
+    updateHostedSeedSelectSummary();
+    if (selectAll) {
+      const boxes = [...tbody.querySelectorAll(".hosted-seed-import-cb")];
+      selectAll.checked = boxes.length > 0 && boxes.every((b) => b.checked);
+      selectAll.indeterminate =
+        boxes.some((b) => b.checked) && boxes.length > 0 && !selectAll.checked;
+    }
+  };
+
+  tbody.querySelectorAll(".hosted-seed-import-cb").forEach((cb) => {
+    cb.addEventListener("change", () => {
+      const row = cb.closest("tr");
+      if (row) row.classList.toggle("hosted-seed-data__row--off", !cb.checked);
+      syncPrefs();
+    });
+  });
+  if (selectAll) {
+    selectAll.addEventListener("change", () => {
+      const on = !!selectAll.checked;
+      tbody.querySelectorAll(".hosted-seed-import-cb").forEach((cb) => {
+        cb.checked = on;
+      });
+      syncPrefs();
+    });
+  }
+  syncPrefs();
+}
+
+function renderHostedSeedDumpBlock(slug, snap) {
+  const snippets = buildHostedSeedDumpSnippets(slug, snap);
+  return `<div class="hosted-seed-data__panel hosted-seed-data__panel--dump">
+    <h5 class="hosted-seed-data__panel-title">1 · Take a dump (on your Mac)</h5>
+    <p class="muted small">Commands use <strong>${escapeHtml(slug)}</strong> paths and ports from <strong>Attached services</strong> above. Mac Mongo is usually <code>localhost:27017</code>; this stack’s published port may differ.</p>
+    ${snippets
+      .map((sn, idx) => {
+        const text = sn.lines.join("\n");
+        return `<details class="hosted-seed-data__cmd-block"${idx === 0 ? " open" : ""}>
+          <summary>${escapeHtml(sn.title)}</summary>
+          <pre class="hosted-seed-data__cli">${escapeHtml(text)}</pre>
+          <button type="button" class="hosted-seed-data__copy ctrl-act ctrl-act--ops" data-copy="${escapeAttr(text)}">Copy command</button>
+        </details>`;
+      })
+      .join("")}
+  </div>`;
+}
+
+function renderHostedSeedData(snap, slug) {
+  const el = document.getElementById("hostedAppsSeedDataBody");
+  const section = document.getElementById("hostedAppsSeedData");
+  const sub = document.getElementById("hostedAppsSeedDataSub");
+  if (!el) return;
+  const appSlug = (slug || hostedSelectedSlug || snap?.slug || "").trim();
+  const dataRel = appSlug ? `hosting/app-available/${appSlug}/data` : "hosting/app-available/<slug>/data";
+  if (section) section.classList.remove("is-hidden");
+  if (sub) {
+    sub.textContent = appSlug
+      ? `After ${appSlug} is deployed — import does not run at register.`
+      : "Select an app — import runs after deploy.";
+  }
+
+  let html = `<div class="hosted-seed-data__path"><span class="hosted-seed-data__path-label">Data folder</span><code>${escapeHtml(dataRel)}</code></div>`;
+
+  html += renderHostedSeedDumpBlock(appSlug, snap);
+
+  const di = (snap && snap.data_import) || {};
+  html += `<div class="hosted-seed-data__panel hosted-seed-data__panel--plan">
+    <h5 class="hosted-seed-data__panel-title">2 · Import into running stack</h5>`;
+
+  if (di.error) {
+    html += `<p class="hosted-seed-data__err">Discovery failed: <code>${escapeHtml(String(di.error))}</code></p>
+      <p class="muted small">Restart the LEco DevOps dashboard container after pulling the latest <code>local-ecosystem</code> (needs <code>tools/deploy-cli/leco_app/data_import</code>).</p>`;
+  } else if (!di.present) {
+    html += `<p class="muted small">No <code>data/</code> on disk yet — use the dump commands above (pipe is fastest), or create the folder and copy files under <code>mongo/</code>, <code>mysql/</code>, etc.</p>`;
+  } else {
+    const items = Array.isArray(di.items) ? di.items : [];
+    const warnings = Array.isArray(di.warnings) ? di.warnings : [];
+    if (di.path) {
+      html += `<p class="muted small">On disk: <code>${escapeHtml(String(di.path))}</code>`;
+      if (di.total_bytes) html += ` · ~${formatBytes(di.total_bytes)}`;
+      html += "</p>";
+    }
+    if (warnings.length) {
+      html += `<ul class="hosted-seed-data__warnings">${warnings
+        .map((w) => `<li>${escapeHtml(String(w))}</li>`)
+        .join("")}</ul>`;
+    }
+    if (!items.length) {
+      html += '<p class="muted small">Folder exists but nothing detected — add <code>manifest.yaml</code> or standard subdirs (<code>mongo/&lt;database&gt;/</code>, …).</p>';
+    } else {
+      html += `<div class="hosted-seed-data__select-bar">
+        <label class="hosted-seed-data__select-all">
+          <input type="checkbox" id="hostedSeedSelectAll" checked />
+          Select all
+        </label>
+        <span id="hostedSeedSelectSummary" class="muted small"></span>
+      </div>`;
+      html += `<table class="hosted-seed-data__table hosted-seed-data__table--select"><thead><tr>
+        <th class="hosted-seed-data__chk" aria-label="Import"></th>
+        <th>Kind</th><th>Target</th><th>Path</th><th>Size</th>
+      </tr></thead><tbody id="hostedSeedImportTbody">${items
+        .map((it) => {
+          const importId = escapeAttr(hostedSeedItemId(it));
+          const checked = hostedSeedIsItemChecked(appSlug, it);
+          const kind = escapeHtml(String(it.kind || "—"));
+          const label = escapeHtml(String(it.label || it.database || it.bucket || it.namespace || "—"));
+          const path = escapeHtml(String(it.path || "—"));
+          const size = formatBytes(it.size_bytes);
+          const sizeBytes = Number(it.size_bytes) || 0;
+          return `<tr class="hosted-seed-data__row${checked ? "" : " hosted-seed-data__row--off"}">
+            <td class="hosted-seed-data__chk">
+              <input type="checkbox" class="hosted-seed-import-cb" data-import-id="${importId}"
+                data-size-bytes="${sizeBytes}"${checked ? " checked" : ""} aria-label="Import ${label}" />
+            </td>
+            <td>${kind}</td><td>${label}</td><td><code>${path}</code></td><td>${size}</td></tr>`;
+        })
+        .join("")}</tbody></table>`;
+      html += `<p class="muted small"><strong>Import data</strong> runs only checked rows, with <code>--drop</code> / reimport when enabled.</p>`;
+    }
+  }
+
+  html += `<p class="hosted-seed-data__help muted small"><a href="/help#hosted-app-data-import" target="_blank" rel="noopener noreferrer">Help → Hosted app data import</a></p></div>`;
+
+  el.innerHTML = html;
+  el.querySelectorAll(".hosted-seed-data__copy").forEach((btn) => {
+    btn.addEventListener("click", () => copyHostedAttachedText(btn.getAttribute("data-copy")));
+  });
+  if (appSlug && Array.isArray(di.items) && di.items.length) {
+    bindHostedSeedImportSelection(appSlug);
+  }
+}
+
+async function runHostedDataImport(slug, { dryRun = false } = {}) {
+  if (!slug) return;
+  const snap = hostedLastDetailSnap;
+  const di = (snap && snap.data_import) || {};
+  const allItems = Array.isArray(di.items) ? di.items : [];
+  const selectedIds = collectHostedSeedSelectedIds();
+  if (allItems.length && !selectedIds.length) {
+    await showAppHtmlAlert(
+      "<p>Select at least one row to import (checkboxes in the table above).</p>",
+      "Nothing selected",
+    );
+    return;
+  }
+  const selectedSet = new Set(selectedIds);
+  const items = allItems.filter((it) => selectedSet.has(hostedSeedItemId(it)));
+  const itemLines = items.length
+    ? `<ul class="app-modal-list app-modal-list--import">${items
+        .map(
+          (it) =>
+            `<li><span class="app-modal-list__kind">${escapeHtml(String(it.kind || "?"))}</span> ${escapeHtml(String(it.label || it.path || ""))} <span class="muted">(${formatBytes(it.size_bytes)})</span></li>`,
+        )
+        .join("")}</ul>`
+    : "<p class=\"muted small\">No files discovered under <code>data/</code> yet — you can still dry-run; import may no-op or fail until dumps exist.</p>";
+
+  const warnBox = dryRun
+    ? `<div class="app-modal-warn-box app-modal-warn-box--info" role="status">
+        <strong>Dry-run only</strong>
+        <p>Prints the import plan and logs — <strong>no writes</strong> to databases or files.</p>
+      </div>`
+    : `<div class="app-modal-warn-box" role="alert">
+        <strong>Reimport — data will be replaced</strong>
+        <p>Each checked step runs with <code>--drop</code> / reimport: existing data in those targets is <strong>deleted then restored</strong> from your dumps. This cannot be undone.</p>
+        <p class="muted small">Unchecked rows in the table are skipped.</p>
+      </div>`;
+
+  if (!dryRun) {
+    const ok = await showAppHtmlConfirm({
+      title: `Import seed data · ${slug}`,
+      htmlMessage: `<p class="app-modal-message__lead">Import <strong>${items.length}</strong> selected step(s) into <strong>${escapeHtml(slug)}</strong>?</p>
+        ${warnBox}
+        <p class="app-modal-list__heading">Steps to import</p>
+        ${itemLines}`,
+      confirmText: "Import data",
+      cancelText: "Cancel",
+      danger: true,
+      formLayout: true,
+    });
+    if (!ok) return;
+  }
+
+  if (dryRun) {
+    const ok = await showAppHtmlConfirm({
+      title: `Dry-run import · ${slug}`,
+      htmlMessage: `<p class="app-modal-message__lead">Preview the import plan for <strong>${escapeHtml(slug)}</strong>?</p>
+        ${warnBox}
+        <p class="app-modal-list__heading">Steps to validate (${items.length})</p>
+        ${itemLines}`,
+      confirmText: "Run dry-run",
+      cancelText: "Cancel",
+      danger: false,
+      formLayout: true,
+    });
+    if (!ok) return;
+  }
+
+  if (dashboardTokenRequired() && !controlToken()) {
+    await showAppHtmlAlert(
+      "<p>Set the control token on the <strong>Control</strong> tab before importing.</p>",
+      "Control token required",
+    );
+    return;
+  }
+
+  await runDashboardStreamOverlay({
+    title: dryRun ? `Dry-run import · ${slug}` : `Import data · ${slug}`,
+    url: `/api/hosted-apps/${encodeURIComponent(slug)}/data-import/stream`,
+    body: {
+      reimport: true,
+      dry_run: dryRun,
+      selected_ids: allItems.length ? selectedIds : undefined,
+    },
+    trackProgress: true,
+    actionVerb: dryRun ? "dry-run" : "import",
+    onFinally: async () => {
+      if (activeTab === "hostedAppsTab" && hostedSelectedSlug === slug) {
+        await refreshHostedAppsPanel();
+      }
+    },
+  });
+}
+
+let hostedDataImportButtonsBound = false;
+function bindHostedDataImportButtons() {
+  if (hostedDataImportButtonsBound) return;
+  hostedDataImportButtonsBound = true;
+  const importBtn = document.getElementById("hostedDataImportBtn");
+  const dryBtn = document.getElementById("hostedDataImportDryBtn");
+  if (importBtn) {
+    importBtn.addEventListener("click", () => {
+      if (hostedSelectedSlug) runHostedDataImport(hostedSelectedSlug, { dryRun: false });
+    });
+  }
+  if (dryBtn) {
+    dryBtn.addEventListener("click", () => {
+      if (hostedSelectedSlug) runHostedDataImport(hostedSelectedSlug, { dryRun: true });
+    });
   }
 }
 
@@ -6593,6 +7115,9 @@ async function refreshHostedAppsPanel() {
   renderHostedManifestSummary(snap.manifest_ui, snap);
   renderHostedResourceLedger(snap.manifest_ui, snap);
   renderHostedAttachedServices(snap);
+  hostedLastDetailSnap = snap;
+  renderHostedSeedData(snap, slug);
+  bindHostedDataImportButtons();
   renderHostedLocalProfile(snap.manifest_ui, snap);
   renderHostedCfResources(snap.manifest_ui);
 
@@ -7362,18 +7887,29 @@ function initHostedRegisterWizard() {
         idIn && idIn.value.trim() ? idIn.value.trim() : previewId || "";
       await hostedRegSyncUrlsFromLocTa(aidAfter, true);
       await refreshYamlStatus();
+      const seedHint = (() => {
+        const sd = data.seed_data;
+        if (sd && sd.present) {
+          const n = Number(sd.item_count) || 0;
+          return ` Seed data/ detected (${n} import step${n === 1 ? "" : "s"}) — import manually after deploy.`;
+        }
+        if (sd && !sd.present) {
+          return " Optional: add data/ under hosting for seed dumps (import after deploy).";
+        }
+        return "";
+      })();
       if (how && how.fromBrowse) {
         setMsg(
-          dashboardTokenRequired()
+          (dashboardTokenRequired()
             ? "Detect ok — use Generate YAML or Save YAML, then Register (control token)."
-            : "Detect ok — use Generate YAML or Save YAML, then Register.",
+            : "Detect ok — use Generate YAML or Save YAML, then Register.") + seedHint,
         );
       } else {
-        setMsg(
+        let base =
           dashboardTokenRequired()
             ? "Detect ok — Generate YAML writes files from scan; Save YAML persists edits; Register needs both files on disk (control token)."
-            : "Detect ok — Generate YAML writes files from scan; Save YAML persists edits; Register needs both files on disk.",
-        );
+            : "Detect ok — Generate YAML writes files from scan; Save YAML persists edits; Register needs both files on disk.";
+        setMsg(base + seedHint);
       }
     } catch (e) {
       hostedRegDetectOkForPath = "";
@@ -8703,11 +9239,78 @@ function prepareDashboardGlobalOverlayLayer() {
   closeHostedChartExpand();
 }
 
+/** @type {{ startedAt: number, lastStepAt: number, completedSteps: number }} */
+let streamProgressTiming = { startedAt: 0, lastStepAt: 0, completedSteps: 0 };
+
+function resetStreamProgressUI() {
+  streamProgressTiming = { startedAt: 0, lastStepAt: 0, completedSteps: 0 };
+  const wrap = document.getElementById("controlActionProgress");
+  const fill = document.getElementById("controlActionProgressFill");
+  const meta = document.getElementById("controlActionProgressMeta");
+  if (wrap) {
+    wrap.classList.add("is-hidden");
+    wrap.setAttribute("aria-hidden", "true");
+  }
+  if (fill) fill.style.width = "0%";
+  if (meta) meta.textContent = "";
+}
+
+function formatStreamEta(seconds) {
+  const s = Math.max(0, Math.round(seconds));
+  if (s < 60) return `~${s}s`;
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return r ? `~${m}m ${r}s` : `~${m}m`;
+}
+
+/**
+ * @param {{ step?: number, total?: number, label?: string }} ev
+ */
+function updateStreamProgressUI(ev) {
+  const wrap = document.getElementById("controlActionProgress");
+  const fill = document.getElementById("controlActionProgressFill");
+  const meta = document.getElementById("controlActionProgressMeta");
+  const liveEl = document.getElementById("controlActionLive");
+  if (!wrap || !fill || !meta) return;
+
+  const step = Number(ev.step);
+  const total = Number(ev.total);
+  const label = ev.label != null ? String(ev.label) : "";
+  if (!Number.isFinite(step) || !Number.isFinite(total) || total <= 0) return;
+
+  const now = Date.now();
+  if (!streamProgressTiming.startedAt) streamProgressTiming.startedAt = now;
+  if (streamProgressTiming.lastStepAt && step > streamProgressTiming.completedSteps + 1) {
+    streamProgressTiming.completedSteps = Math.max(streamProgressTiming.completedSteps, step - 1);
+  }
+  streamProgressTiming.lastStepAt = now;
+
+  const pct = Math.min(100, Math.max(0, Math.round((step / total) * 100)));
+  wrap.classList.remove("is-hidden");
+  wrap.setAttribute("aria-hidden", "false");
+  fill.style.width = `${pct}%`;
+
+  let etaText = "";
+  const doneSteps = Math.max(0, step - 1);
+  const elapsedSec = (now - streamProgressTiming.startedAt) / 1000;
+  if (doneSteps > 0 && step < total) {
+    const avgPerStep = elapsedSec / doneSteps;
+    const remaining = total - step + 1;
+    etaText = ` · ETA ${formatStreamEta(avgPerStep * remaining)}`;
+  } else if (step >= total) {
+    etaText = " · finishing";
+  }
+
+  meta.textContent = `Step ${step} of ${total} (${pct}%)${label ? ` · ${label}` : ""}${etaText}`;
+  if (liveEl) liveEl.textContent = label ? `Running: ${label}` : `Step ${step} of ${total}`;
+}
+
 /**
  * @param {ReadableStreamDefaultReader<Uint8Array>} reader
  * @param {(t: string) => void} appendStreamLog
+ * @param {(ev: { step?: number, total?: number, label?: string }) => void} [onProgress]
  */
-async function readNdjsonLinesFromReader(reader, appendStreamLog) {
+async function readNdjsonLinesFromReader(reader, appendStreamLog, onProgress) {
   const dec = new TextDecoder();
   let lineBuf = "";
   let finalResult = null;
@@ -8727,6 +9330,13 @@ async function readNdjsonLinesFromReader(reader, appendStreamLog) {
         continue;
       }
       if (ev.type === "log" && ev.text != null) appendStreamLog(ev.text);
+      if (ev.type === "progress") {
+        const step = ev.step != null ? ev.step : "?";
+        const total = ev.total != null ? ev.total : "?";
+        const label = ev.label != null ? ev.label : "";
+        if (onProgress) onProgress(ev);
+        appendStreamLog(`\n--- [${step}/${total}] ${label} ---\n`);
+      }
       if (ev.type === "done") finalResult = ev.result || null;
     }
   }
@@ -8734,6 +9344,13 @@ async function readNdjsonLinesFromReader(reader, appendStreamLog) {
     try {
       const ev = JSON.parse(lineBuf);
       if (ev.type === "log" && ev.text != null) appendStreamLog(ev.text);
+      if (ev.type === "progress") {
+        const step = ev.step != null ? ev.step : "?";
+        const total = ev.total != null ? ev.total : "?";
+        const label = ev.label != null ? ev.label : "";
+        if (onProgress) onProgress(ev);
+        appendStreamLog(`\n--- [${step}/${total}] ${label} ---\n`);
+      }
       if (ev.type === "done") finalResult = ev.result || finalResult;
     } catch (_) {
       /* trailing garbage */
@@ -8743,7 +9360,7 @@ async function readNdjsonLinesFromReader(reader, appendStreamLog) {
 }
 
 /** When fetch body has no getReader (older browsers / proxies), parse buffered NDJSON. */
-function parseNdjsonFromFullText(text, appendStreamLog) {
+function parseNdjsonFromFullText(text, appendStreamLog, onProgress) {
   let finalResult = null;
   for (const line of text.split("\n")) {
     if (!line.trim()) continue;
@@ -8755,6 +9372,13 @@ function parseNdjsonFromFullText(text, appendStreamLog) {
       continue;
     }
     if (ev.type === "log" && ev.text != null) appendStreamLog(ev.text);
+    if (ev.type === "progress") {
+      const step = ev.step != null ? ev.step : "?";
+      const total = ev.total != null ? ev.total : "?";
+      const label = ev.label != null ? ev.label : "";
+      if (onProgress) onProgress(ev);
+      appendStreamLog(`\n--- [${step}/${total}] ${label} ---\n`);
+    }
     if (ev.type === "done") finalResult = ev.result || null;
   }
   return finalResult;
@@ -8762,11 +9386,11 @@ function parseNdjsonFromFullText(text, appendStreamLog) {
 
 /**
  * Shared overlay + NDJSON stream reader (Control actions, Register app, …).
- * @param {{ title: string, url: string, body: Record<string, unknown>, actionVerb?: string, onFinally?: (outcome: { ok: boolean, result?: object, error?: string }) => void | Promise<void> }} opts
+ * @param {{ title: string, url: string, body: Record<string, unknown>, actionVerb?: string, trackProgress?: boolean, onFinally?: (outcome: { ok: boolean, result?: object, error?: string }) => void | Promise<void> }} opts
  * @returns {Promise<{ ok: boolean, result?: object, error?: string }>}
  */
 async function runDashboardStreamOverlay(opts) {
-  const { title, url, body, actionVerb = "operation", onFinally } = opts;
+  const { title, url, body, actionVerb = "operation", trackProgress = false, onFinally } = opts;
   /** @type {{ ok: boolean, result?: object, error?: string }} */
   const outcome = { ok: false };
   initControlActionOverlay();
@@ -8828,6 +9452,7 @@ async function runDashboardStreamOverlay(opts) {
     snippetEl.classList.add("control-action-snippet--live");
     snippetEl.textContent = "Waiting for output…\n";
   }
+  if (trackProgress) resetStreamProgressUI();
   if (spinnerEl) spinnerEl.classList.remove("is-hidden");
   if (runningBar) runningBar.classList.remove("is-hidden");
   if (doneBar) doneBar.classList.add("is-hidden");
@@ -8858,6 +9483,7 @@ async function runDashboardStreamOverlay(opts) {
   const tok = controlToken();
   const payload = { ...body, token: tok };
   const streamTrigger = peekActionTrigger(400);
+  const onProgress = trackProgress ? updateStreamProgressUI : undefined;
 
   try {
     const res = await fetch(url, {
@@ -8903,14 +9529,14 @@ async function runDashboardStreamOverlay(opts) {
       let finalResult = null;
       if (res.body && typeof res.body.getReader === "function") {
         try {
-          finalResult = await readNdjsonLinesFromReader(res.body.getReader(), appendStreamLog);
+          finalResult = await readNdjsonLinesFromReader(res.body.getReader(), appendStreamLog, onProgress);
         } catch (streamErr) {
           appendStreamLog(`\n[ui] stream read failed: ${String(streamErr.message || streamErr)}\n`);
           finalResult = { ok: false, error: String(streamErr.message || streamErr) };
         }
       } else {
         const txt = await res.text();
-        finalResult = parseNdjsonFromFullText(txt, appendStreamLog);
+        finalResult = parseNdjsonFromFullText(txt, appendStreamLog, onProgress);
       }
 
       const data = finalResult || { ok: false, error: "no result from stream" };
@@ -9001,6 +9627,12 @@ async function runDashboardStreamOverlay(opts) {
     if (spinnerEl) spinnerEl.classList.add("is-hidden");
     if (runningBar) runningBar.classList.add("is-hidden");
     if (doneBar) doneBar.classList.remove("is-hidden");
+    if (trackProgress) {
+      const fill = document.getElementById("controlActionProgressFill");
+      const meta = document.getElementById("controlActionProgressMeta");
+      if (outcome.ok && fill) fill.style.width = "100%";
+      if (meta && outcome.ok) meta.textContent = "Complete";
+    }
     try {
       await onFinally?.(outcome);
     } catch (_) {

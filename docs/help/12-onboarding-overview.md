@@ -50,6 +50,7 @@ More diagrams: [Architecture & diagrams](help:architecture-diagrams).
 4. **Public URLs** table — optional merge into profile `urls[]`.
 5. **Register** — `ecosystem-register` + optional **Deploy stack** (`docker compose up -d --build`).
 6. Verify on **Hosted apps** — health probes, logs, routes.
+7. **Seed data (optional)** — if `hosting/app-available/<slug>/data/` exists, the register wizard reports it; import is **manual** after deploy via **Import data** or `leco-devops import-data` ([Seed data import](help:hosted-app-data-import)).
 
 Optional: enable **AI-assisted onboarding** on Infrastructure → AI settings to stream analysis and suggested configs (see `docs/AI_ONBOARDING_PLAN.md`).
 
@@ -83,6 +84,8 @@ leco-devops scaffold myapp -E "$LECO_ECOSYSTEM_ROOT" \
 ```
 
 Copies `hosting/samples/<template>/` → `hosting/app-available/myapp/` with placeholders. Point **`--source-path`** at the real repo; LEco creates the `source` symlink on register/materialize.
+
+For **Node + Varnish** apps, pass **`--health-path`** matching the upstream app (e.g. **`/alb-health-check`** for botfeed). The template includes **`server` healthchecks**, **`varnish` waits for healthy server**, and **`LECO_DISABLE_VARNISH_NCSA`** so restarts do not cause [503 Backend fetch failed](help:ts-503).
 
 ## Zip upload
 

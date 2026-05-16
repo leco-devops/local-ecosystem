@@ -1,10 +1,9 @@
 # LEco hosting overlay — attaches services to the ecosystem edge network.
 # Mounts leco-docker-preload.js to /opt/leco/ (NOT /app — that's the source bind mount).
-# Commands override upstream entrypoints with preloader + optional system deps.
 #
-# Adjust: service names, env vars, command scripts, and apt-get packages.
-# If your app doesn't need Chromium/ffmpeg/etc., simplify the command to:
-#   command: ["node", "-r", "/opt/leco/leco-docker-preload.js", "server.js"]
+# Varnish apps: set LECO_VARNISH_HOST + LECO_DISABLE_VARNISH_NCSA so the Node process
+# does not spawn host-side `sudo varnishncsa` (not available inside the server container).
+# Startup skips apt-get/npm when already present to shorten restarts.
 
 services:
   server:
@@ -14,34 +13,21 @@ services:
       - ./leco-docker-preload.js:/opt/leco/leco-docker-preload.js:ro
     environment:
       NODE_ENV: development
-      LECO_MONGO_URI: mongodb://mongo:27017/              # ← patches config.MONGODB_URI
-      LECO_REDIS_URI: redis://redis:6379                  # ← patches config.REDIS_URI
+      LECO_MONGO_URI: mongodb://mongo:27017/
+      LECO_REDIS_URI: redis://redis:6379
       LECO_REDIS_HOST: redis
       LECO_REDIS_PORT: "6379"
-      LECO_VARNISH_HOST: varnish                          # ← patches config.varnishHost
-      LECO_OWN_DOMAINS: my-app.lh                         # ← patches config.OWN_DOMAINS
+      LECO_VARNISH_HOST: varnish
+      LECO_OWN_DOMAINS: my-app.lh
+      LECO_DISABLE_VARNISH_NCSA: "true"
       # Uncomment if your app needs Puppeteer/Chromium:
       # LECO_CHROME_USER_DATA_DIR: /mnt/tmpfs-user-data
       # PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
       # PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"
     # Simple startup (no system deps):
-    command: >-
-      bash -c "
-        rm -rf /app/node_modules/.package-lock.json &&
-        npm install --prefer-offline 2>&1 | tail -5 &&
-        echo 'npm install done — starting server.js' &&
-        node -r /opt/leco/leco-docker-preload.js server.js
-      "
-    # If you need system packages (Chromium, ffmpeg, etc.), use this instead:
-    # command: >-
-    #   bash -c "
-    #     apt-get update -qq &&
-    #     apt-get install -y -qq --no-install-recommends chromium ffmpeg &&
-    #     rm -rf /var/lib/apt/lists/* &&
-    #     rm -rf /app/node_modules/.package-lock.json &&
-    #     npm install --prefer-offline 2>&1 | tail -5 &&
-    #     node -r /opt/leco/leco-docker-preload.js server.js
-    #   "
+    command: ["bash", "-c", "if [ ! -d /app/node_modules/express ]; then npm install --prefer-offline 2>&1 | tail -5; else echo 'node_modules present — skipping npm install'; fi && echo 'starting server.js' && node -r /opt/leco/leco-docker-preload.js server.js"]
+    # Chromium / Puppeteer — use this command instead of the simple one above:
+    # command: ["bash", "-c", "if ! command -v chromium >/dev/null 2>&1; then echo 'Installing Chromium + deps' && apt-get update -qq && apt-get install -y -qq --no-install-recommends chromium fonts-liberation libnss3 libatk-bridge2.0-0 libdrm2 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libasound2 libpangocairo-1.0-0 libgtk-3-0 libxshmfence1 ffmpeg webp && rm -rf /var/lib/apt/lists/*; else echo 'Chromium already installed — skipping apt-get'; fi && mkdir -p /mnt/tmpfs-user-data && if [ ! -d /app/node_modules/express ]; then npm install --prefer-offline 2>&1 | tail -5; else echo 'node_modules present — skipping npm install'; fi && echo 'starting server.js' && node -r /opt/leco/leco-docker-preload.js server.js"]
 
   worker:
     networks:
@@ -54,12 +40,7 @@ services:
       LECO_REDIS_URI: redis://redis:6379
       LECO_REDIS_HOST: redis
       LECO_REDIS_PORT: "6379"
-    command: >-
-      bash -c "
-        while [ ! -f /app/node_modules/.package-lock.json ]; do sleep 2; done &&
-        echo 'node_modules ready — starting worker.js' &&
-        node -r /opt/leco/leco-docker-preload.js worker.js
-      "
+    command: ["bash", "-c", "while [ ! -d /app/node_modules/express ]; do sleep 2; done && echo 'node_modules ready — starting worker.js' && node -r /opt/leco/leco-docker-preload.js worker.js"]
 
   cron:
     networks:
@@ -72,12 +53,7 @@ services:
       LECO_REDIS_URI: redis://redis:6379
       LECO_REDIS_HOST: redis
       LECO_REDIS_PORT: "6379"
-    command: >-
-      bash -c "
-        while [ ! -f /app/node_modules/.package-lock.json ]; do sleep 2; done &&
-        echo 'node_modules ready — starting cron.js' &&
-        node -r /opt/leco/leco-docker-preload.js cron.js
-      "
+    command: ["bash", "-c", "while [ ! -d /app/node_modules/express ]; do sleep 2; done && echo 'node_modules ready — starting cron.js' && node -r /opt/leco/leco-docker-preload.js cron.js"]
 
   varnish:
     networks:

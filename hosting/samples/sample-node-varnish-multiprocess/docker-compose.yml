@@ -19,6 +19,8 @@ services:
     image: mongo:7.0
     container_name: my-app-mongo                  # ← prefix with your slug
     restart: unless-stopped
+    ports:
+      - "27018:27017"   # host Compass/mongosh; pick first free 27018–27022 if busy
     volumes:
       - app_mongo_data:/data/db
     networks:
@@ -56,7 +58,8 @@ services:
     environment:
       VARNISH_SIZE: 256m
     depends_on:
-      - server
+      server:
+        condition: service_healthy
     networks:
       - app-network
     healthcheck:
@@ -64,7 +67,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
-      start_period: 30s
+      start_period: 60s
 
   # ── Primary Node.js process (Express HTTP API) ─────────────────────────────
 
@@ -85,6 +88,12 @@ services:
         condition: service_healthy
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 180s
     # Command is overridden in docker-compose.leco-hosting.yml
 
   # ── Worker process (queue consumer, background jobs, etc.) ─────────────────

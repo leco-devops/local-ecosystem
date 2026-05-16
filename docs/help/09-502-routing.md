@@ -29,3 +29,7 @@
 - Shim must bind `0.0.0.0:11435` (not `127.0.0.1` only).
 
 See **Docs** → *Hosted apps Traefik runbook*.
+
+## Related: Varnish 503
+
+If the error page says **Varnish cache server** and **503 Backend fetch failed**, the issue is between **Varnish and Express**, not Traefik routing. See [503 / Varnish backend](help:ts-503).

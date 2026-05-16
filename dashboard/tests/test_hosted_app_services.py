@@ -20,6 +20,11 @@ from hosted_app_services import (  # noqa: E402
     _extract_credentials,
     _host_port_from_publish,
     _management_uis_for_data_store,
+    _resolve_mongodb_database,
+)
+from port_utils import (  # noqa: E402
+    host_port_in_use,
+    pick_first_free_mongo_host_port,
 )
 
 
@@ -108,19 +113,72 @@ class TestHostMongoAccess(unittest.TestCase):
         self.assertIn("/botfeed", host)
 
     def test_management_ui_not_docker_dns(self) -> None:
-        spec = {"ports": ["27017:27017"], "image": "mongo:7"}
+        spec = {"ports": ["27018:27017"], "image": "mongo:7"}
         creds = {"database": "botfeed"}
         mgmt = _management_uis_for_data_store("mongodb", "mongo", spec, creds)
         self.assertEqual(len(mgmt), 1)
         self.assertIn("Compass (host)", mgmt[0]["label"])
-        self.assertIn("127.0.0.1", mgmt[0]["url"])
+        self.assertIn("127.0.0.1:27018", mgmt[0]["url"])
         self.assertNotIn("mongo:27017", mgmt[0]["url"])
+
+    def test_management_ui_omitted_without_publish(self) -> None:
+        spec = {"image": "mongo:7"}
+        creds = {"database": "botfeed"}
+        mgmt = _management_uis_for_data_store("mongodb", "mongo", spec, creds)
+        self.assertEqual(mgmt, [])
+
+    def test_mongo_unpublished_no_host_endpoint(self) -> None:
+        eps = _build_connection_endpoints(
+            "mongodb",
+            "mongo",
+            {"image": "mongo:7"},
+            {},
+            ["mongodb://mongo:27017/"],
+            [],
+        )
+        scopes = {e["scope"] for e in eps}
+        self.assertIn("docker", scopes)
+        self.assertNotIn("host", scopes)
+
+    def test_mongo_published_uses_mapped_host_port(self) -> None:
+        eps = _build_connection_endpoints(
+            "mongodb",
+            "mongo",
+            {"ports": ["27018:27017"], "image": "mongo:7"},
+            {"database": "clientData"},
+            [],
+            [],
+        )
+        host_uri = next(e["uri"] for e in eps if e["scope"] == "host")
+        self.assertIn("127.0.0.1:27018", host_uri)
+        self.assertIn("/clientData", host_uri)
+        self.assertNotIn(":27017", host_uri.split("127.0.0.1")[1])
+
+    def test_resolve_database_from_leco_env(self) -> None:
+        services = {
+            "mongo": {"image": "mongo:7", "_compose_file": "/tmp/docker-compose.yml"},
+            "server": {
+                "image": "node:20",
+                "_compose_file": "/tmp/docker-compose.yml",
+                "environment": {
+                    "LECO_MONGO_URI": "mongodb://mongo:27017/",
+                    "LECO_MONGO_DATABASE": "clientData",
+                },
+            },
+        }
+        db = _resolve_mongodb_database(
+            {},
+            ["mongodb://mongo:27017/"],
+            services=services,
+            mongo_service_name="mongo",
+        )
+        self.assertEqual(db, "clientData")
 
     def test_enrich_exposes_host_and_docker_endpoints(self) -> None:
         services = {
             "mongo": {
                 "image": "mongo:7",
-                "ports": ["27017:27017"],
+                "ports": ["27018:27017"],
                 "_compose_file": "/tmp/docker-compose.yml",
                 "environment": {
                     "MONGO_INITDB_ROOT_USERNAME": "root",
@@ -152,8 +210,37 @@ class TestHostMongoAccess(unittest.TestCase):
         self.assertIn("docker", scopes)
         host_uri = next(e["uri"] for e in eps if e["scope"] == "host")
         docker_uri = next(e["uri"] for e in eps if e["scope"] == "docker")
-        self.assertIn("127.0.0.1", host_uri)
+        self.assertIn("127.0.0.1:27018", host_uri)
         self.assertIn("mongo", docker_uri)
+        self.assertEqual(items[0].get("host_access"), "published")
+
+    def test_enrich_unpublished_mongo_host_access_note(self) -> None:
+        services = {
+            "mongo": {
+                "image": "mongo:7",
+                "_compose_file": "/tmp/docker-compose.yml",
+            },
+            "server": {
+                "image": "node:20",
+                "_compose_file": "/tmp/docker-compose.yml",
+                "environment": {"LECO_MONGO_URI": "mongodb://mongo:27017/"},
+            },
+        }
+        items = [
+            {
+                "name": "mongo",
+                "kind": "mongodb",
+                "credentials": {},
+                "connection_strings": [],
+                "management_uis": [],
+                "notes": "",
+            }
+        ]
+        hints = {"mongodb": ["mongodb://mongo:27017/"]}
+        _enrich_data_store_items(items, services, hints)
+        self.assertEqual(items[0].get("host_access"), "not_published")
+        self.assertNotIn("host", {e["scope"] for e in items[0]["connection_endpoints"]})
+        self.assertIn("Not published", items[0].get("notes", ""))
 
     def test_mysql_redis_postgres_endpoints(self) -> None:
         mysql_eps = _build_connection_endpoints(
@@ -188,6 +275,61 @@ class TestHostMongoAccess(unittest.TestCase):
         )
         self.assertTrue(any(e["scope"] == "docker" and "n8n_postgres:5432" in e["uri"] for e in pg_eps))
         self.assertTrue(any(e["scope"] == "host" and "127.0.0.1:5432" in e["uri"] for e in pg_eps))
+
+    def test_redis_unpublished_no_host_endpoint(self) -> None:
+        eps = _build_connection_endpoints(
+            "redis",
+            "redis",
+            {"image": "redis:7"},
+            {},
+            [],
+            [],
+        )
+        scopes = {e["scope"] for e in eps}
+        self.assertIn("docker", scopes)
+        self.assertNotIn("host", scopes)
+        self.assertIn("host_lh", scopes)
+
+
+class TestMongoHostPortPicker(unittest.TestCase):
+    def test_pick_skips_27017(self) -> None:
+        port = pick_first_free_mongo_host_port(skip_ports=(27017,))
+        self.assertIsNotNone(port)
+        self.assertNotEqual(port, 27017)
+
+    def test_pick_returns_none_when_all_busy(self) -> None:
+        import unittest.mock as mock
+
+        with mock.patch("port_utils.host_port_in_use", return_value=True):
+            self.assertIsNone(pick_first_free_mongo_host_port())
+
+    def test_host_port_in_use_detects_bound_port(self) -> None:
+        import socket
+
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.bind(("127.0.0.1", 0))
+            port = s.getsockname()[1]
+            self.assertTrue(host_port_in_use(port))
+        finally:
+            s.close()
+
+
+class TestComposeServiceMerge(unittest.TestCase):
+    def test_overlay_preserves_base_ports(self) -> None:
+        from hosted_app_services import _merge_compose_service_specs
+
+        base = {
+            "image": "mongo:7",
+            "ports": ["27018:27017"],
+            "networks": ["botfeed-network"],
+        }
+        overlay = {"networks": {"lh-network": {"external": True}}}
+        merged = _merge_compose_service_specs(base, overlay, compose_file="/tmp/overlay.yml")
+        self.assertEqual(merged.get("ports"), ["27018:27017"])
+        self.assertIn("botfeed-network", merged.get("networks", {}))
+        self.assertIn("lh-network", merged.get("networks", {}))
 
 
 class TestEnvDictFromSpec(unittest.TestCase):

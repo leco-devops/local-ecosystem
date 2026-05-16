@@ -1589,6 +1589,83 @@ def cmd_scaffold(
     typer.echo(f"  4. Edit docker-compose.leco-hosting.yml — adjust LECO_* env vars and command scripts")
     typer.echo(f"  5. Register: leco-devops ecosystem-register --cwd {target_dir} -E {er}")
     typer.echo(f"  6. Deploy: leco-devops deploy --cwd {target_dir}")
+    data_tpl = er / "hosting" / "samples" / "data-template"
+    data_dest = target_dir / "data"
+    if data_tpl.is_dir():
+        data_dest.mkdir(parents=True, exist_ok=True)
+        for name in ("README.md", "manifest.yaml.example"):
+            src_f = data_tpl / name
+            if src_f.is_file():
+                dest_name = "manifest.yaml.example" if name.endswith(".example") else name
+                (data_dest / dest_name).write_text(src_f.read_text(encoding="utf-8"), encoding="utf-8")
+        typer.echo(f"  data/ — seed folder template ({data_dest})")
+
+
+@app.command("import-data")
+def cmd_import_data(
+    cwd: Path = Path("."),
+    manifest: ManifestPathOption = None,
+    reimport: Annotated[
+        bool,
+        typer.Option("--reimport/--no-reimport", help="Drop/replace existing data before import"),
+    ] = True,
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Print import plan only")] = False,
+    ecosystem_root: EcosystemRootOption = None,
+) -> None:
+    """Import seed data from hosting/app-available/<slug>/data/ into running services."""
+    mp = _find_manifest(cwd, manifest)
+    from leco_app.data_import.orchestrator import run_import_plan_stream
+    from leco_app.data_import.plan import build_import_plan
+
+    if dry_run:
+        plan = build_import_plan(mp)
+        typer.echo(yaml.safe_dump(plan, default_flow_style=False, sort_keys=False))
+        raise typer.Exit(0)
+
+    from leco_app.data_import.orchestrator import compose_context_for_manifest
+
+    compose_root, compose_tail, compose_ps = compose_context_for_manifest(mp)
+    services: dict[str, Any] = {}
+    try:
+        import sys
+
+        er = resolve_ecosystem_root(ecosystem_root)
+        if er:
+            dash_pkg = er / "dashboard"
+            if dash_pkg.is_dir() and str(dash_pkg) not in sys.path:
+                sys.path.insert(0, str(dash_pkg))
+            from hosted_app_services import load_merged_compose_services
+
+            services = load_merged_compose_services(mp, compose_tail=compose_tail)
+    except Exception:
+        services = {}
+
+    imported = 0
+    failed = 0
+    for ev in run_import_plan_stream(
+        mp,
+        compose_root=compose_root,
+        compose_tail=compose_tail,
+        services=services,
+        compose_ps=compose_ps,
+        reimport=reimport,
+        dry_run=False,
+    ):
+        if ev.get("type") == "log":
+            typer.echo(str(ev.get("text") or ""), nl=False)
+        elif ev.get("type") == "progress":
+            typer.echo(
+                f"\n--- [{ev.get('step')}/{ev.get('total')}] {ev.get('label')} ---\n",
+                err=True,
+            )
+        elif ev.get("type") == "done":
+            res = ev.get("result") or {}
+            imported = int(res.get("imported") or 0)
+            failed = int(res.get("failed") or 0)
+            if not res.get("ok"):
+                typer.secho(f"Import finished with failures ({failed} failed)", fg=typer.colors.RED)
+                raise typer.Exit(1)
+    typer.secho(f"Import complete ({imported} step(s) OK)", fg=typer.colors.GREEN)
 
 
 @app.command("cf-deploy")

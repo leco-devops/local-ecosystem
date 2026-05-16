@@ -72,7 +72,11 @@ COPY dashboard/hosted_zip_upload.py .
 COPY dashboard/leco_registration.py .
 COPY dashboard/leco_subprocess.py .
 COPY dashboard/hosted_apps.py .
+COPY dashboard/hosted_app_services.py .
+COPY dashboard/hosted_data_import.py .
+COPY dashboard/port_utils.py .
 COPY dashboard/hosted_app_timeseries.py .
+COPY dashboard/help_manual.py .
 COPY dashboard/traefik_manifest_keys.py .
 COPY dashboard/traefik_dynamic_file.py .
 COPY dashboard/local_cf_teardown.py .

@@ -76,6 +76,7 @@ HELP_TREE: list[dict] = [
             {"id": "onboarding-materialize", "title": "wsp: paths & materialize", "file": "12-onboarding-materialize.md"},
             {"id": "multi-wrangler-monorepo", "title": "Multi-Wrangler monorepos", "file": "12-multi-wrangler-monorepo.md"},
             {"id": "hosted-app-attached-services", "title": "Attached services panel", "file": "12-hosted-app-attached-services.md"},
+            {"id": "hosted-app-data-import", "title": "Seed data import", "file": "13-hosted-app-data-import.md"},
             {"id": "hosting-overrides", "title": "Overriding upstream apps", "file": "12-hosting-overrides.md"},
             {"id": "deploy-rebuild", "title": "Deploy, rebuild & offload", "file": "12-deploy-rebuild.md"},
         ],
@@ -107,6 +108,7 @@ HELP_TREE: list[dict] = [
             {"id": "dev-extending", "title": "Extending LEco", "file": "dev-06-extending.md"},
             {"id": "dev-debugging", "title": "Debugging & validation", "file": "dev-07-debugging.md"},
             {"id": "dev-hosted-app-services", "title": "Attached services (API)", "file": "dev-08-hosted-app-services.md"},
+            {"id": "dev-data-import", "title": "Data import", "file": "dev-09-data-import.md"},
         ],
     },
     {
@@ -120,6 +122,7 @@ HELP_TREE: list[dict] = [
         "children": [
             {"id": "ts-common", "title": "Common issues", "file": "09-troubleshooting.md"},
             {"id": "ts-502", "title": "502 / routing / lh-network", "file": "09-502-routing.md"},
+            {"id": "ts-503", "title": "503 / Varnish backend fetch failed", "file": "09-503-varnish-backend.md"},
         ],
     },
     {

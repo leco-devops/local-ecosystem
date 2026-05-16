@@ -195,6 +195,20 @@ DOC_MODULES = [
         "blurb": "Per-app data stores, credentials, host vs Docker DNS connection strings, Compass/Adminer links (dashboard Hosted apps detail).",
     },
     {
+        "id": "hosted-app-data-import",
+        "title": "Hosted apps — seed data import",
+        "category": "DevOps",
+        "rel_path": "docs/help/13-hosted-app-data-import.md",
+        "blurb": "data/ folder convention, CLI pipe mongodump|mongorestore, dashboard Import data stream, per-store cookbooks.",
+    },
+    {
+        "id": "dev-data-import",
+        "title": "Data import (developers)",
+        "category": "Develop",
+        "rel_path": "docs/help/dev-09-data-import.md",
+        "blurb": "Import orchestrator, manifest schema, NDJSON API, ImportContext, adding importer plugins.",
+    },
+    {
         "id": "devops-custom-apps",
         "title": "Deploy custom apps — Workers, Docker, NGINX, Node",
         "category": "DevOps",

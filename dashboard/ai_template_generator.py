@@ -8,6 +8,7 @@ does file generation.  No raw AI text hits disk.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import yaml
@@ -52,7 +53,10 @@ def generate_from_analysis(
     files["leco.yaml"] = _gen_leco_yaml(slug, backend_host, backend_port, port, hp)
     files["leco.app.yaml"] = _gen_leco_app_yaml(slug, config_file, source_path, analysis)
     files["docker-compose.yml"] = _gen_docker_compose(slug, source_path, data_stores, services, cache, port, hp, node_version)
-    files["docker-compose.leco-hosting.yml"] = _gen_hosting_overlay(slug, source_path, services, patches, env_vars, uses_chromium, config_file)
+    files["docker-compose.leco-hosting.yml"] = _gen_hosting_overlay(
+        slug, source_path, services, patches, env_vars, uses_chromium, config_file,
+        cache=cache, health_path=hp, port=port,
+    )
 
     if config_file and patches:
         files["leco-docker-preload.js"] = _gen_preloader(slug, config_file, patches)
@@ -247,7 +251,8 @@ def _gen_docker_compose(
             "    environment:",
             "      VARNISH_SIZE: 256m",
             "    depends_on:",
-            "      - server",
+            "      server:",
+            "        condition: service_healthy",
             "    networks:",
             f"      - {network}",
             "    healthcheck:",
@@ -255,7 +260,7 @@ def _gen_docker_compose(
             "      interval: 15s",
             "      timeout: 5s",
             "      retries: 5",
-            "      start_period: 30s",
+            "      start_period: 60s",
         ]
 
     # Node.js services
@@ -297,6 +302,15 @@ def _gen_docker_compose(
             "    networks:",
             f"      - {network}",
         ]
+        if is_primary and svc.get("port"):
+            lines += [
+                "    healthcheck:",
+                f'      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:{port}{health_path} || exit 1"]',
+                "      interval: 10s",
+                "      timeout: 5s",
+                "      retries: 12",
+                "      start_period: 180s",
+            ]
         lines.append(f"    # Command overridden in docker-compose.leco-hosting.yml")
 
     # Volumes
@@ -322,6 +336,10 @@ def _gen_hosting_overlay(
     env_vars: list[str],
     uses_chromium: bool,
     config_file: str | None,
+    *,
+    cache: str | None = None,
+    health_path: str = "/health",
+    port: int = 3000,
 ) -> str:
     lines = [
         "# AI-generated LEco hosting overlay.",
@@ -352,44 +370,55 @@ def _gen_hosting_overlay(
 
         if uses_chromium:
             lines.append("      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium")
+            lines.append("      PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: \"true\"")
 
         lines.append(f"      LECO_OWN_DOMAINS: \"{slug}.lh\"")
 
-        # Command
+        if cache == "varnish" and is_primary:
+            lines.append("      LECO_VARNISH_HOST: varnish")
+            lines.append("      LECO_DISABLE_VARNISH_NCSA: \"true\"")
+
+        # Command — skip apt-get/npm on restart when already present
         if is_primary and uses_chromium:
-            # Primary with chromium: apt-get + npm install + start
-            lines += [
-                f"    command: >-",
-                f"      bash -c '",
-                f"      apt-get update -qq && apt-get install -y -qq chromium > /dev/null 2>&1;",
-                f"      npm install --prefer-offline --no-audit --no-fund 2>&1;",
-                f"      exec node -r /opt/leco/leco-docker-preload.js {entry}",
-                f"      '",
-            ]
+            start_cmd = (
+                "if ! command -v chromium >/dev/null 2>&1; then echo 'Installing Chromium + deps' && "
+                "apt-get update -qq && apt-get install -y -qq --no-install-recommends chromium "
+                "fonts-liberation libnss3 libatk-bridge2.0-0 libdrm2 libxcomposite1 libxdamage1 "
+                "libxrandr2 libgbm1 libasound2 libpangocairo-1.0-0 libgtk-3-0 libxshmfence1 ffmpeg webp "
+                "&& rm -rf /var/lib/apt/lists/*; else echo 'Chromium already installed — skipping apt-get'; fi "
+                "&& mkdir -p /mnt/tmpfs-user-data && "
+                "if [ ! -d /app/node_modules/express ]; then npm install --prefer-offline 2>&1 | tail -5; "
+                "else echo 'node_modules present — skipping npm install'; fi "
+                f"&& echo 'starting {entry}' && node -r /opt/leco/leco-docker-preload.js {entry}"
+            )
         elif is_primary:
-            # Primary without chromium: npm install + start
-            lines += [
-                f"    command: >-",
-                f"      bash -c '",
-                f"      npm install --prefer-offline --no-audit --no-fund 2>&1;",
-                f"      exec node -r /opt/leco/leco-docker-preload.js {entry}",
-                f"      '",
-            ]
+            start_cmd = (
+                "if [ ! -d /app/node_modules/express ]; then npm install --prefer-offline 2>&1 | tail -5; "
+                "else echo 'node_modules present — skipping npm install'; fi "
+                f"&& echo 'starting {entry}' && node -r /opt/leco/leco-docker-preload.js {entry}"
+            )
         else:
-            # Secondary: wait for node_modules then start
-            lines += [
-                f"    command: >-",
-                f"      bash -c '",
-                f"      echo \"[{svc_name}] Waiting for node_modules...\";",
-                f"      while [ ! -f /app/node_modules/.package-lock.json ]; do sleep 2; done;",
-                f"      echo \"[{svc_name}] Starting {entry}\";",
-                f"      exec node -r /opt/leco/leco-docker-preload.js {entry}",
-                f"      '",
-            ]
+            start_cmd = (
+                "while [ ! -d /app/node_modules/express ]; do sleep 2; done "
+                f"&& echo 'node_modules ready — starting {entry}' "
+                f"&& node -r /opt/leco/leco-docker-preload.js {entry}"
+            )
+        lines += [
+            "    command:",
+            f"      {json.dumps(['bash', '-c', start_cmd])}",
+        ]
 
         lines += [
             "    networks:",
             f"      - {network}",
+            "      - lh-network",
+        ]
+
+    if cache == "varnish":
+        lines += [
+            "",
+            "  varnish:",
+            "    networks:",
             "      - lh-network",
         ]
 

@@ -302,7 +302,8 @@ Takes the structured JSON from Phase 2 and produces config files using Python te
 | `leco.yaml` | `listening_port`, `health_endpoint`, `cache_layer`, app slug |
 | `leco.app.yaml` | `config_file`, app slug, standard bridge template |
 | `docker-compose.yml` | `services[]`, `data_stores[]`, `cache_layer`, source path |
-| `docker-compose.leco-hosting.yml` | `config_keys_to_patch`, `entry_scripts[]`, `environment_vars[]` |
+| `docker-compose.leco-hosting.yml` | `config_keys_to_patch`, `entry_scripts[]`, `environment_vars[]`; when `cache_layer == varnish`: `LECO_VARNISH_HOST`, `LECO_DISABLE_VARNISH_NCSA`, skip apt-get/npm on restart |
+| `docker-compose.yml` (varnish apps) | `server` healthcheck; `varnish` `depends_on: server: service_healthy` |
 | `leco-docker-preload.js` | `config_keys_to_patch` map (key → localhost value → Docker service name) |
 | `conf/varnish/default.vcl` | Only if `cache_layer == "varnish"` — adapted from sample VCL template |
 

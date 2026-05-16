@@ -16,6 +16,8 @@ This Low-Level Design (LLD) maps concrete modules, APIs, and responsibilities.
 | `dashboard/hosting_layout.py` | Source/target path policy and symlink handling |
 | `dashboard/hosted_apps.py` | Registry-based hosted listing, snapshots, manifest-driven UI fields |
 | `dashboard/hosted_app_services.py` | Per-app attached services: compose merge, credentials, `connection_endpoints` (host vs Docker DNS) |
+| `dashboard/hosted_data_import.py` | Seed data discover + NDJSON import stream bridge to `leco_app.data_import` |
+| `tools/deploy-cli/leco_app/data_import/` | Import plan, orchestrator, per-store importers (`import-data` CLI) |
 | `dashboard/hosted_offboard.py` | Offboard helper around unregister flow |
 | `dashboard/docs_catalog.py` | Whitelisted docs surfaced in in-app Docs tab |
 | `dashboard/monitor.py` | Service map, metrics aggregation, probes, and overview payloads |
@@ -55,7 +57,9 @@ This Low-Level Design (LLD) maps concrete modules, APIs, and responsibilities.
 ### LEco hosted workflows
 
 - `GET /api/hosted-apps`
-- `GET /api/hosted-apps/<slug>/snapshot` — includes `attached_services` (grouped items with `connection_endpoints`: `host`, `host_lh`, `docker`)
+- `GET /api/hosted-apps/<slug>/snapshot` — includes `attached_services` (grouped items with `connection_endpoints`: `host`, `host_lh`, `docker`) and `data_import` (seed folder discovery)
+- `GET /api/hosted-apps/<slug>/data-import/discover` — import plan without writes
+- `POST /api/hosted-apps/<slug>/data-import/stream` — NDJSON import (`log`, `progress`, `done`)
 - `GET /api/hosted-apps/<slug>/insights`
 - `POST /api/hosted/upload-zip`
 - `POST /api/leco/browse`

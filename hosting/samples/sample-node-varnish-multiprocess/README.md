@@ -77,7 +77,47 @@ Production configs live in `conf/<service>/<config-file>` and are bind-mounted `
 
 ### Multi-process shared node_modules
 
-The primary service (`server`) runs `npm install` which populates the shared `app_node_modules` volume. Secondary services (`worker`, `cron`) poll for `/app/node_modules/.package-lock.json` before starting — this file is created at the end of `npm install`, acting as a ready signal.
+The primary service (`server`) runs `npm install` (skipped on restart when `node_modules/express` exists) which populates the shared `app_node_modules` volume. Secondary services (`worker`, `cron`) poll for `/app/node_modules/express` before starting.
+
+### MongoDB host access (Compass / mongosh)
+
+The `mongo` service publishes **`27018:27017`** by default so Compass on your Mac can reach the **container** volume. Do not map host port **27017** if you already run native Mongo on the Mac — that port is a different database.
+
+- **Inside containers:** `mongodb://mongo:27017/` (set via `LECO_MONGO_URI` in the hosting overlay).
+- **From your Mac:** `mongodb://127.0.0.1:27018/<database>` — use the host port from compose `ports:` (see LEco **Attached services**).
+- **No publish / empty volume:** `docker exec -it <container> mongosh <database>` or `mongodump` from Mac → `mongorestore` via `docker exec`.
+
+Set `LECO_MONGO_DATABASE` in the hosting overlay when the app uses a fixed database name.
+
+### Varnish 503 prevention (required for this template)
+
+| Pattern | Why |
+|---------|-----|
+| **`server` healthcheck** on port 3000 | Compose marks the API healthy only when Express is listening |
+| **`varnish` `depends_on: server: service_healthy`** | Varnish does not accept traffic until the backend is up |
+| **`LECO_DISABLE_VARNISH_NCSA: "true"`** | Node must not run host-side `sudo varnishncsa` inside the server container |
+| **`LECO_VARNISH_HOST: varnish`** | PURGE/BAN targets the Varnish container, not localhost |
+| **Skip apt-get/npm on restart** | Chromium and `node_modules` persist in the container filesystem between restarts |
+
+Upstream apps that start a `varnishWorker` / `varnishncsa` log monitor must guard that path when `LECO_VARNISH_HOST` is set (see botfeed `varnish.js`). **403** after the stack is healthy usually means missing MongoDB `client_conf_key` data — not a proxy failure.
+
+### Seed MongoDB / Redis data
+
+After deploy, copy production-like data into the stack:
+
+```bash
+# One database (Mac → LEco container)
+mongodump --uri="mongodb://localhost:27017" --db=<source-database> --archive \
+  | mongorestore --uri="mongodb://127.0.0.1:<host-port>/<target-database>" --archive --drop
+
+# Full server (all databases — omit --db)
+mongodump --uri="mongodb://localhost:27017" --archive \
+  | mongorestore --uri="mongodb://127.0.0.1:<host-port>" --archive --drop
+```
+
+Or place dumps under `data/mongo/` and use **Hosted apps → Import data** — see [Seed data import](../../docs/help/13-hosted-app-data-import.md).
+
+See [docs/help/09-503-varnish-backend.md](../../docs/help/09-503-varnish-backend.md).
 
 ### Staging (offload)
 
@@ -94,6 +134,7 @@ leco-devops offload --cwd hosting/app-available/myapp -E /path/to/local-ecosyste
 - [ ] `leco.app.yaml` — `name`, `configRefs.packageJson`
 - [ ] `leco.yaml` — `projectName`, `hostname`, `backendHost`, `backendPort`, `healthcheckUrls`, `publicUrl`
 - [ ] `docker-compose.yml` — source path, `container_name` prefix, volume names, images
-- [ ] `docker-compose.leco-hosting.yml` — `LECO_*` env vars, `LECO_OWN_DOMAINS`, command scripts
+- [ ] `docker-compose.leco-hosting.yml` — `LECO_*` env vars, `LECO_OWN_DOMAINS`, `LECO_DISABLE_VARNISH_NCSA`, command scripts
+- [ ] `docker-compose.yml` — `server` healthcheck path matches your app (`/health` or `/alb-health-check`)
 - [ ] `leco-docker-preload.js` — config key names to match your app's `config.js` exports
 - [ ] `conf/varnish/default.vcl` — backend `.host` and `.port`, ACL, VCL logic

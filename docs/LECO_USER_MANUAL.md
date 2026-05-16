@@ -145,6 +145,7 @@ After **`ecosystem-register`** (or the wizard below), open **Hosted apps** for:
 
 - Per-service metrics, logs, insights, health URL probes (from manifest).
 - **Attached services** — compose data stores, runtimes, Cloudflare bindings, with **host** (`127.0.0.1` / `*.lh`) and **Docker DNS** connection strings (see **`docs/help/12-hosted-app-attached-services.md`**).
+- **Seed data** — discover `hosting/app-available/<slug>/data/`, **Import data** / **Dry-run plan** (NDJSON logs, reimport). Not run at register. See **`docs/help/13-hosted-app-data-import.md`**.
 - **Local profile** summary: archetype, **`leco.yaml`** URLs, lifecycle steps (read-only in the UI).
 - Lifecycle actions via **Control** targets **`leco-stack-<id>`** (same token model as other Control actions). The LEco DevOps service runs **`leco-devops deploy`**, **`stop`**, **`down`** (and **`down -v`** on reset) with **`--manifest`** for those stacks; **restart** / **recreate** / **pause** still use **`docker compose`** where LEco DevOps has no matching command. **Remove** / **Reset** always runs **offboard** (registry + hosting dirs + Traefik / local CF as configured) after **`down`**, even when **`down`** exits non-zero (e.g. missing compose file on disk).
 
@@ -201,9 +202,11 @@ Full syntax, offload, and edge cases: **[DEPLOY_CLI.md](DEPLOY_CLI.md)**.
 |---------|--------|
 | App not in Hosted apps list | **`ecosystem-register`** run with correct **`LECO_ECOSYSTEM_ROOT`**; v3 apps need **effective** compose (e.g. **`infrastructure.dockerCompose`** in **`leco.yaml`**, not only on the bridge); rebuild/restart LEco DevOps after registry edits |
 | Traefik 502 / no route | Containers on **`lh-network`**; **`docker-compose.leco-hosting.yml`** + **`additionalComposeFilesFromManifest`**; **`traefik-fragment`** merged into **`hosting/traefik/dynamic.yml`**; **`loadBalancer`** hosts match **`container_name`** or **`{project}-{service}-1`**. Full table: **[HOSTED_APPS_TRAEFIK_RUNBOOK.md](HOSTED_APPS_TRAEFIK_RUNBOOK.md)**. |
+| Varnish **503 Backend fetch failed** after restart | **`server`** still starting or crash loop; use **`sample-node-varnish-multiprocess`** (server healthcheck, varnish **`service_healthy`**, **`LECO_DISABLE_VARNISH_NCSA`**). See **`docs/help/09-503-varnish-backend.md`**. |
 | Hosted apps URL column **HTTP 0** or API vs UI mismatch | Restart LEco DevOps after upgrades; probes use **`http://traefik`** for `*.lh`. Browser API base must use **`https://<app>.lh/api`** (overlay env / app code), not **`localhost`**. See runbook. |
 | **`detect`** / wizard path errors | Path must be under project or workspace-parent mount; no forbidden **`..`** traversal |
 | Hooks fail | Run from manifest directory; check **`cwd`** in steps; increase **`timeoutSec`** |
+| Seed import failed / Compass wrong port / app 403 after deploy | Use **Attached services** host port (e.g. `27018`); recreate mongo if `docker ps` shows no publish; see **`docs/help/13-hosted-app-data-import.md`** |
 
 ---
 

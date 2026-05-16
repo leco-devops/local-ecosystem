@@ -727,6 +727,17 @@ def snapshot_for_slug(slug: str) -> dict[str, Any]:
             "groups": [],
             "error": str(exc)[:300],
         }
+    data_import: dict[str, Any] = {"present": False, "items": [], "warnings": []}
+    try:
+        from hosted_data_import import data_import_summary_for_slug
+
+        data_import = data_import_summary_for_slug(
+            slug.strip(),
+            manifest_path=meta["manifest_path"],
+            compose_tail=tail,
+        )
+    except Exception as exc:
+        data_import = {"present": False, "error": str(exc)[:300], "items": [], "warnings": []}
     return {
         "ok": True,
         "slug": slug.strip(),
@@ -737,6 +748,7 @@ def snapshot_for_slug(slug: str) -> dict[str, Any]:
         "aggregate": agg,
         "manifest_ui": mf,
         "attached_services": attached,
+        "data_import": data_import,
         "url_probes": url_probes,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }

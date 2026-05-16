@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Hosted apps — attached services:** Per-app panel lists compose containers, edge runtimes, Cloudflare KV/R2/D1 bindings, and ecosystem data stores with inline credentials, connection strings, and management UI links (`attached_services` on snapshot API).
 - **Attached services (Mongo/Redis):** Reads compose via `compose_tail` fallback, `.env` beside compose, and `MONGODB_URI` / `REDIS_URL` from app services; builds default `mongodb://` / host-port connection strings and mongo-express links when present.
 - **Docs — attached services:** User help (`docs/help/12-hosted-app-attached-services.md`), developer API reference (`docs/help/dev-08-hosted-app-services.md`), and cross-links in LLD, playbook, DEPLOY_CLI, and user manual.
+- **Hosted apps — seed data import:** `hosting/app-available/<slug>/data/` convention, `leco-devops import-data`, dashboard **Seed data** card with **Import data** / dry-run NDJSON stream, importers for MongoDB, MySQL, Postgres, Redis, D1, R2, KV, and files. Operator guide `docs/help/13-hosted-app-data-import.md`, developer reference `docs/help/dev-09-data-import.md`, scaffold `data/` template on `leco-devops scaffold`.
 
 ### Changed
 
