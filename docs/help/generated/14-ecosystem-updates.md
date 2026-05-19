@@ -1,6 +1,6 @@
 # Ecosystem updates (auto-generated)
 
-_Generated at **2026-05-16T18:48:56Z** by `leco-update-catalog`. [Refresh service](/help?topic=ecosystem-updates)_
+_Generated at **2026-05-19T04:08:50Z** by `leco-update-catalog`. [Refresh service](/help?topic=ecosystem-updates)_
 
 ## Stack service versions
 
