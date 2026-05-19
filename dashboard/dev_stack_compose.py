@@ -81,6 +81,13 @@ def generate_compose(
         "volumes": {},
     }
 
+    from dev_stack_images import normalize_compose_images, verify_compose_images
+
+    compose, _ = normalize_compose_images(compose)
+    image_errors = verify_compose_images(compose, skip_registry=True)
+    if image_errors:
+        raise ValueError("Unavailable container images:\n" + "\n".join(f"  • {e}" for e in image_errors))
+
     compose_path = stack_dir / "docker-compose.yml"
     compose_path.write_text(yaml.safe_dump(compose, sort_keys=False), encoding="utf-8")
     meta = {

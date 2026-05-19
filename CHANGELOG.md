@@ -14,6 +14,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - **Dev stack Destroy:** `compose down -v --remove-orphans`, prunes leftover project containers/volumes/networks, removes stack files only after compose succeeds, updates platform config and Traefik routes; confirmation dialog in the Platform tab.
 
+- **Dev stack live logs:** Start/Stop/Destroy stream NDJSON via `/api/dev-stacks/<id>/action/stream` (compose output and `wp-sample-init` logs in real time); Platform tab log panel has high-contrast styling, a spinner while the action runs, disables stack action buttons (e.g. **Starting…**), and a **Close** button that clears the log when idle.
+
+- **Dev stack create (Magento):** Fix `NameError` in `stack_access_info` for `magento-min` / `magento-full` presets; create API returns JSON errors instead of HTML 500 pages.
+
+- **Dev stack presets (audit):** Hardened all ready stacks (WordPress, WooCommerce, Joomla, Magento, Drupal, Ghost, Elasticsearch) — richer access metadata, WooCommerce `wc-setup` waits for WordPress install, JSON error responses on dev-stack APIs, and regression tests for every template preset.
+
+- **Magento dev stacks:** `magento-min` / `magento-full` now use `bitnamilegacy/magento-archived:2` (Bitnami removed `docker.io/bitnami/magento` from Docker Hub). Existing stacks: edit `docker-compose.yml` or destroy/recreate from the Platform tab.
+
+- **Magento full (Varnish/Nginx):** Edge config uses Compose `configs` instead of host bind mounts so **Start** works when the dashboard runs under `/project` (no Docker Desktop file-sharing for `varnish/default.vcl`). Existing `magento-full` stacks auto-upgrade on **Start**.
+
+- **Dev stack image preflight:** Central image registry (`dev_stack_images.py`), auto-rewrite of deprecated Bitnami Magento/MariaDB refs on start, registry checks before `compose up`, and create-time validation so API errors stay JSON (not HTML).
+
 - **Traefik 404 on `localhost.lh`:** Empty `hosting/traefik/20-dev-stacks.yml` no longer writes invalid `http.routers: {}` (Traefik v3 rejected the whole file provider). `traefik.sh heal` normalizes every `hosting/traefik/*.yml`.
 
 - **Control — service dependencies:** Stopping **n8n** now stops **n8n_postgres** automatically; stopping Postgres stops n8n first. Infra targets cascade similarly (e.g. **cache-varnish** / **redis-commander** with their backends).

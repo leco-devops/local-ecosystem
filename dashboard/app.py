@@ -315,7 +315,10 @@ def api_platform_traefik_apply():
 def api_dev_stacks_list():
     from dev_stacks import list_stacks
 
-    return jsonify({"stacks": list_stacks()})
+    try:
+        return jsonify({"stacks": list_stacks()})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc), "stacks": []}), 500
 
 
 @app.post("/api/dev-stacks")
@@ -348,6 +351,8 @@ def api_dev_stacks_create():
         )
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
 
 
 @app.post("/api/dev-stacks/<stack_id>/action")
@@ -363,18 +368,54 @@ def api_dev_stack_action(stack_id: str):
     return jsonify(stack_action(stack_id, action))
 
 
+@app.post("/api/dev-stacks/<stack_id>/action/stream")
+def api_dev_stack_action_stream(stack_id: str):
+    """NDJSON stream: `{type:log,text}` lines then `{type:done,result:{...}}`."""
+    from dev_stack_stream import stack_action_streaming
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    action = str(data.get("action") or "").strip().lower()
+    if action not in ("start", "stop", "destroy"):
+        return jsonify({"ok": False, "error": "invalid action"}), 400
+
+    @stream_with_context
+    def ndjson():
+        try:
+            for ev in stack_action_streaming(stack_id, action):
+                yield json.dumps(ev, ensure_ascii=False) + "\n"
+        except Exception as exc:
+            yield json.dumps(
+                {"type": "done", "result": {"ok": False, "error": str(exc)}},
+                ensure_ascii=False,
+            ) + "\n"
+
+    return Response(
+        ndjson(),
+        mimetype="text/plain; charset=utf-8",
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
+
 @app.get("/api/dev-stacks/<stack_id>/snapshot")
 def api_dev_stack_snapshot(stack_id: str):
     from dev_stacks import stack_snapshot
 
-    return jsonify(stack_snapshot(stack_id))
+    try:
+        return jsonify(stack_snapshot(stack_id))
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
 
 
 @app.get("/api/dev-stacks/<stack_id>/access")
 def api_dev_stack_access(stack_id: str):
     from dev_stack_access import stack_access_info
 
-    return jsonify(stack_access_info(stack_id))
+    try:
+        return jsonify(stack_access_info(stack_id))
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
 
 
 @app.post("/api/dev-stacks/<stack_id>/reset-admin")
@@ -384,7 +425,10 @@ def api_dev_stack_reset_admin(stack_id: str):
     data = request.get_json(silent=True) or {}
     if not check_control_token(request, data):
         return jsonify({"ok": False, "error": "unauthorized"}), 401
-    return jsonify(reset_template_admin(stack_id))
+    try:
+        return jsonify(reset_template_admin(stack_id))
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
 
 
 @app.post("/api/hosted-apps/<slug>/platform-binding")

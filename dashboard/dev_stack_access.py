@@ -77,6 +77,11 @@ def stack_access_info(stack_id: str) -> dict[str, Any]:
             _url_entry("WP Admin", "admin", host, "/wp-admin/"),
             _url_entry("Install wizard", "install", host, "/wp-admin/install.php"),
         ]
+        if template == "woocommerce":
+            info["urls"].append(_url_entry("Shop", "shop", host, "/shop/"))
+            info["notes"].append(
+                "WooCommerce is installed on first start (wc-setup). Use the stack hostname above, not localhost."
+            )
         if sample:
             info["credentials"] = [_cred("WordPress admin", "admin", "admin", "/wp-admin/")]
         else:
@@ -97,15 +102,22 @@ def stack_access_info(stack_id: str) -> dict[str, Any]:
             _url_entry("Administrator", "admin", host, "/administrator/"),
         ]
         info["notes"].append(
-            "Open the stack hostname above (not localhost). With sample data, Joomla auto-installs on first start."
+            f"Open {info['base_url']} (not localhost). With sample data, Joomla auto-installs on first start."
         )
+        if sample:
+            info["credentials"] = [
+                _cred("Joomla admin", "admin", "localdevpass12", "/administrator/")
+            ]
     elif template in ("magento-min", "magento-full"):
         info["urls"] = [
             _url_entry("Storefront", "frontend", host, "/"),
             _url_entry("Admin", "admin", host, "/admin/"),
         ]
         info["credentials"] = [_cred("Magento admin", "admin", "Admin123!", "/admin/")]
-        info["notes"].append(f"Store base URL is set to {base} (MAGENTO_HOST on first boot).")
+        info["notes"].append(f"Store base URL is set to {info['base_url']} (MAGENTO_HOST on first boot).")
+        info["notes"].append(
+            "Uses bitnamilegacy/magento-archived and bitnamilegacy/mariadb (Bitnami removed public catalog images in 2025)."
+        )
         if template == "magento-full":
             info["notes"].append(
                 "Full stack: Elasticsearch, Redis, Varnish, and Nginx edge in front of Magento. First start can take 10+ minutes."
@@ -126,14 +138,18 @@ def stack_access_info(stack_id: str) -> dict[str, Any]:
             _url_entry("User login", "admin", host, "/user/login"),
         ]
         info["notes"].append(
-            "Complete the installer in the browser at the stack hostname above (not localhost) so CSS/assets load correctly."
+            f"Complete the installer in the browser at {info['base_url']} (not localhost) so CSS/assets load correctly."
         )
+        if sample:
+            info["notes"].append("Sample mode sets the site name only; you still complete the Drupal installer once.")
     elif template == "ghost":
         info["urls"] = [
             _url_entry("Ghost site", "frontend", host, "/"),
             _url_entry("Admin", "admin", host, "/ghost/"),
         ]
-        info["notes"].append("Create the owner account in the browser on first visit.")
+        info["notes"].append(
+            f"Create the owner account in the browser at {info['base_url']} on first visit (Ghost url env is set to this host)."
+        )
 
     return info
 

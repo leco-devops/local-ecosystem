@@ -168,7 +168,9 @@ def wait_for_stack_app_ready(stack_id: str) -> str:
     template = str(meta.get("template") or "").strip().lower()
     sections: list[str] = []
 
-    if "wp-sample-init" in _compose_services(stack_id):
+    services = _compose_services(stack_id)
+
+    if "wp-sample-init" in services:
         sections.append("--- Sample data init ---")
         code, out = _compose_wait_service(stack_id, "wp-sample-init", timeout=300)
         if out:
@@ -178,9 +180,18 @@ def wait_for_stack_app_ready(stack_id: str) -> str:
         else:
             sections.append("wp-sample-init did not complete successfully.")
 
+    if "wc-setup" in services:
+        sections.append("--- WooCommerce setup ---")
+        code, out = _compose_wait_service(stack_id, "wc-setup", timeout=300)
+        if out:
+            sections.append(out)
+        elif code == 0:
+            sections.append("wc-setup completed.")
+        else:
+            sections.append("wc-setup did not complete successfully.")
+
     if template in ("wordpress", "woocommerce"):
         sections.append("--- WordPress install ---")
-        services = _compose_services(stack_id)
         if "wp-sample-init" in services:
             ok, msg = _wait_wordpress_installed(stack_id)
             sections.append(msg)

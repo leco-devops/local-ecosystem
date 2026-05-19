@@ -6289,23 +6289,98 @@ body.help-page {
   min-height: 1.2em;
 }
 
+.devstack-status-line--error {
+  color: var(--danger, #f87171);
+}
+
+.devstack-log-wrap {
+  margin: 0.5rem 0 0.75rem;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border, #3f3f46) 85%, transparent);
+  background: #18181b;
+  overflow: hidden;
+}
+
+.devstack-log-wrap.is-hidden,
+.devstack-log-wrap[hidden] {
+  display: none !important;
+}
+
+.devstack-log-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 0.45rem 0.65rem;
+  background: color-mix(in srgb, #27272a 92%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--border, #3f3f46) 70%, transparent);
+}
+
+.devstack-log-toolbar .devstack-log-close {
+  margin-left: auto;
+}
+
+.devstack-log-spinner {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(148, 163, 184, 0.35);
+  border-top-color: #38bdf8;
+  border-radius: 50%;
+  animation: host-metrics-spin 0.7s linear infinite;
+}
+
+.devstack-log-spinner.is-hidden,
+.devstack-log-spinner[hidden] {
+  display: none !important;
+}
+
+.devstack-log-wrap--busy .devstack-log-close {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.platform-stack-row--action-busy {
+  outline: 1px solid color-mix(in srgb, #38bdf8 45%, transparent);
+  outline-offset: 2px;
+}
+
+.dev-stack-act--busy {
+  opacity: 0.85;
+  cursor: wait;
+}
+
+.devstack-log-toolbar__title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #e4e4e7;
+  letter-spacing: 0.02em;
+}
+
+.devstack-log-close {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.55rem;
+}
+
 .devstack-status-log {
   white-space: pre-wrap;
   word-break: break-word;
-  max-height: 18rem;
+  max-height: 20rem;
   overflow: auto;
-  margin: 0.35rem 0 0;
-  padding: 0.65rem 0.75rem;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--panel-bg, #f4f4f5) 88%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border, #d4d4d8) 70%, transparent);
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  border: 0;
+  border-radius: 0;
+  background: #0f0f12;
+  color: #f4f4f5;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.78rem;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
 .devstack-status-log--error {
-  border-color: color-mix(in srgb, var(--danger, #dc2626) 45%, transparent);
+  color: #fecaca;
+  background: #1c1010;
 }
 
 .devstack-sample-wrap {

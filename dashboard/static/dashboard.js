@@ -11856,19 +11856,69 @@ function devStackIsRunning(state) {
   return s === "running" || s === "partial";
 }
 
+/** @type {{ stackId: string, action: string } | null} */
+let devStackActionInFlight = null;
+
+function devStackActionLabel(action, inflightAction) {
+  if (action === "start") return inflightAction === "start" ? "Starting…" : "Start";
+  if (action === "stop") return inflightAction === "stop" ? "Stopping…" : "Stop";
+  if (action === "destroy") return inflightAction === "destroy" ? "Destroying…" : "Destroy";
+  return action;
+}
+
 function devStackActionBtn(id, action, state) {
+  const inflight = devStackActionInFlight;
+  const rowBusy = inflight && inflight.stackId === id;
+  const inflightAction = rowBusy ? inflight.action : null;
+  const label = devStackActionLabel(action, inflightAction);
   if (action === "destroy") {
-    return `<button type="button" class="ctrl-act ctrl-act--caution dev-stack-act" data-id="${escapeAttr(id)}" data-action="destroy" aria-label="Destroy ${escapeAttr(id)}">Destroy</button>`;
+    const dis = rowBusy ? " disabled" : "";
+    const busyCls = inflightAction === "destroy" ? " dev-stack-act--busy" : "";
+    const ariaBusy = inflightAction === "destroy" ? ' aria-busy="true"' : "";
+    return `<button type="button" class="ctrl-act ctrl-act--caution dev-stack-act${busyCls}" data-id="${escapeAttr(id)}" data-action="destroy"${dis}${ariaBusy} aria-label="${escapeAttr(label)} ${escapeAttr(id)}">${label}</button>`;
   }
   const running = devStackIsRunning(state);
   const isStart = action === "start";
-  const disabled = (isStart && running) || (!isStart && !running);
-  const primary = !disabled;
-  const label = isStart ? "Start" : "Stop";
+  let disabled = (isStart && running) || (!isStart && !running);
+  if (rowBusy) disabled = true;
+  const primary = !disabled && isStart;
   const tone = isStart ? "ctrl-act--safe" : "ctrl-act--caution";
   const stateCls = disabled ? "platform-svc-act--inactive" : primary ? "platform-svc-act--primary" : "";
+  const busyCls = rowBusy && inflightAction === action ? " dev-stack-act--busy" : "";
   const dis = disabled ? " disabled" : "";
-  return `<button type="button" class="ctrl-act ${tone} platform-svc-act dev-stack-act ${stateCls}" data-id="${escapeAttr(id)}" data-action="${action}"${dis} aria-label="${escapeAttr(label)} ${escapeAttr(id)}">${label}</button>`;
+  const ariaBusy = rowBusy && inflightAction === action ? ' aria-busy="true"' : "";
+  return `<button type="button" class="ctrl-act ${tone} platform-svc-act dev-stack-act ${stateCls}${busyCls}" data-id="${escapeAttr(id)}" data-action="${action}"${dis}${ariaBusy} aria-label="${escapeAttr(label)} ${escapeAttr(id)}">${label}</button>`;
+}
+
+function setDevStackActionBusy(stackId, action) {
+  devStackActionInFlight = stackId && action ? { stackId: String(stackId), action: String(action) } : null;
+  const spinner = document.getElementById("devStackLogSpinner");
+  const wrap = document.getElementById("devStackLogWrap");
+  const closeBtn = document.getElementById("devStackLogClose");
+  const busy = !!devStackActionInFlight;
+  if (spinner) {
+    spinner.classList.toggle("is-hidden", !busy);
+    spinner.hidden = !busy;
+    spinner.setAttribute("aria-hidden", busy ? "false" : "true");
+  }
+  if (wrap) wrap.classList.toggle("devstack-log-wrap--busy", busy);
+  if (closeBtn) closeBtn.disabled = busy;
+  document.querySelectorAll(".platform-stack-row").forEach((row) => {
+    const rowId = row.getAttribute("data-stack-id") || "";
+    const isRow = busy && rowId === devStackActionInFlight?.stackId;
+    row.classList.toggle("platform-stack-row--action-busy", isRow);
+    if (!isRow) return;
+    const state = row.getAttribute("data-stack-state") || "unknown";
+    const actions = row.querySelector(".platform-svc-tile__actions");
+    if (!actions) return;
+    actions.innerHTML =
+      devStackActionBtn(rowId, "start", state) +
+      devStackActionBtn(rowId, "stop", state) +
+      devStackActionBtn(rowId, "destroy", state);
+    actions.querySelectorAll(".dev-stack-act").forEach((btn) => {
+      btn.addEventListener("click", () => devStackAction(btn));
+    });
+  });
 }
 
 function inferPlatformDeploymentMode(cfg, hasPlatformFile) {
@@ -12110,7 +12160,7 @@ function renderDevStacksList(stacks) {
         .join(", ");
       const rowCls = devStackIsRunning(state) ? "platform-stack-row--running" : "platform-stack-row--stopped";
       const accessHtml = renderDevStackAccessHtml(s.access, rawId);
-      return `<div class="platform-stack-row ${rowCls}" data-id="${id}">
+      return `<div class="platform-stack-row ${rowCls}" data-id="${id}" data-stack-id="${escapeAttr(rawId)}" data-stack-state="${escapeAttr(state)}">
         <div><strong>${name}</strong> <span class="muted small">(${id}) — ${st}${template ? ` · ${template}` : ""}${sampleTag}</span></div>
         ${comps ? `<span class="muted small">${comps}</span>` : ""}
         ${accessHtml}
@@ -12130,7 +12180,50 @@ function renderDevStacksList(stacks) {
   });
 }
 
-function setDevStackStatus(message, { error = false, pre = false } = {}) {
+let devStackLogBuffer = "";
+
+function openDevStackLogPanel(title = "Operation log") {
+  const wrap = document.getElementById("devStackLogWrap");
+  const titleEl = document.getElementById("devStackLogTitle");
+  const pre = document.getElementById("devStackLog");
+  devStackLogBuffer = "";
+  if (pre) {
+    pre.textContent = "";
+    pre.classList.remove("devstack-status-log--error");
+  }
+  if (titleEl) titleEl.textContent = title;
+  if (wrap) {
+    wrap.hidden = false;
+    wrap.classList.remove("is-hidden");
+  }
+}
+
+function closeDevStackLogPanel() {
+  const wrap = document.getElementById("devStackLogWrap");
+  const pre = document.getElementById("devStackLog");
+  devStackLogBuffer = "";
+  if (pre) {
+    pre.textContent = "";
+    pre.classList.remove("devstack-status-log--error");
+  }
+  if (wrap) {
+    wrap.hidden = true;
+    wrap.classList.add("is-hidden");
+  }
+  setDevStackStatus("");
+}
+
+function appendDevStackLog(text) {
+  if (text === undefined || text === null) return;
+  const chunk = typeof text === "string" ? text : String(text);
+  devStackLogBuffer += chunk;
+  const pre = document.getElementById("devStackLog");
+  if (!pre) return;
+  pre.textContent = devStackLogBuffer;
+  pre.scrollTop = pre.scrollHeight;
+}
+
+function setDevStackStatus(message, { error = false } = {}) {
   const statusEl = document.getElementById("devStackStatus");
   if (!statusEl) return;
   if (!message) {
@@ -12138,11 +12231,57 @@ function setDevStackStatus(message, { error = false, pre = false } = {}) {
     statusEl.innerHTML = "";
     return;
   }
-  if (pre) {
-    statusEl.innerHTML = `<pre class="devstack-status-log${error ? " devstack-status-log--error" : ""}">${escapeHtml(message)}</pre>`;
-    return;
-  }
   statusEl.textContent = message;
+  if (error) statusEl.classList.add("devstack-status-line--error");
+  else statusEl.classList.remove("devstack-status-line--error");
+}
+
+async function streamDevStackAction(stackId, action) {
+  const tok = controlToken();
+  setDevStackActionBusy(stackId, action);
+  openDevStackLogPanel(`${action} · ${stackId}`);
+  appendDevStackLog(`Running ${action} on stack ${stackId}…\n\n`);
+  try {
+  const res = await fetch(`/api/dev-stacks/${encodeURIComponent(stackId)}/action/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Control-Token": tok },
+    body: JSON.stringify({ action, token: tok }),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    let err = `HTTP ${res.status}`;
+    try {
+      const data = await res.json();
+      err = data.error || err;
+    } catch (_) {
+      /* ignore */
+    }
+    appendDevStackLog(`\n[error] ${err}\n`);
+    const pre = document.getElementById("devStackLog");
+    if (pre) pre.classList.add("devstack-status-log--error");
+    return { ok: false, error: err };
+  }
+  let final = null;
+  if (res.body && typeof res.body.getReader === "function") {
+    final = await readNdjsonLinesFromReader(res.body.getReader(), appendDevStackLog);
+  } else {
+    const txt = await res.text();
+    final = parseNdjsonFromFullText(txt, appendDevStackLog);
+  }
+  if (!final) {
+    appendDevStackLog("\n[error] No result from stream.\n");
+    const pre = document.getElementById("devStackLog");
+    if (pre) pre.classList.add("devstack-status-log--error");
+    return { ok: false, error: "no result from stream" };
+  }
+  if (!final.ok) {
+    const pre = document.getElementById("devStackLog");
+    if (pre) pre.classList.add("devstack-status-log--error");
+  }
+  return final;
+  } finally {
+    setDevStackActionBusy(null);
+  }
 }
 
 async function devStackResetAdmin(stackId) {
@@ -12186,33 +12325,24 @@ async function devStackAction(btn) {
     });
     if (!ok) return;
   }
-  const token = controlToken();
-  const busyLabel =
-    action === "destroy" ? `Destroying ${id}…` : action === "start" ? `Starting ${id}…` : `Stopping ${id}…`;
-  setDevStackStatus(busyLabel);
   try {
-    const res = await fetch(`/api/dev-stacks/${encodeURIComponent(id)}/action`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, token }),
-    });
-    const data = await res.json();
-    if (data.ok) {
-      const head =
-        action === "destroy"
+    const data = await streamDevStackAction(id, action);
+    const head =
+      action === "destroy"
+        ? data.ok
           ? `Destroyed stack ${id}.`
-          : `${action === "start" ? "Started" : "Stopped"} ${id}.`;
-      const log = data.output ? String(data.output).trim() : "";
-      const warn = data.public_url_repair_warning ? `\n\nWarning: ${data.public_url_repair_warning}` : "";
-      const body = log ? `${head}\n\n${log}${warn}` : `${head}${warn}`;
-      setDevStackStatus(body, { pre: Boolean(log) });
-    } else {
-      const errBody = data.output || data.error || JSON.stringify(data);
-      setDevStackStatus(String(errBody).trim(), { error: true, pre: Boolean(data.output) });
-    }
+          : `Destroy failed for ${id}.`
+        : data.ok
+          ? `${action === "start" ? "Started" : "Stopped"} ${id}.`
+          : `${action === "start" ? "Start" : "Stop"} failed for ${id}.`;
+    const warn = data.public_url_repair_warning ? ` Warning: ${data.public_url_repair_warning}` : "";
+    setDevStackStatus(`${head}${warn} See log below — Close clears it.`, { error: !data.ok });
     _hostedDevStacksCache = null;
     await loadPlatformTab();
   } catch (e) {
+    appendDevStackLog(`\n[error] ${String(e.message || e)}\n`);
+    const pre = document.getElementById("devStackLog");
+    if (pre) pre.classList.add("devstack-status-log--error");
     setDevStackStatus(String(e.message || e), { error: true });
   }
 }
@@ -12221,6 +12351,11 @@ function initPlatformTab() {
   bindPlatformDeploymentAutoSelect();
   const saveBtn = document.getElementById("platformSaveConfig");
   const applyBtn = document.getElementById("platformApplyTraefik");
+  const logCloseBtn = document.getElementById("devStackLogClose");
+  if (logCloseBtn && logCloseBtn.dataset.bound !== "1") {
+    logCloseBtn.dataset.bound = "1";
+    logCloseBtn.addEventListener("click", () => closeDevStackLogPanel());
+  }
   const createBtn = document.getElementById("devStackCreate");
   if (saveBtn) {
     saveBtn.addEventListener("click", async () => {
@@ -12310,12 +12445,11 @@ function initPlatformTab() {
         };
         if (presetKey) body.preset = presetKey;
         else body.components = components;
-        const res = await fetch("/api/dev-stacks", {
+        const data = await fetchPlatformJson("/api/dev-stacks", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
-        const data = await res.json();
         if (data.ok) {
           if (statusEl) statusEl.textContent = `Created stack “${id}”. Click Start on the stack below to run containers.`;
         } else {

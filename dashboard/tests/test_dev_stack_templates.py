@@ -61,6 +61,8 @@ def test_magento_presets_and_templates(tmp_path, monkeypatch):
         assert svc in raw_full["services"]
     assert meta_full["template"] == "magento-full"
     assert (stacks_root / "magento-full" / "varnish" / "default.vcl").is_file()
+    assert "varnish_vcl" in raw_full.get("configs", {})
+    assert "./varnish/" not in str(raw_full["services"]["varnish"].get("volumes", []))
 
     path_es, meta_es = create_from_preset("elasticsearch", sample_data=False)
     raw_es = yaml.safe_load(path_es.read_text(encoding="utf-8"))
@@ -72,5 +74,6 @@ def test_magento_presets_and_templates(tmp_path, monkeypatch):
     assert ghost_env["url"] == "http://ghost.lh"
 
     path_mag, _ = create_from_preset("magento-min", sample_data=False)
-    mag_env = yaml.safe_load(path_mag.read_text(encoding="utf-8"))["services"]["magento"]["environment"]
-    assert mag_env["MAGENTO_HOST"] == "magento-min.lh"
+    raw_mag = yaml.safe_load(path_mag.read_text(encoding="utf-8"))["services"]["magento"]
+    assert "bitnamilegacy/magento-archived" in raw_mag["image"]
+    assert raw_mag["environment"]["MAGENTO_HOST"] == "magento-min.lh"

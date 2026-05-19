@@ -634,9 +634,17 @@
             <div class="platform-stack-actions">
               <button type="button" id="devStackCreate" class="ctrl-act ctrl-act--deploy">Create stack</button>
             </div>
-            <p id="devStackStatus" class="platform-stack-status muted small" role="status" aria-live="polite"></p>
               </div>
             </details>
+            <p id="devStackStatus" class="platform-stack-status muted small" role="status" aria-live="polite"></p>
+            <div id="devStackLogWrap" class="devstack-log-wrap is-hidden" hidden>
+              <div class="devstack-log-toolbar">
+                <span id="devStackLogSpinner" class="devstack-log-spinner is-hidden" aria-hidden="true"></span>
+                <span id="devStackLogTitle" class="devstack-log-toolbar__title">Operation log</span>
+                <button type="button" id="devStackLogClose" class="ctrl-act devstack-log-close" aria-label="Close log">Close</button>
+              </div>
+              <pre id="devStackLog" class="devstack-status-log" role="log" aria-live="polite"></pre>
+            </div>
             <h4 class="devstack-list-heading">Your dev stacks</h4>
             <div id="devStacksList" class="platform-stacks-list"><p class="muted small">Loading stacks…</p></div>
           </article>

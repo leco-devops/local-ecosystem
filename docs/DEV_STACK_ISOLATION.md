@@ -37,6 +37,8 @@ Files land in `platform/dev-stacks/billing/` (`docker-compose.yml`, `stack.yaml`
 | `stop` | Stops billing stack; other stacks keep running |
 | `destroy` | `compose down -v --remove-orphans`, prunes leftover project containers/volumes/networks, removes `platform/dev-stacks/<id>/`, drops the stack from `config/leco-platform.yaml`, and regenerates `hosting/traefik/20-dev-stacks.yml` |
 
+**Image preflight:** On **Start**, LEco rewrites deprecated image names in `docker-compose.yml` (e.g. `bitnami/magento` → `bitnamilegacy/magento-archived`) and verifies every image exists on the registry before `compose up`. **Create** rejects known-removed images immediately.
+
 ## Bind a hosted app
 
 In `leco.yaml` or bridge manifest (future materialization):

@@ -14,6 +14,8 @@ from platform_config import _PROJECT_ROOT
 
 _PRESETS_FILE = _PROJECT_ROOT / "ecosystem-stack" / "config" / "dev-stack-presets.yaml"
 
+from dev_stack_images import MAGENTO_APP_IMAGE, MAGENTO_DB_IMAGE
+
 
 def load_dev_stack_presets() -> dict[str, Any]:
     if not _PRESETS_FILE.is_file():
@@ -60,9 +62,15 @@ def _write_stack_files(sid: str, files: dict[str, str]) -> None:
 
 
 def _write_stack(stack_id: str, name: str, compose: dict[str, Any], meta: dict[str, Any]) -> tuple[Path, dict[str, Any]]:
+    from dev_stack_images import normalize_compose_images, verify_compose_images
+
     sid = _slugify(stack_id)
     stack_dir = STACKS_ROOT / sid
     stack_dir.mkdir(parents=True, exist_ok=True)
+    compose, _ = normalize_compose_images(compose)
+    image_errors = verify_compose_images(compose, skip_registry=True)
+    if image_errors:
+        raise ValueError("Unavailable container images:\n" + "\n".join(f"  • {e}" for e in image_errors))
     compose_path = stack_dir / "docker-compose.yml"
     compose_path.write_text(yaml.safe_dump(compose, sort_keys=False), encoding="utf-8")
     meta = dict(meta)
@@ -233,9 +241,18 @@ def _template_woocommerce(sid: str, name: str, *, sample_data: bool) -> tuple[Pa
     password = "localdev"
     db_name = "wordpress"
     compose = yaml.safe_load((STACKS_ROOT / _slugify(sid) / "docker-compose.yml").read_text(encoding="utf-8"))
+    wc_setup = (
+        "set -e; "
+        "for i in $(seq 1 90); do wp core is-installed 2>/dev/null && break; sleep 3; done; "
+        "wp core is-installed; "
+        "wp plugin is-installed woocommerce 2>/dev/null || wp plugin install woocommerce --activate; "
+        "wp plugin is-active woocommerce || wp plugin activate woocommerce; "
+    )
+    if sample_data:
+        wc_setup += "wp wc tool run install_pages 2>/dev/null || true; "
     compose["services"]["wc-setup"] = {
         "image": "wordpress:cli",
-        "depends_on": ["wordpress"],
+        "depends_on": ["db", "wordpress"],
         "environment": {
             "WORDPRESS_DB_HOST": "db",
             "WORDPRESS_DB_USER": "app",
@@ -244,12 +261,9 @@ def _template_woocommerce(sid: str, name: str, *, sample_data: bool) -> tuple[Pa
         },
         "volumes": ["wp_data:/var/www/html"],
         "networks": [internal_net],
-        "restart": "on-failure",
+        "restart": "no",
         "entrypoint": ["/bin/sh", "-c"],
-        "command": [
-            "sleep 25 && wp plugin install woocommerce --activate"
-            + (" && wp wc tool run install_pages 2>/dev/null || true" if sample_data else "")
-        ],
+        "command": [wc_setup],
     }
     (STACKS_ROOT / _slugify(sid) / "docker-compose.yml").write_text(
         yaml.safe_dump(compose, sort_keys=False), encoding="utf-8"
@@ -328,12 +342,44 @@ def _magento_app_env(sid: str, *, sample_data: bool, with_search_cache: bool) ->
     return env
 
 
+MAGENTO_FULL_VARNISH_VCL = """vcl 4.1;
+backend magento_app {
+  .host = "magento";
+  .port = "8080";
+}
+sub vcl_recv {
+  return (hash);
+}
+"""
+
+MAGENTO_FULL_NGINX_EDGE_CONF = """server {
+  listen 80;
+  server_name _;
+  location / {
+    proxy_pass http://varnish:80;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+}
+"""
+
+
+def magento_full_edge_configs() -> dict[str, Any]:
+    """Inline Compose configs — avoids host bind mounts (Docker Desktop file sharing)."""
+    return {
+        "varnish_vcl": {"content": MAGENTO_FULL_VARNISH_VCL.rstrip() + "\n"},
+        "nginx_edge_conf": {"content": MAGENTO_FULL_NGINX_EDGE_CONF.rstrip() + "\n"},
+    }
+
+
 def _template_magento_min(sid: str, name: str, *, sample_data: bool) -> tuple[Path, dict[str, Any]]:
     """Minimum: MariaDB + Bitnami Magento (no Elasticsearch / Varnish / Nginx edge)."""
     internal_net = f"leco-devstack-{sid}-internal"
     services: dict[str, Any] = {
         "mariadb": {
-            "image": "docker.io/bitnami/mariadb:latest",
+            "image": MAGENTO_DB_IMAGE,
             "restart": "unless-stopped",
             "environment": {
                 "ALLOW_EMPTY_PASSWORD": "yes",
@@ -344,7 +390,7 @@ def _template_magento_min(sid: str, name: str, *, sample_data: bool) -> tuple[Pa
             "networks": [internal_net],
         },
         "magento": {
-            "image": "docker.io/bitnami/magento:2",
+            "image": MAGENTO_APP_IMAGE,
             "container_name": http_container_name(sid, "app"),
             "restart": "unless-stopped",
             "depends_on": ["mariadb"],
@@ -372,27 +418,8 @@ def _template_magento_full(sid: str, name: str, *, sample_data: bool) -> tuple[P
     _write_stack_files(
         sid,
         {
-            "varnish/default.vcl": """vcl 4.1;
-backend magento_app {
-  .host = "magento";
-  .port = "8080";
-}
-sub vcl_recv {
-  return (hash);
-}
-""",
-            "nginx/default.conf": """server {
-  listen 80;
-  server_name _;
-  location / {
-    proxy_pass http://varnish:80;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-  }
-}
-""",
+            "varnish/default.vcl": MAGENTO_FULL_VARNISH_VCL,
+            "nginx/default.conf": MAGENTO_FULL_NGINX_EDGE_CONF,
         },
     )
     services: dict[str, Any] = {
@@ -421,7 +448,7 @@ sub vcl_recv {
             "networks": [internal_net],
         },
         "mariadb": {
-            "image": "docker.io/bitnami/mariadb:latest",
+            "image": MAGENTO_DB_IMAGE,
             "restart": "unless-stopped",
             "environment": {
                 "ALLOW_EMPTY_PASSWORD": "yes",
@@ -432,7 +459,7 @@ sub vcl_recv {
             "networks": [internal_net],
         },
         "magento": {
-            "image": "docker.io/bitnami/magento:2",
+            "image": MAGENTO_APP_IMAGE,
             "restart": "unless-stopped",
             "depends_on": {
                 "mariadb": {"condition": "service_started"},
@@ -447,7 +474,7 @@ sub vcl_recv {
             "image": "varnish:7.4",
             "restart": "unless-stopped",
             "depends_on": ["magento"],
-            "volumes": ["./varnish/default.vcl:/etc/varnish/default.vcl:ro"],
+            "configs": [{"source": "varnish_vcl", "target": "/etc/varnish/default.vcl"}],
             "networks": [internal_net],
         },
         "edge": {
@@ -455,7 +482,7 @@ sub vcl_recv {
             "container_name": http_container_name(sid, "app"),
             "restart": "unless-stopped",
             "depends_on": ["varnish"],
-            "volumes": ["./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro"],
+            "configs": [{"source": "nginx_edge_conf", "target": "/etc/nginx/conf.d/default.conf"}],
             "networks": [internal_net, NETWORK_EXTERNAL],
         },
     }
@@ -464,6 +491,7 @@ sub vcl_recv {
         services,
         {"es_data": {}, "redis_data": {}, "magento_db": {}, "magento_data": {}},
     )
+    compose["configs"] = magento_full_edge_configs()
     meta = {
         "template": "magento-full",
         "sample_data": sample_data,

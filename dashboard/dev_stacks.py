@@ -228,7 +228,14 @@ def list_stacks() -> list[dict[str, Any]]:
             item["template"] = row.get("template")
         if row.get("sample_data") is not None:
             item["sample_data"] = bool(row.get("sample_data"))
-        item["access"] = stack_access_info(sid)
+        try:
+            item["access"] = stack_access_info(sid)
+        except Exception as exc:
+            item["access"] = {
+                "stack_id": sid,
+                "hostname": None,
+                "error": str(exc),
+            }
         items.append(item)
     return items
 
@@ -263,13 +270,33 @@ def create_stack(
     from dev_stack_routes import sync_dev_stack_routes
 
     sync_dev_stack_routes(meta.get("id"))
-    meta["access"] = stack_access_info(meta.get("id") or stack_id)
+    sid = str(meta.get("id") or stack_id)
+    try:
+        meta["access"] = stack_access_info(sid)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": f"Stack files were written but access metadata failed: {exc}",
+            "stack_id": sid,
+        }
     return {"ok": True, "stack": meta}
 
 
 def stack_action(stack_id: str, action: str) -> dict[str, Any]:
     sid = stack_id.strip().lower()
     if action == "start":
+        from dev_stack_images import normalize_stack_compose_file, verify_stack_compose_file
+
+        normalize_stack_compose_file(sid)
+        image_errors = verify_stack_compose_file(sid, skip_registry=False)
+        if image_errors:
+            return {
+                "ok": False,
+                "error": "Container image preflight failed",
+                "output": "\n".join(image_errors),
+                "image_errors": image_errors,
+                "state": _docker_ps_state(sid),
+            }
         code, out = _compose_cmd(sid, "up", "-d")
     elif action == "stop":
         code, out = _compose_cmd(sid, "stop")
