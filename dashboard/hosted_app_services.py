@@ -74,6 +74,12 @@ def _ecosystem_hub_item(hub_slug: str, *, name: str, notes: str = "") -> dict[st
     except Exception:
         pass
     conn = list(hub.get("connection_strings") or [])
+    try:
+        from platform_config import public_url_from_lh
+
+        conn = [public_url_from_lh(c) if isinstance(c, str) and "://" in c else c for c in conn]
+    except ImportError:
+        pass
     mgmt: list[dict[str, str]] = []
     for g in hub.get("database_guis") or []:
         if isinstance(g, dict) and g.get("url"):
@@ -1042,6 +1048,12 @@ def _runtime_items(manifest_path: Path, compose_ps: list[dict[str, Any]] | None)
             if not isinstance(ent, dict):
                 continue
             host = str(ent.get("hostname") or f"{slug}.lh")
+            try:
+                from platform_config import lh_to_public_host
+
+                host = lh_to_public_host(host)
+            except ImportError:
+                pass
             for up in ent.get("upstream") or []:
                 if not isinstance(up, dict):
                     continue
@@ -1063,6 +1075,12 @@ def _runtime_items(manifest_path: Path, compose_ps: list[dict[str, Any]] | None)
         svc_name = f"leco-rt-{slug}-{rid}"
         row = ps_by_svc.get(svc_name) or {}
         url = prefix_map.get(rid, f"https://{slug}.lh")
+        try:
+            from platform_config import public_url_from_lh
+
+            url = public_url_from_lh(url)
+        except ImportError:
+            pass
         notes = f"config: {cfg}" if cfg else ""
         if port:
             notes = (notes + f" · port {port}").strip(" · ")

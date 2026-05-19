@@ -64,16 +64,24 @@ ensure_hosting_files() {
   fi
   rm -f "$HOSTING_TRAEFIK_DIR/00-core.yml" 2>/dev/null
   rm -f "$CORE_DYNAMIC_COPY" 2>/dev/null
-  cp "$CORE_DYNAMIC" "$CORE_DYNAMIC_COPY" || {
-    echo "❌ Could not copy stack core to $CORE_DYNAMIC_COPY"
-    return 1
-  }
+  if [ -f "$DOCKER_BIND/config/leco-platform.yaml" ] && [ -f "$DOCKER_BIND/scripts/render-platform-traefik.py" ]; then
+    python3 "$DOCKER_BIND/scripts/render-platform-traefik.py" --write 2>/dev/null || true
+  fi
+  if [ ! -f "$CORE_DYNAMIC_COPY" ]; then
+    cp "$CORE_DYNAMIC" "$CORE_DYNAMIC_COPY" || {
+      echo "❌ Could not copy stack core to $CORE_DYNAMIC_COPY"
+      return 1
+    }
+  fi
   # Do not write http: {} — Traefik v3 rejects an empty http block. Use a no-op root mapping.
   if [ ! -f "$HOSTING_DYNAMIC" ]; then
     printf '%s\n' '{}' >"$HOSTING_DYNAMIC"
     echo "ℹ️ Created hosting/traefik/dynamic.yml (empty merge stub; leco-devops adds routes here)"
   fi
-  _normalize_hosting_dynamic_yaml "$HOSTING_DYNAMIC" || return 1
+  for f in "$HOSTING_TRAEFIK_DIR"/*.yml; do
+    [ -f "$f" ] || continue
+    _normalize_hosting_dynamic_yaml "$f" || return 1
+  done
 }
 
 # Fix files on disk; restart Traefik if a container exists (picks up copy vs symlink / repaired YAML).
@@ -85,11 +93,73 @@ heal() {
   fi
 }
 
+_traefik_tls_mode() {
+  if [ ! -f "$DOCKER_BIND/config/leco-platform.yaml" ]; then
+    echo "mkcert"
+    return 0
+  fi
+  python3 - <<'PY' 2>/dev/null || echo "mkcert"
+import sys
+sys.path.insert(0, "$DOCKER_BIND/ecosystem-stack/lib")
+from platform_config import load_platform_config
+cfg = load_platform_config() or {}
+tls = cfg.get("tls") if isinstance(cfg.get("tls"), dict) else {}
+print(str(tls.get("mode") or "mkcert").strip().lower() or "mkcert")
+PY
+}
+
+_traefik_static_config() {
+  local mode
+  mode="$(_traefik_tls_mode)"
+  case "$mode" in
+    acme) echo "traefik-static-acme.yaml" ;;
+    static|cloudflare) echo "traefik-static.yaml" ;;
+    *) echo "traefik-static.yaml" ;;
+  esac
+}
+
+_prepare_acme_static() {
+  local src="$DOCKER_BIND/traefik/traefik-static-acme.yaml"
+  local dst="$HOSTING_TRAEFIK_DIR/traefik-static-runtime.yaml"
+  mkdir -p "$HOSTING_TRAEFIK_DIR" "$DOCKER_BIND/certs/acme"
+  if [ ! -f "$src" ]; then
+    echo "❌ Missing $src"
+    return 1
+  fi
+  python3 - <<PY || cp "$src" "$dst"
+import sys
+from pathlib import Path
+sys.path.insert(0, "$DOCKER_BIND/ecosystem-stack/lib")
+from platform_config import load_platform_config
+src = Path("$src")
+dst = Path("$dst")
+text = src.read_text(encoding="utf-8")
+cfg = load_platform_config() or {}
+tls = cfg.get("tls") if isinstance(cfg.get("tls"), dict) else {}
+email = str(tls.get("acme_email") or "ops@example.com").strip() or "ops@example.com"
+text = text.replace('email: "ops@example.com"', f'email: "{email}"')
+dst.write_text(text, encoding="utf-8")
+PY
+}
+
 start() {
   docker network inspect lh-network >/dev/null 2>&1 || docker network create lh-network >/dev/null
   docker rm -f "$NAME" 2>/dev/null
 
   ensure_hosting_files || return 1
+
+  local tls_mode static_cfg
+  tls_mode="$(_traefik_tls_mode)"
+  static_cfg="$(_traefik_static_config)"
+  local -a extra_vols=()
+  local config_arg="--configFile=/etc/traefik/${static_cfg}"
+
+  if [ "$tls_mode" = "acme" ]; then
+    _prepare_acme_static || return 1
+    extra_vols+=(-v "$HOSTING_TRAEFIK_DIR/traefik-static-runtime.yaml:/etc/traefik/traefik-static-acme.yaml:ro")
+    extra_vols+=(-v "$DOCKER_BIND/certs/acme:/acme")
+    config_arg="--configFile=/etc/traefik/traefik-static-acme.yaml"
+  fi
 
   docker run -d \
     --name "$NAME" \
@@ -101,8 +171,9 @@ start() {
     -v "$DOCKER_BIND/traefik:/etc/traefik" \
     -v "$HOSTING_TRAEFIK_DIR:/etc/traefik-dynamic" \
     -v "$DOCKER_BIND/certs:/certs" \
+    "${extra_vols[@]}" \
     traefik:v3.3 \
-    --configFile=/etc/traefik/traefik-static.yaml
+    $config_arg
 }
 
 stop() { docker stop "$NAME"; }

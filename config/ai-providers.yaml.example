@@ -1,0 +1,41 @@
+# Copy to config/ai-providers.yaml (gitignored). Used by AI-assisted onboarding.
+# Profile ai-cloud recommends external providers; ai-full recommends local Ollama/AirLLM.
+
+default_provider: openai
+default_model: gpt-4o-mini
+timeout: 180
+
+providers:
+  ollama:
+    base_url: http://ollama:11434
+    default_model: qwen2.5-coder
+    timeout: 300
+  airllm:
+    base_url: http://airllm:11435
+    default_model: Qwen/Qwen2.5-7B-Instruct
+    timeout: 600
+  openai:
+    api_key: ""
+    default_model: gpt-4o-mini
+    timeout: 120
+  anthropic:
+    api_key: ""
+    default_model: claude-sonnet-4-20250514
+    timeout: 120
+  google:
+    api_key: ""
+    default_model: gemini-2.0-flash
+    timeout: 120
+  openai-compatible:
+    base_url: ""
+    api_key: ""
+    default_model: ""
+    timeout: 180
+  hybrid:
+    local_provider: ollama
+    local_model: qwen2.5-coder
+    cloud_provider: openai
+    cloud_model: gpt-4o-mini
+    cloud_api_key: ""
+    local_timeout: 300
+    cloud_timeout: 120

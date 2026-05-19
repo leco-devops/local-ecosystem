@@ -34,6 +34,40 @@ AI_TARGETS = [
 ]
 
 # Infra compose: same pattern as CF — per-service lifecycle in Control + API.
+# Ecosystem service scripts: dependents are stopped before the dependency on stop/remove.
+ECOSYSTEM_SERVICE_REQUIRES: dict[str, tuple[str, ...]] = {
+    "n8n": ("postgres",),
+}
+
+# Infra compose services (per-service Control targets).
+COMPOSE_SERVICE_REQUIRES: dict[str, tuple[str, ...]] = {
+    "cache-varnish": ("cache-nginx",),
+    "redis-commander": ("redis",),
+}
+
+
+def _compose_dependents(requires_map: dict[str, tuple[str, ...]], service: str) -> tuple[str, ...]:
+    return tuple(s for s, reqs in requires_map.items() if service in reqs)
+
+
+def compose_action_services(service: str, action: str, requires_map: dict[str, tuple[str, ...]]) -> list[str]:
+    """Order of compose service names for a lifecycle action (infra / cloudflare-local)."""
+    a = (action or "").strip().lower()
+    requires = requires_map.get(service, ())
+    dependents = _compose_dependents(requires_map, service)
+    if a in ("start", "deploy", "unpause"):
+        return [*requires, service]
+    if a in ("stop", "pause", "remove", "reset"):
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for s in [*dependents, service, *requires]:
+            if s not in seen:
+                seen.add(s)
+                ordered.append(s)
+        return ordered
+    return [service]
+
+
 INFRA_TARGETS = [
     {"id": "infra-mysql", "label": "MySQL", "compose_service": "mysql", "container": "mysql", "compose_project": "infra"},
     {"id": "infra-redis", "label": "Redis", "compose_service": "redis", "container": "redis", "compose_project": "infra"},

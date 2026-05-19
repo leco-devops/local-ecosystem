@@ -1,0 +1,204 @@
+# Dev stack quick presets — infrastructure bundles and ready application stacks.
+# Ready stacks are expanded to multi-service compose in dashboard/dev_stack_templates.py.
+
+groups:
+  - id: infrastructure
+    label: Infrastructure levels
+  - id: common
+    label: Common bundles
+  - id: ready
+    label: Ready application stacks
+
+presets:
+  level1:
+    group: infrastructure
+    label: Level 1
+    id: level-1
+    name: Level 1
+    components:
+      - { id: postgres, version: "16" }
+      - { id: redis, version: "7" }
+      - { id: node, version: "20" }
+
+  level2:
+    group: infrastructure
+    label: Level 2
+    id: level-2
+    name: Level 2
+    components:
+      - { id: mysql, version: "8.0" }
+      - { id: node, version: "18" }
+      - { id: python, version: "3.11" }
+
+  level3:
+    group: infrastructure
+    label: Level 3
+    id: level-3
+    name: Level 3
+    components:
+      - { id: postgres, version: "16" }
+      - { id: redis, version: "7" }
+      - { id: node, version: "20" }
+      - { id: mailpit, version: latest }
+
+  level4:
+    group: infrastructure
+    label: Level 4
+    id: level-4
+    name: Level 4
+    components:
+      - { id: postgres, version: "16" }
+      - { id: mongodb, version: "7" }
+      - { id: redis, version: "7" }
+      - { id: node, version: "22" }
+      - { id: python, version: "3.12" }
+      - { id: mailpit, version: latest }
+
+  level5:
+    group: infrastructure
+    label: Level 5
+    id: level-5
+    name: Level 5
+    components:
+      - { id: mysql, version: "8.0" }
+      - { id: redis, version: "7" }
+      - { id: java, version: "21" }
+      - { id: php, version: "8.3" }
+
+  level6:
+    group: infrastructure
+    label: Level 6
+    id: level-6
+    name: Level 6
+    components:
+      - { id: postgres, version: "17" }
+      - { id: redis, version: "7" }
+      - { id: minio, version: latest }
+      - { id: node, version: "24" }
+      - { id: mailpit, version: latest }
+      - { id: nginx, version: alpine }
+
+  lamp:
+    group: common
+    label: LAMP (MySQL + PHP + Nginx)
+    id: lamp
+    name: LAMP stack
+    components:
+      - { id: mysql, version: "8.0" }
+      - { id: php, version: "8.3" }
+      - { id: nginx, version: alpine }
+
+  mean:
+    group: common
+    label: MEAN (MongoDB + Node + Nginx)
+    id: mean
+    name: MEAN stack
+    components:
+      - { id: mongodb, version: "7" }
+      - { id: node, version: "20" }
+      - { id: nginx, version: alpine }
+
+  postgres-api:
+    group: common
+    label: Postgres API (Postgres + Redis + Python)
+    id: postgres-api
+    name: Postgres API
+    components:
+      - { id: postgres, version: "16" }
+      - { id: redis, version: "7" }
+      - { id: python, version: "3.12" }
+
+  java-services:
+    group: common
+    label: Java services (MySQL + Redis + Java)
+    id: java-services
+    name: Java services
+    components:
+      - { id: mysql, version: "8.0" }
+      - { id: redis, version: "7" }
+      - { id: java, version: "21" }
+
+  php-workspace:
+    group: common
+    label: PHP workspace (MariaDB + PHP + Mailpit)
+    id: php-workspace
+    name: PHP workspace
+    components:
+      - { id: mariadb, version: "11" }
+      - { id: php, version: "8.3" }
+      - { id: mailpit, version: latest }
+
+  data-stores:
+    group: common
+    label: Data stores (Postgres + MySQL + Mongo + Redis)
+    id: data-stores
+    name: Data stores
+    components:
+      - { id: postgres, version: "16" }
+      - { id: mysql, version: "8.0" }
+      - { id: mongodb, version: "7" }
+      - { id: redis, version: "7" }
+
+  wordpress:
+    group: ready
+    label: WordPress
+    template: wordpress
+    id: wordpress
+    name: WordPress
+    supports_sample_data: true
+
+  joomla:
+    group: ready
+    label: Joomla
+    template: joomla
+    id: joomla
+    name: Joomla
+    supports_sample_data: true
+
+  magento-min:
+    group: ready
+    label: Magento Open Source (minimum)
+    template: magento-min
+    id: magento-min
+    name: Magento Open Source (minimum)
+    supports_sample_data: true
+
+  magento-full:
+    group: ready
+    label: Magento Open Source (full)
+    template: magento-full
+    id: magento-full
+    name: Magento Open Source (full)
+    supports_sample_data: true
+
+  elasticsearch:
+    group: ready
+    label: Elasticsearch
+    template: elasticsearch
+    id: elasticsearch
+    name: Elasticsearch
+    supports_sample_data: false
+
+  drupal:
+    group: ready
+    label: Drupal
+    template: drupal
+    id: drupal
+    name: Drupal
+    supports_sample_data: true
+
+  ghost:
+    group: ready
+    label: Ghost
+    template: ghost
+    id: ghost
+    name: Ghost blog
+    supports_sample_data: true
+
+  woocommerce:
+    group: ready
+    label: WooCommerce (WordPress)
+    template: woocommerce
+    id: woocommerce
+    name: WooCommerce
+    supports_sample_data: true

@@ -299,6 +299,11 @@
 
         <div class="infra-group" id="infra-ai">
           <h3 class="infra-group__title">7 · AI-assisted onboarding</h3>
+          <div id="aiCloudBanner" class="ai-cloud-banner is-hidden" role="note">
+            <strong>Cloud VM (ai-cloud profile):</strong> External LLM APIs are the recommended path.
+            Set OpenAI, Anthropic, or Google keys below. Ollama and AirLLM remain available but may be stopped on
+            CPU-only VMs to save RAM.
+          </div>
           <p class="infra-group__lead muted small">
             Configure AI provider for automatic application analysis during registration.
             Supports <strong>local</strong> (Ollama) or <strong>cloud</strong> (OpenAI, Anthropic, Google, OpenAI-compatible) providers.
@@ -480,7 +485,7 @@
       <section id="controlTab" class="tab-content">
         <h2 class="tab-heading">Control</h2>
         <p class="tab-lead muted small">
-          Cards are grouped: <strong>Ecosystem stack bulk</strong>, <strong>Ecosystem services</strong>, <strong>Infra add-ons</strong> (MySQL, Adminer, Redis Commander, cache lab, …), then <strong>Cloudflare local</strong>. Registered <strong>leco</strong> compose apps live under the <strong>Hosted apps</strong> tab. Each card is a stack or service — click an action. Destructive ops may wipe volumes; read the JSON response.
+          Cards are grouped: <strong>Bulk &amp; orchestration</strong> (full-stack API target), <strong>Ecosystem stack &amp; Traefik</strong>, <strong>Infra add-ons</strong>, and <strong>Cloudflare local</strong>. Use the bulk bars above for quick <strong>Start all / Stop all</strong>. Registered compose apps are under <strong>Hosted apps</strong>. Destructive ops may wipe volumes — read the JSON response.
         </p>
 
         <div class="control-token-row" id="controlTokenRow" style="display: none">
@@ -535,6 +540,107 @@
           <summary>Full API response</summary>
           <pre id="controlResult" class="control-result"></pre>
         </details>
+      </section>
+
+      <section id="platformTab" class="tab-content">
+        <h2 class="tab-heading">Platform (cloud VM)</h2>
+        <p class="tab-lead muted small">
+          Install profiles, custom domain/TLS, ecosystem bundles, and isolated <strong>dev stacks</strong>
+          (Postgres, MySQL, Redis, Node/Python versions). Requires <code>config/leco-platform.yaml</code> — see
+          <code>config/leco-platform.yaml.example</code> and <a href="/help?topic=cloud-vm-deployment">cloud VM help</a>.
+        </p>
+        <div class="platform-grid">
+          <article class="platform-card platform-card--wide platform-card--config">
+            <h3>Platform config</h3>
+            <form class="platform-config-form" id="platformConfigForm" onsubmit="return false;">
+              <div class="platform-config-form__row">
+                <label class="platform-config-form__label" for="platformDeploymentMode">Deployment</label>
+                <select id="platformDeploymentMode" class="platform-config-form__control" aria-label="Deployment mode">
+                  <option value="local">local (*.lh workstation)</option>
+                  <option value="cloud">cloud (VM / custom domain)</option>
+                </select>
+              </div>
+              <div class="platform-config-form__row">
+                <label class="platform-config-form__label" for="platformBaseDomain">Base domain</label>
+                <input type="text" id="platformBaseDomain" class="platform-config-form__control" placeholder="lh or dev.example.com" />
+              </div>
+              <div class="platform-config-form__row">
+                <label class="platform-config-form__label" for="platformTlsMode">TLS mode</label>
+                <select id="platformTlsMode" class="platform-config-form__control">
+                  <option value="mkcert">mkcert (local)</option>
+                  <option value="acme">ACME (Let’s Encrypt)</option>
+                  <option value="static">Static PEM</option>
+                  <option value="cloudflare">Cloudflare proxy / tunnel</option>
+                </select>
+              </div>
+              <div class="platform-config-form__row">
+                <label class="platform-config-form__label" for="platformInstallProfile">Install profile</label>
+                <select id="platformInstallProfile" class="platform-config-form__control" aria-label="Install profile">
+                  <option value="">— keep current —</option>
+                </select>
+              </div>
+              <div class="platform-config-form__row platform-config-form__row--actions">
+                <span class="platform-config-form__label" aria-hidden="true"></span>
+                <div class="platform-config-form__actions">
+                  <button type="button" id="platformSaveConfig" class="ctrl-act ctrl-act--ops">Save config</button>
+                  <button type="button" id="platformApplyTraefik" class="ctrl-act ctrl-act--deploy">Apply Traefik routes</button>
+                </div>
+              </div>
+              <pre id="platformConfigStatus" class="platform-config-form__status muted small"></pre>
+            </form>
+          </article>
+          <article class="platform-card platform-card--wide">
+            <h3>Ecosystem services &amp; bundles</h3>
+            <div id="platformServicesList" class="platform-services-list"><p class="muted small">Loading…</p></div>
+          </article>
+          <article class="platform-card platform-card--wide platform-card--devstacks">
+            <details class="devstack-builder-panel">
+              <summary class="devstack-builder-panel__summary">
+                <span class="devstack-builder-panel__title">Dev stack builder</span>
+                <span class="devstack-builder-panel__hint muted small">Isolated compose per stack — create presets or custom components</span>
+              </summary>
+              <div class="devstack-builder-panel__body">
+            <details class="platform-help muted small">
+              <summary>How dev stack builder works</summary>
+              <p>
+                Pick a <strong>Stack preset</strong> (infrastructure, common bundles, or ready apps like WordPress / Magento) or choose components manually. Ready stacks can include <strong>sample demo content</strong>. LEco generates
+                <code>platform/dev-stacks/&lt;id&gt;/docker-compose.yml</code> and runs it as project
+                <code>leco-devstack-&lt;id&gt;</code> on its own Docker network. Databases stay internal;
+                only routed HTTP services join <code>lh-network</code>. Bind a hosted app with
+                <code>platform.devStackId</code> in <code>leco.yaml</code> (Hosted apps → Dev stack).
+              </p>
+            </details>
+            <div class="platform-stack-form">
+              <label class="platform-field">Stack id
+                <input type="text" id="devStackId" placeholder="level-1" pattern="[a-z0-9-]+" />
+              </label>
+              <label class="platform-field">Name
+                <input type="text" id="devStackName" placeholder="Level 1" />
+              </label>
+              <label class="platform-field">Stack preset
+                <select id="devStackPreset" aria-label="Dev stack preset">
+                  <option value="">— custom (pick below) —</option>
+                </select>
+              </label>
+              <label id="devStackSampleDataWrap" class="platform-field devstack-sample-wrap" hidden>
+                <input type="checkbox" id="devStackSampleData" />
+                Include sample / demo content
+              </label>
+            </div>
+            <p id="devStackTemplateHint" class="devstack-template-hint muted small" hidden></p>
+            <div id="devStackComponentPicker" class="devstack-picker" aria-label="Stack components">
+              <p class="muted small">Loading component catalog…</p>
+            </div>
+            <div class="platform-stack-actions">
+              <button type="button" id="devStackCreate" class="ctrl-act ctrl-act--deploy">Create stack</button>
+            </div>
+            <p id="devStackStatus" class="platform-stack-status muted small" role="status" aria-live="polite"></p>
+              </div>
+            </details>
+            <h4 class="devstack-list-heading">Your dev stacks</h4>
+            <div id="devStacksList" class="platform-stacks-list"><p class="muted small">Loading stacks…</p></div>
+          </article>
+        </div>
       </section>
 
       <section id="hostedAppsTab" class="tab-content">
@@ -784,6 +890,24 @@
                 <p id="hostedAppsRuntime" class="control-card__runtime"></p>
               </header>
               <div class="hosted-apps-links" id="hostedAppsLinks"></div>
+              <section id="hostedAppsDevStack" class="hosted-devstack-bind" aria-label="Dev stack binding">
+                <h4 class="hosted-apps-subhead">Dev stack</h4>
+                <p class="muted small">
+                  Bind this app to an isolated dev stack (Postgres, Redis, Node, …). Saves
+                  <code>platform.devStackId</code> in <code>leco.yaml</code> and applies
+                  <code>docker-compose.leco-devstack.yml</code> on register/deploy.
+                </p>
+                <div class="hosted-devstack-bind__row">
+                  <label class="hosted-devstack-bind__field">
+                    <span class="muted small">Stack</span>
+                    <select id="hostedDevStackSelect" aria-label="Dev stack">
+                      <option value="">— none (self-contained) —</option>
+                    </select>
+                  </label>
+                  <button type="button" id="hostedDevStackSave" class="ctrl-act ctrl-act--ops">Save binding</button>
+                  <span id="hostedDevStackStatus" class="muted small"></span>
+                </div>
+              </section>
               <div id="hostedAppsStagingBar" class="hosted-apps-staging-bar is-hidden" role="region" aria-label="Staging app">
                 <div class="hosted-apps-staging-bar__row">
                   <button type="button" id="hostedAppsQuickRegister" class="hosted-apps-register-primary">

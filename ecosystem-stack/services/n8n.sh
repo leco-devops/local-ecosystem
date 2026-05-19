@@ -8,9 +8,31 @@ if [ -z "${PROJECT_ROOT:-}" ]; then
   PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 fi
 N8N_DOCKER_DIR="$PROJECT_ROOT/ecosystem-stack/docker/n8n-local"
+POSTGRES_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/postgres.sh"
+
+_ensure_postgres_running() {
+  if docker inspect -f '{{.State.Running}}' n8n_postgres 2>/dev/null | grep -q true; then
+    return 0
+  fi
+  echo "🔄 Starting n8n_postgres (required by n8n)…"
+  if [ -f "$POSTGRES_SCRIPT" ]; then
+    bash "$POSTGRES_SCRIPT" start
+  else
+    echo "❌ Missing $POSTGRES_SCRIPT"
+    return 1
+  fi
+}
+
+_stop_postgres_if_present() {
+  if docker inspect n8n_postgres >/dev/null 2>&1; then
+    echo "🛑 Stopping n8n_postgres…"
+    docker stop n8n_postgres 2>/dev/null || true
+  fi
+}
 
 start() {
   echo "🚀 Starting n8n (HTTP + HTTPS compatible mode)..."
+  _ensure_postgres_running || return 1
 
   # Force clean start (IMPORTANT for env changes)
   docker network inspect lh-network >/dev/null 2>&1 || docker network create lh-network >/dev/null
@@ -61,7 +83,8 @@ start() {
 }
 
 stop() {
-  docker stop "$NAME"
+  docker stop "$NAME" 2>/dev/null || true
+  _stop_postgres_if_present
 }
 
 restart() {
@@ -70,11 +93,18 @@ restart() {
 }
 
 remove() {
-  docker rm -f "$NAME"
+  docker rm -f "$NAME" 2>/dev/null || true
+  docker rm -f n8n_postgres 2>/dev/null || true
 }
 
-pause() { docker pause "$NAME"; }
-unpause() { docker unpause "$NAME"; }
+pause() {
+  docker pause "$NAME" 2>/dev/null || true
+  docker pause n8n_postgres 2>/dev/null || true
+}
+unpause() {
+  docker unpause n8n_postgres 2>/dev/null || true
+  docker unpause "$NAME" 2>/dev/null || true
+}
 status() { docker ps -a --filter "name=^/$NAME$" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"; }
 reset() {
   remove

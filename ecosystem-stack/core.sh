@@ -11,12 +11,44 @@ get_services() {
   done
 }
 
+_platform_enabled_services() {
+  if [ ! -f "$PROJECT_ROOT/config/leco-platform.yaml" ] && \
+     [ ! -f "$CORE_DIR/config/install-selection.env" ]; then
+    return 0
+  fi
+  python3 "$CORE_DIR/lib/platform_config.py" enabled-services 2>/dev/null || return 0
+}
+
 get_services_in_start_order() {
+  local filtered
+  filtered="$(_platform_enabled_services)"
+  if [ -n "$filtered" ]; then
+    while IFS= read -r svc; do
+      [ -z "$svc" ] && continue
+      if [ -f "$SERVICES_DIR/$svc.sh" ]; then
+        echo "$svc"
+      fi
+    done <<<"$filtered"
+    return 0
+  fi
   for svc in $START_ORDER; do
     if [ -f "$SERVICES_DIR/$svc.sh" ]; then
       echo "$svc"
     fi
   done
+}
+
+service_enabled() {
+  local svc=$1
+  local filtered
+  filtered="$(_platform_enabled_services)"
+  if [ -z "$filtered" ]; then
+    return 0
+  fi
+  while IFS= read -r s; do
+    [ "$s" = "$svc" ] && return 0
+  done <<<"$filtered"
+  return 1
 }
 
 service_exists() {
@@ -74,6 +106,13 @@ repair_network_links() {
 run_service() {
   svc=$1
   action=$2
+
+  if [ "$action" = "start" ] || [ "$action" = "restart" ]; then
+    if ! service_enabled "$svc"; then
+      echo "ℹ️ Skipping disabled service: $svc (see config/leco-platform.yaml)"
+      return 0
+    fi
+  fi
 
   if ! service_exists "$svc"; then
     echo "❌ Unknown service: $svc"

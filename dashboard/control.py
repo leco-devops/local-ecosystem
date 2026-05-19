@@ -11,7 +11,15 @@ from typing import Any
 import docker
 import requests
 
-from control_targets import AI_TARGETS, CF_TARGETS, COMPOSE_REL, INFRA_COMPOSE_REL, INFRA_TARGETS
+from control_targets import (
+    AI_TARGETS,
+    CF_TARGETS,
+    COMPOSE_REL,
+    COMPOSE_SERVICE_REQUIRES,
+    INFRA_COMPOSE_REL,
+    INFRA_TARGETS,
+    compose_action_services,
+)
 from leco_control import resolve_leco_target
 from leco_subprocess import run_leco_app
 
@@ -35,6 +43,8 @@ _AI_SCRIPT_FN_ACTIONS = frozenset(
 )
 
 _BY_ID = {t["id"]: t for t in CF_TARGETS + AI_TARGETS + INFRA_TARGETS}
+_INFRA_BY_COMPOSE = {t["compose_service"]: t for t in INFRA_TARGETS}
+_CF_BY_COMPOSE = {t["compose_service"]: t for t in CF_TARGETS}
 
 
 def _format_invoked_cmd(cmd: list) -> str:
@@ -702,13 +712,82 @@ def _stream_leco_stack_action(meta: dict, action: str) -> Iterator[dict[str, Any
     yield _emit_done(False, error=f"unsupported action {action} for leco stack")
 
 
+def _compose_start_cascade(
+    svc: str,
+    meta_map: dict[str, dict],
+    compose_runner,
+    *,
+    build: bool = False,
+) -> dict[str, Any]:
+    services = compose_action_services(svc, "deploy" if build else "start", COMPOSE_SERVICE_REQUIRES)
+    logs: list[str] = []
+    ok = True
+    exit_code = 0
+    for s in services:
+        args = ["up", "-d"]
+        if build:
+            args.append("--build")
+        args.append(s)
+        code, log = compose_runner(args)
+        logs.append(f"=== {s}: {' '.join(args)} ===\n{log}\n")
+        if code != 0:
+            ok = False
+            exit_code = code
+            if s != svc:
+                break
+    return {"ok": ok, "exit_code": exit_code, "log": "".join(logs)[-8000:]}
+
+
+def _compose_docker_lifecycle_cascade(
+    svc: str,
+    action: str,
+    meta_map: dict[str, dict],
+) -> dict[str, Any]:
+    """Stop/pause/restart a compose service and its dependents / dependencies in order."""
+    dc = _docker_client()
+    if dc is None:
+        return {"ok": False, "error": "docker unavailable"}
+    if action == "restart":
+        services = [svc]
+    else:
+        services = compose_action_services(svc, action, COMPOSE_SERVICE_REQUIRES)
+    logs: list[str] = []
+    ok = True
+    for s in services:
+        m = meta_map.get(s)
+        if not m:
+            continue
+        cname = m.get("container")
+        if not cname:
+            continue
+        try:
+            c = dc.containers.get(cname)
+        except Exception:
+            logs.append(f"=== {s}: container {cname} not found (skipped)\n")
+            continue
+        try:
+            logs.append(f"=== {s}: {action} {cname} ===\n")
+            if action == "stop":
+                c.stop(timeout=30)
+            elif action == "pause":
+                c.pause()
+            elif action == "restart":
+                c.restart(timeout=30)
+            elif action == "unpause":
+                c.unpause()
+            logs.append("Done.\n")
+        except Exception as exc:
+            ok = False
+            logs.append(f"FAIL: {exc}\n")
+    return {"ok": ok, "log": "".join(logs)[-8000:]}
+
+
 def _cf_service_action(meta: dict, action: str):
     svc = meta["compose_service"]
     cname = meta["container"]
 
     if action == "deploy":
-        code, log = _compose(["up", "-d", "--build", svc])
-        return {"ok": code == 0, "exit_code": code, "log": log[-8000:]}
+        return _compose_start_cascade(svc, _CF_BY_COMPOSE, lambda args: _compose(args), build=True)
     if action == "recreate":
         code, log = _compose(["up", "-d", "--force-recreate", "--no-deps", svc])
         return {"ok": code == 0, "exit_code": code, "log": log[-8000:]}
@@ -728,33 +807,12 @@ def _cf_service_action(meta: dict, action: str):
         return {"ok": False, "error": "backup only defined for d1-adapter or full stack"}
 
     if action == "start":
-        code, log = _compose(["start", svc])
-        if code != 0:
-            code, log = _compose(["up", "-d", svc])
-        return {"ok": code == 0, "exit_code": code, "log": log[-8000:]}
+        return _compose_start_cascade(svc, _CF_BY_COMPOSE, lambda args: _compose(args))
 
-    dc = _docker_client()
-    if dc is None:
-        return {"ok": False, "error": "docker unavailable"}
-    try:
-        c = dc.containers.get(cname)
-    except Exception:
-        return {"ok": False, "error": f"container {cname} not found"}
+    if action in {"stop", "restart", "pause", "unpause"}:
+        return _compose_docker_lifecycle_cascade(svc, action, _CF_BY_COMPOSE)
 
-    try:
-        if action == "stop":
-            c.stop(timeout=30)
-        elif action == "restart":
-            c.restart(timeout=30)
-        elif action == "pause":
-            c.pause()
-        elif action == "unpause":
-            c.unpause()
-        else:
-            return {"ok": False, "error": f"unsupported action {action}"}
-        return {"ok": True, "container": cname, "action": action}
-    except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+    return {"ok": False, "error": f"unsupported action {action}"}
 
 
 def _infra_service_action(meta: dict, action: str):
@@ -762,51 +820,51 @@ def _infra_service_action(meta: dict, action: str):
     cname = meta["container"]
 
     if action == "deploy":
-        code, log = _infra_compose(["up", "-d", "--build", svc])
-        return {"ok": code == 0, "exit_code": code, "log": log[-8000:]}
+        return _compose_start_cascade(svc, _INFRA_BY_COMPOSE, lambda args: _infra_compose(args), build=True)
     if action == "recreate":
         code, log = _infra_compose(["up", "-d", "--force-recreate", "--no-deps", svc])
         return {"ok": code == 0, "exit_code": code, "log": log[-8000:]}
     if action == "reset":
-        code1, log1 = _infra_compose(["stop", svc])
-        code2, log2 = _infra_compose(["rm", "-sf", svc])
+        services = compose_action_services(svc, "reset", COMPOSE_SERVICE_REQUIRES)
+        logs: list[str] = []
+        ok = True
+        exit_code = 0
+        for s in services:
+            code1, log1 = _infra_compose(["stop", s])
+            code2, log2 = _infra_compose(["rm", "-sf", s])
+            logs.append(f"{log1}\n{log2}")
+            if code1 != 0 or code2 != 0:
+                ok = False
+                exit_code = code2 or code1
         code3, log3 = _infra_compose(["up", "-d", svc])
-        log = f"{log1}\n{log2}\n{log3}"
-        return {"ok": code1 == 0 and code2 == 0 and code3 == 0, "exit_code": code3, "log": log[-8000:]}
+        logs.append(log3)
+        if code3 != 0:
+            ok = False
+            exit_code = code3
+        log = "\n".join(logs)
+        return {"ok": ok, "exit_code": exit_code, "log": log[-8000:]}
     if action == "remove":
-        code, log = _infra_compose(["rm", "-sf", svc])
-        return {"ok": code == 0, "exit_code": code, "log": log[-8000:]}
+        services = compose_action_services(svc, "remove", COMPOSE_SERVICE_REQUIRES)
+        logs = []
+        ok = True
+        exit_code = 0
+        for s in services:
+            code, log = _infra_compose(["rm", "-sf", s])
+            logs.append(f"=== {s}: rm ===\n{log}\n")
+            if code != 0:
+                ok = False
+                exit_code = code
+        return {"ok": ok, "exit_code": exit_code, "log": "".join(logs)[-8000:]}
     if action == "backup":
         return {"ok": False, "error": "backup not defined for infra services"}
 
     if action == "start":
-        code, log = _infra_compose(["start", svc])
-        if code != 0:
-            code, log = _infra_compose(["up", "-d", svc])
-        return {"ok": code == 0, "exit_code": code, "log": log[-8000:]}
+        return _compose_start_cascade(svc, _INFRA_BY_COMPOSE, lambda args: _infra_compose(args))
 
-    dc = _docker_client()
-    if dc is None:
-        return {"ok": False, "error": "docker unavailable"}
-    try:
-        c = dc.containers.get(cname)
-    except Exception:
-        return {"ok": False, "error": f"container {cname} not found"}
+    if action in {"stop", "restart", "pause", "unpause"}:
+        return _compose_docker_lifecycle_cascade(svc, action, _INFRA_BY_COMPOSE)
 
-    try:
-        if action == "stop":
-            c.stop(timeout=30)
-        elif action == "restart":
-            c.restart(timeout=30)
-        elif action == "pause":
-            c.pause()
-        elif action == "unpause":
-            c.unpause()
-        else:
-            return {"ok": False, "error": f"unsupported action {action}"}
-        return {"ok": True, "container": cname, "action": action}
-    except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+    return {"ok": False, "error": f"unsupported action {action}"}
 
 
 def _ai_service_action(meta: dict, action: str):
@@ -1129,40 +1187,18 @@ def _stream_cf_service_action_stream(meta: dict, action: str) -> Iterator[dict[s
         return
 
     if action == "start":
-        code, log = yield from _stream_compose(["start", svc])
-        if code != 0:
-            yield {"type": "log", "text": f"=== compose up -d {svc} (start failed) ===\n"}
-            code, log = yield from _stream_compose(["up", "-d", svc])
-        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        body = _compose_start_cascade(svc, _CF_BY_COMPOSE, lambda args: _compose(args))
+        yield {"type": "log", "text": body.get("log", "")}
+        yield _emit_done(body.get("ok", False), exit_code=body.get("exit_code", 1), log=body.get("log", "")[-8000:])
         return
 
-    dc = _docker_client()
-    if dc is None:
-        yield _emit_done(False, error="docker unavailable")
-        return
-    try:
-        c = dc.containers.get(cname)
-    except Exception:
-        yield _emit_done(False, error=f"container {cname} not found")
+    if action in {"stop", "restart", "pause", "unpause"}:
+        body = _compose_docker_lifecycle_cascade(svc, action, _CF_BY_COMPOSE)
+        yield {"type": "log", "text": body.get("log", "")}
+        yield _emit_done(body.get("ok", False), log=body.get("log", "")[-8000:])
         return
 
-    try:
-        yield {"type": "log", "text": f"Docker {action} {cname} …\n"}
-        if action == "stop":
-            c.stop(timeout=30)
-        elif action == "restart":
-            c.restart(timeout=30)
-        elif action == "pause":
-            c.pause()
-        elif action == "unpause":
-            c.unpause()
-        else:
-            yield _emit_done(False, error=f"unsupported action {action}")
-            return
-        yield {"type": "log", "text": "Done.\n"}
-        yield _emit_done(True, container=cname, action=action)
-    except Exception as exc:
-        yield _emit_done(False, error=str(exc))
+    yield _emit_done(False, error=f"unsupported action {action}")
 
 
 def _stream_infra_service_action_stream(meta: dict, action: str) -> Iterator[dict[str, Any]]:
@@ -1196,40 +1232,18 @@ def _stream_infra_service_action_stream(meta: dict, action: str) -> Iterator[dic
         return
 
     if action == "start":
-        code, log = yield from _stream_infra_compose(["start", svc])
-        if code != 0:
-            yield {"type": "log", "text": f"=== compose up -d {svc} (start failed) ===\n"}
-            code, log = yield from _stream_infra_compose(["up", "-d", svc])
-        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        body = _compose_start_cascade(svc, _INFRA_BY_COMPOSE, lambda args: _infra_compose(args))
+        yield {"type": "log", "text": body.get("log", "")}
+        yield _emit_done(body.get("ok", False), exit_code=body.get("exit_code", 1), log=body.get("log", "")[-8000:])
         return
 
-    dc = _docker_client()
-    if dc is None:
-        yield _emit_done(False, error="docker unavailable")
-        return
-    try:
-        c = dc.containers.get(cname)
-    except Exception:
-        yield _emit_done(False, error=f"container {cname} not found")
+    if action in {"stop", "restart", "pause", "unpause"}:
+        body = _compose_docker_lifecycle_cascade(svc, action, _INFRA_BY_COMPOSE)
+        yield {"type": "log", "text": body.get("log", "")}
+        yield _emit_done(body.get("ok", False), log=body.get("log", "")[-8000:])
         return
 
-    try:
-        yield {"type": "log", "text": f"Docker {action} {cname} …\n"}
-        if action == "stop":
-            c.stop(timeout=30)
-        elif action == "restart":
-            c.restart(timeout=30)
-        elif action == "pause":
-            c.pause()
-        elif action == "unpause":
-            c.unpause()
-        else:
-            yield _emit_done(False, error=f"unsupported action {action}")
-            return
-        yield {"type": "log", "text": "Done.\n"}
-        yield _emit_done(True, container=cname, action=action)
-    except Exception as exc:
-        yield _emit_done(False, error=str(exc))
+    yield _emit_done(False, error=f"unsupported action {action}")
 
 
 def _stream_ai_service_action_stream(meta: dict, action: str) -> Iterator[dict[str, Any]]:

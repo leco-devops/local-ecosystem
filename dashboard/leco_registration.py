@@ -134,9 +134,25 @@ def effective_manifest_url_summary(manifest_abs: Path) -> dict[str, Any]:
         merged = load_merged_manifest(manifest_abs.resolve())
         m = merged.manifest
         host_slug = host_slug_from_app_id(m.name or "app")
-        derived_main = f"https://{host_slug}.lh"
-        out["derived_main_url"] = derived_main
-        out["derived_main_urls"] = {"https": f"https://{host_slug}.lh", "http": f"http://{host_slug}.lh"}
+        try:
+            from platform_config import deployment_mode, public_hostname
+
+            if deployment_mode() == "cloud":
+                host = public_hostname("", slug=host_slug)
+                derived_main = f"https://{host}"
+                out["derived_main_url"] = derived_main
+                out["derived_main_urls"] = {"https": f"https://{host}", "http": f"http://{host}"}
+            else:
+                derived_main = f"https://{host_slug}.lh"
+                out["derived_main_url"] = derived_main
+                out["derived_main_urls"] = {
+                    "https": f"https://{host_slug}.lh",
+                    "http": f"http://{host_slug}.lh",
+                }
+        except ImportError:
+            derived_main = f"https://{host_slug}.lh"
+            out["derived_main_url"] = derived_main
+            out["derived_main_urls"] = {"https": f"https://{host_slug}.lh", "http": f"http://{host_slug}.lh"}
 
         explicit_urls: list[dict[str, str]] = []
         frontend_url = ""
@@ -370,6 +386,20 @@ def iterate_register_app_wizard(
                 "text": f"Normalized routing backend hosts for isolation ({fix.get('updated')} entry/entries).\n",
             }
         overlay = ensure_lh_network_hosting_overlay(prep.manifest_abs)
+        try:
+            from dev_stack_binding import ensure_dev_stack_hosting_overlay
+
+            ds = ensure_dev_stack_hosting_overlay(prep.manifest_abs)
+            if ds.get("stack_id"):
+                yield {
+                    "type": "log",
+                    "text": (
+                        f"Dev stack binding: {ds.get('stack_id')} "
+                        f"(overlay {ds.get('overlay', 'docker-compose.leco-devstack.yml')}).\n"
+                    ),
+                }
+        except Exception as exc:
+            yield {"type": "log", "text": f"Dev stack overlay skipped: {exc}\n"}
         overlay_svcs = overlay.get("services") or []
         reset_svcs = overlay.get("ports_reset_services") or []
         if overlay_svcs or reset_svcs:
@@ -526,6 +556,21 @@ def iterate_register_app_wizard(
         yield {"type": "log", "text": skip}
         yield {"type": "done", "result": _register_result_dict(prep, log + skip)}
         return
+
+    try:
+        from dev_stack_binding import ensure_dev_stack_hosting_overlay
+
+        ds = ensure_dev_stack_hosting_overlay(prep.manifest_abs)
+        if ds.get("stack_id"):
+            yield {
+                "type": "log",
+                "text": (
+                    f"Dev stack overlay for deploy: {ds.get('stack_id')} "
+                    f"({', '.join(ds.get('env_keys') or []) or 'network only'}).\n"
+                ),
+            }
+    except Exception as exc:
+        yield {"type": "log", "text": f"Dev stack overlay skipped before deploy: {exc}\n"}
 
     yield {"type": "log", "text": "\n--- leco-devops deploy (docker compose up) ---\n"}
     dcombined: list[str] = []

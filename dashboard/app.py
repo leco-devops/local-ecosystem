@@ -227,6 +227,184 @@ def api_hosted_snapshot(slug: str):
     return jsonify(data)
 
 
+@app.get("/api/platform/config")
+def api_platform_config_get():
+    from platform_config import PLATFORM_EXAMPLE, load_platform_config
+
+    cfg = load_platform_config()
+    from platform_config import PLATFORM_FILE
+
+    return jsonify(
+        {
+            "config": cfg,
+            "example_path": str(PLATFORM_EXAMPLE),
+            "has_platform_file": PLATFORM_FILE.is_file(),
+        }
+    )
+
+
+@app.post("/api/platform/config")
+def api_platform_config_post():
+    from platform_config import save_platform_config
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    cfg = data.get("config")
+    if not isinstance(cfg, dict):
+        return jsonify({"ok": False, "error": "config object required"}), 400
+    save_platform_config(cfg)
+    return jsonify({"ok": True})
+
+
+@app.get("/api/platform/catalog")
+def api_platform_catalog():
+    from dev_stack_compose import load_component_catalog
+    from platform_services import catalog
+
+    cat = catalog()
+    comp_root = load_component_catalog() or {}
+    comp_map = comp_root.get("components") if isinstance(comp_root.get("components"), dict) else comp_root
+    from dev_stack_templates import preset_catalog_for_api
+
+    return jsonify(
+        {
+            "profiles": cat.get("profiles") or {},
+            "bundles": cat.get("bundles") or {},
+            "start_order": cat.get("start_order") or [],
+            "components": comp_map,
+            "dev_stack_presets": preset_catalog_for_api(),
+        }
+    )
+
+
+@app.get("/api/platform/services")
+def api_platform_services():
+    try:
+        from platform_services import list_services
+
+        return jsonify({"services": list_services()})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc), "services": []}), 500
+
+
+@app.post("/api/platform/services/<service_id>/action")
+def api_platform_service_action(service_id: str):
+    from platform_services import service_action
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    action = str(data.get("action") or "").strip().lower()
+    if action not in ("install", "start", "stop", "disable"):
+        return jsonify({"ok": False, "error": "invalid action"}), 400
+    return jsonify(service_action(service_id, action))
+
+
+@app.post("/api/platform/traefik/apply")
+def api_platform_traefik_apply():
+    from platform_services import apply_traefik
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    return jsonify(apply_traefik())
+
+
+@app.get("/api/dev-stacks")
+def api_dev_stacks_list():
+    from dev_stacks import list_stacks
+
+    return jsonify({"stacks": list_stacks()})
+
+
+@app.post("/api/dev-stacks")
+def api_dev_stacks_create():
+    from dev_stacks import create_stack
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    stack_id = str(data.get("id") or data.get("stack_id") or "").strip()
+    name = str(data.get("name") or stack_id).strip()
+    components = data.get("components")
+    preset = str(data.get("preset") or "").strip() or None
+    template = str(data.get("template") or "").strip() or None
+    sample_data = bool(data.get("sample_data"))
+    if not stack_id:
+        return jsonify({"ok": False, "error": "id required"}), 400
+    if not preset and not template and not isinstance(components, list):
+        return jsonify({"ok": False, "error": "preset, template, or components[] required"}), 400
+    try:
+        return jsonify(
+            create_stack(
+                stack_id,
+                name,
+                components if isinstance(components, list) else None,
+                preset=preset,
+                template=template,
+                sample_data=sample_data,
+            )
+        )
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@app.post("/api/dev-stacks/<stack_id>/action")
+def api_dev_stack_action(stack_id: str):
+    from dev_stacks import stack_action
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    action = str(data.get("action") or "").strip().lower()
+    if action not in ("start", "stop", "destroy"):
+        return jsonify({"ok": False, "error": "invalid action"}), 400
+    return jsonify(stack_action(stack_id, action))
+
+
+@app.get("/api/dev-stacks/<stack_id>/snapshot")
+def api_dev_stack_snapshot(stack_id: str):
+    from dev_stacks import stack_snapshot
+
+    return jsonify(stack_snapshot(stack_id))
+
+
+@app.get("/api/dev-stacks/<stack_id>/access")
+def api_dev_stack_access(stack_id: str):
+    from dev_stack_access import stack_access_info
+
+    return jsonify(stack_access_info(stack_id))
+
+
+@app.post("/api/dev-stacks/<stack_id>/reset-admin")
+def api_dev_stack_reset_admin(stack_id: str):
+    from dev_stack_access import reset_template_admin
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    return jsonify(reset_template_admin(stack_id))
+
+
+@app.post("/api/hosted-apps/<slug>/platform-binding")
+def api_hosted_platform_binding(slug: str):
+    from dev_stack_binding import set_platform_dev_stack
+    from hosted_apps import leco_meta_for_slug
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    meta = leco_meta_for_slug(slug.strip())
+    if not meta:
+        return jsonify({"ok": False, "error": "unknown app"}), 404
+    dev_stack_id = data.get("dev_stack_id")
+    if dev_stack_id is None:
+        dev_stack_id = data.get("devStackId")
+    result = set_platform_dev_stack(meta["manifest_path"], str(dev_stack_id or "").strip() or None)
+    return jsonify(result)
+
+
 @app.get("/api/hosted-apps/<slug>/metrics/history")
 def api_hosted_metrics_history(slug: str):
     from hosted_app_timeseries import get_history, maybe_append_from_aggregate

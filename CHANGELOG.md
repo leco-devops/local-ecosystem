@@ -6,9 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **Platform — dev stack builder:** Builder form is a collapsible panel (closed by default); **Your dev stacks** list stays visible outside it.
+
+- **Dev stack public URLs:** WordPress, WooCommerce, Ghost, Joomla (sample auto-install), and Magento templates bind to `http://{stackId}.lh` (not `localhost`); **Start** waits for `wp-sample-init` / `wp core is-installed` before URL repair (no more `wp core install` spam in logs); Platform tab shows line-oriented compose output in a scrollable log panel.
+
+- **Dev stack Destroy:** `compose down -v --remove-orphans`, prunes leftover project containers/volumes/networks, removes stack files only after compose succeeds, updates platform config and Traefik routes; confirmation dialog in the Platform tab.
+
+- **Traefik 404 on `localhost.lh`:** Empty `hosting/traefik/20-dev-stacks.yml` no longer writes invalid `http.routers: {}` (Traefik v3 rejected the whole file provider). `traefik.sh heal` normalizes every `hosting/traefik/*.yml`.
+
+- **Control — service dependencies:** Stopping **n8n** now stops **n8n_postgres** automatically; stopping Postgres stops n8n first. Infra targets cascade similarly (e.g. **cache-varnish** / **redis-commander** with their backends).
+
 ### Added
 
-- **SRS — Cloud VM platform:** [`docs/SRS_CLOUD_VM_PLATFORM.md`](docs/SRS_CLOUD_VM_PLATFORM.md) — requirements for cloud VM install profiles, dev stacks, custom domain/TLS, and dashboard platform operations (branch `feature/cloud-vm-platform`).
+- **SRS — Cloud VM platform:** [`docs/SRS_CLOUD_VM_PLATFORM.md`](docs/SRS_CLOUD_VM_PLATFORM.md) — requirements for cloud VM install profiles, dev stacks, custom domain/TLS, and dashboard platform operations.
+- **Cloud VM platform:** Install profiles (`cloudflare-full`, `ai-full`, `ai-cloud`, …), `config/leco-platform.yaml`, `ecosystem-stack/lib/platform_config.py`, cloud installer, Platform dashboard tab, `/api/platform/*` and `/api/dev-stacks/*`, isolated dev stack compose generator, Traefik domain render + ACME TLS mode, `platform.devStackId` schema and hosting overlay, docs [`CLOUD_VM_DEPLOYMENT.md`](docs/CLOUD_VM_DEPLOYMENT.md) and [`DEV_STACK_ISOLATION.md`](docs/DEV_STACK_ISOLATION.md).
+- **Cloud VM — ai-cloud:** Installer seeds `config/ai-providers.yaml` with external provider default; Infrastructure AI panel shows cloud-first banner when `ai-cloud` / `prefer_cloud` is active.
+- **Cloud VM — dev stack binding:** Hosted apps **Dev stack** dropdown saves `platform.devStackId`; register/deploy apply `docker-compose.leco-devstack.yml`; cloud mode rewrites `*.lh` URLs in manifest UI, attached services, and registration summaries.
+- **Dev stack builder — presets & ready apps:** `ecosystem-stack/config/dev-stack-presets.yaml` with infrastructure levels (1–6), common bundles (LAMP, MEAN, data stores, …), and ready stacks (WordPress, WooCommerce, Joomla, Magento Open Source minimum/full, standalone Elasticsearch, Drupal, Ghost) with optional **sample / demo content**; templates generate multi-service compose in `dashboard/dev_stack_templates.py`.
 
 - **UI credential vault (local dev):** gitignored `config/ui-credentials.yaml`, registry JSON, Infrastructure **UI access** panel, hub actions, login-assist routes, and reset/apply for MinIO, MySQL, and PostgreSQL.
 - **CF ↔ LEco service map:** `docs/CF_LECO_SERVICE_MAP.md`, `ecosystem-stack/config/cf-leco-service-registry.json`, Docs catalog entry, and cross-links across help/samples.
@@ -26,6 +42,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **Infrastructure health:** Intentionally stopped containers (exited/paused) and services with **stop** or **offloaded** policy no longer fail HTTP probes or mark the platform **degraded**; probes show **n/a** instead of 502.
 - **Onboarding (multi-wrangler monorepos):** Detect and generate YAML now find `wrangler.*.toml` files (e.g. `infra/wrangler.api.toml`), emit multiple `infrastructure.runtimes[]` entries, and surface each Worker in register logs — not only a root `wrangler.toml`.
 - **Register wizard:** Step 4 (Validate YAML) now marks complete after a successful validate; validation warns when wrangler files exist on disk but `leco.yaml` has empty `infrastructure`.
 - **Workers-only deploy:** `dockerCompose.composeFile` no longer defaults to `docker-compose.yml` when only `composeFileFromManifest` / runtime overlay is set; runtime materialization sets `composeFileFromManifest: docker-compose.leco-runtime.yml` for Traefik-only stacks.

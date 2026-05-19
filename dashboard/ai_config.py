@@ -127,15 +127,29 @@ def mask_key(key: str) -> str:
     return key[:4] + "•" * (len(key) - 8) + key[-4:]
 
 
+def _platform_ai_hints() -> dict[str, Any]:
+    try:
+        from platform_config import ai_platform_hints
+
+        return ai_platform_hints()
+    except Exception:
+        return {}
+
+
 def config_for_ui() -> dict[str, Any]:
     """Return config safe for browser display (keys masked)."""
     cfg = load_config()
+    hints = _platform_ai_hints()
+    if hints.get("cloud_first") and cfg.get("default_provider") in (None, "", "none", "ollama"):
+        cfg = dict(cfg)
+        cfg["default_provider"] = hints.get("default_provider") or "openai"
     safe = {
         "default_provider": cfg.get("default_provider", "none"),
         "default_model": cfg.get("default_model", ""),
         "timeout": cfg.get("timeout", 180),
         "providers": {},
         "provider_meta": PROVIDER_META,
+        "platform": hints,
     }
     for pname, pcfg in cfg.get("providers", {}).items():
         p = dict(pcfg)

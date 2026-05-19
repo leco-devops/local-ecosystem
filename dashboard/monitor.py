@@ -672,6 +672,37 @@ def _probe_backend_internal(container_name: str) -> tuple[bool, int | None, floa
         return False, None, None
 
 
+def _skipped_url_checks(urls: list[str], reason: str) -> list[dict]:
+    """Placeholder checks when the service is intentionally stopped — not counted as failures."""
+    return [
+        {
+            "url": u,
+            "ok": None,
+            "skipped": True,
+            "skip_reason": reason,
+            "status_code": None,
+            "latency_ms": None,
+        }
+        for u in urls
+    ]
+
+
+def _http_probes_suppressed(container_info: dict, container_name: str) -> tuple[bool, str]:
+    """True when edge HTTP probes should not affect health (stopped container or stop/offloaded policy)."""
+    status = str(container_info.get("status") or "").lower()
+    if status and status != "running":
+        return True, f"Container {status} — probes skipped"
+    try:
+        from service_policies import policy_for_container
+
+        pol = policy_for_container(container_name)
+        if pol in ("stop", "offloaded"):
+            return True, f"Policy {pol} — probes skipped"
+    except Exception:
+        pass
+    return False, ""
+
+
 def check_urls_for_service(urls: list[str], container_name: str) -> list[dict]:
     """Run edge probes; if all fail with gateway/connection issues, accept internal Docker-network probe as OK."""
     checks = check_urls_many(urls)
@@ -928,8 +959,9 @@ def build_system_status(services, docker_overview):
             missing_services += 1
             missing_service_names.append(service.get("container") or service.get("service", "?"))
 
-        total_urls += len(checks)
-        healthy_urls += sum(1 for check in checks if check.get("ok"))
+        active_checks = [c for c in checks if not c.get("skipped")]
+        total_urls += len(active_checks)
+        healthy_urls += sum(1 for c in active_checks if c.get("ok"))
 
         total_error_lines += int(logs.get("error_lines") or 0)
         total_error_rate_per_min += to_float(logs.get("error_rate_per_min"))
@@ -1075,7 +1107,11 @@ def collect_overview():
         container = get_container_from_index(by_name, item["container"])
         container_info = get_container_info(container)
         expanded_urls = normalize_lh_probe_urls(list(item.get("urls") or []))
-        checks = check_urls_for_service(expanded_urls, item["container"])
+        suppressed, skip_reason = _http_probes_suppressed(container_info, item["container"])
+        if suppressed and expanded_urls:
+            checks = _skipped_url_checks(expanded_urls, skip_reason)
+        else:
+            checks = check_urls_for_service(expanded_urls, item["container"])
         slug = item.get("hub_slug")
         row = {
             "service": item["service"],

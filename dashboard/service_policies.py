@@ -103,6 +103,17 @@ def targets_for_bulk_action(action: str) -> dict[str, list[str]]:
     return {"skip": skip, "include": include}
 
 
+def policy_for_container(container_name: str) -> str:
+    """Resolve default policy for a Docker container name (SERVICE_MAP / control card)."""
+    name = (container_name or "").strip()
+    if not name:
+        return "start"
+    for t in (*AI_TARGETS, *CF_TARGETS, *INFRA_TARGETS):
+        if (t.get("container") or "").strip() == name:
+            return policy_for(str(t.get("id") or ""))
+    return "start"
+
+
 def script_name_for_target(target_id: str) -> str | None:
     """Map a target ID to its ecosystem-stack script name (for shell integration)."""
     for t in AI_TARGETS:

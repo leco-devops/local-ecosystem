@@ -517,6 +517,31 @@ class ProfileInfrastructureSpec(BaseModel):
         return self
 
 
+class PlatformToolchainSpec(BaseModel):
+    """Pinned toolchain versions when bound to a dev stack (materialization hints)."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    node: str | None = Field(default=None, description="Node major version, e.g. 20")
+    python: str | None = Field(default=None, description="Python version, e.g. 3.11")
+    java: str | None = None
+    go: str | None = None
+    php: str | None = None
+
+
+class PlatformSpec(BaseModel):
+    """Cloud VM platform binding (dev stack, toolchain)."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    dev_stack_id: str | None = Field(
+        default=None,
+        alias="devStackId",
+        description="Isolated dev stack id under platform/dev-stacks/<id>/",
+    )
+    toolchain: PlatformToolchainSpec | None = None
+
+
 class LocalhostProfile(BaseModel):
     """``leco.yaml`` — operator profile, lifecycle, URLs, and (optionally) full infrastructure spec."""
 
@@ -524,6 +549,7 @@ class LocalhostProfile(BaseModel):
 
     schema_version: int = Field(default=1, alias="schemaVersion")
     archetype: LocalhostArchetype = "generic"
+    platform: PlatformSpec | None = None
     infrastructure: ProfileInfrastructureSpec | None = None
     urls: list[LocalhostUrlEntry] = Field(default_factory=list)
     lifecycle: LocalhostLifecycleSpec = Field(default_factory=LocalhostLifecycleSpec)
@@ -617,6 +643,10 @@ class ApplicationManifest(BaseModel):
         default=None,
         alias="localHostProfile",
         description="Optional path to localhost.yaml relative to this manifest directory",
+    )
+    platform: PlatformSpec | None = Field(
+        default=None,
+        description="Optional dev stack binding (prefer leco.yaml platform.devStackId)",
     )
     localhost: LocalhostProfile | None = Field(
         default=None,

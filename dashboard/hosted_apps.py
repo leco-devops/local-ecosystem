@@ -409,6 +409,13 @@ def manifest_ui_fields(manifest_path: str) -> dict[str, Any]:
                 "r2": f"https://{lcp}-r2.lh",
                 "d1": f"https://{lcp}-d1.lh",
             }
+            try:
+                from platform_config import deployment_mode, public_url_from_lh
+
+                if deployment_mode() == "cloud":
+                    adapter_hosts = {k: public_url_from_lh(v) for k, v in adapter_hosts.items()}
+            except ImportError:
+                pass
             break
 
     dedicated_local_adapters = False
@@ -447,8 +454,22 @@ def manifest_ui_fields(manifest_path: str) -> dict[str, Any]:
         main_url_source = "routing.entries"
     try:
         host_slug = host_slug_from_app_id(str(_pick(data, "name") or mp.parent.name))
-        derived_main_url = f"https://{host_slug}.lh"
-        derived_main_urls = {"https": f"https://{host_slug}.lh", "http": f"http://{host_slug}.lh"}
+        try:
+            from platform_config import deployment_mode, public_hostname
+
+            if deployment_mode() == "cloud":
+                host = public_hostname("", slug=host_slug)
+                derived_main_url = f"https://{host}"
+                derived_main_urls = {"https": f"https://{host}", "http": f"http://{host}"}
+            else:
+                derived_main_url = f"https://{host_slug}.lh"
+                derived_main_urls = {
+                    "https": f"https://{host_slug}.lh",
+                    "http": f"http://{host_slug}.lh",
+                }
+        except ImportError:
+            derived_main_url = f"https://{host_slug}.lh"
+            derived_main_urls = {"https": f"https://{host_slug}.lh", "http": f"http://{host_slug}.lh"}
         if not main_url:
             main_url = derived_main_url
             main_url_source = "derived_slug"
@@ -468,6 +489,28 @@ def manifest_ui_fields(manifest_path: str) -> dict[str, Any]:
         pass
     if not source_location and resolved_paths.get("sourceRoot"):
         source_location = str(resolved_paths["sourceRoot"])
+
+    platform_binding: dict[str, Any] = {"dev_stack_id": "", "toolchain": {}}
+    try:
+        from dev_stack_binding import read_platform_binding
+
+        platform_binding = read_platform_binding(manifest_path)
+    except Exception:
+        pass
+    try:
+        from platform_config import deployment_mode, lh_to_public_host
+
+        if deployment_mode() == "cloud":
+            for row in routes:
+                if isinstance(row, dict) and row.get("hostname"):
+                    row["hostname"] = lh_to_public_host(str(row["hostname"]))
+            for row in explicit_urls:
+                if isinstance(row, dict) and row.get("public_url"):
+                    from platform_config import public_url_from_lh
+
+                    row["public_url"] = public_url_from_lh(str(row["public_url"]))
+    except ImportError:
+        pass
 
     return {
         "routes": routes,
@@ -494,6 +537,8 @@ def manifest_ui_fields(manifest_path: str) -> dict[str, Any]:
         "endpoint_urls": endpoint_urls,
         "source_location": source_location,
         "resolved_paths": resolved_paths,
+        "platform": platform_binding,
+        "dev_stack_id": platform_binding.get("dev_stack_id") or "",
     }
 
 

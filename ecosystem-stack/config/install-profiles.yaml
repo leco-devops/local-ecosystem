@@ -1,0 +1,64 @@
+# Install profiles for ecosystem-stack / cloud VM platform.
+# Resolved by ecosystem-stack/lib/platform_config.py
+
+profiles:
+  minimal:
+    description: Traefik edge + LEco DevOps dashboard only
+    services:
+      - traefik
+      - dashboard
+
+  platform:
+    description: Minimal + shared Postgres for n8n
+    extends: minimal
+    services:
+      - postgres
+      - n8n
+
+  cloudflare-full:
+    description: Minimal + full Cloudflare-local mimic bundle
+    extends: minimal
+    bundles:
+      - cloudflare-full
+
+  ai-full:
+    description: Minimal + all AI/LLM ecosystem services (local inference)
+    extends: minimal
+    services:
+      - ollama
+      - airllm
+      - webui
+      - update-catalog
+    ai:
+      default_provider: ollama
+
+  ai-cloud:
+    description: Same containers as ai-full; external LLM APIs as default path
+    extends: ai-full
+    ai:
+      default_provider: openai
+      prefer_cloud: true
+
+  infra-full:
+    description: Minimal + shared infra compose (mysql, redis, mailpit, …)
+    extends: minimal
+    bundles:
+      - infra-full
+
+  full:
+    description: All ecosystem services and bundles
+    services:
+      - traefik
+      - postgres
+      - ollama
+      - airllm
+      - webui
+      - n8n
+      - dashboard
+      - update-catalog
+      - cloudflare-local
+      - infra
+
+  custom:
+    description: Operator-defined via component catalog / dashboard (no preset services)
+    services: []

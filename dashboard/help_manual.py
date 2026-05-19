@@ -77,6 +77,7 @@ HELP_TREE: list[dict] = [
             {"id": "multi-wrangler-monorepo", "title": "Multi-Wrangler monorepos", "file": "12-multi-wrangler-monorepo.md"},
             {"id": "hosted-app-attached-services", "title": "Attached services panel", "file": "12-hosted-app-attached-services.md"},
             {"id": "hosted-app-data-import", "title": "Seed data import", "file": "13-hosted-app-data-import.md"},
+            {"id": "cloud-vm-deployment", "title": "Cloud VM deployment", "file": "12-cloud-vm-deployment.md"},
             {"id": "hosting-overrides", "title": "Overriding upstream apps", "file": "12-hosting-overrides.md"},
             {"id": "deploy-rebuild", "title": "Deploy, rebuild & offload", "file": "12-deploy-rebuild.md"},
         ],
@@ -109,6 +110,7 @@ HELP_TREE: list[dict] = [
             {"id": "dev-debugging", "title": "Debugging & validation", "file": "dev-07-debugging.md"},
             {"id": "dev-hosted-app-services", "title": "Attached services (API)", "file": "dev-08-hosted-app-services.md"},
             {"id": "dev-data-import", "title": "Data import", "file": "dev-09-data-import.md"},
+            {"id": "dev-platform-cloud", "title": "Platform cloud APIs", "file": "dev-09-platform-cloud.md"},
         ],
     },
     {

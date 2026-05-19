@@ -55,6 +55,7 @@ const TAB_LABELS = {
   infrastructureTab: "Infrastructure",
   metricsTab: "Metrics",
   controlTab: "Control",
+  platformTab: "Platform",
   hostedAppsTab: "Hosted apps",
   routesTab: "Routes",
   docsTab: "Docs",
@@ -1357,6 +1358,13 @@ function badge(ok, txt, title) {
 
 /** URL probe pill; * = OK via Docker network fallback when Traefik edge failed. */
 function urlProbePill(c) {
+  if (c?.skipped) {
+    return badge(
+      null,
+      "n/a",
+      c.skip_reason || "Service stopped — HTTP probe skipped (not a failure)",
+    );
+  }
   if (!c || c.ok !== true) {
     return badge(c?.ok, c?.status_code != null ? String(c.status_code) : "ERR", c?.error);
   }
@@ -4470,6 +4478,9 @@ function activateTab(tabId, opts = {}) {
     if (tabId === "controlTab") {
       loadControlTargets();
     }
+    if (tabId === "platformTab") {
+      loadPlatformTab();
+    }
     if (tabId === "hostedAppsTab") {
       loadHostedAppsList();
     }
@@ -4638,11 +4649,12 @@ function renderCloudflareLocalContainers(services) {
       <tbody>
         ${rows
           .map((s) => {
-            const probe = (s.url_checks || []).some((u) => u.ok)
-              ? '<span class="pill ok">ok</span>'
-              : (s.url_checks || []).length
-                ? '<span class="pill bad">fail</span>'
-                : '<span class="pill na">n/a</span>';
+            const activeProbes = (s.url_checks || []).filter((u) => !u.skipped);
+            const probe = !activeProbes.length
+              ? '<span class="pill na">n/a</span>'
+              : activeProbes.some((u) => u.ok)
+                ? '<span class="pill ok">ok</span>'
+                : '<span class="pill bad">fail</span>';
             return `<tr><td><code>${escapeHtml(s.container)}</code></td><td>${escapeHtml(s.service)}</td><td>${cfContainerStatusPill(s.container_info)}</td><td>${probe}</td></tr>`;
           })
           .join("")}
@@ -5408,13 +5420,15 @@ function emphasizeUpdateCatalogTokenHint(message) {
   document.getElementById("ucControlToken")?.focus();
 }
 
+const BULK_ECOSYSTEM_TARGET_ID = "stack-ecosystem-all";
+
 const CONTROL_GROUP_ORDER = ["ecosystem", "ecosystem-stack", "infra", "cloudflare-local"];
 
 const CONTROL_GROUP_META = {
   ecosystem: {
     title: "Bulk & orchestration",
-    lead: "Same full-stack actions as the toolbar above, exposed as a control target for the API.",
-    sectionClass: "",
+    lead: "Full-stack actions for every ecosystem service (same as the bulk toolbar above), exposed as a single API control target.",
+    sectionClass: " control-target-group--bulk",
   },
   "ecosystem-stack": {
     title: "Ecosystem stack & Traefik",
@@ -5508,8 +5522,9 @@ function controlTargetCardHtml(SB, t) {
   const policyBadge = controlPolicyBadgeHtml(t.default_policy);
   const policySelector = t.id.startsWith("stack-") ? "" : controlPolicySelectorHtml(t.id, t.default_policy);
   const offloadedClass = t.default_policy === "offloaded" ? " control-card--offloaded" : "";
+  const bulkClass = t.id === BULK_ECOSYSTEM_TARGET_ID ? " control-card--bulk" : "";
   return `
-          <div class="control-card${offloadedClass}" data-brand="${escapeHtml(brand)}">
+          <div class="control-card${offloadedClass}${bulkClass}" data-brand="${escapeHtml(brand)}">
             <div class="control-card__head">
               <div class="control-card__iconcol">
                 <span class="control-card__emoji" aria-hidden="true">${SB.emojiFor(brand)}</span>
@@ -6867,6 +6882,68 @@ function renderHostedCfResources(manifestUi) {
   el.innerHTML = html;
 }
 
+let _hostedDevStacksCache = null;
+
+async function loadHostedDevStacksList() {
+  if (_hostedDevStacksCache) return _hostedDevStacksCache;
+  try {
+    const r = await fetch("/api/dev-stacks");
+    const d = await r.json();
+    _hostedDevStacksCache = Array.isArray(d.stacks) ? d.stacks : [];
+  } catch (_) {
+    _hostedDevStacksCache = [];
+  }
+  return _hostedDevStacksCache;
+}
+
+async function refreshHostedDevStackSelect(slug, snap) {
+  const sel = document.getElementById("hostedDevStackSelect");
+  if (!sel) return;
+  const stacks = await loadHostedDevStacksList();
+  const current = String(snap?.manifest_ui?.dev_stack_id || snap?.manifest_ui?.platform?.dev_stack_id || "");
+  const opts = ['<option value="">— none (self-contained) —</option>'];
+  stacks.forEach((s) => {
+    const id = escapeHtml(String(s.id || ""));
+    const name = escapeHtml(String(s.name || s.id || ""));
+    const st = escapeHtml(String(s.state || ""));
+    const selected = id === current ? " selected" : "";
+    opts.push(`<option value="${id}"${selected}>${name} (${id}) — ${st}</option>`);
+  });
+  sel.innerHTML = opts.join("");
+}
+
+function initHostedDevStackBinding() {
+  const saveBtn = document.getElementById("hostedDevStackSave");
+  if (!saveBtn || saveBtn.dataset.bound === "1") return;
+  saveBtn.dataset.bound = "1";
+  saveBtn.addEventListener("click", async () => {
+    const slug = hostedSelectedSlug;
+    const statusEl = document.getElementById("hostedDevStackStatus");
+    const sel = document.getElementById("hostedDevStackSelect");
+    if (!slug || !sel) return;
+    const token = controlToken();
+    if (statusEl) statusEl.textContent = "Saving…";
+    try {
+      const res = await fetch(`/api/hosted-apps/${encodeURIComponent(slug)}/platform-binding`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dev_stack_id: sel.value.trim(), token }),
+      });
+      const data = await res.json();
+      if (statusEl) {
+        statusEl.textContent = data.ok
+          ? data.dev_stack_id
+            ? `Bound to ${data.dev_stack_id}`
+            : "Binding cleared"
+          : data.error || "Failed";
+      }
+      if (data.ok) refreshHostedAppsPanel();
+    } catch (e) {
+      if (statusEl) statusEl.textContent = String(e.message || e);
+    }
+  });
+}
+
 async function refreshHostedAppsPanel() {
   if (activeTab !== "hostedAppsTab" || !hostedSelectedSlug) return;
   const slug = hostedSelectedSlug;
@@ -6988,6 +7065,8 @@ async function refreshHostedAppsPanel() {
     rtEl.title = rt.label || "";
     rtEl.innerHTML = `<span class="control-runtime-dot" aria-hidden="true"></span><span class="control-runtime-text">${rtLabel}</span>`;
   }
+
+  refreshHostedDevStackSelect(slug, snap);
 
   if (linksEl && app) {
     const muLinks = snap.manifest_ui || {};
@@ -10461,6 +10540,7 @@ async function bootstrap() {
   initInfraQuickstartBar();
   initHostedAppsLogToolbar();
   initHostedAppsStagingActions();
+  initHostedDevStackBinding();
   initHostedRegisterWizard();
   initRoutesTab();
   initHostedChartExpandModal();
@@ -10633,11 +10713,21 @@ function initAiSettingsPanel() {
       const d = await r.json();
       if (!d.ok) return;
       const prov = d.provider || "none";
-      provSel.value = prov;
-      _aiCurrentProvider = prov;
-      showFieldsForProvider(prov);
+      const plat = d.platform || {};
+      const cloudBanner = document.getElementById("aiCloudBanner");
+      if (cloudBanner) {
+        cloudBanner.classList.toggle("is-hidden", !plat.cloud_first);
+      }
+      if (plat.cloud_first && plat.default_provider && prov === "none") {
+        provSel.value = plat.default_provider;
+      } else {
+        provSel.value = prov;
+      }
+      _aiCurrentProvider = provSel.value;
+      showFieldsForProvider(provSel.value);
 
-      const provCfg = (d.providers || {})[prov] || {};
+      const activeProv = provSel.value;
+      const provCfg = (d.providers || {})[activeProv] || {};
       keyIn.value  = provCfg.api_key || "";
       urlIn.value  = provCfg.base_url || "";
       const mdl = provCfg.default_model || d.default_model || "";
@@ -10656,10 +10746,10 @@ function initAiSettingsPanel() {
       if (hybridLlm) hybridLlm.value = hybCfg.cloud_provider || "openai";
       if (hybridKey) hybridKey.value = hybCfg.cloud_api_key || "";
 
-      updateWizardToggleProvider(prov, mdl);
+      updateWizardToggleProvider(activeProv, mdl);
 
       // Auto-fetch models for the active provider
-      if (prov !== "none" && prov !== "hybrid") {
+      if (activeProv !== "none" && activeProv !== "hybrid") {
         refreshAiModels();
       }
     } catch (_) { /* offline / not running */ }
@@ -11486,5 +11576,769 @@ initOllamaModelsPanel = function() {
   loadAirllmBackupSelect();
 };
 
+
+async function fetchPlatformJson(url, options) {
+  const res = await fetch(url, options);
+  const ct = (res.headers.get("content-type") || "").toLowerCase();
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} ${url}: ${text.slice(0, 200)}`);
+  }
+  if (!ct.includes("application/json")) {
+    throw new Error(`Expected JSON from ${url}, got: ${text.slice(0, 120)}`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    throw new Error(`Invalid JSON from ${url}: ${String(e.message || e)}`);
+  }
+}
+
+const DEVSTACK_CATEGORY_LABELS = {
+  sql: "SQL",
+  nosql: "NoSQL",
+  cache: "Cache / Valkey",
+  storage: "Object storage",
+  toolchain: "Toolchains",
+  messaging: "Messaging",
+  proxy: "Proxy / edge",
+  search: "Search",
+  other: "Other",
+};
+
+let _devStackPresetsCatalog = { groups: [], presets: {} };
+
+function renderInstallProfileSelect(profileMap, currentProfile) {
+  const sel = document.getElementById("platformInstallProfile");
+  if (!sel) return;
+  const profs = profileMap && typeof profileMap === "object" ? profileMap : {};
+  const entries = Object.entries(profs);
+  sel.innerHTML =
+    '<option value="">— keep current —</option>' +
+    entries
+      .map(([key, meta]) => {
+        const desc = typeof meta === "string" ? meta : key;
+        return `<option value="${escapeAttr(key)}">${escapeHtml(key)} — ${escapeHtml(desc)}</option>`;
+      })
+      .join("");
+  if (currentProfile) sel.value = currentProfile;
+}
+
+function loadDevStackPresetsCatalog(catalogPresets) {
+  const raw = catalogPresets && typeof catalogPresets === "object" ? catalogPresets : {};
+  _devStackPresetsCatalog = {
+    groups: Array.isArray(raw.groups) ? raw.groups : [],
+    presets: raw.presets && typeof raw.presets === "object" ? raw.presets : {},
+  };
+}
+
+function getDevStackPreset(presetKey) {
+  return _devStackPresetsCatalog.presets?.[presetKey] || null;
+}
+
+function renderDevStackPresets() {
+  const sel = document.getElementById("devStackPreset");
+  if (!sel) return;
+  const keep = sel.value;
+  const groups = _devStackPresetsCatalog.groups || [];
+  const presets = _devStackPresetsCatalog.presets || {};
+  const byGroup = {};
+  Object.entries(presets).forEach(([k, p]) => {
+    const g = (p && p.group) || "infrastructure";
+    if (!byGroup[g]) byGroup[g] = [];
+    byGroup[g].push([k, p]);
+  });
+  let html = '<option value="">— custom (pick below) —</option>';
+  const seen = new Set();
+  groups.forEach((g) => {
+    const gid = g.id || g.label;
+    const items = byGroup[gid] || [];
+    if (!items.length) return;
+    seen.add(gid);
+    html += `<optgroup label="${escapeHtml(g.label || gid)}">`;
+    items
+      .sort((a, b) => String(a[1].label || a[0]).localeCompare(String(b[1].label || b[0])))
+      .forEach(([k, pr]) => {
+        html += `<option value="${escapeAttr(k)}">${escapeHtml(pr.label || k)}</option>`;
+      });
+    html += "</optgroup>";
+  });
+  Object.entries(byGroup).forEach(([gid, items]) => {
+    if (seen.has(gid)) return;
+    html += `<optgroup label="${escapeHtml(gid)}">`;
+    items.forEach(([k, pr]) => {
+      html += `<option value="${escapeAttr(k)}">${escapeHtml(pr.label || k)}</option>`;
+    });
+    html += "</optgroup>";
+  });
+  sel.innerHTML = html;
+  if (keep && presets[keep]) sel.value = keep;
+}
+
+function updateDevStackPresetUi(presetKey) {
+  const preset = presetKey ? getDevStackPreset(presetKey) : null;
+  const sampleWrap = document.getElementById("devStackSampleDataWrap");
+  const sampleCb = document.getElementById("devStackSampleData");
+  const picker = document.getElementById("devStackComponentPicker");
+  const hint = document.getElementById("devStackTemplateHint");
+  const isTemplate = !!(preset && preset.template);
+  if (sampleWrap) sampleWrap.hidden = !(preset && preset.supports_sample_data);
+  if (sampleCb && !preset?.supports_sample_data) sampleCb.checked = false;
+  if (picker) picker.hidden = isTemplate;
+  if (hint) {
+    if (isTemplate) {
+      const sampleNote = preset.supports_sample_data
+        ? " Optional sample content can be enabled below (WordPress & Magento seed automatically; others use guided install)."
+        : "";
+      hint.hidden = false;
+      hint.textContent = `Ready stack: ${preset.label || preset.template} — compose includes app + database.${sampleNote}`;
+    } else {
+      hint.hidden = true;
+      hint.textContent = "";
+    }
+  }
+}
+
+function applyDevStackPreset(presetKey) {
+  const preset = getDevStackPreset(presetKey);
+  if (!preset) {
+    updateDevStackPresetUi("");
+    return;
+  }
+  const idEl = document.getElementById("devStackId");
+  const nameEl = document.getElementById("devStackName");
+  if (idEl) idEl.value = preset.id || presetKey;
+  if (nameEl) nameEl.value = preset.name || preset.label || presetKey;
+  updateDevStackPresetUi(presetKey);
+  if (preset.template) {
+    refreshDevStacksEmptyHint();
+    return;
+  }
+  applyDevStackComponentSelection(preset.components || []);
+}
+
+function applyDevStackComponentSelection(components) {
+  const picker = document.getElementById("devStackComponentPicker");
+  if (!picker) return;
+  const want = new Map((components || []).map((c) => [String(c.id), String(c.version)]));
+  picker.querySelectorAll(".devstack-comp-row").forEach((row) => {
+    const cid = row.getAttribute("data-component-id");
+    const cb = row.querySelector('input[type="checkbox"]');
+    const verSel = row.querySelector("select.devstack-comp-ver");
+    if (!cb || !verSel) return;
+    if (want.has(cid)) {
+      cb.checked = true;
+      verSel.disabled = false;
+      const ver = want.get(cid);
+      if (ver && [...verSel.options].some((o) => o.value === ver)) verSel.value = ver;
+    } else {
+      cb.checked = false;
+      verSel.disabled = true;
+    }
+  });
+  refreshDevStacksEmptyHint();
+}
+
+function collectDevStackComponents() {
+  const picker = document.getElementById("devStackComponentPicker");
+  const out = [];
+  if (!picker) return out;
+  picker.querySelectorAll(".devstack-comp-row").forEach((row) => {
+    const cb = row.querySelector('input[type="checkbox"]');
+    if (!cb?.checked) return;
+    const cid = row.getAttribute("data-component-id");
+    const verSel = row.querySelector("select.devstack-comp-ver");
+    const ver = verSel?.value?.trim();
+    if (cid && ver) out.push({ id: cid, version: ver });
+  });
+  return out;
+}
+
+function normalizeDevStackCatalogComponents(raw) {
+  if (!raw || typeof raw !== "object") return {};
+  const inner = raw.components;
+  if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+    const sample = Object.values(inner)[0];
+    if (sample && typeof sample === "object" && (sample.versions || sample.category || sample.label)) {
+      return inner;
+    }
+  }
+  return raw;
+}
+
+function renderDevStackComponentPicker(catalogComponents) {
+  const el = document.getElementById("devStackComponentPicker");
+  if (!el) return;
+  _devStackCatalogComponents = normalizeDevStackCatalogComponents(catalogComponents || {});
+  const comps = _devStackCatalogComponents;
+  const ids = Object.keys(comps).sort();
+  if (!ids.length) {
+    el.innerHTML = '<p class="muted small">No components in catalog.</p>';
+    return;
+  }
+  const byCat = {};
+  ids.forEach((cid) => {
+    const meta = comps[cid] || {};
+    const cat = meta.category || "other";
+    if (!byCat[cat]) byCat[cat] = [];
+    byCat[cat].push({ id: cid, meta });
+  });
+  const catOrder = ["sql", "nosql", "cache", "search", "storage", "toolchain", "messaging", "proxy", "other"];
+  const sections = [];
+  catOrder.forEach((cat) => {
+    const items = byCat[cat];
+    if (!items?.length) return;
+    const rows = items
+      .map(({ id: cid, meta }) => {
+        const label = escapeHtml(meta.label || cid);
+        const versions = Object.keys(meta.versions || {}).sort();
+        const defaultVer = meta.default_version || versions[versions.length - 1] || "";
+        const opts = versions
+          .map((v) => {
+            const sel = v === String(defaultVer) ? " selected" : "";
+            return `<option value="${escapeAttr(v)}"${sel}>${escapeHtml(v)}</option>`;
+          })
+          .join("");
+        return `<div class="devstack-comp-row" data-component-id="${escapeAttr(cid)}">
+          <input type="checkbox" id="devstack-cb-${escapeAttr(cid)}" data-component-id="${escapeAttr(cid)}" />
+          <label class="devstack-comp-row__label" for="devstack-cb-${escapeAttr(cid)}"><strong>${label}</strong><span class="muted">${escapeHtml(cid)}</span></label>
+          <span class="devstack-comp-row__ver"><select class="devstack-comp-ver" data-version-for="${escapeAttr(cid)}" disabled aria-label="Version for ${escapeAttr(cid)}">${opts}</select></span>
+        </div>`;
+      })
+      .join("");
+    sections.push(
+      `<section class="devstack-picker__section">
+        <h4 class="devstack-picker__title">${escapeHtml(DEVSTACK_CATEGORY_LABELS[cat] || cat)}</h4>
+        <div class="devstack-picker__grid">${rows}</div>
+      </section>`,
+    );
+  });
+  el.innerHTML = sections.join("");
+  el.querySelectorAll('.devstack-comp-row input[type="checkbox"]').forEach((cb) => {
+    cb.addEventListener("change", () => {
+      const row = cb.closest(".devstack-comp-row");
+      const verSel = row?.querySelector("select.devstack-comp-ver");
+      if (verSel) verSel.disabled = !cb.checked;
+      refreshDevStacksEmptyHint();
+    });
+  });
+  refreshDevStacksEmptyHint();
+}
+
+function devStackEmptyListHtml() {
+  const presetKey = document.getElementById("devStackPreset")?.value?.trim() || "";
+  const preset = presetKey ? getDevStackPreset(presetKey) : null;
+  if (preset?.template) {
+    const sample = document.getElementById("devStackSampleData")?.checked ? " with sample content" : "";
+    const stackId = document.getElementById("devStackId")?.value?.trim() || preset.id || "";
+    return `<p class="devstack-empty-hint muted small">Ready stack <strong>${escapeHtml(preset.label || preset.template)}</strong>${sample} configured — not created yet. Click <strong>Create stack</strong>${stackId ? ` to save <code>${escapeHtml(stackId)}</code>` : ""}.</p>`;
+  }
+  const picked = collectDevStackComponents();
+  const stackId = document.getElementById("devStackId")?.value?.trim() || "";
+  if (picked.length) {
+    const summary = picked.map((c) => `${c.id}:${c.version}`).join(", ");
+    const idBit = stackId
+      ? ` Click <strong>Create stack</strong> to save <code>${escapeHtml(stackId)}</code>.`
+      : " Enter a stack id and click <strong>Create stack</strong>.";
+    return `<p class="devstack-empty-hint muted small"><strong>${picked.length} component(s) selected</strong> (${escapeHtml(summary)}) — not created yet.${idBit}</p>`;
+  }
+  return `<p class="devstack-empty-hint muted small">No dev stacks created yet. Pick a <strong>Quick preset</strong> or select components, then click <strong>Create stack</strong>.</p>`;
+}
+
+function refreshDevStacksEmptyHint() {
+  const el = document.getElementById("devStacksList");
+  if (!el || el.querySelector(".platform-stack-row")) return;
+  el.innerHTML = devStackEmptyListHtml();
+}
+
+function devStackIsRunning(state) {
+  const s = String(state || "").toLowerCase();
+  return s === "running" || s === "partial";
+}
+
+function devStackActionBtn(id, action, state) {
+  if (action === "destroy") {
+    return `<button type="button" class="ctrl-act ctrl-act--caution dev-stack-act" data-id="${escapeAttr(id)}" data-action="destroy" aria-label="Destroy ${escapeAttr(id)}">Destroy</button>`;
+  }
+  const running = devStackIsRunning(state);
+  const isStart = action === "start";
+  const disabled = (isStart && running) || (!isStart && !running);
+  const primary = !disabled;
+  const label = isStart ? "Start" : "Stop";
+  const tone = isStart ? "ctrl-act--safe" : "ctrl-act--caution";
+  const stateCls = disabled ? "platform-svc-act--inactive" : primary ? "platform-svc-act--primary" : "";
+  const dis = disabled ? " disabled" : "";
+  return `<button type="button" class="ctrl-act ${tone} platform-svc-act dev-stack-act ${stateCls}" data-id="${escapeAttr(id)}" data-action="${action}"${dis} aria-label="${escapeAttr(label)} ${escapeAttr(id)}">${label}</button>`;
+}
+
+function inferPlatformDeploymentMode(cfg, hasPlatformFile) {
+  const explicit = String(cfg?.deployment_mode || "").trim().toLowerCase();
+  if (explicit === "cloud" || explicit === "local") return explicit;
+  const dom = String(cfg?.base_domain || "").trim().toLowerCase();
+  if (dom && dom !== "lh") return "cloud";
+  const tls = String(cfg?.tls?.mode || cfg?.tls_mode || "").trim().toLowerCase();
+  if (tls === "acme") return "cloud";
+  const prof = String(cfg?.install_profile || "").trim();
+  if (/cloud|ai-cloud/.test(prof)) return "cloud";
+  if (hasPlatformFile === false) {
+    try {
+      const host = window.location.hostname || "";
+      if (host && !host.endsWith(".lh") && host !== "localhost" && host !== "127.0.0.1") {
+        return "cloud";
+      }
+    } catch (_) {
+      /* ignore */
+    }
+  }
+  return "local";
+}
+
+function applyPlatformDeploymentDefaults(mode, { userChangedDomain } = {}) {
+  const dom = document.getElementById("platformBaseDomain");
+  const tls = document.getElementById("platformTlsMode");
+  if (!dom || !tls) return;
+  if (mode === "cloud") {
+    if (!userChangedDomain && (dom.value === "lh" || !dom.value.trim())) {
+      dom.value = "dev.example.com";
+    }
+    if (tls.value === "mkcert") tls.value = "acme";
+  } else if (mode === "local") {
+    if (!userChangedDomain && (!dom.value.trim() || dom.value.includes("example.com"))) {
+      dom.value = "lh";
+    }
+    if (tls.value === "acme") tls.value = "mkcert";
+  }
+}
+
+function bindPlatformDeploymentAutoSelect() {
+  const modeEl = document.getElementById("platformDeploymentMode");
+  if (!modeEl || modeEl.dataset.bound === "1") return;
+  modeEl.dataset.bound = "1";
+  let domainTouched = false;
+  const domEl = document.getElementById("platformBaseDomain");
+  if (domEl) {
+    domEl.addEventListener("input", () => {
+      domainTouched = true;
+    });
+  }
+  modeEl.addEventListener("change", () => {
+    applyPlatformDeploymentDefaults(modeEl.value, { userChangedDomain: domainTouched });
+  });
+}
+
+async function loadPlatformTab() {
+  const statusEl = document.getElementById("platformConfigStatus");
+  const svcEl = document.getElementById("platformServicesList");
+  try {
+    const catalogData = await fetchPlatformJson("/api/platform/catalog");
+    loadDevStackPresetsCatalog(catalogData.dev_stack_presets || {});
+    renderDevStackPresets();
+    renderDevStackComponentPicker(catalogData.components || {});
+    const cfgData = await fetchPlatformJson("/api/platform/config");
+    const cfg = cfgData.config || {};
+    const hasPlatformFile = cfgData.has_platform_file !== false;
+    renderInstallProfileSelect(catalogData.profiles || {}, cfg.install_profile || "");
+    const dom = document.getElementById("platformBaseDomain");
+    const tls = document.getElementById("platformTlsMode");
+    const mode = document.getElementById("platformDeploymentMode");
+    const deployment = inferPlatformDeploymentMode(cfg, hasPlatformFile);
+    if (dom) dom.value = cfg.base_domain || (deployment === "cloud" ? "dev.example.com" : "lh");
+    if (tls) tls.value = (cfg.tls && cfg.tls.mode) || (deployment === "cloud" ? "acme" : "mkcert");
+    if (mode) mode.value = deployment;
+    bindPlatformDeploymentAutoSelect();
+    const svcData = await fetchPlatformJson("/api/platform/services");
+    renderPlatformServices(svcData.services || []);
+    const stData = await fetchPlatformJson("/api/dev-stacks");
+    renderDevStacksList(stData.stacks || []);
+    if (statusEl) statusEl.textContent = "";
+  } catch (e) {
+    if (svcEl) {
+      svcEl.innerHTML = `<p class="muted small">Could not load platform APIs. ${escapeHtml(String(e.message || e))}</p>`;
+    }
+    if (statusEl) statusEl.textContent = String(e.message || e);
+  }
+}
+
+function platformSvcActionBtn(id, action, running) {
+  const isStart = action === "start";
+  const disabled = (isStart && running) || (!isStart && !running);
+  const primary = !disabled;
+  const label = isStart ? "Start" : "Stop";
+  const tone = isStart ? "ctrl-act--safe" : "ctrl-act--caution";
+  const stateCls = disabled ? "platform-svc-act--inactive" : primary ? "platform-svc-act--primary" : "";
+  const dis = disabled ? " disabled" : "";
+  return `<button type="button" class="ctrl-act ${tone} platform-svc-act ${stateCls}" data-id="${escapeAttr(id)}" data-action="${action}"${dis} aria-label="${escapeAttr(label)} ${escapeAttr(id)}">${label}</button>`;
+}
+
+function renderPlatformServiceTile(s) {
+  const id = escapeHtml(String(s.id));
+  const lab = escapeHtml(String(s.label || s.id));
+  const running = !!s.running;
+  const st = running ? "running" : "stopped";
+  const en = s.enabled ? "enabled" : "disabled";
+  const tileCls = running ? "platform-svc-tile--running" : "platform-svc-tile--stopped";
+  return `<div class="platform-svc-tile ${tileCls}" data-id="${id}" data-running="${running ? "1" : "0"}">
+    <div class="platform-svc-tile__head">
+      <span class="platform-svc-tile__name">${lab}</span>
+      <span class="platform-svc-tile__meta muted">${id} · ${en} · ${st}</span>
+    </div>
+    <div class="platform-svc-tile__actions">
+      ${platformSvcActionBtn(String(s.id), "start", running)}
+      ${platformSvcActionBtn(String(s.id), "stop", running)}
+    </div>
+  </div>`;
+}
+
+function renderPlatformServices(services) {
+  const el = document.getElementById("platformServicesList");
+  if (!el) return;
+  if (!services.length) {
+    el.innerHTML = '<p class="muted small">No services.</p>';
+    return;
+  }
+  const ecosystem = services.filter((s) => (s.type || "ecosystem") === "ecosystem");
+  const bundles = services.filter((s) => s.type === "bundle");
+  const sections = [];
+  if (ecosystem.length) {
+    sections.push(
+      `<section class="platform-services-section">
+        <h4 class="platform-services-section__title">Ecosystem services</h4>
+        <div class="platform-services-grid">${ecosystem.map(renderPlatformServiceTile).join("")}</div>
+      </section>`,
+    );
+  }
+  if (bundles.length) {
+    sections.push(
+      `<section class="platform-services-section">
+        <h4 class="platform-services-section__title">Optional bundles</h4>
+        <div class="platform-services-grid">${bundles.map(renderPlatformServiceTile).join("")}</div>
+      </section>`,
+    );
+  }
+  el.innerHTML = sections.join("");
+  el.querySelectorAll(".platform-svc-act").forEach((btn) => {
+    btn.addEventListener("click", () => platformServiceAction(btn));
+  });
+}
+
+async function platformServiceAction(btn) {
+  if (btn.disabled) return;
+  const id = btn.getAttribute("data-id");
+  const action = btn.getAttribute("data-action");
+  const token = controlToken();
+  const res = await fetch(`/api/platform/services/${encodeURIComponent(id)}/action`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, token }),
+  });
+  const data = await res.json();
+  const statusEl = document.getElementById("platformConfigStatus");
+  if (statusEl) statusEl.textContent = data.output || JSON.stringify(data);
+  loadPlatformTab();
+}
+
+function devStackDualUrlRow(u) {
+  const label = u.label || u.role || "URL";
+  const httpUrl =
+    u.url_http || (typeof u.url === "string" && u.url.startsWith("http://") ? u.url : "");
+  if (httpUrl && httpUrl.includes(".lh")) {
+    return cfDualUrlRow(label, httpUrl);
+  }
+  const one = (u.url_https || u.url || "").trim();
+  if (!one) return "";
+  const oneA = escapeAttr(one);
+  return `<div class="row"><span>${escapeHtml(label)}</span><a href="${oneA}"${externalNavigationAttrs(one)}>${escapeHtml(one)}</a></div>`;
+}
+
+function devStackLoginLinks(c) {
+  const httpUrl = c.login_url_http || "";
+  const httpsUrl = c.login_url_https || c.login_url || "";
+  if (httpUrl && httpsUrl) {
+    return ` · <a href="${escapeAttr(httpUrl)}"${externalNavigationAttrs(httpUrl)}>Login (HTTP)</a> · <a href="${escapeAttr(httpsUrl)}"${externalNavigationAttrs(httpsUrl)}>Login (HTTPS)</a>`;
+  }
+  if (httpsUrl) {
+    return ` · <a href="${escapeAttr(httpsUrl)}"${externalNavigationAttrs(httpsUrl)}>Open login</a>`;
+  }
+  return "";
+}
+
+function renderDevStackAccessHtml(access, rawId) {
+  if (!access || typeof access !== "object") return "";
+  const urls = Array.isArray(access.urls) ? access.urls : [];
+  const creds = Array.isArray(access.credentials) ? access.credentials : [];
+  const notes = Array.isArray(access.notes) ? access.notes : [];
+  const urlRows = urls.map((u) => devStackDualUrlRow(u)).join("");
+  const credRows = creds
+    .map((c) => {
+      const login = devStackLoginLinks(c);
+      return `<li><strong>${escapeHtml(c.label || "Login")}:</strong> <code>${escapeHtml(c.username || "")}</code> / <code>${escapeHtml(c.password || "")}</code>${login}</li>`;
+    })
+    .join("");
+  const noteRows = notes.map((n) => `<li class="muted small">${escapeHtml(n)}</li>`).join("");
+  const resetBtn =
+    access.template === "wordpress" || access.template === "woocommerce"
+      ? `<button type="button" class="ctrl-act ctrl-act--ops dev-stack-reset-admin" data-id="${escapeAttr(rawId)}">Reset WP admin → admin / admin</button>`
+      : "";
+  return `<div class="devstack-access muted small">
+    ${access.hostname ? `<p><strong>Host:</strong> <code>${escapeHtml(access.hostname)}</code></p>` : ""}
+    ${urlRows ? `<div class="devstack-access__urls">${urlRows}</div>` : ""}
+    ${credRows ? `<ul class="devstack-access__creds">${credRows}</ul>` : ""}
+    ${noteRows ? `<ul class="devstack-access__notes">${noteRows}</ul>` : ""}
+    <p class="devstack-access__hint muted small">Routes: <code>hosting/traefik/20-dev-stacks.yml</code>. If the site 404s, use <strong>Apply Traefik routes</strong> above or <code>traefik.sh heal</code>.</p>
+    ${resetBtn}
+  </div>`;
+}
+
+function renderDevStacksList(stacks) {
+  const el = document.getElementById("devStacksList");
+  if (!el) return;
+  if (!stacks.length) {
+    el.innerHTML = devStackEmptyListHtml();
+    return;
+  }
+  el.innerHTML = stacks
+    .map((s) => {
+      const rawId = String(s.id);
+      const id = escapeHtml(rawId);
+      const name = escapeHtml(String(s.name || s.id));
+      const state = String(s.state || "unknown");
+      const st = escapeHtml(state);
+      const template = s.template ? escapeHtml(String(s.template)) : "";
+      const sampleTag = s.sample_data ? " · sample" : "";
+      const comps = (s.components || [])
+        .map((c) => escapeHtml(`${c.id || "?"}:${c.version || "?"}`))
+        .join(", ");
+      const rowCls = devStackIsRunning(state) ? "platform-stack-row--running" : "platform-stack-row--stopped";
+      const accessHtml = renderDevStackAccessHtml(s.access, rawId);
+      return `<div class="platform-stack-row ${rowCls}" data-id="${id}">
+        <div><strong>${name}</strong> <span class="muted small">(${id}) — ${st}${template ? ` · ${template}` : ""}${sampleTag}</span></div>
+        ${comps ? `<span class="muted small">${comps}</span>` : ""}
+        ${accessHtml}
+        <div class="platform-svc-tile__actions">
+          ${devStackActionBtn(rawId, "start", state)}
+          ${devStackActionBtn(rawId, "stop", state)}
+          ${devStackActionBtn(rawId, "destroy", state)}
+        </div>
+      </div>`;
+    })
+    .join("");
+  el.querySelectorAll(".dev-stack-act").forEach((btn) => {
+    btn.addEventListener("click", () => devStackAction(btn));
+  });
+  el.querySelectorAll(".dev-stack-reset-admin").forEach((btn) => {
+    btn.addEventListener("click", () => devStackResetAdmin(btn.getAttribute("data-id") || ""));
+  });
+}
+
+function setDevStackStatus(message, { error = false, pre = false } = {}) {
+  const statusEl = document.getElementById("devStackStatus");
+  if (!statusEl) return;
+  if (!message) {
+    statusEl.textContent = "";
+    statusEl.innerHTML = "";
+    return;
+  }
+  if (pre) {
+    statusEl.innerHTML = `<pre class="devstack-status-log${error ? " devstack-status-log--error" : ""}">${escapeHtml(message)}</pre>`;
+    return;
+  }
+  statusEl.textContent = message;
+}
+
+async function devStackResetAdmin(stackId) {
+  const statusEl = document.getElementById("devStackStatus");
+  if (dashboardTokenRequired() && !controlToken()) {
+    setDevStackStatus("Control token required — set it on the Control tab.");
+    return;
+  }
+  try {
+    const res = await fetch(`/api/dev-stacks/${encodeURIComponent(stackId)}/reset-admin`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: controlToken() }),
+    });
+    const data = await res.json();
+    setDevStackStatus(
+      data.ok ? data.message || "Admin reset." : data.error || JSON.stringify(data),
+      { error: !data.ok },
+    );
+    if (data.ok) await loadPlatformTab();
+  } catch (e) {
+    setDevStackStatus(String(e.message || e), { error: true });
+  }
+}
+
+async function devStackAction(btn) {
+  if (btn.disabled && btn.getAttribute("data-action") !== "destroy") return;
+  const id = btn.getAttribute("data-id");
+  const action = btn.getAttribute("data-action");
+  if (dashboardTokenRequired() && !controlToken()) {
+    setDevStackStatus("Control token required — set it on the Control tab.");
+    return;
+  }
+  if (action === "destroy") {
+    const ok = await showAppConfirm({
+      title: `Destroy ${id}`,
+      message:
+        "Stops all stack containers, deletes Docker volumes (database and app data), removes generated files under platform/dev-stacks/, clears platform config, and updates Traefik routes. This cannot be undone.",
+      confirmText: "Destroy",
+      danger: true,
+    });
+    if (!ok) return;
+  }
+  const token = controlToken();
+  const busyLabel =
+    action === "destroy" ? `Destroying ${id}…` : action === "start" ? `Starting ${id}…` : `Stopping ${id}…`;
+  setDevStackStatus(busyLabel);
+  try {
+    const res = await fetch(`/api/dev-stacks/${encodeURIComponent(id)}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, token }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      const head =
+        action === "destroy"
+          ? `Destroyed stack ${id}.`
+          : `${action === "start" ? "Started" : "Stopped"} ${id}.`;
+      const log = data.output ? String(data.output).trim() : "";
+      const warn = data.public_url_repair_warning ? `\n\nWarning: ${data.public_url_repair_warning}` : "";
+      const body = log ? `${head}\n\n${log}${warn}` : `${head}${warn}`;
+      setDevStackStatus(body, { pre: Boolean(log) });
+    } else {
+      const errBody = data.output || data.error || JSON.stringify(data);
+      setDevStackStatus(String(errBody).trim(), { error: true, pre: Boolean(data.output) });
+    }
+    _hostedDevStacksCache = null;
+    await loadPlatformTab();
+  } catch (e) {
+    setDevStackStatus(String(e.message || e), { error: true });
+  }
+}
+
+function initPlatformTab() {
+  bindPlatformDeploymentAutoSelect();
+  const saveBtn = document.getElementById("platformSaveConfig");
+  const applyBtn = document.getElementById("platformApplyTraefik");
+  const createBtn = document.getElementById("devStackCreate");
+  if (saveBtn) {
+    saveBtn.addEventListener("click", async () => {
+      const statusEl = document.getElementById("platformConfigStatus");
+      try {
+        const token = controlToken();
+        const cfgData = await fetchPlatformJson("/api/platform/config");
+        const cfg = cfgData.config || {};
+        cfg.base_domain = document.getElementById("platformBaseDomain")?.value || "lh";
+        cfg.deployment_mode = document.getElementById("platformDeploymentMode")?.value || "local";
+        cfg.tls = cfg.tls || {};
+        cfg.tls.mode = document.getElementById("platformTlsMode")?.value || "mkcert";
+        const profSel = document.getElementById("platformInstallProfile")?.value?.trim();
+        if (profSel) cfg.install_profile = profSel;
+        const data = await fetchPlatformJson("/api/platform/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ config: cfg, token }),
+        });
+        if (statusEl) statusEl.textContent = data.ok ? "Saved." : JSON.stringify(data);
+        loadPlatformTab();
+      } catch (e) {
+        if (statusEl) statusEl.textContent = String(e.message || e);
+      }
+    });
+  }
+  if (applyBtn) {
+    applyBtn.addEventListener("click", async () => {
+      const statusEl = document.getElementById("platformConfigStatus");
+      try {
+        const token = controlToken();
+        const data = await fetchPlatformJson("/api/platform/traefik/apply", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token }),
+        });
+        if (statusEl) statusEl.textContent = JSON.stringify(data);
+      } catch (e) {
+        if (statusEl) statusEl.textContent = String(e.message || e);
+      }
+    });
+  }
+  const presetSel = document.getElementById("devStackPreset");
+  if (presetSel && presetSel.dataset.bound !== "1") {
+    presetSel.dataset.bound = "1";
+    presetSel.addEventListener("change", () => {
+      const key = presetSel.value;
+      if (key) applyDevStackPreset(key);
+      else updateDevStackPresetUi("");
+      refreshDevStacksEmptyHint();
+    });
+  }
+  const sampleCb = document.getElementById("devStackSampleData");
+  if (sampleCb && sampleCb.dataset.bound !== "1") {
+    sampleCb.dataset.bound = "1";
+    sampleCb.addEventListener("change", refreshDevStacksEmptyHint);
+  }
+  if (createBtn) {
+    createBtn.addEventListener("click", async () => {
+      const statusEl = document.getElementById("devStackStatus");
+      const id = document.getElementById("devStackId")?.value?.trim();
+      const name = document.getElementById("devStackName")?.value?.trim() || id;
+      const presetKey = document.getElementById("devStackPreset")?.value?.trim() || "";
+      const preset = presetKey ? getDevStackPreset(presetKey) : null;
+      const components = collectDevStackComponents();
+      if (!id) {
+        if (statusEl) statusEl.textContent = "Stack id is required.";
+        return;
+      }
+      if (!preset && !components.length) {
+        if (statusEl) statusEl.textContent = "Select a preset or at least one component.";
+        return;
+      }
+      if (dashboardTokenRequired() && !controlToken()) {
+        if (statusEl) statusEl.textContent = "Control token required — set it on the Control tab.";
+        return;
+      }
+      createBtn.disabled = true;
+      if (statusEl) statusEl.textContent = `Creating stack ${id}…`;
+      try {
+        const token = controlToken();
+        const body = {
+          id,
+          name,
+          token,
+          sample_data: !!document.getElementById("devStackSampleData")?.checked,
+        };
+        if (presetKey) body.preset = presetKey;
+        else body.components = components;
+        const res = await fetch("/api/dev-stacks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          if (statusEl) statusEl.textContent = `Created stack “${id}”. Click Start on the stack below to run containers.`;
+        } else {
+          if (statusEl) statusEl.textContent = data.error || JSON.stringify(data);
+        }
+        _hostedDevStacksCache = null;
+        await loadPlatformTab();
+      } catch (e) {
+        if (statusEl) statusEl.textContent = String(e.message || e);
+      } finally {
+        createBtn.disabled = false;
+      }
+    });
+  }
+  ["devStackId", "devStackName"].forEach((fieldId) => {
+    const field = document.getElementById(fieldId);
+    if (field && field.dataset.bound !== "1") {
+      field.dataset.bound = "1";
+      field.addEventListener("input", refreshDevStacksEmptyHint);
+    }
+  });
+}
+
+initPlatformTab();
 
 bootstrap();
