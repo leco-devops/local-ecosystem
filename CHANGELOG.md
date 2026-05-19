@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **SRS — Cloud VM platform:** [`docs/SRS_CLOUD_VM_PLATFORM.md`](docs/SRS_CLOUD_VM_PLATFORM.md) — requirements for cloud VM install profiles, dev stacks, custom domain/TLS, and dashboard platform operations (branch `feature/cloud-vm-platform`).
+
 - **UI credential vault (local dev):** gitignored `config/ui-credentials.yaml`, registry JSON, Infrastructure **UI access** panel, hub actions, login-assist routes, and reset/apply for MinIO, MySQL, and PostgreSQL.
 - **CF ↔ LEco service map:** `docs/CF_LECO_SERVICE_MAP.md`, `ecosystem-stack/config/cf-leco-service-registry.json`, Docs catalog entry, and cross-links across help/samples.
 - **Control default policies:** per-target `start` / `stop` / `offloaded` with API, example JSON, and Infrastructure **Start stacks** shortcuts.

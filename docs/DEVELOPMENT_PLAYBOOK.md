@@ -125,5 +125,6 @@ When changing registration, materialization, or compose behavior, treat these as
 - **Read-only `wsp:` paths:** **`source`** symlink target and **config symlinks** (`configRefs`, `runtimes[].config`, wrangler scan; host `/workspace-parent` remap) live in **`dashboard/leco_detect.py`**, **`dashboard/leco_wrangler_paths.py`**, **`dashboard/leco_materialize.py`**, **`dashboard/hosting_layout.py`**.
 - **Teardown:** **`dashboard/control.py`** + **`dashboard/hosted_offboard.py`** — offboard after **`leco-devops down`** even on failure.
 - **Attached services:** **`dashboard/hosted_app_services.py`** builds snapshot `attached_services` (compose + runtimes + CF + labeled host/Docker connection URIs). Operator help: **`docs/help/12-hosted-app-attached-services.md`**; API/fields: **`docs/help/dev-08-hosted-app-services.md`**.
+- **Cloud VM platform (in progress):** Requirements **`docs/SRS_CLOUD_VM_PLATFORM.md`** on branch `feature/cloud-vm-platform`; implementation plan phases 1–7 (profiles, dev stacks, domain/TLS, platform UI).
 
 Operator-facing map: **[LECO_APP_BLUEPRINT.md](LECO_APP_BLUEPRINT.md)**. Dashboard **Docs** catalog: **`dashboard/docs_catalog.py`** (`leco-app-blueprint` id).
