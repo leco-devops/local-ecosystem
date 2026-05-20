@@ -1,0 +1,13 @@
+# URLs for sitemap.xml (GitHub Pages)
+- path: /
+  changefreq: weekly
+  priority: "1.0"
+- path: /llms.txt
+  changefreq: monthly
+  priority: "0.9"
+- path: /llms-full.txt
+  changefreq: monthly
+  priority: "0.85"
+- path: /ai.txt
+  changefreq: monthly
+  priority: "0.85"

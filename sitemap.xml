@@ -1,0 +1,15 @@
+---
+layout: null
+permalink: /sitemap.xml
+---
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+{% for entry in site.data.sitemap %}
+  <url>
+    <loc>{{ site.url }}{{ entry.path }}</loc>
+    <lastmod>{{ site.time | date_to_xmlschema }}</lastmod>
+    {% if entry.changefreq %}<changefreq>{{ entry.changefreq }}</changefreq>{% endif %}
+    {% if entry.priority %}<priority>{{ entry.priority }}</priority>{% endif %}
+  </url>
+{% endfor %}
+</urlset>
