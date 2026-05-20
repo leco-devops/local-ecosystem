@@ -1,0 +1,144 @@
+# =============================================================================
+# LECO LOCALHOST PROFILE — Cloudflare Worker as the API runtime
+# =============================================================================
+# REGISTRY KEYS
+#   infrastructure.runtimes[]
+#       → LEco generates docker-compose.leco-runtime.yml beside this file with
+#         one container per entry. The Cloudflare Workers adapter:
+#         * bind-mounts your upstream sourceDir at /app (read-only in spirit;
+#           write paths are masked by LEco-owned named volumes)
+#         * runs `wrangler dev --local` on the upstream wrangler.toml
+#         * sanitizes wrangler.toml in-container by stripping bindings that
+#           Wrangler local cannot simulate (default: [browser] → strip).
+#           Override with infrastructure.runtimes[].stripBindings (list or
+#           "none" to disable).
+#         * applies, on first boot, an optional D1 bootstrap SQL file under
+#           hosting/app-available/<slug>/.leco-runtime/<runtime_id>/ named
+#           d1-bootstrap-<BINDING>.sql (per binding) or d1-bootstrap.sql
+#           (fallback). Then runs `wrangler d1 migrations apply` in a
+#           resilient loop that tolerates per-file failures.
+#
+#   infrastructure.routing.entries[].upstream[]
+#       → which path prefix Traefik forwards to which upstream. Longest prefix
+#         wins (priority is derived from prefix length automatically — no
+#         manual priority math required). target=runtime points at one of the
+#         declared runtimes; target=service points at a Docker Compose service.
+#
+# ONBOARDING SHORTCUT
+#   `leco-devops runtimes -f leco.app.yaml` scans the resolved source root for
+#   Worker entrypoints (src/index.ts, worker.ts, …) and prints the URL paths
+#   it handles plus a copy-pasteable routing.upstream YAML block. The
+#   registration wizard surfaces the same hint when you click Register.
+# =============================================================================
+schemaVersion: 2
+archetype: generic
+infrastructure:
+  dockerCompose:
+    # Upstream stack's compose lives next to source root, mounted via the
+    # `source` symlink. The hosting overlay (lh-network + ports reset) and the
+    # runtime overlay (this sample) are merged on top automatically.
+    composeFile: ../docker-compose.yml
+    projectName: sample-cf-worker-runtime
+    additionalComposeFilesFromManifest:
+    - docker-compose.leco-hosting.yml
+    - docker-compose.leco-runtime.yml
+  runtimes:
+  - id: worker
+    # type drives which adapter under dashboard/leco_runtimes/ materializes it.
+    # cloudflare-workers is fully implemented in V1; cloudflare-pages, vercel,
+    # aws-lambda, and deno-deploy are known types on the roadmap.
+    type: cloudflare-workers
+    # path relative to the resolved manifest root (your upstream `source` link).
+    # Omit when the upstream repo *is* the worker dir.
+    sourceDir: cloudflare
+    config: wrangler.toml
+    port: 8787
+
+    # Operator-supplied secrets file. LEco bind-mounts it to /app/.dev.vars
+    # inside the runtime container — Wrangler reads it automatically. The
+    # field is OPTIONAL: if you simply drop a file named `.dev.vars` next to
+    # this leco.yaml, the runtime adapter auto-detects and mounts it without
+    # any manifest change. LEco also auto-generates `.dev.vars.example`
+    # listing every `env.<NAME>` reference the Worker source uses that is
+    # NOT declared in wrangler.toml `[vars]` or as a binding — grouped by
+    # vendor (LLM / Payments / Email / Cloudflare / Other) so you can fill
+    # values quickly. Existing `.dev.vars.example` is never overwritten.
+    devVarsFile: .dev.vars
+
+    # Optional: strip locally-incompatible bindings from a sanitized
+    # wrangler.toml overlay the runtime sees (upstream wrangler.toml is never
+    # edited on disk). Default = ["browser"]. Common reasons to override:
+    #   stripBindings: [browser, ai]   # drop both → forces local-only paths
+    #   stripBindings: "none"          # keep everything; rely on `wrangler dev --remote`
+    # See infra/runtimes/cloudflare-workers/README.md for the full list of
+    # bindings Wrangler local cannot simulate.
+
+    # Informational: list paid Cloudflare-platform features this Worker
+    # depends on in production that have no local equivalent. LEco surfaces
+    # them as `expected: production-only` badges in `leco-devops runtimes` and
+    # the dashboard. Defaults to: vectorize, analytics_engine_datasets,
+    # mtls_certificates. Bindings with local substitutes (browser → browser.lh,
+    # hyperdrive → postgres.lh, send_email → Mailpit) are no longer in the
+    # default badge list when the local service is available.
+    # Set to `none` to suppress the badge entirely.
+    # productionOnlyBindings:
+    # - vectorize
+    # - analytics_engine_datasets
+    #
+    # Local binding bridges (see docs/CF_LECO_SERVICE_MAP.md):
+    #   browser    → browser.lh (set LECO_LOCAL_BROWSER_URL to enable bridge)
+    #   hyperdrive → add DSN to .dev.vars: HYPERDRIVE_URL=postgres://user:pass@postgres.lh:5432/db
+    #   send_email → Mailpit SMTP: mailpit:1025 (Docker) or mailpit.lh:1025 (host)
+    # Full binding mapping: docs/CF_LECO_SERVICE_MAP.md
+
+  routing:
+    entries:
+    - hostname: sample.lh
+      # Longer prefixes win automatically (priority = prefix length). Order
+      # within this list does not matter, but readability-first matches the
+      # production Worker's request switch:
+      upstream:
+      # All /api/* hits the local Worker (production-faithful).
+      - prefix: /api
+        target: runtime
+        runtime: worker
+      # Operations / health endpoints the Worker handles too. Examples to copy
+      # for your own app — the registration wizard auto-detects these from
+      # your Worker source and prints a ready-to-paste block.
+      # - prefix: /health/json
+      #   target: runtime
+      #   runtime: worker
+      # - prefix: /metrics
+      #   target: runtime
+      #   runtime: worker
+      # Catch-all → SPA. Replace host/port to match your frontend service.
+      - prefix: /
+        target: service
+        service:
+          host: sample-frontend
+          port: 3000
+
+urls:
+- role: frontend
+  label: Main app (HTTPS)
+  publicUrl: https://sample.lh
+- role: api
+  label: API via local Worker
+  publicUrl: https://sample.lh/api
+lifecycle:
+  prepare: []
+  build: []
+  preStart: []
+notes: |
+  Wire-up summary:
+  - LEco generates `docker-compose.leco-runtime.yml` (gitignored under
+    hosting/app-available/<slug>/) the first time onboarding runs.
+  - `leco-devops runtimes -f leco.app.yaml` confirms the adapter is wired AND
+    surfaces a routing.upstream YAML hint based on a scan of the Worker source.
+  - First boot applies any d1-bootstrap*.sql under
+    `hosting/app-available/<slug>/.leco-runtime/<runtime_id>/`, then runs
+    `wrangler d1 migrations apply` resiliently (per-file failure tolerated).
+  - Traefik forwards `https://<slug>.lh/api/*` to `leco-rt-<slug>-worker:8787`.
+    The SPA on `/` keeps using its compose service unchanged. Production
+    behavior is reproduced locally — when the Worker 404s, the local stack
+    404s too (no silent fallback).

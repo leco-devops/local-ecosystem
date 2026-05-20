@@ -1,0 +1,341 @@
+{
+  "ok": true,
+  "generated_at": "2026-05-20T05:49:32Z",
+  "services": [
+    {
+      "id": "traefik",
+      "label": "Traefik",
+      "container": "traefik",
+      "running_image": null,
+      "status": "not_running",
+      "upgrade_help": "deploy-rebuild",
+      "upgrade_steps": [
+        "Edit traefik/dynamic.yml in git if stack routes changed",
+        "./ecosystem-stack/ecosystem-stack.sh heal traefik"
+      ],
+      "source": "docker_hub",
+      "latest": {
+        "tag": "v1.0.0",
+        "updated": "2016-07-06T14:39:02.186778Z",
+        "full": "traefik:v1.0.0"
+      }
+    },
+    {
+      "id": "ollama",
+      "label": "Ollama",
+      "container": "ollama",
+      "running_image": null,
+      "status": "not_running",
+      "upgrade_help": "deploy-rebuild",
+      "upgrade_steps": [
+        "./ecosystem-stack/ecosystem-stack.sh restart ollama",
+        "Models persist in Docker volume ollama"
+      ],
+      "source": "docker_hub",
+      "latest": {
+        "tag": "0.0.13",
+        "updated": "2023-08-04T04:30:07.039025Z",
+        "full": "ollama/ollama:0.0.13"
+      }
+    },
+    {
+      "id": "airllm",
+      "label": "AirLLM shim",
+      "container": "airllm",
+      "running_image": null,
+      "status": "not_running",
+      "upgrade_help": "deploy-rebuild",
+      "upgrade_steps": [
+        "./leco-cli.sh airllm build",
+        "./leco-cli.sh airllm start"
+      ],
+      "source": "local_image",
+      "latest": {
+        "full": "local-airllm:latest"
+      }
+    },
+    {
+      "id": "webui",
+      "label": "Open WebUI",
+      "container": "open-webui",
+      "running_image": null,
+      "status": "not_running",
+      "upgrade_help": "deploy-rebuild",
+      "upgrade_steps": [
+        "./ecosystem-stack/ecosystem-stack.sh restart webui"
+      ],
+      "source": "docker_hub",
+      "latest": {
+        "tag": "0.9.5",
+        "updated": "2026-05-10T18:14:07Z",
+        "full": "ghcr.io/open-webui/open-webui:0.9.5"
+      }
+    },
+    {
+      "id": "n8n",
+      "label": "n8n",
+      "container": "n8n",
+      "running_image": null,
+      "status": "not_running",
+      "upgrade_help": "deploy-rebuild",
+      "upgrade_steps": [
+        "./ecosystem-stack/ecosystem-stack.sh restart n8n"
+      ],
+      "source": "docker_hub",
+      "latest": {
+        "tag": "0.1.2",
+        "updated": "2019-06-23T15:34:57.369403Z",
+        "full": "n8nio/n8n:0.1.2"
+      }
+    },
+    {
+      "id": "postgres",
+      "label": "PostgreSQL (n8n)",
+      "container": "n8n_postgres",
+      "running_image": null,
+      "status": "not_running",
+      "upgrade_help": "deploy-rebuild",
+      "upgrade_steps": [
+        "Back up n8n data before major Postgres upgrades",
+        "./ecosystem-stack/ecosystem-stack.sh restart postgres"
+      ],
+      "source": "docker_hub",
+      "latest": {
+        "tag": "9.1.16",
+        "updated": "2015-06-03T02:21:53Z",
+        "full": "postgres:9.1.16"
+      }
+    },
+    {
+      "id": "dashboard",
+      "label": "LEco DevOps dashboard",
+      "container": "service-dashboard",
+      "running_image": null,
+      "status": "not_running",
+      "upgrade_help": "deploy-rebuild",
+      "upgrade_steps": [
+        "./ecosystem-stack/ecosystem-stack.sh restart dashboard",
+        "Or: bash ./ecosystem-stack/services/dashboard.sh deploy"
+      ],
+      "source": "local_image",
+      "latest": {
+        "full": "local/service-dashboard:latest"
+      }
+    }
+  ],
+  "service_updates_available": 0,
+  "model_alerts": [
+    {
+      "type": "ollama_model",
+      "name": "cogito-2.1:671b",
+      "message": "New or trending on Ollama library: cogito-2.1:671b",
+      "install": "./leco-cli.sh ollama install cogito-2.1:671b",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "deepseek-v3.1:671b",
+      "message": "New or trending on Ollama library: deepseek-v3.1:671b",
+      "install": "./leco-cli.sh ollama install deepseek-v3.1:671b",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "deepseek-v3.2",
+      "message": "New or trending on Ollama library: deepseek-v3.2",
+      "install": "./leco-cli.sh ollama install deepseek-v3.2",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "deepseek-v4-flash",
+      "message": "New or trending on Ollama library: deepseek-v4-flash",
+      "install": "./leco-cli.sh ollama install deepseek-v4-flash",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "deepseek-v4-pro",
+      "message": "New or trending on Ollama library: deepseek-v4-pro",
+      "install": "./leco-cli.sh ollama install deepseek-v4-pro",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "devstral-2:123b",
+      "message": "New or trending on Ollama library: devstral-2:123b",
+      "install": "./leco-cli.sh ollama install devstral-2:123b",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "devstral-small-2:24b",
+      "message": "New or trending on Ollama library: devstral-small-2:24b",
+      "install": "./leco-cli.sh ollama install devstral-small-2:24b",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "gemini-3-flash-preview",
+      "message": "New or trending on Ollama library: gemini-3-flash-preview",
+      "install": "./leco-cli.sh ollama install gemini-3-flash-preview",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "gemma3:12b",
+      "message": "New or trending on Ollama library: gemma3:12b",
+      "install": "./leco-cli.sh ollama install gemma3:12b",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "gemma3:27b",
+      "message": "New or trending on Ollama library: gemma3:27b",
+      "install": "./leco-cli.sh ollama install gemma3:27b",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "gemma3:4b",
+      "message": "New or trending on Ollama library: gemma3:4b",
+      "install": "./leco-cli.sh ollama install gemma3:4b",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "gemma4:31b",
+      "message": "New or trending on Ollama library: gemma4:31b",
+      "install": "./leco-cli.sh ollama install gemma4:31b",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "glm-4.6",
+      "message": "New or trending on Ollama library: glm-4.6",
+      "install": "./leco-cli.sh ollama install glm-4.6",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "glm-4.7",
+      "message": "New or trending on Ollama library: glm-4.7",
+      "install": "./leco-cli.sh ollama install glm-4.7",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "glm-5",
+      "message": "New or trending on Ollama library: glm-5",
+      "install": "./leco-cli.sh ollama install glm-5",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "glm-5.1",
+      "message": "New or trending on Ollama library: glm-5.1",
+      "install": "./leco-cli.sh ollama install glm-5.1",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "gpt-oss:120b",
+      "message": "New or trending on Ollama library: gpt-oss:120b",
+      "install": "./leco-cli.sh ollama install gpt-oss:120b",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "gpt-oss:20b",
+      "message": "New or trending on Ollama library: gpt-oss:20b",
+      "install": "./leco-cli.sh ollama install gpt-oss:20b",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "kimi-k2-thinking",
+      "message": "New or trending on Ollama library: kimi-k2-thinking",
+      "install": "./leco-cli.sh ollama install kimi-k2-thinking",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "kimi-k2.5",
+      "message": "New or trending on Ollama library: kimi-k2.5",
+      "install": "./leco-cli.sh ollama install kimi-k2.5",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "kimi-k2.6",
+      "message": "New or trending on Ollama library: kimi-k2.6",
+      "install": "./leco-cli.sh ollama install kimi-k2.6",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "kimi-k2:1t",
+      "message": "New or trending on Ollama library: kimi-k2:1t",
+      "install": "./leco-cli.sh ollama install kimi-k2:1t",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "minimax-m2",
+      "message": "New or trending on Ollama library: minimax-m2",
+      "install": "./leco-cli.sh ollama install minimax-m2",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "minimax-m2.1",
+      "message": "New or trending on Ollama library: minimax-m2.1",
+      "install": "./leco-cli.sh ollama install minimax-m2.1",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "minimax-m2.5",
+      "message": "New or trending on Ollama library: minimax-m2.5",
+      "install": "./leco-cli.sh ollama install minimax-m2.5",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "minimax-m2.7",
+      "message": "New or trending on Ollama library: minimax-m2.7",
+      "install": "./leco-cli.sh ollama install minimax-m2.7",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "ministral-3:14b",
+      "message": "New or trending on Ollama library: ministral-3:14b",
+      "install": "./leco-cli.sh ollama install ministral-3:14b",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "ministral-3:3b",
+      "message": "New or trending on Ollama library: ministral-3:3b",
+      "install": "./leco-cli.sh ollama install ministral-3:3b",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "ministral-3:8b",
+      "message": "New or trending on Ollama library: ministral-3:8b",
+      "install": "./leco-cli.sh ollama install ministral-3:8b",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "mistral-large-3:675b",
+      "message": "New or trending on Ollama library: mistral-large-3:675b",
+      "install": "./leco-cli.sh ollama install mistral-large-3:675b",
+      "help": "ollama"
+    }
+  ],
+  "ollama_new_count": 39,
+  "airllm_catalog_count": 19
+}

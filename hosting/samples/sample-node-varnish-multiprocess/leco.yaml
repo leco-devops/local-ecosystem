@@ -1,0 +1,33 @@
+# Node.js multi-process + Varnish: operator profile for LEco DevOps.
+# Adjust hostnames, service names, ports, and URLs to match your app.
+schemaVersion: 2
+archetype: node
+infrastructure:
+  dockerCompose:
+    composeFile: docker-compose.yml
+    projectName: my-app                          # ← docker compose -p name
+    additionalComposeFilesFromManifest:
+      - docker-compose.leco-hosting.yml          # ← hosting overlay (lh-network, preloader)
+  routing:
+    entries:
+      - hostname: my-app.lh                      # ← Traefik hostname (*.lh)
+        backendHost: my-app-varnish               # ← container_name of Varnish (or server if no cache)
+        backendPort: 80                           # ← Varnish default port (or 3000 for direct Express)
+  healthcheckUrls:
+    - http://my-app-server:3000/health            # ← internal healthcheck (container_name:port/path)
+urls:
+  - role: api
+    label: Main server (HTTPS)
+    publicUrl: https://my-app.lh/health           # ← URL probe (must return 200)
+  - role: api
+    label: Main server (HTTP)
+    publicUrl: http://my-app.lh/health
+lifecycle:
+  prepare: []
+  build: []
+  preStart: []
+notes: >-
+  Multi-process Node.js with Varnish HTTP cache. Traefik routes my-app.lh to
+  Varnish (port 80), which proxies to Express (port 3000). Worker processes
+  share MongoDB and Redis. Config patched at runtime by leco-docker-preload.js.
+  Custom service configs in conf/<service>/. See leco.app.yaml for full docs.

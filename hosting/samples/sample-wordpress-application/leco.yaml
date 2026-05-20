@@ -1,0 +1,30 @@
+# WordPress: compose brings up wordpress + database (MySQL/MariaDB) and optional redis object cache.
+schemaVersion: 2
+archetype: wordpress
+infrastructure:
+  dockerCompose:
+    composeFile: docker-compose.yml
+    projectName: wp-sample
+    envFile: .env
+  healthcheckUrls:
+    - http://127.0.0.1:8080/
+  routing:
+    entries:
+      - hostname: wp-sample.lh
+        backendHost: wordpress
+        backendPort: 80
+urls:
+  - role: frontend
+    label: Public site
+    publicUrl: https://wp-sample.lh
+  - role: admin
+    label: WP Admin
+    publicUrl: https://wp-sample.lh/wp-admin
+lifecycle:
+  prepare: []
+  build: []
+  preStart: []
+notes: >-
+  Expected docker-compose services (names are examples — match your compose file): wordpress (or php-fpm +
+  nginx), db (mysql/mariadb), optional redis for object cache. Map Traefik backendHost/backendPort to the
+  service that serves HTTP inside the stack.

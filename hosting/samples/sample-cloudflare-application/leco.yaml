@@ -1,0 +1,38 @@
+# Cloudflare application: local KV / R2 / D1 come from wrangler.toml (wranglerConfig).
+# wranglerBindingPreview mirrors bindings for review; provision still reads the wrangler file.
+schemaVersion: 2
+archetype: node
+infrastructure:
+  cloudflare:
+    wranglerConfig: wrangler.toml
+    wranglerEnv: ''
+    provisionLocalResources: true
+  wranglerBindingPreview:
+    note: >-
+      One local resource per row: KV namespaces, R2 buckets, D1 databases on cloudflare-local adapters.
+      Regenerate from dashboard Generate/Save YAML when wrangler.toml changes.
+    wranglerEnv: ''
+    kv:
+      - binding: CACHE
+        cfId: cloudflare-app-cache-local
+      - binding: SESSIONS
+        cfId: cloudflare-app-sessions-local
+      - binding: RATE_LIMIT
+        cfId: cloudflare-app-ratelimit-local
+    r2:
+      - binding: UPLOADS
+        bucketName: cloudflare-app-uploads-local
+    d1:
+      - binding: METADATA
+        databaseName: cloudflare-app-metadata-local
+urls:
+  - role: other
+    label: Worker (production)
+    publicUrl: https://example.workers.dev
+lifecycle:
+  prepare: []
+  build: []
+  preStart: []
+notes: >-
+  Place wrangler.toml beside this file. Optional: add dockerCompose if the same repo runs sidecar
+  containers (e.g. local API) alongside the Worker.

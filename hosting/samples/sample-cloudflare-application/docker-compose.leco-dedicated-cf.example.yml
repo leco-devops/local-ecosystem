@@ -1,0 +1,79 @@
+# Per-app Cloudflare-local adapters (Valkey, MinIO, kv/r2/d1 adapters).
+# Copy beside your main compose file, set LECO_CF_ROOT in .env to the absolute path of
+# this repo's cloudflare-local directory, then merge via infrastructure.dockerCompose.additionalComposeFiles.
+#
+# Services join lh-network so service-dashboard (and Traefik) can provision/teardown from Docker DNS.
+# They also use the compose project default network so your app containers can reach leco-local-* hostnames.
+
+services:
+  leco-local-valkey:
+    image: valkey/valkey:8
+    command: valkey-server --appendonly yes
+    volumes:
+      - leco_local_valkey_data:/data
+    networks:
+      - default
+      - lh-network
+
+  leco-local-minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - leco_local_minio_data:/data
+    networks:
+      - default
+      - lh-network
+
+  leco-local-kv-adapter:
+    build:
+      context: ${LECO_CF_ROOT}/adapters/kv-adapter
+    environment:
+      KV_REDIS_URL: redis://leco-local-valkey:6379/0
+    depends_on:
+      - leco-local-valkey
+    networks:
+      - default
+      - lh-network
+
+  leco-local-r2-adapter:
+    build:
+      context: ${LECO_CF_ROOT}/adapters/r2-adapter
+    environment:
+      R2_S3_ENDPOINT: leco-local-minio:9000
+      R2_ACCESS_KEY: minioadmin
+      R2_SECRET_KEY: minioadmin
+      R2_SECURE: "false"
+      R2_DEFAULT_REGION: auto
+    depends_on:
+      - leco-local-minio
+    networks:
+      - default
+      - lh-network
+
+  leco-local-d1-adapter:
+    build:
+      context: ${LECO_CF_ROOT}/adapters/d1-adapter
+    environment:
+      D1_DATA_DIR: /data
+      D1_BACKUP_DIR: /backups
+      D1_MIGRATIONS_DIR: /migrations
+    volumes:
+      - leco_local_d1_data:/data
+      - leco_local_d1_backups:/backups
+      - ${LECO_CF_ROOT}/migrations:/migrations:ro
+    networks:
+      - default
+      - lh-network
+
+volumes:
+  leco_local_valkey_data:
+  leco_local_minio_data:
+  leco_local_d1_data:
+  leco_local_d1_backups:
+
+networks:
+  lh-network:
+    external: true

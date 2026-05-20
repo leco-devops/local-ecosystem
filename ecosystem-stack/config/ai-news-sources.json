@@ -1,0 +1,63 @@
+{
+  "_comment": "RSS/Atom feeds for dashboard AI news aggregator. Add feeds with category + default tags.",
+  "cache_ttl_seconds": 900,
+  "max_items_per_feed": 15,
+  "max_items_total": 80,
+  "default_categories": [
+    "research",
+    "products",
+    "open-source",
+    "local-llm",
+    "tools",
+    "policy"
+  ],
+  "feeds": [
+    {
+      "id": "openai-blog",
+      "title": "OpenAI Blog",
+      "url": "https://openai.com/blog/rss.xml",
+      "category": "products",
+      "tags": ["openai", "products"]
+    },
+    {
+      "id": "huggingface-blog",
+      "title": "Hugging Face Blog",
+      "url": "https://huggingface.co/blog/feed.xml",
+      "category": "open-source",
+      "tags": ["huggingface", "models"]
+    },
+    {
+      "id": "ollama-blog",
+      "title": "Ollama Blog",
+      "url": "https://ollama.com/blog/rss.xml",
+      "category": "local-llm",
+      "tags": ["ollama", "local"]
+    },
+    {
+      "id": "google-ai-blog",
+      "title": "Google AI Blog",
+      "url": "https://blog.google/technology/ai/rss/",
+      "category": "products",
+      "tags": ["google", "gemini"]
+    },
+    {
+      "id": "anthropic-news",
+      "title": "Anthropic News",
+      "url": "https://www.anthropic.com/rss.xml",
+      "category": "products",
+      "tags": ["anthropic", "claude"]
+    },
+    {
+      "id": "arxiv-cs-ai",
+      "title": "arXiv cs.AI (recent)",
+      "url": "http://export.arxiv.org/rss/cs.AI",
+      "category": "research",
+      "tags": ["arxiv", "research"]
+    }
+  ],
+  "keyword_hints": {
+    "local-llm": ["ollama", "llama.cpp", "local inference", "on-device", "quantization"],
+    "tools": ["sdk", "api", "framework", "release", "benchmark"],
+    "policy": ["regulation", "safety", "alignment", "governance"]
+  }
+}

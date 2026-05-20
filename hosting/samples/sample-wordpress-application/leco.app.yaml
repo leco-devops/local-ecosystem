@@ -1,0 +1,40 @@
+# =============================================================================
+# LEco ↔ APPLICATION BRIDGE  (leco.app.yaml) — WordPress
+# =============================================================================
+# BRIDGE ROLE
+#   Identifies the WordPress stack for the ecosystem registry and resolves the
+#   directory where docker-compose.yml and .env live. PHP/DB/Volumes are not
+#   declared here — they belong in leco.yaml → infrastructure.dockerCompose and
+#   your compose file.
+#
+# ROOT vs COMPOSE
+#   resolved_root is where compose paths are interpreted. composeFile in the
+#   profile is relative to that root (e.g. docker-compose.yml in the repo root).
+#
+# TRAEFIK & OPS
+#   Routing hostnames and backend service:port targets are in leco.yaml →
+#   infrastructure.routing; leco-devops merges them into hosting/traefik/dynamic.yml when
+#   configured. healthcheckUrls in the profile drive status probes.
+#
+# REGISTRY
+#   name must stay stable; changing it is treated as a different app in
+#   leco-registry.yaml (unregister old id before renaming).
+#
+# CONFIG REFS
+#   Compose + env + WordPress config paths relative to resolved_root.
+# =============================================================================
+lecoAppVersion: '3'
+applicationVersion: '0.1.0-sample'
+name: sample-wordpress-application
+root: .
+localHostProfile: leco.yaml
+configRefs:
+  dockerComposeFile: docker-compose.yml
+  envFile: .env
+  wordpressConfigPhp: wp-config.php
+localhost:
+  notes: |
+    [BRIDGE — WordPress]
+    leco.yaml carries archetype wordpress, dockerCompose, routing (wp-sample.lh →
+    wordpress:80), urls for frontend/admin, and health checks. Align compose
+    service names with routing.backendHost / split-route targets.

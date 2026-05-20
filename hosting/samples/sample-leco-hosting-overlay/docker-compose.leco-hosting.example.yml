@@ -1,0 +1,37 @@
+# Example LEco hosting overlay (rename to docker-compose.leco-hosting.yml next to leco.app.yaml).
+# Wire it from leco.yaml:
+#   infrastructure:
+#     dockerCompose:
+#       composeFile: docker-compose.yml   # or ../docker-compose.yml if root: source
+#       additionalComposeFilesFromManifest:
+#         - docker-compose.leco-hosting.yml
+#
+# Replace my-frontend / my-backend with the real service names from your upstream compose file.
+# For split Traefik routes (Host + PathPrefix /api), set browser same-origin on *.lh:
+#   REACT_APP_SITE_URL + REACT_APP_BACKEND_URL="" (CrawlerVision api.js pattern), or VITE_API_URL="".
+
+services:
+  my-frontend:
+    ports: !reset []
+    networks:
+      - default
+      - lh-network
+    environment:
+      REACT_APP_SITE_URL: ${REACT_APP_SITE_URL:-https://myapp.lh}
+      REACT_APP_BACKEND_URL: ""
+      REACT_APP_API_BASE: ${REACT_APP_API_BASE:-https://myapp.lh/api}
+
+  my-backend:
+    ports: !reset []
+    networks:
+      - default
+      - lh-network
+    environment:
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://myapp.lh,https://myapp.lh}
+
+  my-database:
+    ports: !reset []
+
+networks:
+  lh-network:
+    external: true

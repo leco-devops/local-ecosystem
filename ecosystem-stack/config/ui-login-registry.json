@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "services": [
+    {
+      "id": "n8n",
+      "hub_slug": "n8n",
+      "label": "n8n",
+      "login_url": "http://n8n.lh",
+      "auth_type": "json_post",
+      "submit_path": "/rest/login",
+      "internal_login_url": "http://n8n:5678/rest/login",
+      "session_mode": "cookie",
+      "form_fields": {
+        "emailOrLdapLoginId": "email",
+        "password": "password"
+      },
+      "default_credentials": {
+        "email": "admin@local.lh",
+        "password": "Localdev1"
+      },
+      "reset_handler": "n8n_volume",
+      "container": "n8n",
+      "restart_service": "n8n",
+      "compose_stack": "ecosystem-stack"
+    },
+    {
+      "id": "webui",
+      "hub_slug": "webui",
+      "label": "Open WebUI",
+      "login_url": "http://ai.lh",
+      "auth_type": "json_post",
+      "submit_path": "/api/v1/auths/signin",
+      "internal_login_url": "http://open-webui:8080/api/v1/auths/signin",
+      "session_mode": "local_storage",
+      "session_storage_key": "token",
+      "form_fields": {
+        "email": "email",
+        "password": "password"
+      },
+      "default_credentials": {
+        "email": "admin@local.lh",
+        "password": "Localdev1",
+        "name": "Admin Local"
+      },
+      "reset_handler": "webui_volume",
+      "container": "open-webui",
+      "restart_service": "open-webui",
+      "compose_stack": "ecosystem-stack"
+    },
+    {
+      "id": "minio",
+      "hub_slug": "minio",
+      "label": "MinIO Console",
+      "login_url": "http://minio-console.lh",
+      "auth_type": "json_post",
+      "submit_path": "/api/v1/login",
+      "internal_login_url": "http://minio:9001/api/v1/login",
+      "session_mode": "cookie",
+      "form_fields": {
+        "accessKey": "username",
+        "secretKey": "password"
+      },
+      "default_credentials": {
+        "username": "minioadmin",
+        "password": "minioadmin"
+      },
+      "reset_handler": "minio",
+      "container": "minio",
+      "restart_service": "minio",
+      "compose_stack": "cloudflare-local"
+    },
+    {
+      "id": "mysql",
+      "hub_slug": "mysql",
+      "label": "Adminer (MySQL)",
+      "login_url": "http://adminer.lh",
+      "auth_type": "form_post",
+      "form_action": "http://adminer.lh",
+      "form_fields": {
+        "auth[driver]": "driver",
+        "auth[server]": "server",
+        "auth[username]": "username",
+        "auth[password]": "password",
+        "auth[db]": "database"
+      },
+      "default_credentials": {
+        "driver": "server",
+        "server": "mysql",
+        "username": "root",
+        "password": "localdev",
+        "database": ""
+      },
+      "reset_handler": "mysql",
+      "container": "mysql",
+      "restart_service": "mysql",
+      "compose_stack": "infra"
+    },
+    {
+      "id": "postgres",
+      "hub_slug": "postgres",
+      "label": "Adminer (PostgreSQL)",
+      "login_url": "http://adminer.lh",
+      "auth_type": "form_post",
+      "form_action": "http://adminer.lh",
+      "form_fields": {
+        "auth[driver]": "driver",
+        "auth[server]": "server",
+        "auth[username]": "username",
+        "auth[password]": "password",
+        "auth[db]": "database"
+      },
+      "default_credentials": {
+        "driver": "pgsql",
+        "server": "n8n_postgres",
+        "username": "postgres",
+        "password": "password",
+        "database": "n8n"
+      },
+      "reset_handler": "postgres",
+      "container": "n8n_postgres",
+      "restart_service": "n8n_postgres",
+      "compose_stack": "ecosystem-stack"
+    }
+  ]
+}

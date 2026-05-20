@@ -1,0 +1,32 @@
+{
+  "project": "LEco DevOps Open Project",
+  "application": "LEco DevOps",
+  "version": "0.3.0",
+  "released": "2026-05-16",
+  "license": "MIT",
+  "schema": 1,
+  "components": {
+    "platform": {
+      "name": "LEco DevOps platform",
+      "version": "0.3.0",
+      "paths": ["ecosystem-stack/", "dashboard/", "traefik/", "hosting/"]
+    },
+    "leco_cli": {
+      "name": "leco-devops",
+      "package": "leco-app",
+      "version": "0.1.10",
+      "path": "tools/deploy-cli/"
+    },
+    "update_catalog": {
+      "name": "leco-update-catalog",
+      "version": "1.0.0",
+      "path": "ecosystem-stack/update-catalog/"
+    }
+  },
+  "documentation": {
+    "changelog": "CHANGELOG.md",
+    "release_notes_index": "docs/RELEASE_NOTES.md",
+    "versioning_policy": "docs/VERSIONING.md",
+    "releases_dir": "releases/"
+  }
+}

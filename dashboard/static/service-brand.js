@@ -65,7 +65,7 @@
     "Open WebUI": "open-webui",
     n8n: "n8n",
     Ollama: "ollama",
-    "Service Dashboard": "dashboard",
+    "LEco DevOps": "dashboard",
     PostgreSQL: "postgres",
     "R2 (Cloudflare local)": "r2",
     "KV (Cloudflare local)": "kv",
@@ -95,6 +95,7 @@
     "cf-compose": "🧩",
     "cf-stack": "🌐",
     ecosystem: "🎛️",
+    leco: "📦",
     infra: "🏗️",
     default: "📌",
   };
@@ -158,6 +159,9 @@
     ecosystem: svg(
       "M6 4h4v4H6V4zm8 0h4v4h-4V4zM6 10h4v4H6v-4zm8 0h4v4h-4v-4zM6 16h4v4H6v-4zm8 0h4v4h-4v-4z",
     ),
+    leco: svg(
+      "M4 7h6v10H4V7zm8-3h8v6h-8V4zm0 8h5v9h-5v-9zm7 0h5v5h-5V12z",
+    ),
     infra: svg(
       "M4 6h6v5H4V6zm10 0h6v5h-6V6zM4 13h6v7H4v-7zm10 3h6v4h-6v-4zM4 4h16v1H4V4zm0 12h6v1H4v-1zm10 3h6v1h-6v-1z",
     ),
@@ -165,6 +169,7 @@
 
   function getBrandForControlTarget(t) {
     if (!t || !t.id) return "default";
+    if (String(t.id).startsWith("leco-stack-")) return "leco";
     return CONTROL_TARGET_BRAND[t.id] || "default";
   }
 

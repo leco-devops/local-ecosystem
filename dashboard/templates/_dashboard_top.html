@@ -1,0 +1,61 @@
+{# Shared header + primary nav. Set link_tabs + nav_hub_active on hub pages before include. #}
+{% set link_tabs = link_tabs|default(false) %}
+{% set nav_hub_active = nav_hub_active|default(false) %}
+<header class="page-header">
+  <div class="header-main">
+    <h1>LEco DevOps</h1>
+    <div id="summary" class="header-status">Loading…</div>
+    <details class="header-more">
+      <summary>Deploy &amp; system metrics</summary>
+      <p class="small muted">
+        Rebuild:
+        <code>./ecosystem-stack/ecosystem-stack.sh restart dashboard</code>
+        ·
+        <code>bash ./ecosystem-stack/services/dashboard.sh deploy</code>
+      </p>
+      <p class="small muted">
+        Linux: mount <code>/proc</code> for host CPU/RAM/net/IOPS. Temperature uses <code>/sys/class/thermal</code> (host via <code>DASHBOARD_HOST_SYS</code>, or the container’s own <code>/sys</code> when zones exist). Docker Desktop: thermal may still be empty; see the Metrics “Host CPU temperature” card for status.
+      </p>
+    </details>
+  </div>
+  <div class="toolbar">
+    <label class="sr-only" for="refreshRate">Auto refresh</label>
+    <select id="refreshRate" title="Auto refresh interval">
+      <option value="5000">5s</option>
+      <option value="10000" selected>10s</option>
+      <option value="30000">30s</option>
+      <option value="60000">60s</option>
+      <option value="0">Manual</option>
+    </select>
+    <button type="button" id="refreshNow">Refresh now</button>
+    <span id="nextRefresh" class="small"></span>
+  </div>
+</header>
+
+<nav class="tabs" aria-label="Primary navigation">
+  {% if link_tabs %}
+    <a class="tab-btn tab-btn--link" href="/?tab=overviewTab">Overview</a>
+    <a class="tab-btn tab-btn--link" href="/?tab=referenceTab">Reference</a>
+    <a class="tab-btn tab-btn--link" href="/?tab=infrastructureTab">Infrastructure</a>
+    <a class="tab-btn tab-btn--link" href="/?tab=metricsTab">Metrics</a>
+    <a class="tab-btn tab-btn--link" href="/?tab=controlTab">Control</a>
+    <a class="tab-btn tab-btn--link" href="/?tab=platformTab">Platform</a>
+    <a class="tab-btn tab-btn--link" href="/?tab=hostedAppsTab">Hosted apps</a>
+    <a class="tab-btn tab-btn--link" href="/?tab=routesTab">Routes</a>
+    <a class="tab-btn tab-btn--link" href="/?tab=logsTab">Logs</a>
+    <a class="tab-btn tab-btn--link" href="/help">Help</a>
+    <a class="tab-btn tab-btn--link{% if nav_hub_active %} active{% endif %}" href="/hub">Service hubs</a>
+  {% else %}
+    <button type="button" class="tab-btn active" data-tab="overviewTab">Overview</button>
+    <button type="button" class="tab-btn" data-tab="referenceTab">Reference</button>
+    <button type="button" class="tab-btn" data-tab="infrastructureTab">Infrastructure</button>
+    <button type="button" class="tab-btn" data-tab="metricsTab">Metrics</button>
+    <button type="button" class="tab-btn" data-tab="controlTab">Control</button>
+    <button type="button" class="tab-btn" data-tab="platformTab">Platform</button>
+    <button type="button" class="tab-btn" data-tab="hostedAppsTab">Hosted apps</button>
+    <button type="button" class="tab-btn" data-tab="routesTab">Routes</button>
+    <button type="button" class="tab-btn" data-tab="logsTab">Logs</button>
+    <a class="tab-btn tab-btn--link" href="/help">Help</a>
+    <a class="tab-btn tab-btn--link" href="/hub">Service hubs</a>
+  {% endif %}
+</nav>

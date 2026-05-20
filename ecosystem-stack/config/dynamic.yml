@@ -1,0 +1,415 @@
+http:
+  serversTransports:
+    local-relaxed-timeout:
+      forwardingTimeouts:
+        dialTimeout: 45s
+        responseHeaderTimeout: 90s
+
+  routers:
+
+    traefik-http:
+      rule: "Host(`traefik.lh`)"
+      service: api@internal
+      entryPoints:
+        - web
+
+    traefik-https:
+      rule: "Host(`traefik.lh`)"
+      service: api@internal
+      entryPoints:
+        - websecure
+      tls: true
+
+    ai-http:
+      rule: "Host(`ai.lh`)"
+      service: ai-service
+      entryPoints:
+        - web
+
+    ai-https:
+      rule: "Host(`ai.lh`)"
+      service: ai-service
+      entryPoints:
+        - websecure
+      tls: true
+
+    n8n-http:
+      rule: "Host(`n8n.lh`)"
+      service: n8n-service
+      entryPoints:
+        - web
+
+    n8n-https:
+      rule: "Host(`n8n.lh`)"
+      service: n8n-service
+      entryPoints:
+        - websecure
+      tls: true
+
+    n8n-assist-http:
+      rule: "Host(`n8n.lh`) && PathPrefix(`/assist`)"
+      service: dashboard-service
+      entryPoints:
+        - web
+      priority: 100
+
+    n8n-assist-https:
+      rule: "Host(`n8n.lh`) && PathPrefix(`/assist`)"
+      service: dashboard-service
+      entryPoints:
+        - websecure
+      tls: true
+      priority: 100
+
+    ai-assist-http:
+      rule: "Host(`ai.lh`) && PathPrefix(`/assist`)"
+      service: dashboard-service
+      entryPoints:
+        - web
+      priority: 100
+
+    ai-assist-https:
+      rule: "Host(`ai.lh`) && PathPrefix(`/assist`)"
+      service: dashboard-service
+      entryPoints:
+        - websecure
+      tls: true
+      priority: 100
+
+    ollama-http:
+      rule: "Host(`ollama.lh`)"
+      service: ollama-service
+      entryPoints:
+        - web
+
+    ollama-https:
+      rule: "Host(`ollama.lh`)"
+      service: ollama-service
+      entryPoints:
+        - websecure
+      tls: true
+
+    airllm-http:
+      rule: "Host(`airllm.lh`)"
+      service: airllm-service
+      entryPoints:
+        - web
+
+    airllm-https:
+      rule: "Host(`airllm.lh`)"
+      service: airllm-service
+      entryPoints:
+        - websecure
+      tls: true
+
+    dashboard-http:
+      rule: "Host(`localhost.lh`)"
+      service: dashboard-service
+      entryPoints:
+        - web
+
+    dashboard-https:
+      rule: "Host(`localhost.lh`)"
+      service: dashboard-service
+      entryPoints:
+        - websecure
+      tls: true
+
+    r2-http:
+      rule: "Host(`r2.lh`)"
+      service: r2-service
+      entryPoints:
+        - web
+
+    r2-https:
+      rule: "Host(`r2.lh`)"
+      service: r2-service
+      entryPoints:
+        - websecure
+      tls: true
+
+    kv-http:
+      rule: "Host(`kv.lh`)"
+      service: kv-service
+      entryPoints:
+        - web
+
+    kv-https:
+      rule: "Host(`kv.lh`)"
+      service: kv-service
+      entryPoints:
+        - websecure
+      tls: true
+
+    d1-http:
+      rule: "Host(`d1.lh`)"
+      service: d1-service
+      entryPoints:
+        - web
+
+    d1-https:
+      rule: "Host(`d1.lh`)"
+      service: d1-service
+      entryPoints:
+        - websecure
+      tls: true
+
+    autoscale-http:
+      rule: "Host(`autoscale.lh`)"
+      service: autoscale-service
+      entryPoints:
+        - web
+
+    autoscale-https:
+      rule: "Host(`autoscale.lh`)"
+      service: autoscale-service
+      entryPoints:
+        - websecure
+      tls: true
+
+    minio-s3-http:
+      rule: "Host(`s3.lh`)"
+      service: minio-api-service
+      entryPoints:
+        - web
+
+    minio-s3-https:
+      rule: "Host(`s3.lh`)"
+      service: minio-api-service
+      entryPoints:
+        - websecure
+      tls: true
+
+    minio-console-http:
+      rule: "Host(`minio-console.lh`)"
+      service: minio-console-service
+      entryPoints:
+        - web
+
+    minio-console-https:
+      rule: "Host(`minio-console.lh`)"
+      service: minio-console-service
+      entryPoints:
+        - websecure
+      tls: true
+
+    minio-console-assist-http:
+      rule: "Host(`minio-console.lh`) && PathPrefix(`/assist`)"
+      service: dashboard-service
+      entryPoints:
+        - web
+      priority: 100
+
+    minio-console-assist-https:
+      rule: "Host(`minio-console.lh`) && PathPrefix(`/assist`)"
+      service: dashboard-service
+      entryPoints:
+        - websecure
+      tls: true
+      priority: 100
+
+    workers-http:
+      rule: "Host(`workers.lh`)"
+      service: workers-service
+      entryPoints:
+        - web
+
+    workers-https:
+      rule: "Host(`workers.lh`)"
+      service: workers-service
+      entryPoints:
+        - websecure
+      tls: true
+
+    browser-http:
+      rule: "Host(`browser.lh`)"
+      service: browser-rendering-service
+      entryPoints:
+        - web
+
+    browser-https:
+      rule: "Host(`browser.lh`)"
+      service: browser-rendering-service
+      entryPoints:
+        - websecure
+      tls: true
+
+    cache-http:
+      rule: "Host(`cache.lh`)"
+      service: cache-varnish-service
+      entryPoints:
+        - web
+
+    cache-https:
+      rule: "Host(`cache.lh`)"
+      service: cache-varnish-service
+      entryPoints:
+        - websecure
+      tls: true
+
+    mailpit-http:
+      rule: "Host(`mail.lh`)"
+      service: mailpit-service
+      entryPoints:
+        - web
+
+    mailpit-https:
+      rule: "Host(`mail.lh`)"
+      service: mailpit-service
+      entryPoints:
+        - websecure
+      tls: true
+
+    telegram-http:
+      rule: "Host(`telegram.lh`)"
+      service: telegram-gateway-service
+      entryPoints:
+        - web
+
+    telegram-https:
+      rule: "Host(`telegram.lh`)"
+      service: telegram-gateway-service
+      entryPoints:
+        - websecure
+      tls: true
+
+    adminer-http:
+      rule: "Host(`adminer.lh`)"
+      service: adminer-service
+      entryPoints:
+        - web
+
+    adminer-https:
+      rule: "Host(`adminer.lh`)"
+      service: adminer-service
+      entryPoints:
+        - websecure
+      tls: true
+
+    adminer-assist-http:
+      rule: "Host(`adminer.lh`) && PathPrefix(`/assist`)"
+      service: dashboard-service
+      entryPoints:
+        - web
+      priority: 100
+
+    adminer-assist-https:
+      rule: "Host(`adminer.lh`) && PathPrefix(`/assist`)"
+      service: dashboard-service
+      entryPoints:
+        - websecure
+      tls: true
+      priority: 100
+
+    redis-ui-http:
+      rule: "Host(`redis-ui.lh`)"
+      service: redis-commander-service
+      entryPoints:
+        - web
+
+    redis-ui-https:
+      rule: "Host(`redis-ui.lh`)"
+      service: redis-commander-service
+      entryPoints:
+        - websecure
+      tls: true
+
+  services:
+
+    ai-service:
+      loadBalancer:
+        servers:
+          - url: "http://open-webui:8080"
+
+    n8n-service:
+      loadBalancer:
+        servers:
+          - url: "http://n8n:5678"
+
+    ollama-service:
+      loadBalancer:
+        servers:
+          - url: "http://ollama:11434"
+
+    airllm-service:
+      loadBalancer:
+        servers:
+          - url: "http://airllm:11435"
+
+    dashboard-service:
+      loadBalancer:
+        servers:
+          - url: "http://service-dashboard:8090"
+
+    r2-service:
+      loadBalancer:
+        servers:
+          - url: "http://r2-adapter:8081"
+
+    kv-service:
+      loadBalancer:
+        servers:
+          - url: "http://kv-adapter:8082"
+
+    d1-service:
+      loadBalancer:
+        servers:
+          - url: "http://d1-adapter:8083"
+
+    autoscale-service:
+      loadBalancer:
+        servers:
+          - url: "http://autoscaler:8084"
+
+    minio-console-service:
+      loadBalancer:
+        servers:
+          - url: "http://minio:9001"
+
+    minio-api-service:
+      loadBalancer:
+        servers:
+          - url: "http://minio:9000"
+
+    workers-service:
+      loadBalancer:
+        serversTransport: local-relaxed-timeout
+        servers:
+          - url: "http://workers-runtime:8787"
+
+    browser-rendering-service:
+      loadBalancer:
+        serversTransport: local-relaxed-timeout
+        servers:
+          - url: "http://browser-rendering-local:8085"
+
+    cache-varnish-service:
+      loadBalancer:
+        servers:
+          - url: "http://cache-varnish:80"
+
+    mailpit-service:
+      loadBalancer:
+        servers:
+          - url: "http://mailpit:8025"
+
+    telegram-gateway-service:
+      loadBalancer:
+        servers:
+          - url: "http://telegram-gateway:8091"
+
+    adminer-service:
+      loadBalancer:
+        servers:
+          - url: "http://adminer:8080"
+
+    redis-commander-service:
+      loadBalancer:
+        servers:
+          - url: "http://redis-commander:8081"
+
+# Container paths: traefik mounts repo certs at /certs
+tls:
+  certificates:
+    - certFile: "/certs/wildcard.lh.pem"
+      keyFile: "/certs/wildcard.lh-key.pem"

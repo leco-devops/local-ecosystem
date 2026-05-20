@@ -1,0 +1,481 @@
+{
+  "ok": true,
+  "backend": "airllm",
+  "generated_at": "2026-05-20T05:49:32Z",
+  "model_count": 19,
+  "new_online_count": 9,
+  "new_online": [
+    "Qwen/Qwen2-1.5B-Instruct",
+    "Qwen/Qwen2.5-1.5B-Instruct",
+    "Qwen/Qwen2.5-14B-Instruct",
+    "Qwen/Qwen2.5-3B-Instruct",
+    "Qwen/Qwen3-4B-Instruct-2507",
+    "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+    "meta-llama/Llama-3.2-1B-Instruct",
+    "mistralai/Mistral-7B-Instruct-v0.2",
+    "unsloth/Qwen3-Coder-Next-GGUF"
+  ],
+  "models": [
+    {
+      "name": "Qwen/Qwen2-1.5B-Instruct",
+      "label": "Qwen2-1.5B-Instruct",
+      "publisher": "Qwen",
+      "license": "apache-2.0",
+      "parameters": "",
+      "size_disk": "",
+      "niche": [
+        "discovered"
+      ],
+      "specialty": "Trending on HuggingFace; verify AirLLM compatibility before production.",
+      "use_where": [
+        "https://airllm.lh"
+      ],
+      "use_how": "./leco-cli.sh airllm install Qwen/Qwen2-1.5B-Instruct",
+      "install_cli": "./leco-cli.sh airllm install Qwen/Qwen2-1.5B-Instruct",
+      "source_url": "https://huggingface.co/Qwen/Qwen2-1.5B-Instruct",
+      "tags": [
+        "discovered"
+      ],
+      "discovered_online": true,
+      "hf_downloads": 4641934
+    },
+    {
+      "name": "Qwen/Qwen2.5-0.5B-Instruct",
+      "label": "Qwen 2.5 · 0.5B Instruct",
+      "publisher": "Alibaba (Qwen team)",
+      "license": "Apache-2.0",
+      "parameters": "0.5B",
+      "size_disk": "~1 GB weights (+ shards)",
+      "niche": [
+        "smoke-test",
+        "tiny"
+      ],
+      "specialty": "Fastest AirLLM install path; shard split completes in seconds.",
+      "use_where": [
+        "https://airllm.lh",
+        "LEco Infrastructure → 6 · AirLLM",
+        "When Ollama GGUF is too large for HF weights"
+      ],
+      "use_how": "./leco-cli.sh airllm install Qwen/Qwen2.5-0.5B-Instruct",
+      "install_cli": "./leco-cli.sh airllm install Qwen/Qwen2.5-0.5B-Instruct",
+      "source_url": "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct",
+      "ollama_alternative": "qwen2.5:0.5b",
+      "gated": false,
+      "tags": [
+        "tiny",
+        "smoke-test"
+      ],
+      "online_seen": true,
+      "hf_downloads": 4927203
+    },
+    {
+      "name": "Qwen/Qwen2.5-1.5B-Instruct",
+      "label": "Qwen2.5-1.5B-Instruct",
+      "publisher": "Qwen",
+      "license": "apache-2.0",
+      "parameters": "",
+      "size_disk": "",
+      "niche": [
+        "discovered"
+      ],
+      "specialty": "Trending on HuggingFace; verify AirLLM compatibility before production.",
+      "use_where": [
+        "https://airllm.lh"
+      ],
+      "use_how": "./leco-cli.sh airllm install Qwen/Qwen2.5-1.5B-Instruct",
+      "install_cli": "./leco-cli.sh airllm install Qwen/Qwen2.5-1.5B-Instruct",
+      "source_url": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct",
+      "tags": [
+        "discovered"
+      ],
+      "discovered_online": true,
+      "hf_downloads": 13480118
+    },
+    {
+      "name": "Qwen/Qwen2.5-14B-Instruct",
+      "label": "Qwen2.5-14B-Instruct",
+      "publisher": "Qwen",
+      "license": "apache-2.0",
+      "parameters": "",
+      "size_disk": "",
+      "niche": [
+        "discovered"
+      ],
+      "specialty": "Trending on HuggingFace; verify AirLLM compatibility before production.",
+      "use_where": [
+        "https://airllm.lh"
+      ],
+      "use_how": "./leco-cli.sh airllm install Qwen/Qwen2.5-14B-Instruct",
+      "install_cli": "./leco-cli.sh airllm install Qwen/Qwen2.5-14B-Instruct",
+      "source_url": "https://huggingface.co/Qwen/Qwen2.5-14B-Instruct",
+      "tags": [
+        "discovered"
+      ],
+      "discovered_online": true,
+      "hf_downloads": 2476611
+    },
+    {
+      "name": "Qwen/Qwen2.5-3B-Instruct",
+      "label": "Qwen2.5-3B-Instruct",
+      "publisher": "Qwen",
+      "license": "other",
+      "parameters": "",
+      "size_disk": "",
+      "niche": [
+        "discovered"
+      ],
+      "specialty": "Trending on HuggingFace; verify AirLLM compatibility before production.",
+      "use_where": [
+        "https://airllm.lh"
+      ],
+      "use_how": "./leco-cli.sh airllm install Qwen/Qwen2.5-3B-Instruct",
+      "install_cli": "./leco-cli.sh airllm install Qwen/Qwen2.5-3B-Instruct",
+      "source_url": "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct",
+      "tags": [
+        "discovered"
+      ],
+      "discovered_online": true,
+      "hf_downloads": 9116964
+    },
+    {
+      "name": "Qwen/Qwen2.5-72B-Instruct",
+      "label": "Qwen 2.5 · 72B Instruct",
+      "publisher": "Alibaba (Qwen team)",
+      "license": "Qwen License",
+      "parameters": "72B",
+      "size_disk": "~145 GB",
+      "niche": [
+        "large",
+        "frontier-open"
+      ],
+      "specialty": "Open-weight 72B; AirLLM for machines that cannot load full weights at once.",
+      "use_where": [
+        "https://airllm.lh",
+        "Workstation / server"
+      ],
+      "use_how": "./leco-cli.sh airllm install Qwen/Qwen2.5-72B-Instruct",
+      "install_cli": "./leco-cli.sh airllm install Qwen/Qwen2.5-72B-Instruct",
+      "source_url": "https://huggingface.co/Qwen/Qwen2.5-72B-Instruct",
+      "tags": [
+        "large",
+        "airllm-highlight"
+      ]
+    },
+    {
+      "name": "Qwen/Qwen2.5-7B-Instruct",
+      "label": "Qwen 2.5 · 7B Instruct",
+      "publisher": "Alibaba (Qwen team)",
+      "license": "Apache-2.0",
+      "parameters": "7B",
+      "size_disk": "~15 GB",
+      "niche": [
+        "general",
+        "default"
+      ],
+      "specialty": "Daily-driver HF instruct; AirLLM loads layers sequentially on limited VRAM.",
+      "use_where": [
+        "https://airllm.lh",
+        "https://ai.lh (if pointed at airllm backend)"
+      ],
+      "use_how": "./leco-cli.sh airllm install Qwen/Qwen2.5-7B-Instruct",
+      "install_cli": "./leco-cli.sh airllm install Qwen/Qwen2.5-7B-Instruct",
+      "source_url": "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct",
+      "ollama_alternative": "qwen2.5:7b",
+      "tags": [
+        "medium",
+        "default"
+      ],
+      "online_seen": true,
+      "hf_downloads": 12975576
+    },
+    {
+      "name": "Qwen/Qwen2.5-Coder-7B-Instruct",
+      "label": "Qwen 2.5 Coder · 7B",
+      "publisher": "Alibaba (Qwen team)",
+      "license": "Apache-2.0",
+      "parameters": "7B",
+      "size_disk": "~15 GB",
+      "niche": [
+        "code"
+      ],
+      "specialty": "Code generation and refactor at 7B scale.",
+      "use_where": [
+        "https://airllm.lh"
+      ],
+      "use_how": "./leco-cli.sh airllm install Qwen/Qwen2.5-Coder-7B-Instruct",
+      "install_cli": "./leco-cli.sh airllm install Qwen/Qwen2.5-Coder-7B-Instruct",
+      "source_url": "https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct",
+      "ollama_alternative": "qwen2.5-coder:7b",
+      "tags": [
+        "code"
+      ],
+      "online_seen": true,
+      "hf_downloads": 2489603
+    },
+    {
+      "name": "Qwen/Qwen3-4B-Instruct-2507",
+      "label": "Qwen3-4B-Instruct-2507",
+      "publisher": "Qwen",
+      "license": "apache-2.0",
+      "parameters": "",
+      "size_disk": "",
+      "niche": [
+        "discovered"
+      ],
+      "specialty": "Trending on HuggingFace; verify AirLLM compatibility before production.",
+      "use_where": [
+        "https://airllm.lh"
+      ],
+      "use_how": "./leco-cli.sh airllm install Qwen/Qwen3-4B-Instruct-2507",
+      "install_cli": "./leco-cli.sh airllm install Qwen/Qwen3-4B-Instruct-2507",
+      "source_url": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507",
+      "tags": [
+        "discovered"
+      ],
+      "discovered_online": true,
+      "hf_downloads": 6667164
+    },
+    {
+      "name": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+      "label": "TinyLlama-1.1B-Chat-v1.0",
+      "publisher": "TinyLlama",
+      "license": "apache-2.0",
+      "parameters": "",
+      "size_disk": "",
+      "niche": [
+        "discovered"
+      ],
+      "specialty": "Trending on HuggingFace; verify AirLLM compatibility before production.",
+      "use_where": [
+        "https://airllm.lh"
+      ],
+      "use_how": "./leco-cli.sh airllm install TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+      "install_cli": "./leco-cli.sh airllm install TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+      "source_url": "https://huggingface.co/TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+      "tags": [
+        "discovered"
+      ],
+      "discovered_online": true,
+      "hf_downloads": 2656550
+    },
+    {
+      "name": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+      "label": "DeepSeek R1 Distill · 7B",
+      "publisher": "DeepSeek",
+      "license": "MIT",
+      "parameters": "7B",
+      "size_disk": "~15 GB",
+      "niche": [
+        "reasoning"
+      ],
+      "specialty": "Reasoning distill; chain-of-thought style outputs.",
+      "use_where": [
+        "https://airllm.lh"
+      ],
+      "use_how": "./leco-cli.sh airllm install deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+      "install_cli": "./leco-cli.sh airllm install deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+      "source_url": "https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+      "ollama_alternative": "deepseek-r1:7b",
+      "tags": [
+        "reasoning"
+      ]
+    },
+    {
+      "name": "google/gemma-2-9b-it",
+      "label": "Gemma 2 · 9B IT",
+      "publisher": "Google",
+      "license": "Gemma Terms of Use",
+      "parameters": "9B",
+      "size_disk": "~18 GB",
+      "niche": [
+        "general",
+        "gated"
+      ],
+      "specialty": "Google Gemma 2 instruction-tuned.",
+      "use_where": [
+        "https://airllm.lh"
+      ],
+      "use_how": "export HF_TOKEN=… && ./leco-cli.sh airllm install google/gemma-2-9b-it",
+      "install_cli": "./leco-cli.sh airllm install google/gemma-2-9b-it",
+      "source_url": "https://huggingface.co/google/gemma-2-9b-it",
+      "ollama_alternative": "gemma2:9b",
+      "gated": true,
+      "tags": [
+        "medium",
+        "gated"
+      ]
+    },
+    {
+      "name": "meta-llama/Llama-3.1-70B-Instruct",
+      "label": "Llama 3.1 · 70B Instruct",
+      "publisher": "Meta",
+      "license": "Llama 3.1 Community License",
+      "parameters": "70B",
+      "size_disk": "~140 GB",
+      "niche": [
+        "large",
+        "workstation"
+      ],
+      "specialty": "AirLLM's sweet spot — run 70B on consumer GPU via layer streaming.",
+      "use_where": [
+        "https://airllm.lh",
+        "High-RAM / GPU hosts"
+      ],
+      "use_how": "export HF_TOKEN=… && ./leco-cli.sh airllm install meta-llama/Llama-3.1-70B-Instruct",
+      "install_cli": "./leco-cli.sh airllm install meta-llama/Llama-3.1-70B-Instruct",
+      "source_url": "https://huggingface.co/meta-llama/Llama-3.1-70B-Instruct",
+      "ollama_alternative": "llama3.1:70b",
+      "gated": true,
+      "tags": [
+        "large",
+        "gated",
+        "airllm-highlight"
+      ]
+    },
+    {
+      "name": "meta-llama/Llama-3.1-8B-Instruct",
+      "label": "Llama 3.1 · 8B Instruct",
+      "publisher": "Meta",
+      "license": "Llama 3.1 Community License",
+      "parameters": "8B",
+      "size_disk": "~16 GB",
+      "niche": [
+        "general",
+        "gated"
+      ],
+      "specialty": "High-quality Meta instruct on HF for AirLLM.",
+      "use_where": [
+        "https://airllm.lh"
+      ],
+      "use_how": "export HF_TOKEN=… && ./leco-cli.sh airllm install meta-llama/Llama-3.1-8B-Instruct",
+      "install_cli": "./leco-cli.sh airllm install meta-llama/Llama-3.1-8B-Instruct",
+      "source_url": "https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct",
+      "ollama_alternative": "llama3.1:8b",
+      "gated": true,
+      "tags": [
+        "medium",
+        "gated"
+      ],
+      "online_seen": true,
+      "hf_downloads": 10785213
+    },
+    {
+      "name": "meta-llama/Llama-3.2-1B-Instruct",
+      "label": "Llama-3.2-1B-Instruct",
+      "publisher": "meta-llama",
+      "license": "llama3.2",
+      "parameters": "",
+      "size_disk": "",
+      "niche": [
+        "discovered"
+      ],
+      "specialty": "Trending on HuggingFace; verify AirLLM compatibility before production.",
+      "use_where": [
+        "https://airllm.lh"
+      ],
+      "use_how": "./leco-cli.sh airllm install meta-llama/Llama-3.2-1B-Instruct",
+      "install_cli": "./leco-cli.sh airllm install meta-llama/Llama-3.2-1B-Instruct",
+      "source_url": "https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct",
+      "tags": [
+        "discovered"
+      ],
+      "discovered_online": true,
+      "hf_downloads": 7743597
+    },
+    {
+      "name": "meta-llama/Llama-3.2-3B-Instruct",
+      "label": "Llama 3.2 · 3B Instruct",
+      "publisher": "Meta",
+      "license": "Llama 3.2 Community License",
+      "parameters": "3B",
+      "size_disk": "~6 GB",
+      "niche": [
+        "general",
+        "gated"
+      ],
+      "specialty": "Meta Llama 3.2 on HF; requires HF_TOKEN with model access.",
+      "use_where": [
+        "https://airllm.lh"
+      ],
+      "use_how": "export HF_TOKEN=… && ./leco-cli.sh airllm install meta-llama/Llama-3.2-3B-Instruct",
+      "install_cli": "./leco-cli.sh airllm install meta-llama/Llama-3.2-3B-Instruct",
+      "source_url": "https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct",
+      "ollama_alternative": "llama3.2:3b",
+      "gated": true,
+      "tags": [
+        "small",
+        "gated"
+      ],
+      "online_seen": true,
+      "hf_downloads": 2400226
+    },
+    {
+      "name": "mistralai/Mistral-7B-Instruct-v0.2",
+      "label": "Mistral-7B-Instruct-v0.2",
+      "publisher": "mistralai",
+      "license": "apache-2.0",
+      "parameters": "",
+      "size_disk": "",
+      "niche": [
+        "discovered"
+      ],
+      "specialty": "Trending on HuggingFace; verify AirLLM compatibility before production.",
+      "use_where": [
+        "https://airllm.lh"
+      ],
+      "use_how": "./leco-cli.sh airllm install mistralai/Mistral-7B-Instruct-v0.2",
+      "install_cli": "./leco-cli.sh airllm install mistralai/Mistral-7B-Instruct-v0.2",
+      "source_url": "https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2",
+      "tags": [
+        "discovered"
+      ],
+      "discovered_online": true,
+      "hf_downloads": 3274617
+    },
+    {
+      "name": "mistralai/Mistral-7B-Instruct-v0.3",
+      "label": "Mistral 7B Instruct v0.3",
+      "publisher": "Mistral AI",
+      "license": "Apache-2.0",
+      "parameters": "7B",
+      "size_disk": "~14 GB",
+      "niche": [
+        "general"
+      ],
+      "specialty": "Mistral instruct v0.3 on safetensors.",
+      "use_where": [
+        "https://airllm.lh"
+      ],
+      "use_how": "./leco-cli.sh airllm install mistralai/Mistral-7B-Instruct-v0.3",
+      "install_cli": "./leco-cli.sh airllm install mistralai/Mistral-7B-Instruct-v0.3",
+      "source_url": "https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3",
+      "ollama_alternative": "mistral:7b",
+      "tags": [
+        "medium"
+      ]
+    },
+    {
+      "name": "unsloth/Qwen3-Coder-Next-GGUF",
+      "label": "Qwen3-Coder-Next-GGUF",
+      "publisher": "unsloth",
+      "license": "apache-2.0",
+      "parameters": "",
+      "size_disk": "",
+      "niche": [
+        "discovered"
+      ],
+      "specialty": "Trending on HuggingFace; verify AirLLM compatibility before production.",
+      "use_where": [
+        "https://airllm.lh"
+      ],
+      "use_how": "./leco-cli.sh airllm install unsloth/Qwen3-Coder-Next-GGUF",
+      "install_cli": "./leco-cli.sh airllm install unsloth/Qwen3-Coder-Next-GGUF",
+      "source_url": "https://huggingface.co/unsloth/Qwen3-Coder-Next-GGUF",
+      "tags": [
+        "discovered"
+      ],
+      "discovered_online": true,
+      "hf_downloads": 2967814
+    }
+  ]
+}

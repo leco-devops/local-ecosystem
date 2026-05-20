@@ -1,0 +1,51 @@
+schemaVersion: 2
+archetype: generic
+infrastructure:
+  cloudflare:
+    wranglerConfig: infra/wrangler.api.toml
+    localCfPublicPrefix: sample-multi-wrangler
+  runtimes:
+    - id: api
+      type: cloudflare-workers
+      config: infra/wrangler.api.toml
+      port: 8787
+    - id: onboarding-email
+      type: cloudflare-workers
+      config: infra/wrangler.onboarding-email.toml
+      port: 8788
+    - id: onboarding-mobile
+      type: cloudflare-workers
+      config: infra/wrangler.onboarding-mobile.toml
+      port: 8789
+    - id: onboarding
+      type: cloudflare-workers
+      config: infra/wrangler.onboarding.toml
+      port: 8790
+    - id: dashboard
+      type: cloudflare-pages
+      config: infra/wrangler.pages.toml
+      port: 8791
+      pagesBuildOutputDir: apps/dashboard/dist
+  routing:
+    entries:
+      - hostname: sample-multi-wrangler.lh
+        upstream:
+          - prefix: /api
+            target: runtime
+            runtime: api
+          - prefix: /
+            target: runtime
+            runtime: dashboard
+  dockerCompose:
+    composeFileFromManifest: docker-compose.leco-runtime.yml
+    projectName: sample-cf-multi-wrangler-monorepo
+urls:
+  - role: frontend
+    label: App (HTTPS)
+    publicUrl: https://sample-multi-wrangler.lh
+  - role: api
+    label: API (HTTPS)
+    publicUrl: https://sample-multi-wrangler.lh/api
+notes: |
+  Minimal stub wrangler files in infra/ for documentation. Replace main= paths with your
+  monorepo entrypoints. Register generates docker-compose.leco-runtime.yml beside leco.app.yaml.

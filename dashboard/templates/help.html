@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Help &amp; User Manual — LEco DevOps</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/static/dashboard.css?v=20260530" />
+  </head>
+  <body class="help-page">
+    <div class="wrap help-wrap">
+      {% set link_tabs = true %}
+      {% set nav_hub_active = false %}
+      {% include "_dashboard_top.html" %}
+
+      <header class="hub-page-heading help-page-heading">
+        <h2 class="hub-page-heading__title">Help &amp; User Manual</h2>
+        <p class="hub-page-heading__lede muted">
+          Guided setup, hosting &amp; onboarding, Ollama &amp; AirLLM, CLI, deploy/rebuild, troubleshooting, removal, and a full
+          <strong>Developer's guide</strong> for contributors.
+        </p>
+      </header>
+
+      <div class="help-search-bar">
+        <label class="sr-only" for="helpSearchInput">Search help</label>
+        <input
+          type="search"
+          id="helpSearchInput"
+          class="help-search-input"
+          placeholder="Search help… (e.g. onboard, wsp materialize, hosting overlay, deploy, schema.py)"
+          autocomplete="off"
+        />
+        <button type="button" id="helpSearchClear" class="ollama-act ollama-act--safe">Clear</button>
+      </div>
+      <div id="helpSearchResults" class="help-search-results is-hidden" aria-live="polite"></div>
+
+      <div class="help-layout doc-layout">
+        <nav class="help-sidebar doc-sidebar" id="helpSidebar" aria-label="Help topics">
+          <p class="muted small">Loading topics…</p>
+        </nav>
+        <article class="help-article doc-article">
+          <div id="helpToolbar" class="doc-toolbar help-toolbar"></div>
+          <div id="helpBreadcrumb" class="help-breadcrumb muted small"></div>
+          <div id="helpContent" class="doc-content prose help-content">Select a topic from the tree.</div>
+        </article>
+      </div>
+
+      {% set footer_doc_mode = 'anchors' %}
+      {% include "_site_footer.html" %}
+    </div>
+
+    {% include "_app_modal.html" %}
+
+    <script type="application/json" id="dashboard-boot-config">{{ dashboard_boot | tojson }}</script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.3/dist/mermaid.min.js"></script>
+    <script src="/static/dashboard.js?v=20260533"></script>
+    <script src="/static/help.js?v=20260530"></script>
+  </body>
+</html>

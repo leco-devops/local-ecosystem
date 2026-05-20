@@ -1,6 +1,8 @@
+import os
 import threading
 import time
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 from host_metrics import (
@@ -25,10 +27,57 @@ _last_append_epoch: float = 0.0
 _prev_host_cpu: tuple | None = None
 _prev_host_net: int | None = None
 _prev_host_disk: dict | None = None
+try:
+    _AGG_STATS_WORKERS = max(2, min(24, int(os.getenv("DASHBOARD_AGG_STATS_WORKERS", "12") or 12)))
+except ValueError:
+    _AGG_STATS_WORKERS = 12
+try:
+    _AGG_CACHE_TTL_SEC = max(1.0, min(60.0, float(os.getenv("DASHBOARD_AGG_CACHE_TTL_SEC", "15") or 15)))
+except ValueError:
+    _AGG_CACHE_TTL_SEC = 15.0
+_agg_cache_lock = threading.Condition()
+_agg_cache_payload: dict | None = None
+_agg_cache_epoch: float = 0.0
+_agg_cache_busy: bool = False
+try:
+    _HOSTED_SAMPLE_MIN_INTERVAL_SEC = max(
+        5.0, min(300.0, float(os.getenv("DASHBOARD_HOSTED_SAMPLE_MIN_INTERVAL_SEC", "45") or 45))
+    )
+except ValueError:
+    _HOSTED_SAMPLE_MIN_INTERVAL_SEC = 45.0
+_last_hosted_sample_epoch: float = 0.0
+
+
+def _empty_agg_stats() -> dict:
+    return {
+        "cpu_sum_raw": 0.0,
+        "memory_usage": 0,
+        "memory_limit": 0,
+        "memory_percent_limits": 0.0,
+        "network_rx": 0,
+        "network_tx": 0,
+        "blk_read": 0,
+        "blk_write": 0,
+        "running_container_count": 0,
+    }
+
+
+def _metrics_for_agg(args):
+    client, container = args
+    return get_container_metrics(client, container, include_disk_sizes=False)
 
 
 def aggregate_running_container_stats(client):
     """Sum stats for every running container (matches Docker Desktop / full host view)."""
+    if client is None:
+        return _empty_agg_stats()
+    try:
+        running = [c for c in client.containers.list() if c.status == "running"]
+    except Exception:
+        running = []
+    if not running:
+        return _empty_agg_stats()
+
     total_cpu = 0.0
     total_mem_usage = 0
     total_mem_limit = 0
@@ -36,23 +85,25 @@ def aggregate_running_container_stats(client):
     total_net_tx = 0
     total_blk_read = 0
     total_blk_write = 0
-    running_count = 0
 
+    workers = min(_AGG_STATS_WORKERS, len(running))
     try:
-        for c in client.containers.list():
-            if c.status != "running":
-                continue
-            running_count += 1
-            m = get_container_metrics(client, c)
-            total_cpu += float(m.get("cpu_percent") or 0)
-            total_mem_usage += int(m.get("memory_usage") or 0)
-            total_mem_limit += int(m.get("memory_limit") or 0)
-            total_net_rx += int(m.get("network_rx") or 0)
-            total_net_tx += int(m.get("network_tx") or 0)
-            total_blk_read += int(m.get("blk_read") or 0)
-            total_blk_write += int(m.get("blk_write") or 0)
+        if workers <= 1:
+            metrics_rows = [_metrics_for_agg((client, c)) for c in running]
+        else:
+            with ThreadPoolExecutor(max_workers=workers) as ex:
+                metrics_rows = list(ex.map(_metrics_for_agg, ((client, c) for c in running)))
     except Exception:
-        pass
+        metrics_rows = []
+
+    for m in metrics_rows:
+        total_cpu += float(m.get("cpu_percent") or 0)
+        total_mem_usage += int(m.get("memory_usage") or 0)
+        total_mem_limit += int(m.get("memory_limit") or 0)
+        total_net_rx += int(m.get("network_rx") or 0)
+        total_net_tx += int(m.get("network_tx") or 0)
+        total_blk_read += int(m.get("blk_read") or 0)
+        total_blk_write += int(m.get("blk_write") or 0)
 
     mem_pct_limits = (total_mem_usage / total_mem_limit) * 100 if total_mem_limit > 0 else 0.0
     return {
@@ -64,12 +115,37 @@ def aggregate_running_container_stats(client):
         "network_tx": total_net_tx,
         "blk_read": total_blk_read,
         "blk_write": total_blk_write,
-        "running_container_count": running_count,
+        "running_container_count": len(running),
     }
 
 
 def _aggregate_running_containers(client):
     return aggregate_running_container_stats(client)
+
+
+def get_cached_running_container_stats(client, max_age_sec: float | None = None):
+    age = _AGG_CACHE_TTL_SEC if max_age_sec is None else max(0.5, float(max_age_sec))
+    global _agg_cache_busy, _agg_cache_payload, _agg_cache_epoch
+    now = time.time()
+    with _agg_cache_lock:
+        if _agg_cache_payload is not None and now - _agg_cache_epoch <= age:
+            return dict(_agg_cache_payload)
+        if _agg_cache_busy:
+            _agg_cache_lock.wait(timeout=age)
+            now2 = time.time()
+            if _agg_cache_payload is not None and now2 - _agg_cache_epoch <= age:
+                return dict(_agg_cache_payload)
+        _agg_cache_busy = True
+    try:
+        fresh = aggregate_running_container_stats(client)
+    except Exception:
+        fresh = _empty_agg_stats()
+    with _agg_cache_lock:
+        _agg_cache_payload = fresh
+        _agg_cache_epoch = time.time()
+        _agg_cache_busy = False
+        _agg_cache_lock.notify_all()
+        return dict(_agg_cache_payload)
 
 
 def compute_docker_totals_aligned(client, docker_overview, agg=None):
@@ -112,6 +188,7 @@ def compute_docker_totals_aligned(client, docker_overview, agg=None):
 def append_snapshot(client=None, docker_overview=None, precomputed_container_agg=None):
     global _prev_totals, _prev_ts, _last_append_epoch
     global _prev_host_cpu, _prev_host_net, _prev_host_disk
+    global _last_hosted_sample_epoch
 
     if client is None:
         client = get_docker_client()
@@ -128,7 +205,11 @@ def append_snapshot(client=None, docker_overview=None, precomputed_container_agg
         docker_overview = get_docker_overview(client)
 
     now = time.time()
-    agg = precomputed_container_agg if precomputed_container_agg is not None else aggregate_running_container_stats(client)
+    agg = (
+        precomputed_container_agg
+        if precomputed_container_agg is not None
+        else get_cached_running_container_stats(client)
+    )
     host = (docker_overview or {}).get("host") or {}
     disk = (docker_overview or {}).get("disk") or {}
 
@@ -261,6 +342,17 @@ def append_snapshot(client=None, docker_overview=None, precomputed_container_agg
 
     with _lock:
         _history.append(point)
+
+    try:
+        now_hosted = time.time()
+        if now_hosted - _last_hosted_sample_epoch >= _HOSTED_SAMPLE_MIN_INTERVAL_SEC:
+            from hosted_apps import build_aggregate_for_timeseries
+            from hosted_app_timeseries import sample_all_registered
+
+            sample_all_registered(build_aggregate_for_timeseries)
+            _last_hosted_sample_epoch = now_hosted
+    except Exception:
+        pass
 
 
 def get_history(limit: int | None = None):

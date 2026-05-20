@@ -1,0 +1,41 @@
+# AirLLM Ollama-Compatible Shim Server (Docker / Linux container build)
+#
+# This image runs in a Linux container so MLX (Apple Silicon GPU) is not
+# applicable here — AirLLM falls back to PyTorch CPU inference. For CUDA
+# acceleration, run the image on a Linux host with `--gpus=all` and a CUDA
+# build of torch (override via a multi-stage build or extra-index URL).
+
+# Core shim
+# PyPI currently caps at 2.11.0 (May 2026). Bump the floor only after confirming
+# the version exists on pypi.org/pypi/airllm/json — pip will refuse to build the
+# image otherwise.
+airllm>=2.11.0
+# airllm 2.11 still imports `optimum.bettertransformer`, which HuggingFace
+# removed in optimum>=1.18 (deprecated since PyTorch 2.0 added native SDPA).
+# Until airllm switches to `torch.nn.functional.scaled_dot_product_attention`,
+# we must pin optimum below 1.18 or the shim crashes on boot with:
+#   ERROR: airllm not installed: No module named 'optimum.bettertransformer'
+optimum>=1.13,<1.18
+# airllm 2.11 + optimum<1.18 also imports `transformers.utils.is_tf_available`,
+# which HuggingFace removed in transformers>=4.49 (TF support dropped). Without
+# this pin the container crashes on boot with:
+#   ERROR: airllm not installed: cannot import name 'is_tf_available' from 'transformers.utils'
+transformers>=4.46,<4.49
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+huggingface-hub>=0.26.0
+pydantic>=2.10.0
+
+# PyTorch is installed in the Dockerfile BEFORE this requirements file from the
+# PyTorch CPU wheel index (https://download.pytorch.org/whl/cpu). Listing it
+# here too lets `pip install` from a venv-on-host still get a sensible torch,
+# but at image build time pip sees torch already satisfied and skips it (which
+# avoids ~2GB of nvidia_* CUDA wheels pulled by the default PyPI metadata).
+torch>=2.5.0
+
+# Optional 4bit/8bit compression. Only available on x86_64.
+bitsandbytes>=0.45.0; platform_machine == "x86_64" or platform_machine == "AMD64"
+
+# Misc utilities used by the shim.
+psutil>=6.0.0
+aiofiles>=24.0.0

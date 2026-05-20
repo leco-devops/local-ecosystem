@@ -1,0 +1,21 @@
+# AirLLM Pinned Models
+# Models listed here are automatically pulled when the AirLLM shim starts.
+# One HuggingFace model ID per line; lines starting with # are ignored.
+#
+# IMPORTANT: AirLLM uses HuggingFace safetensors format, NOT Ollama GGUF.
+# These models are separate from your Ollama models.
+#
+# Small models (good for testing):
+# Qwen/Qwen2.5-0.5B-Instruct
+# Qwen/Qwen2.5-1.5B-Instruct
+#
+# Medium models (good balance):
+# Qwen/Qwen2.5-7B-Instruct
+# meta-llama/Llama-3.2-8B-Instruct
+#
+# Large models (AirLLM's specialty - can run on limited VRAM):
+# Qwen/Qwen2.5-72B-Instruct
+# meta-llama/Meta-Llama-3.1-70B-Instruct  # Requires HF_TOKEN for gated access
+#
+
+Qwen/Qwen2.5-0.5B-Instruct

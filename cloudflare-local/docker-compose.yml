@@ -7,6 +7,10 @@ services:
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
+      # Console login calls this URL from inside the container; s3.lh → 127.0.0.1:80 fails (network error).
+      # Public S3/browser redirects use MINIO_BROWSER_REDIRECT_URL via Traefik.
+      MINIO_SERVER_URL: http://127.0.0.1:9000
+      MINIO_BROWSER_REDIRECT_URL: http://minio-console.lh
     volumes:
       - minio_data:/data
     networks:

@@ -1,148 +1,142 @@
-# Local Ecosystem — AI stack and local platform
+<p align="center">
+  <a href="https://techtonic.systems/" title="Techtonic Systems Media And Research LLC">
+    <strong>Techtonic Systems Media And Research LLC</strong>
+  </a>
+  <br />
+  <sub>Open-source software · <a href="https://techtonic.systems/">techtonic.systems</a></sub>
+</p>
 
-A **Docker-based local platform** that mimics a small cloud edge: Traefik on `*.lh`, TLS, Ollama, Open WebUI, n8n, PostgreSQL, an ops **dashboard**, and optional **Cloudflare-local** adapters (R2/KV/D1/Workers-style APIs).
+<h1 align="center">LEco DevOps Open Project</h1>
 
-| Layer | Role |
-|--------|------|
-| **DNS** (`*.lh`) | Resolve local hostnames to `127.0.0.1` (e.g. dnsmasq) |
-| **Traefik** | HTTP/HTTPS entrypoints **80 / 443**, dashboard API **8080** |
-| **mkcert** | Trusted dev certificates in `certs/` |
-| **Containers** | Attached to Docker network **`lh-network`** |
+<p align="center">
+  <strong>Your local cloud edge on Docker</strong><br />
+  Traefik · TLS · AI · automation · app lifecycle — all on <code>*.lh</code>
+</p>
 
-You access services by name (**`https://n8n.lh`**, **`https://ai.lh`**, …) instead of memorizing ports.
+<p align="center">
+  <a href="docs/SETUP.md"><strong>Get started</strong></a>
+  &nbsp;·&nbsp;
+  <a href="docs/PROJECT.md"><strong>Repository guide</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/rmaurya/local-ecosystem"><strong>View source</strong></a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" />
+  <img src="https://img.shields.io/badge/open%20source-yes-brightgreen.svg" alt="Open source" />
+  <img src="https://img.shields.io/badge/steward-Techtonic%20Systems%20Media%20And%20Research%20LLC-8b5cf6.svg" alt="Steward: Techtonic Systems Media And Research LLC" />
+</p>
+
+---
+
+## Contribute to this project
+
+**LEco DevOps Open Project** is community-driven open source. Whether you fix a bug, improve docs, add a dev-stack preset, or review a pull request — your help matters.
+
+<p align="center">
+  <a href="CONTRIBUTING.md"><strong>Contribution guide</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/rmaurya/local-ecosystem/issues"><strong>Open an issue</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/rmaurya/local-ecosystem/fork"><strong>Fork &amp; pull request</strong></a>
+</p>
+
+<p align="center">
+  <em>New here?</em> Read <a href="docs/DEVELOPMENT_PLAYBOOK.md">Development playbook</a> and <a href="docs/help/03-platform-tab.md">Platform tab guide</a> before your first PR.
+</p>
+
+---
+
+## What you get
+
+**LEco DevOps Open Project** is a **free, open-source** platform for developers who want a realistic local stack: named HTTPS hosts, a control dashboard, LLM tooling, and repeatable app deploys — without wiring ports by hand.
+
+| | |
+|---|---|
+| **Application** | **LEco DevOps** — web UI + `leco-devops` CLI |
+| **License** | [MIT](LICENSE) — use commercially, fork, contribute |
+| **Steward** | [Techtonic Systems Media And Research LLC](https://techtonic.systems/) |
+| **Contact** | [leco@techtonic.systems](mailto:leco@techtonic.systems) |
+
+---
+
+## Top contributors
+
+| Contributor | Links |
+|-------------|--------|
+| **Rajneesh Maurya** | [GitHub](https://github.com/rmaurya) · [LinkedIn](https://www.linkedin.com/in/rajneeshmaurya/) |
+
+---
+
+## Why teams use it
+
+- **Edge routing** — Traefik on `https://n8n.lh`, `https://ai.lh`, `https://dashboard.lh`, and more  
+- **AI ready** — Ollama, Open WebUI, AirLLM (Ollama-compatible API)  
+- **Operations UI** — metrics, logs, Control tab, hosted apps, Platform / dev stacks  
+- **App toolchain** — LEco manifests, Traefik routes, isolated dev-stack compose projects  
+- **Optional Cloudflare-local** — R2, KV, D1, Workers-style adapters on `*.lh`  
+
+---
+
+## Start in minutes
+
+Prerequisites: **Docker**, **`*.lh` DNS**, **mkcert** (see the setup guide).
+
+```bash
+git clone https://github.com/rmaurya/local-ecosystem.git
+cd local-ecosystem
+./ecosystem-stack/install-foundation.sh
+./ecosystem-stack/ecosystem-stack.sh start
+```
+
+Open **http://localhost.lh** or **http://dashboard.lh** for the LEco DevOps dashboard.
+
+<p align="center">
+  <a href="docs/SETUP.md">→ Full first-time setup (DNS, TLS, troubleshooting)</a>
+</p>
 
 ---
 
 ## Documentation
 
-| Guide | Description |
-|--------|-------------|
-| **[docs/SETUP.md](docs/SETUP.md)** | **Complete first-time setup** — DNS, Docker, TLS, stack start, macOS host CPU metrics, optional Cloudflare-local |
-| **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** | **Deployment and operations** — start/stop, updates, bulk vs Control API behavior, troubleshooting |
-| **[docs/DEVELOPMENT_PLAYBOOK.md](docs/DEVELOPMENT_PLAYBOOK.md)** | Extending services, dashboard APIs, Traefik routes |
-| **[cloudflare-local/README.md](cloudflare-local/README.md)** | CF-local stack entry + links to architecture and user manual |
+| | |
+|---|---|
+| [Setup](docs/SETUP.md) | First machine install |
+| [Deployment](docs/DEPLOYMENT.md) | Day-2 operations |
+| [Architecture](docs/ARCHITECTURE.md) | How it fits together |
+| [Develop](docs/DEVELOPMENT_PLAYBOOK.md) | Extend services and APIs |
+| [Open source](docs/OPEN_SOURCE.md) | License, stewardship, contributing |
+
+**Full technical guide:** [docs/PROJECT.md](docs/PROJECT.md)
 
 ---
 
-## Quick start (after prerequisites)
+## Security & releases
 
-Prerequisites: **Docker**, **dnsmasq** (or equivalent) for **`*.lh`**, **mkcert** and certs for `*.lh`. Full steps are in **[docs/SETUP.md](docs/SETUP.md)**.
-
-```bash
-export REPO="$HOME/path/to/local-ecosystem"
-cd "$REPO"
-
-# Interactive menu
-./ai-stack/ai-stack.sh menu
-
-# Or start everything in dependency order
-./ai-stack/ai-stack.sh start
-```
-
-**Default start order** (`ai-stack/core.sh`): `traefik` → `postgres` → `ollama` → `webui` → `n8n` → `dashboard` → `cloudflare-local`.
-
-Repair routing and network attachments anytime:
-
-```bash
-./ai-stack/ai-stack.sh repair-network
-```
+| | |
+|---|---|
+| [Contributing](CONTRIBUTING.md) | Branch workflow, changelog, safety |
+| [Security](SECURITY.md) | Responsible disclosure |
+| [Changelog](CHANGELOG.md) | Release history |
 
 ---
 
-## Common URLs
+## GitHub Pages
 
-| URL | Service |
-|-----|---------|
-| http://localhost.lh | Ops dashboard (via Traefik) |
-| http://localhost:8090 | Ops dashboard (direct host port; override with `DASHBOARD_HOST_PORT`) |
-| https://traefik.lh | Traefik routing (TLS) |
-| https://ai.lh | Open WebUI |
-| https://n8n.lh | n8n |
-| https://ollama.lh | Ollama |
-| http://r2.lh , http://kv.lh , http://d1.lh , http://workers.lh | Cloudflare-local (when started) |
-| http://minio-console.lh , http://autoscale.lh | CF-local related UIs |
-
-The dashboard provides **overview**, **metrics** (with optional host CPU temperature on macOS), **logs**, **docs**, **Control** (stack actions), and **Ollama** model management. Containers started via `ai-stack` use **`--restart unless-stopped`** where applicable so they come back after a Docker daemon restart unless you stopped them explicitly.
+To publish this landing page: **Repository → Settings → Pages → Build and deployment → Source: Deploy from a branch → Branch: `main` → Folder: `/ (root)`**. GitHub will serve this `README.md` as your site home.
 
 ---
 
-## CLI reference (repository root)
+## Stewardship
 
-```bash
-./ai-stack/ai-stack.sh menu
-./ai-stack/ai-stack.sh start [service]
-./ai-stack/ai-stack.sh stop [service]
-./ai-stack/ai-stack.sh restart [service]
-./ai-stack/ai-stack.sh pause [service]
-./ai-stack/ai-stack.sh unpause [service]
-./ai-stack/ai-stack.sh status [service]
-./ai-stack/ai-stack.sh logs [service]
-./ai-stack/ai-stack.sh remove [service]
-./ai-stack/ai-stack.sh reset [service]    # destructive — confirm prompts
-./ai-stack/ai-stack.sh repair-network
-./ai-stack/ai-stack.sh ollama-pull-models
-```
+**LEco DevOps Open Project** is an **open-source project** managed by **[Techtonic Systems Media And Research LLC](https://techtonic.systems/)**.
 
-Per-service scripts (same actions as each `*.sh` defines):
+**Contact:** [leco@techtonic.systems](mailto:leco@techtonic.systems)
 
-```bash
-./ai-stack/services/dashboard.sh deploy
-./ai-stack/services/cloudflare-local.sh start
-```
+Copyright (c) Techtonic Systems Media And Research LLC and contributors. Licensed under the [MIT License](LICENSE). See [NOTICE](NOTICE.md).
 
----
-
-## Repository layout (high level)
-
-```
-local-ecosystem/
-├── ai-stack/
-│   ├── ai-stack.sh          # CLI entry
-│   ├── core.sh              # start order, network repair, bulk_ecosystem
-│   ├── services/*.sh        # traefik, postgres, ollama, webui, n8n, dashboard, cloudflare-local
-│   ├── scripts/             # macOS host CPU temp writer + LaunchAgent installer
-│   └── config/              # e.g. ollama-pinned-models.txt, dynamic.yml copy
-├── dashboard/               # Flask ops app (image local/service-dashboard)
-├── traefik/
-│   └── dynamic.yml          # *.lh routers (keep in sync with ai-stack/config if you use both)
-├── cloudflare-local/        # docker-compose + adapters
-├── certs/                   # mkcert *.lh PEMs
-└── docs/                    # SETUP.md, DEPLOYMENT.md, DEVELOPMENT_PLAYBOOK.md
-```
-
----
-
-## macOS: host CPU temperature and LaunchAgent
-
-The dashboard container cannot read Apple SMC. On **macOS**, **`dashboard.sh`** mounts **`~/.local-eco-host-metrics`** and sets **`DASHBOARD_HOST_CPU_TEMP_FILE`**.
-
-When you **deploy/start** the dashboard via **`ai-stack/services/dashboard.sh`**, a **LaunchAgent** is installed to run **`ai-stack/scripts/macos-write-cpu-temp.sh`** every **30s**. **Stop/remove** via the same script **uninstalls** that agent. Optional **`brew install osx-cpu-temp`**; Apple Silicon often needs **`sudo powermetrics`** (see script and **[docs/SETUP.md](docs/SETUP.md)** §8).
-
----
-
-## Ollama pinned models
-
-Edit **`ai-stack/config/ollama-pinned-models.txt`** (one model per line). On Ollama service start, pulls run in the background. To refresh a running container:
-
-```bash
-./ai-stack/ai-stack.sh ollama-pull-models
-```
-
----
-
-## Troubleshooting (short)
-
-| Issue | Action |
-|-------|--------|
-| `*.lh` does not resolve | dnsmasq + `/etc/resolver/lh` — see [docs/SETUP.md](docs/SETUP.md) §4 |
-| Bad Gateway | `./ai-stack/ai-stack.sh repair-network` |
-| TLS warnings | mkcert CA + files in `certs/` |
-| n8n cookies / HTTPS | Env in `ai-stack/services/n8n.sh` (`N8N_TRUST_PROXY`, `N8N_SECURE_COOKIE`) |
-
-More: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** §12.
-
----
-
-## License / contributing
-
-Follow **[docs/DEVELOPMENT_PLAYBOOK.md](docs/DEVELOPMENT_PLAYBOOK.md)** when changing services, Traefik, or the dashboard. Control actions can be destructive; use **`DASHBOARD_CONTROL_TOKEN`** in production-like environments.
+<p align="center">
+  <a href="https://techtonic.systems/"><strong>Techtonic Systems Media And Research LLC</strong></a>
+  <br />
+  <a href="mailto:leco@techtonic.systems">leco@techtonic.systems</a>
+</p>

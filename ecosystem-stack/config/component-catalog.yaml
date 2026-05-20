@@ -1,0 +1,187 @@
+# Dev stack component catalog — used by Stack Builder and compose generator.
+# Versions pin container images; host ports are not published by default.
+
+components:
+  postgres:
+    category: sql
+    label: PostgreSQL
+    default_port: 5432
+    max_per_stack: 1
+    versions:
+      "15": { image: postgres:15-alpine }
+      "16": { image: postgres:16-alpine }
+      "17": { image: postgres:17-alpine }
+    default_env:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: appdb
+
+  mysql:
+    category: sql
+    label: MySQL
+    default_port: 3306
+    max_per_stack: 1
+    versions:
+      "8.0": { image: mysql:8.0 }
+      "8.4": { image: mysql:8.4 }
+    default_env:
+      MYSQL_ROOT_PASSWORD: localdev
+      MYSQL_DATABASE: appdb
+      MYSQL_USER: app
+      MYSQL_PASSWORD: localdev
+
+  mariadb:
+    category: sql
+    label: MariaDB
+    default_port: 3306
+    max_per_stack: 1
+    versions:
+      "11": { image: mariadb:11 }
+    default_env:
+      MARIADB_ROOT_PASSWORD: localdev
+      MARIADB_DATABASE: appdb
+      MARIADB_USER: app
+      MARIADB_PASSWORD: localdev
+
+  mongodb:
+    category: nosql
+    label: MongoDB
+    default_port: 27017
+    max_per_stack: 1
+    versions:
+      "7": { image: mongo:7 }
+    default_env:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: localdev
+      MONGO_INITDB_DATABASE: appdb
+
+  redis:
+    category: cache
+    label: Redis
+    default_port: 6379
+    max_per_stack: 1
+    versions:
+      "7": { image: redis:7-alpine }
+    command: ["redis-server", "--appendonly", "yes"]
+
+  valkey:
+    category: cache
+    label: Valkey
+    default_port: 6379
+    max_per_stack: 1
+    versions:
+      "8": { image: valkey/valkey:8 }
+    command: ["valkey-server", "--appendonly", "yes"]
+
+  minio:
+    category: storage
+    label: MinIO
+    default_port: 9000
+    max_per_stack: 1
+    versions:
+      latest: { image: minio/minio:latest }
+    command: ["server", "/data", "--console-address", ":9001"]
+    default_env:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+
+  node:
+    category: toolchain
+    label: Node.js
+    default_port: null
+    max_per_stack: 3
+    versions:
+      "18": { image: node:18-bookworm }
+      "20": { image: node:20-bookworm }
+      "22": { image: node:22-bookworm }
+      "24": { image: node:24-bookworm }
+    command: ["sleep", "infinity"]
+
+  python:
+    category: toolchain
+    label: Python
+    default_port: null
+    max_per_stack: 3
+    versions:
+      "3.10": { image: python:3.10-bookworm }
+      "3.11": { image: python:3.11-bookworm }
+      "3.12": { image: python:3.12-bookworm }
+    command: ["sleep", "infinity"]
+
+  java:
+    category: toolchain
+    label: Java
+    default_port: null
+    max_per_stack: 2
+    versions:
+      "17": { image: eclipse-temurin:17-jdk }
+      "21": { image: eclipse-temurin:21-jdk }
+    command: ["sleep", "infinity"]
+
+  go:
+    category: toolchain
+    label: Go
+    default_port: null
+    max_per_stack: 2
+    versions:
+      "1.22": { image: golang:1.22-bookworm }
+    command: ["sleep", "infinity"]
+
+  php:
+    category: toolchain
+    label: PHP
+    default_port: null
+    max_per_stack: 2
+    versions:
+      "8.2": { image: php:8.2-cli-bookworm }
+      "8.3": { image: php:8.3-cli-bookworm }
+    command: ["sleep", "infinity"]
+
+  ruby:
+    category: toolchain
+    label: Ruby
+    default_port: null
+    max_per_stack: 2
+    versions:
+      "3.3": { image: ruby:3.3-bookworm }
+    command: ["sleep", "infinity"]
+
+  mailpit:
+    category: messaging
+    label: Mailpit
+    default_port: 8025
+    max_per_stack: 1
+    versions:
+      latest: { image: axllent/mailpit:latest }
+    publish_http: true
+
+  nginx:
+    category: proxy
+    label: Nginx
+    default_port: 80
+    max_per_stack: 1
+    versions:
+      alpine: { image: nginx:alpine }
+    publish_http: true
+
+  elasticsearch:
+    category: search
+    label: Elasticsearch
+    default_port: 9200
+    max_per_stack: 1
+    versions:
+      "8.15": { image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0 }
+    default_env:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    publish_http: true
+
+  varnish:
+    category: proxy
+    label: Varnish
+    default_port: 80
+    max_per_stack: 1
+    versions:
+      "7.4": { image: varnish:7.4 }
+    publish_http: false

@@ -1,0 +1,33 @@
+# =============================================================================
+# LEco ↔ APPLICATION BRIDGE  (leco.app.yaml) — Wrangler + local CF (reference)
+# =============================================================================
+# BRIDGE ROLE
+#   Same v3 bridge as production apps: this directory can be copied beside a
+#   wrangler.toml (see sample wrangler.toml here). LEco discovers bindings from
+#   the wrangler file; leco.yaml documents them in wranglerBindingPreview.
+#
+# PROVISIONING MODEL
+#   One row in wranglerBindingPreview.kv  → one local KV namespace on adapters.
+#   One row in r2 → one R2 bucket; one row in d1 → one D1 database. The preview
+#   is informational — parse source remains wrangler.toml (wranglerConfig path in
+#   leco.yaml).
+#
+# REGISTRY
+#   name sample-wrangler-local-cf is for documentation; use your own slug when
+#   registering in a real ecosystem.
+#
+# CONFIG REFS
+#   wranglerConfig points at the Wrangler file provision-local-cf parses.
+# =============================================================================
+lecoAppVersion: '3'
+applicationVersion: '0.1.0-sample'
+name: sample-wrangler-local-cf
+root: .
+localHostProfile: leco.yaml
+configRefs:
+  wranglerConfig: wrangler.toml
+localhost:
+  notes: |
+    [BRIDGE — wrangler local CF sample]
+    Includes wrangler.toml in this folder for a self-contained example. Merge path:
+    this bridge + leco.yaml → effective manifest for leco-devops ecosystem-register.

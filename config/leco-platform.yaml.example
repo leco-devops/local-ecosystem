@@ -1,0 +1,33 @@
+# LEco platform configuration (copy to config/leco-platform.yaml — gitignored).
+# See docs/SRS_CLOUD_VM_PLATFORM.md and docs/CLOUD_VM_DEPLOYMENT.md
+
+deployment_mode: local  # local | cloud
+base_domain: lh          # cloud: e.g. dev.example.com
+extra_domains: []        # optional additional hostnames
+
+tls:
+  mode: mkcert           # mkcert | acme | static | cloudflare
+  acme_email: ""         # required for acme
+  cert_file: ""          # static mode: path under PROJECT_ROOT
+  key_file: ""
+  cloudflare_notes: ""   # operator notes for orange-cloud / tunnel
+
+# Ecosystem services started by ./ecosystem-stack/ecosystem-stack.sh start
+install_profile: minimal
+enabled_bundles: []        # cloudflare-full | ai-full | infra-full
+enabled_services:
+  - traefik
+  - dashboard
+
+# Isolated dev stacks (compose projects leco-devstack-<id>)
+dev_stacks: []
+#  - id: billing
+#    name: Billing team
+#    state: stopped
+#    components:
+#      - { id: postgres, version: "16" }
+#      - { id: redis, version: "7" }
+#      - { id: node, version: "20" }
+
+ai:
+  default_provider: none   # seeds config/ai-providers.yaml on install when set

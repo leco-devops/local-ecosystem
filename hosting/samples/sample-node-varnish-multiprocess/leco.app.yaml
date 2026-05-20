@@ -1,0 +1,67 @@
+# =============================================================================
+# LEco <> APPLICATION BRIDGE  (leco.app.yaml) — Node.js multi-process + Varnish
+# =============================================================================
+# BRIDGE ROLE
+#   Binds the ecosystem to a multi-process Node.js application with a Varnish
+#   HTTP cache layer, data stores (MongoDB, Redis), and a hosting overlay that
+#   patches upstream config at runtime without modifying the app repo.
+#
+# PATTERN
+#   This sample demonstrates the "runtime preloader" pattern:
+#   - Upstream repo has hardcoded localhost URIs in config.js
+#   - leco-docker-preload.js intercepts require('./config') and patches
+#     the exports to use Docker service names (mongo, redis, varnish, etc.)
+#   - No upstream code changes needed
+#
+# MULTI-PROCESS
+#   Multiple Docker containers run the same Node.js image but with different
+#   entry scripts (server.js, worker.js, cron.js, etc.). They share a single
+#   node_modules volume so npm install runs only once (in the primary service).
+#
+# CUSTOM SERVICE CONFIGS (conf/ directory)
+#   Production configs for Varnish, NGINX, Redis, etc. are adapted for Docker
+#   and placed in conf/<service>/<config-file>. They are bind-mounted :ro into
+#   the target container via docker-compose.yml.
+#
+#   conf/
+#   ├── varnish/
+#   │   └── default.vcl      → /etc/varnish/default.vcl
+#   ├── nginx/
+#   │   └── nginx.conf       → /etc/nginx/nginx.conf  (if applicable)
+#   └── redis/
+#       └── redis.conf       → /usr/local/etc/redis/redis.conf  (if applicable)
+#
+# REGISTRATION & DEPLOY
+#   1. Copy this sample to hosting/app-available/<your-slug>/
+#   2. Adjust name, paths, hostnames, service names
+#   3. Register via dashboard "Register application" or CLI:
+#      leco-devops ecosystem-register
+#   4. Deploy/Recreate from the Hosted apps control panel
+#
+# CONFIG REFS
+#   Paths relative to resolved root. Adjust to your repo layout.
+# =============================================================================
+lecoAppVersion: '3'
+applicationVersion: '0.1.0'
+name: my-app                          # ← registry slug (also used for Traefik route prefix)
+root: .
+localHostProfile: leco.yaml
+configRefs:
+  dockerComposeFile: docker-compose.yml
+  packageJson: /path/to/your/app/package.json    # ← absolute path to upstream repo
+localhost:
+  notes: |
+    [BRIDGE — Node multi-process + Varnish + Mongo + Redis]
+
+    Architecture:
+      Traefik (my-app.lh) → Varnish (:80) → Express (:3000)
+      + worker processes sharing Mongo + Redis
+
+    Services (adjust to match your docker-compose.yml):
+      mongo, redis, varnish, server, worker, cron
+
+    Files:
+      docker-compose.yml              — base stack (services, volumes, networks, server healthcheck)
+      docker-compose.leco-hosting.yml — overlay (lh-network, LECO_DISABLE_VARNISH_NCSA, preloader)
+      leco-docker-preload.js          — runtime config patcher (Module._load)
+      conf/varnish/default.vcl        — production VCL adapted for Docker (backend = <slug>-server:3000)

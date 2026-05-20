@@ -1,0 +1,46 @@
+# Node.js + data tier: define redis, mysql, mongo, nginx, varnish, and the Node API in docker-compose.yml.
+schemaVersion: 2
+archetype: node
+infrastructure:
+  dockerCompose:
+    composeFile: docker-compose.yml
+    projectName: node-fullstack-sample
+    envFile: .env
+  containerImage:
+    dockerfile: Dockerfile
+    context: .
+  routing:
+    entries:
+      - hostname: node-stack.lh
+        apiPathPrefix: /api
+        frontend:
+          host: nginx
+          port: 80
+        apiBackend:
+          host: api
+          port: 3000
+  healthcheckUrls:
+    - http://127.0.0.1:3000/health
+    - http://127.0.0.1:80/
+urls:
+  - role: frontend
+    label: NGINX (public)
+    publicUrl: https://node-stack.lh
+  - role: api
+    label: Node API
+    publicUrl: https://node-stack.lh/api
+  - role: other
+    label: Varnish (optional edge cache)
+    publicUrl: http://127.0.0.1:6081
+lifecycle:
+  prepare:
+    - command: npm ci
+      shell: true
+      timeoutSec: 600
+  build: []
+  preStart: []
+notes: >-
+  Suggested compose services: api (Node), nginx (reverse proxy to api/static), varnish (cache in front of
+  nginx or api — common pattern: client → varnish → nginx → node), redis (cache/sessions), mysql (relational),
+  mongo (document store). Rename hosts in routing.frontend / apiBackend to match your service DNS names on
+  the compose network.

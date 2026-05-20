@@ -1,0 +1,15 @@
+{
+  "_comment": "Per-service default policies. Copy to service-default-policies.json to customize. Missing targets default to 'start'. Policies: start | stop | offloaded. See docs/CF_LECO_SERVICE_MAP.md.",
+  "policies": [
+    {"target_id": "ai-traefik", "policy": "start", "updated_at": ""},
+    {"target_id": "ai-postgres", "policy": "start", "updated_at": ""},
+    {"target_id": "ai-ollama", "policy": "start", "updated_at": ""},
+    {"target_id": "ai-airllm", "policy": "stop", "updated_at": ""},
+    {"target_id": "ai-open-webui", "policy": "start", "updated_at": ""},
+    {"target_id": "ai-n8n", "policy": "start", "updated_at": ""},
+    {"target_id": "ai-dashboard", "policy": "start", "updated_at": ""},
+    {"target_id": "ai-update-catalog", "policy": "start", "updated_at": ""},
+    {"target_id": "ai-cloudflare-local", "policy": "start", "updated_at": ""},
+    {"target_id": "ai-infra", "policy": "stop", "updated_at": ""}
+  ]
+}

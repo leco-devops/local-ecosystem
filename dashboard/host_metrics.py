@@ -10,7 +10,7 @@ bare-metal /proc when running on Linux.
 CPU temperature:
 - Linux: sysfs thermal zones (DASHBOARD_HOST_SYS or /sys/class/thermal).
 - macOS (Docker Desktop): the Linux container cannot see Apple SMC. Set DASHBOARD_HOST_CPU_TEMP_FILE
-  to a mounted file that macOS updates (e.g. osx-cpu-temp); see ai-stack/scripts/macos-write-cpu-temp.sh.
+  to a mounted file that macOS updates (e.g. osx-cpu-temp); see ecosystem-stack/scripts/macos-write-cpu-temp.sh.
 """
 
 import json
@@ -177,7 +177,7 @@ def build_host_temp_insights(
             "macos-host-metrics-scheduler.sh install runs, or schedule the writer yourself."
         )
     out.append(
-        "Manual host refresh: on your Mac, run: bash ai-stack/scripts/macos-write-cpu-temp.sh "
+        "Manual host refresh: on your Mac, run: bash ecosystem-stack/scripts/macos-write-cpu-temp.sh "
         "(repo path must match your clone)."
     )
     return out

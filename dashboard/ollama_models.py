@@ -15,7 +15,7 @@ import requests
 from control import check_control_token
 
 PROJECT_ROOT = os.getenv("DASHBOARD_PROJECT_ROOT", "/project")
-PINNED_MODELS_FILE = Path(PROJECT_ROOT) / "ai-stack" / "config" / "ollama-pinned-models.txt"
+PINNED_MODELS_FILE = Path(PROJECT_ROOT) / "ecosystem-stack" / "config" / "ollama-pinned-models.txt"
 OLLAMA_BASE = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434").rstrip("/")
 BACKUP_DIR = os.path.join(PROJECT_ROOT, ".local-eco-backups")
 os.makedirs(BACKUP_DIR, mode=0o755, exist_ok=True)

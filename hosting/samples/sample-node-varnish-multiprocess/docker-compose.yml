@@ -1,0 +1,149 @@
+# =============================================================================
+# Multi-process Node.js + Varnish + MongoDB + Redis — Docker Compose
+# =============================================================================
+# Adjust: image versions, source path, container_name prefix, volume names,
+#         healthcheck commands/paths, and service dependencies.
+#
+# Pattern:
+#   - One "primary" Node service runs npm install and starts the main process.
+#   - Additional Node services wait for node_modules via a shared volume,
+#     then start their own entry scripts (worker, cron, queue, etc.).
+#   - Varnish sits in front of the primary service as an HTTP cache.
+#   - All services share a bridge network; the hosting overlay adds lh-network.
+# =============================================================================
+
+services:
+  # ── Data stores ────────────────────────────────────────────────────────────
+
+  mongo:
+    image: mongo:7.0
+    container_name: my-app-mongo                  # ← prefix with your slug
+    restart: unless-stopped
+    ports:
+      - "27018:27017"   # host Compass/mongosh; pick first free 27018–27022 if busy
+    volumes:
+      - app_mongo_data:/data/db
+    networks:
+      - app-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017 --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: my-app-redis
+    restart: unless-stopped
+    volumes:
+      - app_redis_data:/data
+    networks:
+      - app-network
+    healthcheck:
+      test: redis-cli ping | grep -q PONG
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ── Varnish HTTP cache ─────────────────────────────────────────────────────
+  # Sits between Traefik and Express. VCL in conf/varnish/default.vcl.
+  # Remove this service entirely if you don't need HTTP caching.
+
+  varnish:
+    image: varnish:7.6-alpine
+    container_name: my-app-varnish
+    restart: unless-stopped
+    volumes:
+      - ./conf/varnish/default.vcl:/etc/varnish/default.vcl:ro
+    environment:
+      VARNISH_SIZE: 256m
+    depends_on:
+      server:
+        condition: service_healthy
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  # ── Primary Node.js process (Express HTTP API) ─────────────────────────────
+
+  server:
+    image: node:20-bookworm
+    container_name: my-app-server
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - /path/to/your/app:/app                    # ← absolute path to upstream source
+      - app_node_modules:/app/node_modules         # shared across Node services
+    environment:
+      NODE_ENV: development
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 180s
+    # Command is overridden in docker-compose.leco-hosting.yml
+
+  # ── Worker process (queue consumer, background jobs, etc.) ─────────────────
+
+  worker:
+    image: node:20-bookworm
+    container_name: my-app-worker
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - /path/to/your/app:/app
+      - app_node_modules:/app/node_modules
+    environment:
+      NODE_ENV: development
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  # ── Cron process (scheduled jobs) ──────────────────────────────────────────
+
+  cron:
+    image: node:20-bookworm
+    container_name: my-app-cron
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - /path/to/your/app:/app
+      - app_node_modules:/app/node_modules
+    environment:
+      NODE_ENV: development
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app-network
+
+volumes:
+  app_mongo_data:
+    driver: local
+  app_redis_data:
+    driver: local
+  app_node_modules:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge

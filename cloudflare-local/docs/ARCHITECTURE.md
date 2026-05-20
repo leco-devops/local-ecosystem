@@ -1,6 +1,6 @@
 # Cloudflare Local — Architecture
 
-**Full local platform setup** (DNS, TLS, AI stack): [../../docs/SETUP.md](../../docs/SETUP.md).
+**Full local platform setup** (DNS, TLS, ecosystem stack): [../../docs/SETUP.md](../../docs/SETUP.md).
 
 This stack approximates **R2**, **KV**, **D1**, **Workers**, and an **autoscaler** on Docker so applications can be developed against URLs and behaviors similar to Cloudflare’s edge platform, without calling Cloudflare APIs.
 
@@ -17,7 +17,7 @@ Traefik (*.lh)
     └── minio-console.lh → MinIO console
 ```
 
-All services attach to the external Docker network **`lh-network`** (created by the main AI stack).
+All services attach to the external Docker network **`lh-network`** (created by the main ecosystem stack).
 
 ## Components
 
@@ -37,13 +37,15 @@ All services attach to the external Docker network **`lh-network`** (created by 
 - MinIO and Valkey use named volumes (`minio_data`, `valkey_data`).
 - D1 uses `d1_data` and `d1_backups` plus a bind mount for `./migrations`.
 
-## Dashboard integration
+## LEco DevOps integration
 
-The **localhost.lh** ops dashboard:
+For the full CF product → LEco service mapping, see [CF_LECO_SERVICE_MAP.md](../../docs/CF_LECO_SERVICE_MAP.md).
+
+**localhost.lh** (LEco DevOps):
 
 - Probes adapter health and resource counts via `GET /api/cloudflare-local`.
 - Records **Docker-wide** time series (CPU, memory, network rates, block I/O, disk tracked by the engine) via `GET /api/metrics/history`.
-- Offers lifecycle actions via `POST /api/control` when `/project` is mounted and the Docker CLI is available in the dashboard image.
+- Offers lifecycle actions via `POST /api/control` when `/project` is mounted and the Docker CLI is available in the LEco DevOps image.
 
 ## Limits
 

@@ -1,0 +1,26 @@
+# Minimal Worker config for the sample: three KV bindings, one R2 bucket, one D1 database.
+# leco-devops reads this file (see leco.yaml → infrastructure.cloudflare.wranglerConfig).
+
+name = "sample-wrangler-local-cf"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[[kv_namespaces]]
+binding = "KV_CACHE"
+preview_id = "sample-kv-cache-local"
+
+[[kv_namespaces]]
+binding = "KV_SESSIONS"
+preview_id = "sample-kv-sessions-local"
+
+[[kv_namespaces]]
+binding = "KV_CONFIG"
+preview_id = "sample-kv-config-local"
+
+[[r2_buckets]]
+binding = "R2_ASSETS"
+bucket_name = "sample-wrangler-assets"
+
+[[d1_databases]]
+binding = "D1_MAIN"
+database_name = "sample-wrangler-db"

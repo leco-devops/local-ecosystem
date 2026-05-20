@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Signing in — {{ assist.label }}</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/static/dashboard.css" />
+    <style>
+      .assist-wrap {
+        max-width: 420px;
+        margin: 4rem auto;
+        padding: 1.5rem;
+        text-align: center;
+      }
+      .assist-wrap h1 {
+        font-size: 1.1rem;
+        margin-bottom: 0.5rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="assist-wrap">
+      <h1>Opening {{ assist.label }}</h1>
+      <p class="muted small">Signing in via LEco DevOps (local dev). If nothing happens, use manual login at
+        <a href="{{ assist.login_url }}">{{ assist.login_url }}</a>.</p>
+      {% if assist.auth_type == 'form_post' %}
+      <form id="assistForm" method="post" action="{{ assist.form_action }}" target="_top" style="display: none">
+        {% for field in assist.fields %}
+        <input type="hidden" name="{{ field.name }}" value="{{ field.value }}" />
+        {% endfor %}
+      </form>
+      <script>
+        document.getElementById("assistForm").submit();
+      </script>
+      {% elif assist.auth_type == 'json_post' %}
+      <script>
+        (async function () {
+          const url = {{ assist.json_url | tojson }};
+          const body = {{ assist.json_body | tojson }};
+          const target = {{ assist.login_url | tojson }};
+          try {
+            const res = await fetch(url, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+              credentials: "include",
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok) {
+              if (data && data.token) {
+                try {
+                  localStorage.setItem("token", data.token);
+                } catch (_) {
+                  /* ignore */
+                }
+              }
+              window.location.replace(target);
+              return;
+            }
+          } catch (_) {
+            /* fall through */
+          }
+          document.body.insertAdjacentHTML(
+            "beforeend",
+            "<p class='muted small'>Auto-login failed. <a href='" +
+              target +
+              "'>Open login page manually</a>.</p>",
+          );
+        })();
+      </script>
+      {% endif %}
+    </div>
+  </body>
+</html>

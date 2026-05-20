@@ -3,52 +3,13 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Local Ecosystem Ops Dashboard</title>
-    <link rel="stylesheet" href="/static/dashboard.css" />
+    <title>LEco DevOps</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/static/dashboard.css?v=20260516b" />
   </head>
   <body>
     <div class="wrap">
-      <header class="page-header">
-        <div class="header-main">
-          <h1>Ops Dashboard</h1>
-          <div id="summary" class="header-status">Loading…</div>
-          <details class="header-more">
-            <summary>Deploy &amp; system metrics</summary>
-            <p class="small muted">
-              Rebuild:
-              <code>./ai-stack/ai-stack.sh restart dashboard</code>
-              ·
-              <code>bash ./ai-stack/services/dashboard.sh deploy</code>
-            </p>
-            <p class="small muted">
-              Linux: mount <code>/proc</code> for host CPU/RAM/net/IOPS. Temperature uses <code>/sys/class/thermal</code> (host via <code>DASHBOARD_HOST_SYS</code>, or the container’s own <code>/sys</code> when zones exist). Docker Desktop: thermal may still be empty; see the Metrics “Host CPU temperature” card for status.
-            </p>
-          </details>
-        </div>
-        <div class="toolbar">
-          <label class="sr-only" for="refreshRate">Auto refresh</label>
-          <select id="refreshRate" title="Auto refresh interval">
-            <option value="5000">5s</option>
-            <option value="10000" selected>10s</option>
-            <option value="30000">30s</option>
-            <option value="60000">60s</option>
-            <option value="0">Manual</option>
-          </select>
-          <button id="refreshNow">Refresh now</button>
-          <span id="nextRefresh" class="small"></span>
-        </div>
-      </header>
-
-      <div class="tabs">
-        <button class="tab-btn active" data-tab="overviewTab">Overview</button>
-        <button class="tab-btn" data-tab="referenceTab">Reference</button>
-        <button class="tab-btn" data-tab="infrastructureTab">Infrastructure</button>
-        <button class="tab-btn" data-tab="metricsTab">Metrics</button>
-        <button class="tab-btn" data-tab="controlTab">Control</button>
-        <button class="tab-btn" data-tab="docsTab">Docs</button>
-        <button class="tab-btn" data-tab="developTab">Develop</button>
-        <button class="tab-btn" data-tab="logsTab">Logs</button>
-      </div>
+      {% include "_dashboard_top.html" %}
 
       <section id="overviewTab" class="tab-content active">
         <div class="overview-layout">
@@ -99,7 +60,10 @@
               </div>
             </article>
             <article class="dash-panel dash-panel--compact">
-              <header class="dash-panel__head"><span class="dash-panel__title">Engine containers</span></header>
+              <header class="dash-panel__head">
+                <span class="dash-panel__title">Engine containers</span>
+                <span class="dash-panel__hint muted small" title="Counts containers the dashboard can list; hover segments for names">listed on host</span>
+              </header>
               <div class="dash-panel__chart dash-panel__chart--short">
                 <canvas id="overviewChartEngine"></canvas>
               </div>
@@ -108,6 +72,30 @@
               <header class="dash-panel__head"><span class="dash-panel__title">CPU by service (now)</span></header>
               <div class="dash-panel__chart dash-panel__chart--short">
                 <canvas id="overviewChartServicesBar"></canvas>
+              </div>
+            </article>
+            <article class="dash-panel dash-panel--compact dash-panel--hosted-summary">
+              <header class="dash-panel__head"><span class="dash-panel__title">Hosted app URLs</span></header>
+              <div id="overviewHostedUrls" class="overview-hosted-urls">
+                <p class="muted small">Loading hosted app URLs…</p>
+              </div>
+            </article>
+            <article class="dash-panel dash-panel--compact dash-panel--ui-access">
+              <header class="dash-panel__head">
+                <span class="dash-panel__title">UI access</span>
+                <a class="dash-panel__link" href="/hub#hub-ui-access">Service hubs</a>
+              </header>
+              <div id="overviewUiAccess" class="overview-ui-access">
+                <p class="muted small">Loading UI logins…</p>
+              </div>
+            </article>
+            <article class="dash-panel dash-panel--compact dash-panel--wide dash-panel--update-catalog">
+              <header class="dash-panel__head dash-panel__head--catalog">
+                <span class="dash-panel__title">Updates &amp; catalogs</span>
+                <a class="dash-panel__link" href="/help?topic=update-catalog-service">Help</a>
+              </header>
+              <div id="overviewUpdateCatalog" class="overview-update-catalog">
+                <p class="muted small">Loading update catalog…</p>
               </div>
             </article>
           </div>
@@ -119,13 +107,35 @@
       <section id="infrastructureTab" class="tab-content">
         <h2 class="tab-heading">Infrastructure</h2>
         <p class="tab-lead muted small">
-          <strong>1 · Health</strong> (host &amp; Docker) → <strong>2 · Services</strong> (probed stack &amp; hubs) → <strong>3 · Trends</strong> →
-          <strong>4 · Cloudflare local</strong> → <strong>5 · Ollama</strong> → <strong>6 · Full inventory</strong>.
+          <strong>1 · Health</strong> → <strong>2 · Services</strong> → <strong>3 · Trends</strong> →
+          <strong>4 · Cloudflare local</strong> → <strong>5 · Ollama</strong> → <strong>6 · AirLLM</strong> → <strong>7 · AI onboarding</strong> → <strong>8 · Inventory</strong>.
+          UI credentials and auto-login live under <a href="/hub#hub-ui-access">Service hubs → UI access</a>.
+          Model install/load controls are in the purple <strong>Model manager</strong> panels in sections 5 and 6 (not only the service cards in section 2).
         </p>
+        <nav class="infra-jump-nav" aria-label="Infrastructure sections">
+          <a href="/?tab=infrastructureTab#infra-health" class="infra-jump-link">Health</a>
+          <a href="/?tab=infrastructureTab#infra-services" class="infra-jump-link">Services</a>
+          <a href="/?tab=infrastructureTab#infra-trends" class="infra-jump-link">Trends</a>
+          <a href="/?tab=infrastructureTab#infra-cf" class="infra-jump-link">CF local</a>
+          <a href="/?tab=infrastructureTab#infra-ollama" class="infra-jump-link infra-jump-link--accent">Ollama</a>
+          <a href="/?tab=infrastructureTab#infra-airllm" class="infra-jump-link infra-jump-link--accent">AirLLM</a>
+          <a href="/?tab=infrastructureTab#infra-ai" class="infra-jump-link">AI</a>
+          <a href="/?tab=infrastructureTab#infra-inventory" class="infra-jump-link">Inventory</a>
+          <a href="/help" class="infra-jump-link infra-jump-link--help">Help manual</a>
+        </nav>
 
-        <div class="infra-group">
+        <div class="infra-group" id="infra-health">
           <h3 class="infra-group__title">1 · Platform health</h3>
-          <p class="infra-group__lead muted small">Cluster-level signals from the Docker API and the dashboard's own health model.</p>
+          <p class="infra-group__lead muted small">Cluster-level signals from the Docker API and LEco DevOps’s built-in health model.</p>
+          <div class="infra-quickstart-bar" id="infraQuickstartBar" aria-label="Start platform stacks">
+            <strong>Start stacks</strong>
+            <span class="muted small">Brings managed containers up (may take several minutes). Same actions as Control → bulk bars.</span>
+            <div class="infra-quickstart-bar__btns">
+              <button type="button" class="ctrl-bulk ctrl-bulk--start" data-infra-quickstart="stack-ecosystem-all" data-infra-quickstart-action="start" data-infra-quickstart-label="Start ecosystem stack">Start ecosystem</button>
+              <button type="button" class="ctrl-bulk ctrl-bulk--deploy" data-infra-quickstart="stack-cf-all" data-infra-quickstart-action="deploy" data-infra-quickstart-label="Start Cloudflare local">Start Cloudflare local</button>
+              <button type="button" class="ctrl-bulk ctrl-bulk--deploy" data-infra-quickstart="stack-infra-all" data-infra-quickstart-action="deploy" data-infra-quickstart-label="Start infra stack">Start infra add-ons</button>
+            </div>
+          </div>
           <div class="infra-group__block">
             <h4 class="infra-subhead">System status</h4>
             <div id="systemStatus" class="grid-mini"></div>
@@ -136,7 +146,7 @@
           </div>
         </div>
 
-        <div class="infra-group">
+        <div class="infra-group" id="infra-services">
           <h3 class="infra-group__title">2 · Managed services</h3>
           <p class="infra-group__lead muted small">
             Per-service URLs, probes, metrics, and links to <a href="/hub">service hubs</a> (credentials, DB GUIs, connection strings).
@@ -147,7 +157,7 @@
           </div>
         </div>
 
-        <div class="infra-group">
+        <div class="infra-group" id="infra-trends">
           <h3 class="infra-group__title">3 · Utilization &amp; trends</h3>
           <p class="infra-group__lead muted small">Historical lines and current CPU/memory for the managed service map (same set as the cards above).</p>
           <div class="infra-group__block">
@@ -169,19 +179,23 @@
           </div>
         </div>
 
-        <div class="infra-group infra-group--cf">
+        <div class="infra-group infra-group--cf" id="infra-cf">
           <h3 class="infra-group__title">4 · Cloudflare local</h3>
           <p class="infra-group__lead muted small">
-            R2, KV, D1, Workers, browser rendering, autoscaler — mirrors the Overview CF panel. Quick links are HTTP/HTTPS. Deeper detail:
+            R2, KV, D1, Workers, browser, autoscaler, Valkey, MinIO — mirrors the Overview CF panel (8 stack services). Quick links are HTTP/HTTPS. Deeper detail:
             <a href="/hub">service hubs</a>.
           </p>
           <div class="infra-group__block">
             <h4 class="infra-subhead">Reachability &amp; resources</h4>
             <div id="cloudflareLocal" class="grid-mini"></div>
           </div>
+          <div class="infra-group__block">
+            <h4 class="infra-subhead">Stack containers</h4>
+            <div id="cloudflareLocalContainers" class="cf-stack-containers"></div>
+          </div>
         </div>
 
-        <div class="infra-group">
+        <div class="infra-group infra-group--llm" id="infra-ollama">
           <h3 class="infra-group__title">5 · Ollama</h3>
           <p class="infra-group__lead muted small">Model inventory, RAM, pinned list, and pull/backup actions (same <strong>control token</strong> as Control).</p>
           <div class="infra-group__block">
@@ -189,17 +203,32 @@
             <p class="muted small" id="ollamaModelsSummary">Loading…</p>
             <p class="muted small" id="ollamaModelsInsights"> </p>
             <p class="muted small">
-              Pinned file: <code>ai-stack/config/ollama-pinned-models.txt</code> on the <code>/project</code> mount. Listed from <code>GET /api/tags</code>.
+              Pinned file: <code>ecosystem-stack/config/ollama-pinned-models.txt</code> on the <code>/project</code> mount. Listed from <code>GET /api/tags</code>.
             </p>
+            <div class="llm-model-manager" id="ollama-model-manager">
+              <div class="llm-model-manager__head">
+                <strong class="llm-model-manager__title">Model manager</strong>
+                <span class="muted small">Popular dropdown · Install · Load · Unload · Remove · <a href="/help?topic=ollama">Help</a></span>
+              </div>
             <div class="ollama-models-toolbar">
               <button type="button" id="ollamaPullAllBtn" class="ollama-act ollama-act--ops">Pull all pinned</button>
               <button type="button" id="ollamaModelsRefreshBtn" class="ollama-act ollama-act--safe">Refresh</button>
               <button type="button" id="ollamaBackupBtn" class="ollama-act ollama-act--safe" title="Save manifest JSON under .local-eco-backups">Backup manifest</button>
               <button type="button" id="ollamaUnloadAllBtn" class="ollama-act ollama-act--caution" title="keep_alive=0 for each running model">Unload all (RAM)</button>
               <label class="ollama-pull-field">
-                <span class="muted">Pull by name</span>
+                <span class="muted">Popular</span>
+                <select id="ollamaPopularSelect" class="ollama-backup-select" aria-label="Popular Ollama models">
+                  <option value="">Loading…</option>
+                </select>
+              </label>
+              <label class="ollama-pull-field">
+                <span class="muted">Model</span>
                 <input type="text" id="ollamaPullNameInput" placeholder="e.g. llama3.2:latest" autocomplete="off" />
-                <button type="button" id="ollamaPullNameBtn" class="ollama-act ollama-act--ops">Pull</button>
+                <button type="button" id="ollamaPullNameBtn" class="ollama-act ollama-act--ops" title="Install / pull the model">Install</button>
+                <button type="button" id="ollamaLoadNameBtn" class="ollama-act ollama-act--safe" title="Warm into RAM (keep_alive=-1) without pulling">Load</button>
+                <button type="button" id="ollamaUnloadNameBtn" class="ollama-act ollama-act--caution" title="Unload from RAM (keep_alive=0)">Unload</button>
+                <button type="button" id="ollamaRemoveNameBtn" class="ollama-act ollama-act--destructive" title="Delete model from disk">Remove</button>
+                <button type="button" id="ollamaShowCmdBtn" class="ollama-act ollama-act--safe" title="Show equivalent CLI commands without running them">Show CLI</button>
               </label>
             </div>
             <div class="ollama-backups-bar">
@@ -210,12 +239,163 @@
               <button type="button" id="ollamaRestoreBackupBtn" class="ollama-act ollama-act--ops">Restore pinned list</button>
               <button type="button" id="ollamaClearPinnedBtn" class="ollama-act ollama-act--destructive" title="Clears only the pinned file">Clear pinned</button>
             </div>
+            </div>
             <div id="ollamaModelsPanel" class="ollama-models-panel muted">Loading…</div>
           </div>
         </div>
 
-        <div class="infra-group infra-group--inventory">
-          <h3 class="infra-group__title">6 · Docker inventory</h3>
+        <div class="infra-group infra-group--llm" id="infra-airllm">
+          <h3 class="infra-group__title">6 · AirLLM (Large Models)</h3>
+          <p class="infra-group__lead muted small">
+            HuggingFace model inventory for AirLLM — layer-by-layer loading for 70B/405B models on limited VRAM.
+            Runs as the <code>airllm</code> Docker container on <code>lh-network</code>, exposing an Ollama-compatible API at <code>http://airllm:11435</code> (<code>https://airllm.lh</code> via Traefik).
+          </p>
+          <div class="infra-group__block">
+            <h4 class="infra-subhead">HF Models &amp; lifecycle</h4>
+            <p class="muted small" id="airllmModelsSummary">Loading…</p>
+            <p class="muted small" id="airllmModelsInsights"> </p>
+            <p class="muted small">
+              Pinned file: <code>ecosystem-stack/config/airllm-pinned-models.txt</code> on the <code>/project</code> mount.
+              Listed from AirLLM shim <code>GET /api/tags</code> at <code>http://airllm.lh</code>.
+            </p>
+            <div class="llm-model-manager" id="airllm-model-manager">
+              <div class="llm-model-manager__head">
+                <strong class="llm-model-manager__title">Model manager</strong>
+                <span class="muted small">HF ids · same actions as Ollama · <a href="/help?topic=airllm">Help</a></span>
+              </div>
+            <div class="ollama-models-toolbar">
+              <button type="button" id="airllmPullAllBtn" class="ollama-act ollama-act--ops">Pull all pinned</button>
+              <button type="button" id="airllmModelsRefreshBtn" class="ollama-act ollama-act--safe">Refresh</button>
+              <button type="button" id="airllmBackupBtn" class="ollama-act ollama-act--safe" title="Save manifest JSON under .local-eco-backups">Backup manifest</button>
+              <button type="button" id="airllmUnloadAllBtn" class="ollama-act ollama-act--caution" title="keep_alive=0 for loaded model">Unload from RAM</button>
+              <label class="ollama-pull-field">
+                <span class="muted">Popular</span>
+                <select id="airllmPopularSelect" class="ollama-backup-select" aria-label="Popular AirLLM models">
+                  <option value="">Loading…</option>
+                </select>
+              </label>
+              <label class="ollama-pull-field">
+                <span class="muted">HF model</span>
+                <input type="text" id="airllmPullNameInput" placeholder="e.g. Qwen/Qwen2.5-7B-Instruct" autocomplete="off" />
+                <button type="button" id="airllmPullNameBtn" class="ollama-act ollama-act--ops" title="Install / pull the HF model into AirLLM cache">Install</button>
+                <button type="button" id="airllmLoadNameBtn" class="ollama-act ollama-act--safe" title="Warm into RAM (keep_alive=-1) without pulling">Load</button>
+                <button type="button" id="airllmUnloadNameBtn" class="ollama-act ollama-act--caution" title="Unload from RAM (keep_alive=0)">Unload</button>
+                <button type="button" id="airllmRemoveNameBtn" class="ollama-act ollama-act--destructive" title="Delete model from disk">Remove</button>
+                <button type="button" id="airllmShowCmdBtn" class="ollama-act ollama-act--safe" title="Show equivalent CLI commands without running them">Show CLI</button>
+              </label>
+            </div>
+            <div class="ollama-backups-bar">
+              <select id="airllmBackupSelect" class="ollama-backup-select" aria-label="Backup file">
+                <option value="">Select backup manifest…</option>
+              </select>
+              <button type="button" id="airllmRefreshBackupsBtn" class="ollama-act ollama-act--safe">List backups</button>
+              <button type="button" id="airllmRestoreBackupBtn" class="ollama-act ollama-act--ops">Restore pinned list</button>
+              <button type="button" id="airllmClearPinnedBtn" class="ollama-act ollama-act--destructive" title="Clears only the pinned file">Clear pinned</button>
+            </div>
+            </div>
+            <div id="airllmModelsPanel" class="ollama-models-panel muted">Loading…</div>
+          </div>
+        </div>
+
+        <div class="infra-group" id="infra-ai">
+          <h3 class="infra-group__title">7 · AI-assisted onboarding</h3>
+          <div id="aiCloudBanner" class="ai-cloud-banner is-hidden" role="note">
+            <strong>Cloud VM (ai-cloud profile):</strong> External LLM APIs are the recommended path.
+            Set OpenAI, Anthropic, or Google keys below. Ollama and AirLLM remain available but may be stopped on
+            CPU-only VMs to save RAM.
+          </div>
+          <p class="infra-group__lead muted small">
+            Configure AI provider for automatic application analysis during registration.
+            Supports <strong>local</strong> (Ollama) or <strong>cloud</strong> (OpenAI, Anthropic, Google, OpenAI-compatible) providers.
+            API keys are stored server-side only — never sent to the browser.
+          </p>
+          <div class="infra-group__block">
+            <h4 class="infra-subhead">Provider settings</h4>
+            <div class="ai-settings">
+              <div class="ai-settings__row">
+                <label class="ai-settings__field">
+                  <span class="ai-settings__label">AI provider</span>
+                  <select id="aiProviderSelect" aria-label="AI provider">
+                    <option value="none">No AI (deterministic only)</option>
+                    <option value="ollama">Ollama (local SLM)</option>
+                    <option value="airllm">AirLLM (local large models)</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="anthropic">Anthropic</option>
+                    <option value="google">Google Gemini</option>
+                    <option value="openai-compatible">OpenAI-compatible endpoint</option>
+                    <option value="hybrid">Hybrid (local SLM + cloud LLM)</option>
+                  </select>
+                </label>
+                <label class="ai-settings__field" id="aiModelField">
+                  <span class="ai-settings__label">Model</span>
+                  <span class="ai-settings__model-row">
+                    <select id="aiModelSelect" aria-label="Model">
+                      <option value="">— select provider first —</option>
+                    </select>
+                    <input type="text" id="aiModelCustom" placeholder="or type model name" autocomplete="off" />
+                  </span>
+                </label>
+              </div>
+              <div class="ai-settings__row" id="aiKeyRow" style="display:none">
+                <label class="ai-settings__field ai-settings__field--grow">
+                  <span class="ai-settings__label">API key</span>
+                  <input type="password" id="aiApiKeyInput" autocomplete="off" placeholder="sk-… / key-… (stored server-side)" />
+                </label>
+              </div>
+              <div class="ai-settings__row" id="aiBaseUrlRow" style="display:none">
+                <label class="ai-settings__field ai-settings__field--grow">
+                  <span class="ai-settings__label">Base URL</span>
+                  <input type="text" id="aiBaseUrlInput" autocomplete="off" placeholder="http://localhost:8080/v1" />
+                </label>
+              </div>
+              <div class="ai-settings__row" id="aiTimeoutRow" style="display:none">
+                <label class="ai-settings__field">
+                  <span class="ai-settings__label">Request timeout (seconds)</span>
+                  <input type="number" id="aiTimeoutInput" min="10" max="900" step="10" value="180" autocomplete="off" placeholder="180" />
+                </label>
+                <span class="ai-settings__timeout-hint muted small">
+                  Local SLMs on CPU may need 300–600 s for large codebases. Cloud APIs typically need 60–180 s.
+                </span>
+              </div>
+              <div class="ai-settings__row ai-settings__hybrid-row" id="aiHybridRow" style="display:none">
+                <label class="ai-settings__field">
+                  <span class="ai-settings__label">Local SLM (summarizer)</span>
+                  <select id="aiHybridSlmSelect" aria-label="Local SLM">
+                    <option value="ollama" selected>Ollama</option>
+                    <option value="airllm">AirLLM (large models)</option>
+                    <option value="openai-compatible">OpenAI-compatible local</option>
+                  </select>
+                </label>
+                <label class="ai-settings__field">
+                  <span class="ai-settings__label">Cloud LLM (analyzer)</span>
+                  <select id="aiHybridLlmSelect" aria-label="Cloud LLM">
+                    <option value="openai" selected>OpenAI</option>
+                    <option value="anthropic">Anthropic</option>
+                    <option value="google">Google Gemini</option>
+                  </select>
+                </label>
+                <label class="ai-settings__field ai-settings__field--grow">
+                  <span class="ai-settings__label">Cloud API key</span>
+                  <input type="password" id="aiHybridLlmKey" autocomplete="off" placeholder="Cloud provider API key (stored server-side)" />
+                </label>
+              </div>
+              <p class="muted small ai-settings__hybrid-hint is-hidden" id="aiHybridHint">
+                <strong>Hybrid flow:</strong> Local SLM pre-summarizes your app's source code (fast, free, private),
+                then Cloud LLM produces the structured analysis from that summary (accurate, fewer tokens = lower cost).
+              </p>
+              <div class="ai-settings__toolbar">
+                <button type="button" id="aiSettingsSave" class="ctrl-act ctrl-act--ops">Save settings</button>
+                <button type="button" id="aiSettingsTest" class="ctrl-act ctrl-act--safe">Test connection</button>
+                <button type="button" id="aiModelsRefresh" class="ctrl-act ctrl-act--safe">Refresh models</button>
+                <span id="aiSettingsStatus" class="ai-settings__status muted small"></span>
+              </div>
+              <pre id="aiSettingsTestOutput" class="hosted-reg-pre is-hidden" aria-live="polite"></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="infra-group infra-group--inventory" id="infra-inventory">
+          <h3 class="infra-group__title">7 · Docker inventory</h3>
           <p class="infra-group__lead muted small">Every container on this Docker host (broader than the managed service map above).</p>
           <div class="infra-group__block">
             <h4 class="infra-subhead">All containers</h4>
@@ -271,7 +451,7 @@
             <strong>Host CPU temperature</strong>
             <p class="chart-sub">
               <strong>Linux:</strong> max of <code>/sys/class/thermal/*/temp</code> (optional host mount <code>DASHBOARD_HOST_SYS</code> in <code>dashboard.sh</code>).
-              <strong>macOS + Docker Desktop:</strong> optional <code>brew install osx-cpu-temp</code>. Starting the dashboard from <code>ai-stack/services/dashboard.sh</code> installs a LaunchAgent that runs <code>ai-stack/scripts/macos-write-cpu-temp.sh</code> every 30s; stopping/removing the dashboard removes it. On some Apple Silicon setups <code>osx-cpu-temp</code> reports <code>0°C</code>; the writer then uses <code>sudo powermetrics</code> and maps thermal pressure to a proxy °C, plus load average so the chart moves under CPU load even when pressure stays Nominal. For unattended runs, passwordless <code>sudo</code> for <code>/usr/bin/powermetrics</code> may be needed. Deploy from the Mac so <code>~/.local-eco-host-metrics</code> mounts into the container.
+              <strong>macOS + Docker Desktop:</strong> optional <code>brew install osx-cpu-temp</code>. Starting LEco DevOps from <code>ecosystem-stack/services/dashboard.sh</code> installs a LaunchAgent that runs <code>ecosystem-stack/scripts/macos-write-cpu-temp.sh</code> every 30s; stopping/removing LEco DevOps removes it. On some Apple Silicon setups <code>osx-cpu-temp</code> reports <code>0°C</code>; the writer then uses <code>sudo powermetrics</code> and maps thermal pressure to a proxy °C, plus load average so the chart moves under CPU load even when pressure stays Nominal. For unattended runs, passwordless <code>sudo</code> for <code>/usr/bin/powermetrics</code> may be needed. Deploy from the Mac so <code>~/.local-eco-host-metrics</code> mounts into the container.
             </p>
             <div id="metricsTempPlaceholder" class="metrics-temp-placeholder">
               No temperature samples yet — on Mac run the host temp script; on Linux ensure <code>/sys</code> thermal zones exist or mount host <code>/sys</code>.
@@ -294,7 +474,7 @@
           </div>
           <div id="hostMetricsReloadLog" class="host-metrics-reload-log is-hidden" aria-label="Reload log"></div>
           <p class="muted small host-metrics-panel__lead">
-            The dashboard container reads a file from your Mac (see <code>docs/SETUP.md</code> §8). LaunchAgent status below is from
+            The LEco DevOps container reads a file from your Mac (see <code>docs/SETUP.md</code> §8). LaunchAgent status below is from
             <code>scheduler_meta.json</code> on disk; live <code>launchctl</code> must be checked on the Mac.
           </p>
           <div id="hostInjectedMetricsBody" class="host-metrics-panel__body muted small">Loading…</div>
@@ -305,7 +485,7 @@
       <section id="controlTab" class="tab-content">
         <h2 class="tab-heading">Control</h2>
         <p class="tab-lead muted small">
-          Cards are grouped: <strong>AI-stack bulk</strong>, <strong>AI services</strong>, <strong>Infra add-ons</strong> (MySQL, Adminer, Redis Commander, cache lab, …), then <strong>Cloudflare local</strong>. Each card is a stack or service — click an action. Destructive ops may wipe volumes; read the JSON response.
+          Cards are grouped: <strong>Bulk &amp; orchestration</strong> (full-stack API target), <strong>Ecosystem stack &amp; Traefik</strong>, <strong>Infra add-ons</strong>, and <strong>Cloudflare local</strong>. Use the bulk bars above for quick <strong>Start all / Stop all</strong>. Registered compose apps are under <strong>Hosted apps</strong>. Destructive ops may wipe volumes — read the JSON response.
         </p>
 
         <div class="control-token-row" id="controlTokenRow" style="display: none">
@@ -313,11 +493,24 @@
           <input id="controlTokenInput" type="password" autocomplete="off" placeholder="DASHBOARD_CONTROL_TOKEN" />
           <button type="button" id="controlTokenSave">Save</button>
         </div>
+        <p class="muted small" id="controlTokenInjectHint" style="display: none">
+          <code>DASHBOARD_INJECT_CONTROL_TOKEN_UI</code> is on: the token is prefilled from the server on load (trusted local only; see <strong>DEPLOYMENT.md</strong>).
+        </p>
+
+        <div class="ui-access-control-hint" id="controlUiAccessHint">
+          <strong>UI credentials (local dev)</strong>
+          <span class="muted small">Reset MinIO / Adminer to compose defaults and open services with a short-lived auto-login magic link.</span>
+          <a class="ollama-act ollama-act--safe" href="/hub#hub-ui-access">Open UI access (Service hubs)</a>
+        </div>
+
+        <div class="control-policies-bar muted small" id="controlPoliciesBar">
+          <strong>Default policies</strong> — each service can be set to <strong>start</strong> (included in bulk ops), <strong>stop</strong> (skipped on bulk start), or <strong>offloaded</strong> (excluded from all bulk automation). Use the segmented control on each card. Policies affect <strong>Start all / Stop all / Restart all</strong> and <code>ecosystem-stack.sh start</code>.
+        </div>
 
         <div class="control-bulk-bar" id="controlBulkBar" aria-label="Bulk ecosystem actions">
           <div class="control-bulk-bar__head">
-            <strong>All AI-stack services</strong>
-            <span class="muted small">Uses <code>bulk_ecosystem</code> in <code>ai-stack/core.sh</code>. Bulk <strong>stop</strong>, <strong>restart</strong>, <strong>redeploy</strong>, <strong>pause</strong>, <strong>remove</strong>, <strong>reset</strong>, and <strong>recreate</strong> skip this dashboard and, by default, <strong>Traefik</strong> and <strong>Postgres</strong> so routing and the shared DB stay up. Override skips with <code>ECOSYSTEM_BULK_PLATFORM_SKIP</code> (space-separated names). To stop or redeploy Traefik, Postgres, or the dashboard itself, use the shell — see <strong>DEPLOYMENT.md</strong> (section <em>Core infra — shell</em>).</span>
+            <strong>All ecosystem stack services</strong>
+            <span class="muted small">Uses <code>bulk_ecosystem</code> in <code>ecosystem-stack/core.sh</code>. Bulk <strong>stop</strong>, <strong>restart</strong>, <strong>redeploy</strong>, <strong>pause</strong>, <strong>remove</strong>, <strong>reset</strong>, and <strong>recreate</strong> skip LEco DevOps and, by default, <strong>Traefik</strong> and <strong>Postgres</strong> so routing and the shared DB stay up. Override skips with <code>ECOSYSTEM_BULK_PLATFORM_SKIP</code> (space-separated names). Per-service <strong>default policies</strong> further filter which targets bulk actions include. To stop or redeploy Traefik, Postgres, or LEco DevOps itself, use the shell — see <strong>DEPLOYMENT.md</strong> (section <em>Core infra — shell</em>).</span>
           </div>
           <div class="control-bulk-bar__btns">
             <button type="button" class="ctrl-bulk ctrl-bulk--start" data-bulk-action="start" data-bulk-label="Start all">Start all</button>
@@ -347,37 +540,676 @@
           <summary>Full API response</summary>
           <pre id="controlResult" class="control-result"></pre>
         </details>
+      </section>
 
-        <div id="controlActionOverlay" class="control-action-overlay" hidden>
-          <div class="control-action-dialog" role="dialog" aria-modal="true" aria-labelledby="controlActionTitle">
-            <div class="control-action-dialog__inner">
-              <div id="controlActionSpinner" class="control-action-spinner" aria-hidden="true"></div>
-              <h3 id="controlActionTitle" class="control-action-title">Running…</h3>
-              <p id="controlActionLive" class="control-action-live">Starting…</p>
-              <p class="muted small control-action-hint">
-                Live output streams as Docker/bash prints lines. If this box stays empty for minutes behind <code>*.lh</code>, open the dashboard on
-                <strong>port 8090</strong> (direct to the container) or check <code>docker logs service-dashboard</code>.
+      <section id="platformTab" class="tab-content">
+        <h2 class="tab-heading">Platform (cloud VM)</h2>
+        <p class="tab-lead muted small">
+          Install profiles, custom domain/TLS, ecosystem bundles, and isolated <strong>dev stacks</strong>
+          (Postgres, MySQL, Redis, Node/Python versions). Requires <code>config/leco-platform.yaml</code> — see
+          <code>config/leco-platform.yaml.example</code> and <a href="/help?topic=cloud-vm-deployment">cloud VM help</a>.
+        </p>
+        <div class="platform-grid">
+          <article class="platform-card platform-card--wide platform-card--config">
+            <h3>Platform config</h3>
+            <form class="platform-config-form" id="platformConfigForm" onsubmit="return false;">
+              <div class="platform-config-form__row">
+                <label class="platform-config-form__label" for="platformDeploymentMode">Deployment</label>
+                <select id="platformDeploymentMode" class="platform-config-form__control" aria-label="Deployment mode">
+                  <option value="local">local (*.lh workstation)</option>
+                  <option value="cloud">cloud (VM / custom domain)</option>
+                </select>
+              </div>
+              <div class="platform-config-form__row">
+                <label class="platform-config-form__label" for="platformBaseDomain">Base domain</label>
+                <input type="text" id="platformBaseDomain" class="platform-config-form__control" placeholder="lh or dev.example.com" />
+              </div>
+              <div class="platform-config-form__row">
+                <label class="platform-config-form__label" for="platformTlsMode">TLS mode</label>
+                <select id="platformTlsMode" class="platform-config-form__control">
+                  <option value="mkcert">mkcert (local)</option>
+                  <option value="acme">ACME (Let’s Encrypt)</option>
+                  <option value="static">Static PEM</option>
+                  <option value="cloudflare">Cloudflare proxy / tunnel</option>
+                </select>
+              </div>
+              <div class="platform-config-form__row">
+                <label class="platform-config-form__label" for="platformInstallProfile">Install profile</label>
+                <select id="platformInstallProfile" class="platform-config-form__control" aria-label="Install profile">
+                  <option value="">— keep current —</option>
+                </select>
+              </div>
+              <div class="platform-config-form__row platform-config-form__row--actions">
+                <span class="platform-config-form__label" aria-hidden="true"></span>
+                <div class="platform-config-form__actions">
+                  <button type="button" id="platformSaveConfig" class="ctrl-act ctrl-act--ops">Save config</button>
+                  <button type="button" id="platformApplyTraefik" class="ctrl-act ctrl-act--deploy">Apply Traefik routes</button>
+                </div>
+              </div>
+              <pre id="platformConfigStatus" class="platform-config-form__status muted small"></pre>
+            </form>
+          </article>
+          <article class="platform-card platform-card--wide">
+            <h3>Ecosystem services &amp; bundles</h3>
+            <div id="platformServicesList" class="platform-services-list"><p class="muted small">Loading…</p></div>
+          </article>
+          <article class="platform-card platform-card--wide platform-card--devstacks">
+            <details class="devstack-builder-panel">
+              <summary class="devstack-builder-panel__summary">
+                <span class="devstack-builder-panel__title">Dev stack builder</span>
+                <span class="devstack-builder-panel__hint muted small">Isolated compose per stack — create presets or custom components</span>
+              </summary>
+              <div class="devstack-builder-panel__body">
+            <details class="platform-help muted small">
+              <summary>How dev stack builder works</summary>
+              <p>
+                Pick a <strong>Stack preset</strong> (infrastructure, common bundles, or ready apps like WordPress / Magento) or choose components manually. Ready stacks can include <strong>sample demo content</strong>. LEco generates
+                <code>platform/dev-stacks/&lt;id&gt;/docker-compose.yml</code> and runs it as project
+                <code>leco-devstack-&lt;id&gt;</code> on its own Docker network. Databases stay internal;
+                only routed HTTP services join <code>lh-network</code>. Bind a hosted app with
+                <code>platform.devStackId</code> in <code>leco.yaml</code> (Hosted apps → Dev stack).
               </p>
-              <p id="controlActionSummary" class="control-action-summary is-hidden"></p>
-              <pre id="controlActionSnippet" class="control-action-snippet is-hidden"></pre>
-              <div id="controlActionRunningBar" class="control-action-bar">
-                <button type="button" id="controlActionCancel" class="ctrl-overlay-btn ctrl-overlay-btn--caution">Cancel request</button>
+              <p>
+                <strong>Where configuration lives:</strong> each stack’s files are under
+                <code>platform/dev-stacks/&lt;id&gt;/</code> (compose, <code>stack.yaml</code>, optional
+                <code>varnish/</code> / <code>nginx/</code>). That is separate from
+                <code>hosting/app-available/</code> (registered hosted apps). HTTP routes are generated in
+                <code>hosting/traefik/20-dev-stacks.yml</code>; the registry row is in
+                <code>config/leco-platform.yaml</code>. Use <strong>Advanced — configuration &amp; files</strong> on each stack card to view paths and edit files.
+              </p>
+            </details>
+            <div class="platform-stack-form">
+              <label class="platform-field">Stack id
+                <input type="text" id="devStackId" placeholder="level-1" pattern="[a-z0-9-]+" />
+              </label>
+              <label class="platform-field">Name
+                <input type="text" id="devStackName" placeholder="Level 1" />
+              </label>
+              <label class="platform-field">Stack preset
+                <select id="devStackPreset" aria-label="Dev stack preset">
+                  <option value="">— custom (pick below) —</option>
+                </select>
+              </label>
+              <label id="devStackSampleDataWrap" class="platform-field devstack-sample-wrap" hidden>
+                <input type="checkbox" id="devStackSampleData" />
+                Include sample / demo content
+              </label>
+            </div>
+            <p id="devStackTemplateHint" class="devstack-template-hint muted small" hidden></p>
+            <div id="devStackComponentPicker" class="devstack-picker" aria-label="Stack components">
+              <p class="muted small">Loading component catalog…</p>
+            </div>
+            <div class="platform-stack-actions">
+              <button type="button" id="devStackCreate" class="ctrl-act ctrl-act--deploy">Create stack</button>
+            </div>
               </div>
-              <p id="controlActionToast" class="control-action-toast is-hidden" role="status" aria-live="polite"></p>
-              <div id="controlActionDoneBar" class="control-action-done is-hidden">
-                <button type="button" id="controlActionCopy" class="ctrl-overlay-btn ctrl-overlay-btn--safe">Copy result</button>
-                <button type="button" id="controlActionDismiss" class="ctrl-overlay-btn ctrl-overlay-btn--primary">Close</button>
+            </details>
+            <p id="devStackStatus" class="platform-stack-status muted small" role="status" aria-live="polite"></p>
+            <div id="devStackLogWrap" class="devstack-log-wrap is-hidden" hidden>
+              <div class="devstack-log-toolbar">
+                <span id="devStackLogSpinner" class="devstack-log-spinner is-hidden" aria-hidden="true"></span>
+                <span id="devStackLogTitle" class="devstack-log-toolbar__title">Operation log</span>
+                <button type="button" id="devStackLogClose" class="ctrl-act devstack-log-close" aria-label="Close log">Close</button>
               </div>
+              <pre id="devStackLog" class="devstack-status-log" role="log" aria-live="polite"></pre>
+            </div>
+            <h4 class="devstack-list-heading">Your dev stacks</h4>
+            <div id="devStacksList" class="platform-stacks-list"><p class="muted small">Loading stacks…</p></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="hostedAppsTab" class="tab-content">
+        <h2 class="tab-heading">Hosted apps</h2>
+        <p class="tab-lead muted small">
+          <strong>LEco DevOps</strong> — per-app monitoring, compose logs, and lifecycle controls for entries in <code>config/leco-registry.yaml</code> (via <code>leco-devops ecosystem-register</code> and related commands). <strong>Control → Remove</strong> or <strong>Reset</strong> on a hosted stack runs <code>leco-devops ecosystem-unregister</code>, which runs <code>docker compose down</code> first (with <code>-v</code> on <strong>Reset</strong>), then Traefik strip, <code>leco.local-cf.yaml</code> cleanup, and registry row — same as <strong>Remove from ecosystem</strong>. If you stopped the stack only with <code>docker compose down</code> in a terminal, the app stays registered until you use <strong>Remove from ecosystem</strong>, the <strong>Routes</strong> tab, or <code>leco-devops ecosystem-unregister</code>. Set the <strong>Control token</strong> on the Control tab when <code>DASHBOARD_CONTROL_TOKEN</code> is enabled.
+        </p>
+        <p id="hostedAppsTokenHint" class="muted small is-hidden"></p>
+        <details class="hosted-register-panel" id="hostedRegisterPanel">
+          <summary class="hosted-register-panel__summary">Register application (generate YAML · save · register)</summary>
+          <div class="hosted-register-panel__body">
+            <p class="muted small">
+              <strong>Workflow:</strong> set <strong>path</strong> + <strong>app id</strong>, then <strong>Detect</strong> (scans
+              <code>docker-compose</code>, <code>wrangler.toml</code>, and other config signals). Use <strong>Generate YAML</strong>
+              to write <code>leco.app.yaml</code> + the localhost profile from that scan (or regenerate). Edit the text areas,
+              then <strong>Save YAML</strong> to persist. <strong>Register</strong> stays disabled until both files exist on disk;
+              it only runs <code>leco-devops ecosystem-register</code> (no silent overwrite). Generate/Save/Register require the
+              <strong>control token</strong> when enabled. Read-only app roots materialize under <code>hosting/app-available/&lt;id&gt;/</code>
+              (app id required). Path: repo-relative, <code>wsp:…</code>, or a host path when LEco DevOps was started with path hints.
+              <strong>Label</strong> after Detect is guessed from <code>package.json</code> / Wrangler <code>name</code> / Compose top-level <code>name</code> when present (not from the folder name).
+              <strong>URLs in Traefik</strong> (e.g. <code>cv.lh</code>) come from <code>infrastructure.routing.entries[].hostname</code> in your profile (<code>leco.yaml</code>), not from the registry slug; <code>cloudflare.localCfPublicPrefix</code> only shapes KV/R2/D1 hosts (<code>cv-kv.lh</code>, …). Use the <strong>Public URLs</strong> table below to edit every <code>urls[]</code> entry (dashboard, probes, docs); <strong>Write into profile YAML</strong> copies them into the textarea before Save, and <strong>Register</strong> applies the table to disk before <code>ecosystem-register</code>.
+            </p>
+            <div class="hosted-register-path-row">
+              <label class="hosted-register-field hosted-register-field--grow"
+                >App root path
+                <input
+                  type="text"
+                  id="hostedRegPath"
+                  autocomplete="off"
+                  placeholder="wsp:CrawlerVision/cloudflare or full path from Finder"
+                />
+              </label>
+              <div class="hosted-register-path-btns">
+                <button type="button" id="hostedRegChooseFolder" class="ctrl-act ctrl-act--ops">
+                  Choose folder…
+                </button>
+                <input
+                  type="file"
+                  id="hostedRegRootDir"
+                  class="is-hidden"
+                  webkitdirectory
+                  directory
+                  multiple
+                  aria-label="Choose application root folder"
+                />
+                <button type="button" id="hostedRegBrowse" class="ctrl-act ctrl-act--ops">Browse…</button>
+              </div>
+            </div>
+            <div class="hosted-register-grid">
+              <label class="hosted-register-field"
+                >App id (slug)
+                <input type="text" id="hostedRegId" autocomplete="off" placeholder="my-app" />
+              </label>
+              <label class="hosted-register-field"
+                >Label
+                <input type="text" id="hostedRegLabel" autocomplete="off" placeholder="My application" />
+              </label>
+              <label class="hosted-register-field hosted-register-field--samples"
+                >Sample YAML templates
+                <span class="hosted-register-sample-row">
+                  <select id="hostedRegSampleSelect" aria-label="Sample template">
+                    <option value="">— Choose a sample —</option>
+                  </select>
+                  <button type="button" id="hostedRegSampleApply" class="ctrl-act ctrl-act--ops">Apply sample</button>
+                </span>
+              </label>
+            </div>
+            <label class="hosted-register-check muted small">
+              <input type="checkbox" id="hostedRegLoadExisting" checked />
+              After <strong>Browse</strong> selects a folder, auto-load existing <code>leco.app.yaml</code> / <code>leco.yaml</code> when present; <strong>Detect</strong> still fills previews if files are missing.
+            </label>
+            <label class="hosted-register-check muted small">
+              <input type="checkbox" id="hostedRegDeployAfter" checked />
+              After register, run <strong><code>leco-devops deploy</code></strong> when the manifest has <code>dockerCompose</code> (<code>docker compose up -d --build</code>). Workers-only apps (no compose in <code>leco.yaml</code>) skip deploy automatically. Uncheck if you only want registry + Traefik.
+            </label>
+            <div class="ai-toggle-bar" id="aiToggleBar">
+              <label class="ai-toggle">
+                <input type="checkbox" id="aiAssistToggle" />
+                <span class="ai-toggle__switch"></span>
+                <span class="ai-toggle__text">AI-assisted onboarding</span>
+              </label>
+              <span class="ai-toggle__provider muted small" id="aiToggleProvider">No provider configured</span>
+              <button type="button" id="aiToggleSettings" class="ctrl-act ctrl-act--safe ai-toggle__config-btn">AI Settings</button>
+            </div>
+            <div class="ai-analysis-panel is-hidden" id="aiAnalysisPanel">
+              <div class="ai-analysis-panel__header">
+                <span class="ai-analysis-panel__title">AI analysis</span>
+                <span class="ai-analysis-panel__meta muted small" id="aiAnalysisMeta"></span>
+                <span class="ai-analysis-panel__timer muted small" id="aiAnalysisTimer"></span>
+              </div>
+              <!-- Progress track (animated bar, visible while running) -->
+              <div class="ai-analysis-panel__track is-hidden" id="aiAnalysisTrack">
+                <span class="ai-analysis-panel__fill"></span>
+              </div>
+              <!-- Step indicators -->
+              <div class="ai-analysis-panel__steps is-hidden" id="aiAnalysisSteps">
+                <div class="ai-step" id="aiStep1" data-step="1">
+                  <span class="ai-step__icon">①</span>
+                  <span class="ai-step__label">Collect</span>
+                  <span class="ai-step__detail muted small" id="aiStep1Detail"></span>
+                </div>
+                <div class="ai-step" id="aiStep2" data-step="2">
+                  <span class="ai-step__icon">②</span>
+                  <span class="ai-step__label">Analyze</span>
+                  <span class="ai-step__detail muted small" id="aiStep2Detail"></span>
+                </div>
+                <div class="ai-step" id="aiStep3" data-step="3">
+                  <span class="ai-step__icon">③</span>
+                  <span class="ai-step__label">Generate</span>
+                  <span class="ai-step__detail muted small" id="aiStep3Detail"></span>
+                </div>
+              </div>
+              <pre class="ai-analysis-panel__log" id="aiAnalysisLog" aria-live="polite"></pre>
+              <!-- Summary bar (shown on completion) -->
+              <div class="ai-analysis-panel__summary is-hidden" id="aiAnalysisSummary"></div>
+              <div class="ai-analysis-panel__actions is-hidden" id="aiAnalysisActions">
+                <button type="button" id="aiAnalysisApply" class="ctrl-act ctrl-act--ops">Apply generated configs</button>
+                <button type="button" id="aiAnalysisDiscard" class="ctrl-act ctrl-act--caution">Discard</button>
+                <span class="ai-analysis-panel__files muted small" id="aiAnalysisFiles"></span>
+              </div>
+            </div>
+
+            <div class="hosted-reg-urls" id="hostedRegUrlsBlock" aria-label="Public URLs for localhost profile">
+              <p class="muted small hosted-reg-urls__lead">
+                <strong>Public URLs</strong> (<code>leco.yaml</code> → <code>urls</code>): edit all endpoints here. Suggested values appear after <strong>Detect</strong> or <strong>Use suggested</strong>. <strong>Load from profile YAML</strong> reads the textarea; <strong>Write into profile YAML</strong> updates the textarea (then <strong>Save YAML</strong> to persist).
+              </p>
+              <div class="hosted-reg-urls__toolbar">
+                <button type="button" id="hostedRegUrlsSuggested" class="ctrl-act ctrl-act--ops">Use suggested</button>
+                <button type="button" id="hostedRegUrlsFromYaml" class="ctrl-act ctrl-act--ops">Load from profile YAML</button>
+                <button type="button" id="hostedRegUrlsToYaml" class="ctrl-act ctrl-act--ops">Write into profile YAML</button>
+                <button type="button" id="hostedRegUrlsAddRow" class="ctrl-act ctrl-act--ops">Add URL row</button>
+              </div>
+              <div class="hosted-reg-urls__table-wrap">
+                <table class="hosted-reg-urls__table" aria-label="URL rows">
+                  <thead>
+                    <tr>
+                      <th scope="col">Role</th>
+                      <th scope="col">Label</th>
+                      <th scope="col">Public URL</th>
+                      <th scope="col" class="hosted-reg-urls__col-actions"> </th>
+                    </tr>
+                  </thead>
+                  <tbody id="hostedRegUrlsTbody"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="hosted-reg-workflow" id="hostedRegWorkflow" aria-label="Registration workflow steps">
+              <div class="hosted-reg-workflow__track" role="group" aria-describedby="hostedRegWorkflowHint">
+                <div class="hosted-reg-workflow__step" data-wf-step="detect">
+                  <span class="hosted-reg-workflow__badge" aria-hidden="true">1</span>
+                  <button type="button" id="hostedRegDetect" class="hosted-reg-workflow__btn">Detect</button>
+                </div>
+                <span class="hosted-reg-workflow__rail" aria-hidden="true"></span>
+                <div class="hosted-reg-workflow__step" data-wf-step="generate">
+                  <span class="hosted-reg-workflow__badge" aria-hidden="true">2</span>
+                  <button type="button" id="hostedRegGenerateYaml" class="hosted-reg-workflow__btn">Generate YAML</button>
+                </div>
+                <span class="hosted-reg-workflow__rail" aria-hidden="true"></span>
+                <div class="hosted-reg-workflow__step" data-wf-step="save">
+                  <span class="hosted-reg-workflow__badge" aria-hidden="true">3</span>
+                  <button type="button" id="hostedRegSaveYaml" class="hosted-reg-workflow__btn">Save YAML</button>
+                </div>
+                <span class="hosted-reg-workflow__rail" aria-hidden="true"></span>
+                <div class="hosted-reg-workflow__step" data-wf-step="validate">
+                  <span class="hosted-reg-workflow__badge" aria-hidden="true">4</span>
+                  <button type="button" id="hostedRegValidateYaml" class="hosted-reg-workflow__btn">Validate YAML</button>
+                </div>
+                <span class="hosted-reg-workflow__rail" aria-hidden="true"></span>
+                <div class="hosted-reg-workflow__step" data-wf-step="register">
+                  <span class="hosted-reg-workflow__badge" aria-hidden="true">5</span>
+                  <button type="button" id="hostedRegSubmit" class="hosted-reg-workflow__btn hosted-reg-workflow__btn--primary" disabled>Register</button>
+                </div>
+              </div>
+              <p class="hosted-reg-workflow__hint muted small" id="hostedRegWorkflowHint" role="status"></p>
+            </div>
+            <div id="hostedRegBusy" class="hosted-reg-busy is-hidden" role="status" aria-live="polite">
+              <span class="hosted-reg-busy__spin" aria-hidden="true"></span>
+              <span data-hosted-reg-busy-text>Working…</span>
+            </div>
+            <pre id="hostedRegDetectOut" class="hosted-reg-pre is-hidden" aria-live="polite"></pre>
+            <pre id="hostedRegYamlReport" class="hosted-reg-pre hosted-reg-yaml-report is-hidden" aria-live="polite"></pre>
+            <p id="hostedRegMsg" class="muted small"></p>
+            <label class="hosted-register-field hosted-register-field--full"
+              >Manifest YAML (<code>leco.app.yaml</code>) — use Generate YAML / Save YAML to write disk
+              <span class="hosted-yaml-toolbar">
+                <button type="button" id="hostedRegManifestBrowseFile" class="ctrl-act ctrl-act--ops">Browse file…</button>
+                <input
+                  type="file"
+                  id="hostedRegManifestFile"
+                  class="is-hidden"
+                  accept=".yaml,.yml,.YAML,.YML,application/x-yaml,text/yaml,text/plain"
+                  aria-label="Choose manifest YAML file"
+                />
+              </span>
+              <textarea id="hostedRegManifestYaml" rows="10" spellcheck="false"></textarea>
+            </label>
+            <label class="hosted-register-field hosted-register-field--full"
+              >Localhost profile (e.g. <code>leco.yaml</code>) — must match <code>localHostProfile</code> in the manifest
+              <span class="hosted-yaml-toolbar">
+                <button type="button" id="hostedRegLocalhostBrowseFile" class="ctrl-act ctrl-act--ops">Browse file…</button>
+                <input
+                  type="file"
+                  id="hostedRegLocalhostFile"
+                  class="is-hidden"
+                  accept=".yaml,.yml,.YAML,.YML,application/x-yaml,text/yaml,text/plain"
+                  aria-label="Choose leco.yaml file"
+                />
+              </span>
+              <textarea id="hostedRegLocalhostYaml" rows="10" spellcheck="false"></textarea>
+            </label>
+          </div>
+        </details>
+        <div id="hostedBrowseModal" class="hosted-browse-modal is-hidden" role="dialog" aria-modal="true" aria-labelledby="hostedBrowseTitle">
+          <div class="hosted-browse-backdrop" id="hostedBrowseBackdrop"></div>
+          <div class="hosted-browse-dialog">
+            <h4 id="hostedBrowseTitle" class="hosted-browse-title">Select application folder</h4>
+            <p class="muted small">Only directories under the mounted repo or workspace-parent are listed.</p>
+            <div class="hosted-browse-toolbar">
+              <label class="hosted-browse-root-label"
+                >Root
+                <select id="hostedBrowseRoot" aria-label="Browse root">
+                  <option value="project">Ecosystem repo (/project)</option>
+                  <option value="wsp">Workspace parent</option>
+                </select>
+              </label>
+              <button type="button" id="hostedBrowseUp" class="ctrl-act ctrl-act--ops">Up</button>
+            </div>
+            <p id="hostedBrowseCrumb" class="hosted-browse-crumb muted small"></p>
+            <ul id="hostedBrowseList" class="hosted-browse-list" aria-label="Subfolders"></ul>
+            <p id="hostedBrowseErr" class="hosted-browse-err muted small"></p>
+            <div class="hosted-browse-actions">
+              <button type="button" id="hostedBrowseSelectHere" class="ctrl-act ctrl-act--ops">Use this folder</button>
+              <button type="button" id="hostedBrowseClose" class="ctrl-act">Cancel</button>
             </div>
           </div>
         </div>
+        <div class="hosted-apps-layout">
+          <nav class="hosted-apps-sidebar" id="hostedAppsSidebar" aria-label="Registered apps"></nav>
+          <div class="hosted-apps-main" id="hostedAppsMain">
+            <p id="hostedAppsEmpty" class="muted">Loading…</p>
+            <div id="hostedAppsDetail" class="hosted-apps-detail is-hidden">
+              <header class="hosted-apps-detail__head">
+                <div>
+                  <h3 id="hostedAppsTitle">—</h3>
+                  <p id="hostedAppsMeta" class="muted small"></p>
+                </div>
+                <p id="hostedAppsRuntime" class="control-card__runtime"></p>
+              </header>
+              <div class="hosted-apps-links" id="hostedAppsLinks"></div>
+              <section id="hostedAppsDevStack" class="hosted-devstack-bind" aria-label="Dev stack binding">
+                <h4 class="hosted-apps-subhead">Dev stack</h4>
+                <p class="muted small">
+                  Bind this app to an isolated dev stack (Postgres, Redis, Node, …). Saves
+                  <code>platform.devStackId</code> in <code>leco.yaml</code> and applies
+                  <code>docker-compose.leco-devstack.yml</code> on register/deploy.
+                </p>
+                <div class="hosted-devstack-bind__row">
+                  <label class="hosted-devstack-bind__field">
+                    <span class="muted small">Stack</span>
+                    <select id="hostedDevStackSelect" aria-label="Dev stack">
+                      <option value="">— none (self-contained) —</option>
+                    </select>
+                  </label>
+                  <button type="button" id="hostedDevStackSave" class="ctrl-act ctrl-act--ops">Save binding</button>
+                  <span id="hostedDevStackStatus" class="muted small"></span>
+                </div>
+              </section>
+              <div id="hostedAppsStagingBar" class="hosted-apps-staging-bar is-hidden" role="region" aria-label="Staging app">
+                <div class="hosted-apps-staging-bar__row">
+                  <button type="button" id="hostedAppsQuickRegister" class="hosted-apps-register-primary">
+                    Register application
+                  </button>
+                  <div class="hosted-apps-staging-bar__validate">
+                    <span class="hosted-apps-staging-bar__validate-label muted small">Configuration validator</span>
+                    <button type="button" id="hostedAppsValidateConfig" class="ctrl-act ctrl-act--ops">
+                      Validate YAML &amp; paths
+                    </button>
+                  </div>
+                </div>
+                <p class="muted small hosted-apps-staging-bar__hint">
+                  <strong>Register</strong> runs <code>leco-devops ecosystem-register</code> (and optional deploy) using files under
+                  <code>hosting/app-available/&lt;id&gt;/</code> — same as the collapsible wizard below. Requires the
+                  <strong>control token</strong> when enabled. <strong>Validate</strong> checks schemas and that compose / wrangler /
+                  overlay paths exist on disk.
+                </p>
+                <pre id="hostedAppsConfigValidation" class="hosted-apps-config-validation is-hidden" aria-live="polite"></pre>
+              </div>
+              <div
+                id="hostedAppsManifestSummary"
+                class="hosted-manifest-summary"
+                aria-label="Effective Docker Compose and routing summary"
+              ></div>
+              <div id="hostedAppsUnregisterHint" class="hosted-apps-unregister-hint is-hidden" role="status" aria-live="polite"></div>
+              <div class="hosted-apps-kpi" id="hostedAppsKpi"></div>
+              <section
+                id="hostedAppsAttachedServices"
+                class="hosted-attached-services"
+                aria-label="Attached services for this application"
+              >
+                <h4 class="hosted-apps-subhead">Attached services</h4>
+                <p class="hosted-attached-services__banner" role="note">
+                  Local development only — credentials reflect compose defaults, the UI credential vault, and
+                  Wrangler/local CF bindings. Not for production.
+                </p>
+                <div id="hostedAppsAttachedServicesBody" class="hosted-attached-services__body">
+                  <p class="muted small">Loading attached services…</p>
+                </div>
+              </section>
+              <section
+                id="hostedAppsSeedData"
+                class="hosted-seed-data"
+                aria-label="Seed data import"
+              >
+                <header class="hosted-seed-data__head">
+                  <h4 class="hosted-apps-subhead">Seed data</h4>
+                  <p id="hostedAppsSeedDataSub" class="hosted-seed-data__sub muted small">Loading…</p>
+                </header>
+                <div id="hostedAppsSeedDataBody" class="hosted-seed-data__body">
+                  <p class="muted small">Loading seed data…</p>
+                </div>
+                <div class="hosted-seed-data__actions">
+                  <button type="button" id="hostedDataImportBtn" class="ctrl-act ctrl-act--safe">
+                    Import data
+                  </button>
+                  <button type="button" id="hostedDataImportDryBtn" class="ctrl-act ctrl-act--ops">
+                    Dry-run plan
+                  </button>
+                </div>
+              </section>
+              <div
+                id="hostedAppsResourceLedger"
+                class="hosted-resource-ledger"
+                aria-label="Resources declared in leco.yaml and running under this app"
+              ></div>
+              <div id="hostedAppsLocalProfile" class="hosted-local-profile"></div>
+              <div id="hostedAppsCfResources" class="hosted-cf-resources" aria-label="Wrangler and local CF adapters"></div>
+              <div class="hosted-apps-charts">
+                <article class="dash-panel dash-panel--compact">
+                  <header class="dash-panel__head dash-panel__head--hosted-expand">
+                    <span class="dash-panel__title">CPU (app stack)</span>
+                    <button type="button" class="hosted-chart-expand-btn" data-hosted-expand-chart="cpu" title="Larger view">Expand</button>
+                  </header>
+                  <div class="dash-panel__chart dash-panel__chart--short">
+                    <canvas id="hostedChartCpu" aria-label="Hosted app CPU"></canvas>
+                  </div>
+                </article>
+                <article class="dash-panel dash-panel--compact">
+                  <header class="dash-panel__head dash-panel__head--hosted-expand">
+                    <span class="dash-panel__title">Memory (% of limits · GB used)</span>
+                    <button type="button" class="hosted-chart-expand-btn" data-hosted-expand-chart="mem" title="Larger view">Expand</button>
+                  </header>
+                  <div class="dash-panel__chart dash-panel__chart--short">
+                    <canvas id="hostedChartMem" aria-label="Hosted app memory percent and GB used"></canvas>
+                  </div>
+                </article>
+                <article class="dash-panel dash-panel--compact">
+                  <header class="dash-panel__head dash-panel__head--hosted-expand">
+                    <span class="dash-panel__title">Net Mb/s (RX / TX)</span>
+                    <button type="button" class="hosted-chart-expand-btn" data-hosted-expand-chart="net" title="Larger view">Expand</button>
+                  </header>
+                  <div class="dash-panel__chart dash-panel__chart--short">
+                    <canvas id="hostedChartNet" aria-label="Hosted app network"></canvas>
+                  </div>
+                </article>
+              </div>
+              <h4 class="hosted-apps-subhead">
+                Compose services
+                <span class="muted small" style="font-weight: normal">
+                  — containers from <code>infrastructure.dockerCompose</code> in your profile (<code>leco.yaml</code>);
+                  metrics/logs only for this compose project</span>
+              </h4>
+              <div class="hosted-apps-table-wrap">
+                <table class="hosted-apps-table">
+                  <thead>
+                    <tr>
+                      <th>Service</th>
+                      <th>Container</th>
+                      <th>State</th>
+                      <th>CPU %</th>
+                      <th>RAM % / GB</th>
+                      <th>Restarts</th>
+                    </tr>
+                  </thead>
+                  <tbody id="hostedAppsServicesBody"></tbody>
+                </table>
+              </div>
+              <h4 class="hosted-apps-subhead">Insights</h4>
+              <ul id="hostedAppsInsights" class="hosted-apps-insights"></ul>
+              <h4 class="hosted-apps-subhead">Compose logs</h4>
+              <div class="hosted-apps-log-toolbar">
+                <label class="hosted-apps-log-field"
+                  >Tail
+                  <select id="hostedLogTail">
+                    <option value="200">200</option>
+                    <option value="400" selected>400</option>
+                    <option value="800">800</option>
+                    <option value="1500">1500</option>
+                  </select>
+                </label>
+                <label class="hosted-apps-log-field"
+                  >Since (s)
+                  <select id="hostedLogSince">
+                    <option value="600">600</option>
+                    <option value="1800" selected>1800</option>
+                    <option value="3600">3600</option>
+                    <option value="86400">86400</option>
+                  </select>
+                </label>
+                <label class="hosted-apps-log-field"
+                  >Service
+                  <select id="hostedLogService">
+                    <option value="">(all)</option>
+                  </select>
+                </label>
+                <label class="hosted-apps-log-field hosted-apps-log-field--grow"
+                  >Search
+                  <input type="text" id="hostedLogSearch" placeholder="filter lines (refresh only)" autocomplete="off" />
+                </label>
+                <label class="hosted-apps-log-field hosted-apps-log--live"><input type="checkbox" id="hostedLogLive" /> Live tail</label>
+                <label class="hosted-apps-log-field hosted-apps-log--live"
+                  ><input type="checkbox" id="hostedLogFollowBottom" checked /> Follow latest (auto-scroll)</label>
+                <button type="button" id="hostedLogRefresh" class="ctrl-act ctrl-act--ops">Refresh logs</button>
+              </div>
+              <pre id="hostedAppsLogPre" class="hosted-apps-log-pre"></pre>
+              <h4 class="hosted-apps-subhead">Controls</h4>
+              <p class="muted small"><strong>LEco DevOps</strong> — deploy/stop/down use <code>leco-devops</code> with your manifest; restart/recreate/pause still use <code>docker compose</code>. Streaming shows live compose output where applicable.</p>
+              <div id="hostedAppsControls" class="hosted-apps-controls"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="routesTab" class="tab-content">
+        <h2>Traefik routes</h2>
+        <p class="muted small">
+          File-provider config at <code id="traefikRoutesPath">—</code> (mounted repo). With <code>watch: true</code>, Traefik reloads <code>dynamic.yml</code> when it changes — <strong>no Traefik container restart</strong> for route edits. Mutations require the same
+          <strong>Control token</strong> as the Control tab when <code>DASHBOARD_CONTROL_TOKEN</code> is set.
+        </p>
+        <div class="routes-toolbar">
+          <button type="button" id="traefikRoutesRefresh" class="ctrl-act ctrl-act--ops">Refresh</button>
+        </div>
+        <h3 class="routes-subhead">Routers</h3>
+        <div class="routes-table-wrap">
+          <table class="routes-table" aria-label="Traefik routers">
+            <thead>
+              <tr>
+                <th>Key</th>
+                <th>Rule</th>
+                <th>Service</th>
+                <th>Entry points</th>
+                <th>TLS</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="traefikRoutersBody"></tbody>
+          </table>
+        </div>
+        <h3 class="routes-subhead">Services</h3>
+        <div class="routes-table-wrap">
+          <table class="routes-table" aria-label="Traefik services">
+            <thead>
+              <tr>
+                <th>Key</th>
+                <th>Upstream URLs</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="traefikServicesBody"></tbody>
+          </table>
+        </div>
+        <h3 class="routes-subhead">Hosted apps (registry overlap)</h3>
+        <p class="muted small">
+          Router/service keys derived from each app’s <code>leco.app.yaml</code> (same rules as LEco DevOps <code>leco-devops traefik-fragment</code>). <strong>Remove from registry</strong> runs <code>leco-devops ecosystem-unregister</code>: strips Traefik keys, cleans <code>leco.local-cf.yaml</code> when checked, removes the registry row.
+        </p>
+        <div id="traefikHostedHints" class="routes-hosted-hints"></div>
+        <h3 class="routes-subhead">Quick route builder (URL / endpoint / masking / redirect)</h3>
+        <p class="muted small">
+          Create or edit routes without hand-writing YAML. <strong>Proxy (URL masking)</strong> keeps your public URL and forwards to an internal endpoint. <strong>Redirect</strong> sends clients to a different URL (301/302).
+        </p>
+        <div class="routes-builder-grid">
+          <label>Mode
+            <select id="routeBuilderMode">
+              <option value="proxy">Proxy (URL masking)</option>
+              <option value="redirect">Redirect</option>
+            </select>
+          </label>
+          <label>Router key
+            <input id="routeBuilderRouterKey" type="text" placeholder="myapp-main-http" />
+          </label>
+          <label>Public host
+            <input id="routeBuilderHost" type="text" placeholder="myapp.lh" />
+          </label>
+          <label>Path prefix (optional)
+            <input id="routeBuilderPathPrefix" type="text" placeholder="/api" />
+          </label>
+          <label>Service key (proxy mode)
+            <input id="routeBuilderServiceKey" type="text" placeholder="myapp-main-svc" />
+          </label>
+          <label>Endpoint URL (proxy mode)
+            <input id="routeBuilderEndpointUrl" type="text" placeholder="http://myapp:8080" />
+          </label>
+          <label>Redirect URL (redirect mode)
+            <input id="routeBuilderRedirectUrl" type="text" placeholder="https://www.example.com" />
+          </label>
+          <label>Redirect status
+            <select id="routeBuilderRedirectStatus">
+              <option value="301">301 (permanent)</option>
+              <option value="302">302 (temporary)</option>
+            </select>
+          </label>
+          <label>Priority (optional)
+            <input id="routeBuilderPriority" type="number" placeholder="20" />
+          </label>
+          <label><input id="routeBuilderEntryWeb" type="checkbox" checked /> entryPoint web</label>
+          <label><input id="routeBuilderEntryWebsecure" type="checkbox" checked /> entryPoint websecure</label>
+          <label><input id="routeBuilderTls" type="checkbox" checked /> TLS enabled (websecure)</label>
+        </div>
+        <p class="routes-fragment-toolbar">
+          <button type="button" id="routeBuilderBuildBtn" class="ctrl-act ctrl-act--ops">Build YAML from form</button>
+          <button type="button" id="routeBuilderMergeBtn" class="ctrl-act ctrl-act--safe">Build + merge into dynamic.yml</button>
+          <button type="button" id="routeBuilderResetBtn" class="ctrl-act ctrl-act--ops">Reset form</button>
+        </p>
+        <h3 class="routes-subhead">Merge YAML fragment</h3>
+        <p class="muted small">
+          Load a fragment from a hosted app’s manifest via LEco DevOps <code>leco-devops traefik-fragment</code>, or paste YAML manually. Top-level <code>http:</code> with <code>routers</code> / <code>services</code>; keys merge (overwrite on collision). Writes use an atomic replace.
+        </p>
+        <p class="routes-fragment-toolbar muted small">
+          <label class="routes-fragment-slug-label">Registry id
+            <input type="text" id="traefikFragmentSlug" class="routes-fragment-slug-input" placeholder="my-app" autocomplete="off" />
+          </label>
+          <button type="button" id="traefikLoadFragmentBtn" class="ctrl-act ctrl-act--ops">Load fragment from manifest</button>
+          <button type="button" id="traefikLoadMergeBtn" class="ctrl-act ctrl-act--ops">Load and merge into dynamic.yml</button>
+        </p>
+        <textarea id="traefikMergeYaml" class="routes-yaml-input" rows="10" spellcheck="false" placeholder="http:
+  routers:
+    myapp-http:
+      rule: &quot;Host(`myapp.lh`)&quot;
+      service: myapp-svc
+      entryPoints: [web]
+  services:
+    myapp-svc:
+      loadBalancer:
+        servers:
+          - url: &quot;http://myapp:8080&quot;"></textarea>
+        <p><button type="button" id="traefikMergeBtn" class="ctrl-act ctrl-act--ops">Merge into dynamic.yml</button></p>
+        <p id="traefikRoutesMsg" class="muted small" role="status"></p>
       </section>
 
       <section id="docsTab" class="tab-content">
         <h2>Documentation</h2>
         <p class="muted small">
           Markdown served from your repo at <code>DASHBOARD_PROJECT_ROOT</code> (usually <code>/project</code>). Modules marked unavailable need the host mount in
-          <code>ai-stack/services/dashboard.sh</code>. Under <strong>Operations</strong>, <em>Service management commands</em> lists copy-paste CLI for each Control target (AI-stack scripts, compose, bulk).
+          <code>ecosystem-stack/services/dashboard.sh</code>. Under <strong>Operations</strong>, <em>Service management commands</em> lists copy-paste CLI for each Control target (ecosystem stack scripts, compose, bulk).
         </p>
         <div class="doc-layout">
           <nav class="doc-sidebar" id="docSidebar"></nav>
@@ -394,6 +1226,41 @@
           Start with <strong>Local ecosystem</strong> below for the root README, or open <strong>Docs</strong> for every guide
           (DevOps, Cloudflare local, development playbook).
         </p>
+        <article class="dash-panel dash-panel--wide ai-news-panel" id="aiNewsPanel">
+          <header class="dash-panel__head">
+            <span class="dash-panel__title">AI news (live)</span>
+            <button type="button" class="btn btn--sm btn--ghost" id="aiNewsRefresh">Refresh feeds</button>
+          </header>
+          <p class="muted small ai-news-panel__lede">
+            Consolidated headlines from configured RSS sources. Filter by category and tags, or describe what you care about —
+            a <strong>local Ollama</strong> model suggests categories, tags, and keywords.
+          </p>
+          <div class="ai-news-filters">
+            <label class="ai-news-filters__row">
+              <span class="muted small">Category</span>
+              <select id="aiNewsCategory" class="uc-input"><option value="">All</option></select>
+            </label>
+            <label class="ai-news-filters__row">
+              <span class="muted small">Tags (comma)</span>
+              <input id="aiNewsTags" type="text" class="uc-input" placeholder="ollama, open-source" />
+            </label>
+            <label class="ai-news-filters__row ai-news-filters__row--grow">
+              <span class="muted small">Search</span>
+              <input id="aiNewsSearch" type="search" class="uc-input" placeholder="Keywords in title or summary" />
+            </label>
+            <button type="button" class="btn btn--sm" id="aiNewsApply">Apply filters</button>
+          </div>
+          <div class="ai-news-llm">
+            <label class="ai-news-filters__row ai-news-filters__row--grow">
+              <span class="muted small">Interest (local LLM)</span>
+              <input id="aiNewsInterest" type="text" class="uc-input" placeholder="e.g. local LLM releases and Ollama updates" />
+            </label>
+            <button type="button" class="btn btn--sm btn--ghost" id="aiNewsRefine">Suggest filters</button>
+          </div>
+          <p id="aiNewsRefineHint" class="muted small ai-news-refine-hint"></p>
+          <p id="aiNewsMeta" class="muted small"></p>
+          <ul id="aiNewsList" class="ai-news-list"></ul>
+        </article>
         <div id="developCards" class="dev-grid"></div>
       </section>
 
@@ -438,25 +1305,122 @@
           <tbody id="logsBody"></tbody>
         </table>
       </section>
+
+      {% set footer_doc_mode = 'buttons' %}
+      {% include "_site_footer.html" %}
     </div>
 
-    <div id="appModalOverlay" class="app-modal-overlay" hidden>
-      <div class="app-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="appModalTitle">
-        <div class="app-modal-inner">
-          <h3 id="appModalTitle" class="app-modal-title">Confirm</h3>
-          <div id="appModalMessage" class="app-modal-message"></div>
-          <div class="app-modal-bar">
-            <button type="button" id="appModalCancel" class="ctrl-overlay-btn ctrl-overlay-btn--caution">Cancel</button>
-            <button type="button" id="appModalPrimary" class="ctrl-overlay-btn ctrl-overlay-btn--ops">Continue</button>
+    <div id="hostedChartExpandOverlay" class="hosted-chart-expand-overlay" hidden>
+      <div class="hosted-chart-expand-dialog" role="dialog" aria-modal="true" aria-labelledby="hostedChartExpandTitle">
+        <div class="hosted-chart-expand-head">
+          <h3 id="hostedChartExpandTitle" class="hosted-chart-expand-title">Chart</h3>
+          <button type="button" id="hostedChartExpandClose" class="ctrl-overlay-btn ctrl-overlay-btn--primary">Close</button>
+        </div>
+        <div class="hosted-chart-expand-canvas-wrap">
+          <canvas id="hostedChartExpandCanvas" aria-label="Expanded chart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    {% include "_app_modal.html" %}
+
+    <div id="devStackFileOverlay" class="devstack-file-overlay is-hidden" hidden>
+      <div class="devstack-file-dialog" role="dialog" aria-modal="true" aria-labelledby="devStackFileTitle">
+        <header class="devstack-file-dialog__header">
+          <h3 id="devStackFileTitle" class="devstack-file-dialog__title">Edit file</h3>
+          <button type="button" id="devStackFileClose" class="ctrl-act devstack-file-close" aria-label="Close editor">Close</button>
+        </header>
+        <p id="devStackFilePath" class="devstack-file-dialog__path muted small"></p>
+        <p id="devStackFileHint" class="devstack-file-dialog__hint muted small is-hidden"></p>
+        <textarea id="devStackFileEditor" class="devstack-file-editor" spellcheck="false" aria-label="File content"></textarea>
+        <div class="devstack-file-dialog__actions">
+          <button type="button" id="devStackFileSave" class="ctrl-act ctrl-act--deploy">Save</button>
+          <button type="button" id="devStackFileCancel" class="ctrl-act">Cancel</button>
+        </div>
+        <p id="devStackFileStatus" class="devstack-file-dialog__status muted small" role="status" aria-live="polite"></p>
+      </div>
+    </div>
+
+    <div id="controlActionOverlay" class="control-action-overlay" hidden>
+      <div class="control-action-dialog" role="dialog" aria-modal="true" aria-labelledby="controlActionTitle">
+        <div class="control-action-dialog__inner">
+          <div id="controlActionSpinner" class="control-action-spinner" aria-hidden="true"></div>
+          <h3 id="controlActionTitle" class="control-action-title">Running…</h3>
+          <p id="controlActionLive" class="control-action-live">Starting…</p>
+          <div id="controlActionProgress" class="control-action-progress is-hidden" aria-hidden="true">
+            <div class="control-action-progress__track" aria-hidden="true">
+              <div id="controlActionProgressFill" class="control-action-progress__fill" style="width: 0%"></div>
+            </div>
+            <p id="controlActionProgressMeta" class="control-action-progress__meta muted small"></p>
+          </div>
+          <p class="muted small control-action-hint">
+            Live output streams as Docker, shell scripts, or <code>leco-devops</code> print lines (Control actions, <strong>Register application</strong>, …). If this box stays empty for minutes behind <code>*.lh</code>, open LEco DevOps on
+            <strong>port 8090</strong> (direct to the container) or check <code>docker logs service-dashboard</code>.
+          </p>
+          <p id="controlActionSummary" class="control-action-summary is-hidden"></p>
+          <pre id="controlActionSnippet" class="control-action-snippet is-hidden"></pre>
+          <div id="controlActionRunningBar" class="control-action-bar">
+            <button type="button" id="controlActionCancel" class="ctrl-overlay-btn ctrl-overlay-btn--caution">Cancel request</button>
+          </div>
+          <p id="controlActionToast" class="control-action-toast is-hidden" role="status" aria-live="polite"></p>
+          <div id="controlActionDoneBar" class="control-action-done is-hidden">
+            <button type="button" id="controlActionCopy" class="ctrl-overlay-btn ctrl-overlay-btn--safe">Copy result</button>
+            <button type="button" id="controlActionDismiss" class="ctrl-overlay-btn ctrl-overlay-btn--primary">Close</button>
           </div>
         </div>
       </div>
     </div>
 
+    <div id="dashboardGlobalPreloader" class="dashboard-global-preloader is-hidden" role="status" aria-live="polite">
+      <div id="dashboardGlobalPreloaderPanel" class="dashboard-global-preloader__panel" role="region" aria-label="Loading status">
+        <div class="dashboard-global-preloader__status-row">
+          <span class="dashboard-global-preloader__label">IN FLIGHT</span>
+          <span id="dashboardGlobalPreloaderSummary" class="dashboard-global-preloader__summary">—</span>
+        </div>
+        <ul id="dashboardGlobalPreloaderList" class="dashboard-global-preloader__list" aria-label="Active backend requests"></ul>
+      </div>
+      <div class="dashboard-global-preloader__track-row">
+        <div class="dashboard-global-preloader__track" aria-hidden="true">
+          <span class="dashboard-global-preloader__fill"></span>
+        </div>
+        <button
+          type="button"
+          id="dashboardGlobalPreloaderToggle"
+          class="dashboard-global-preloader__toggle"
+          aria-expanded="true"
+          aria-controls="dashboardGlobalPreloaderPanel"
+          title="Collapse to thin progress bar"
+        >
+          ▲
+        </button>
+      </div>
+    </div>
+
+    <script>
+      (function applyRequestedTabBeforeBootstrap() {
+        try {
+          var qs = new URLSearchParams(window.location.search || "");
+          var requestedTab = String(qs.get("tab") || "").trim();
+          if (!requestedTab) return;
+          var requestedEl = document.getElementById(requestedTab);
+          if (!requestedEl || !requestedEl.classList.contains("tab-content")) return;
+          document.querySelectorAll(".tab-content").forEach(function (el) {
+            el.classList.remove("active");
+          });
+          requestedEl.classList.add("active");
+          document.querySelectorAll(".tab-btn[data-tab]").forEach(function (btn) {
+            btn.classList.toggle("active", btn.getAttribute("data-tab") === requestedTab);
+          });
+        } catch (_) {
+          /* no-op */
+        }
+      })();
+    </script>
+    <script type="application/json" id="dashboard-boot-config">{{ dashboard_boot | tojson }}</script>
     <script src="/static/service-brand.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
-    <script src="/static/dashboard.js"></script>
+    <script src="/static/dashboard.js?v=20260533"></script>
   </body>
 </html>

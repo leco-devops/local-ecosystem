@@ -1,21 +1,20 @@
-# Security Policy
+# Security policy
 
-## Supported Versions
+> **Open source** · Maintained by [Techtonic Systems Media And Research LLC](https://techtonic.systems/)
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
+## Reporting a vulnerability
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+If you discover a security issue in **LEco DevOps Open Project**, please report it **privately** to **[leco@techtonic.systems](mailto:leco@techtonic.systems)** (subject line such as **LEco DevOps security**).
 
-## Reporting a Vulnerability
+You may also use the contact options on **[https://techtonic.systems/](https://techtonic.systems/)**.
 
-Use this section to tell people how to report a vulnerability.
+Please include:
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+- A clear description of the issue.
+- Reproduction steps or a proof of concept.
+- Impact assessment (what data, service, or workflow is affected).
+- Suggested mitigation if available.
+
+Please do not open a public issue for undisclosed vulnerabilities.
+
+We aim to acknowledge reports within a reasonable timeframe and will coordinate disclosure and fixes with reporters when appropriate.

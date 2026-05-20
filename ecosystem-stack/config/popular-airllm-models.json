@@ -1,0 +1,85 @@
+{
+  "_comment": "Curated AirLLM (HuggingFace safetensors) model picks shown in the LEco DevOps dashboard 'Popular models' dropdown and by `leco-cli.sh airllm popular`. Edit freely — names must be valid HuggingFace repo IDs. Sizes are approximate raw weights; AirLLM also writes per-layer shards (~equal size again).",
+  "models": [
+    {
+      "name": "Qwen/Qwen2.5-0.5B-Instruct",
+      "label": "Qwen 2.5 · 0.5B Instruct",
+      "family": "qwen",
+      "size": "~1 GB",
+      "tags": ["tiny", "smoke-test"],
+      "description": "Tiny AirLLM smoke-test model — completes shard split in seconds."
+    },
+    {
+      "name": "Qwen/Qwen2.5-1.5B-Instruct",
+      "label": "Qwen 2.5 · 1.5B Instruct",
+      "family": "qwen",
+      "size": "~3 GB",
+      "tags": ["small"],
+      "description": "Small Qwen 2.5 instruct — handy for low-RAM dev work."
+    },
+    {
+      "name": "Qwen/Qwen2.5-7B-Instruct",
+      "label": "Qwen 2.5 · 7B Instruct",
+      "family": "qwen",
+      "size": "~15 GB",
+      "tags": ["medium", "default"],
+      "description": "Medium Qwen 2.5; comparable quality to Llama 3.1 8B."
+    },
+    {
+      "name": "Qwen/Qwen2.5-Coder-7B-Instruct",
+      "label": "Qwen 2.5 Coder · 7B Instruct",
+      "family": "qwen",
+      "size": "~15 GB",
+      "tags": ["code"],
+      "description": "Code-tuned Qwen 2.5 — completion, refactor, code review."
+    },
+    {
+      "name": "meta-llama/Llama-3.2-3B-Instruct",
+      "label": "Llama 3.2 · 3B Instruct (gated)",
+      "family": "llama",
+      "size": "~6 GB",
+      "tags": ["small", "gated"],
+      "description": "Meta Llama 3.2 3B — requires HF_TOKEN with model access."
+    },
+    {
+      "name": "meta-llama/Llama-3.1-8B-Instruct",
+      "label": "Llama 3.1 · 8B Instruct (gated)",
+      "family": "llama",
+      "size": "~16 GB",
+      "tags": ["medium", "gated"],
+      "description": "Meta Llama 3.1 8B — requires HF_TOKEN with model access."
+    },
+    {
+      "name": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+      "label": "DeepSeek R1 Distill (Qwen 7B)",
+      "family": "deepseek",
+      "size": "~15 GB",
+      "tags": ["medium", "reasoning"],
+      "description": "Distilled DeepSeek R1 over Qwen 7B base — strong reasoning."
+    },
+    {
+      "name": "Qwen/Qwen2.5-32B-Instruct",
+      "label": "Qwen 2.5 · 32B Instruct (AirLLM sweet spot)",
+      "family": "qwen",
+      "size": "~65 GB",
+      "tags": ["large"],
+      "description": "Where layer streaming starts paying off. Plenty of disk required."
+    },
+    {
+      "name": "Qwen/Qwen2.5-72B-Instruct",
+      "label": "Qwen 2.5 · 72B Instruct (very large)",
+      "family": "qwen",
+      "size": "~145 GB",
+      "tags": ["xl"],
+      "description": "AirLLM's intended use case — runs on limited RAM via layer-by-layer."
+    },
+    {
+      "name": "meta-llama/Meta-Llama-3.1-70B-Instruct",
+      "label": "Llama 3.1 · 70B Instruct (gated, very large)",
+      "family": "llama",
+      "size": "~140 GB",
+      "tags": ["xl", "gated"],
+      "description": "Meta Llama 3.1 70B — requires HF_TOKEN with model access."
+    }
+  ]
+}

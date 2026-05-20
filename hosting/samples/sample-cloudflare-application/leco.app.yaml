@@ -1,0 +1,38 @@
+# =============================================================================
+# LEco ↔ APPLICATION BRIDGE  (leco.app.yaml) — Cloudflare Worker / Pages
+# =============================================================================
+# BRIDGE ROLE
+#   Declares *which* app LEco manages (slug, version) and *where* the app root
+#   is. All Worker bindings, local KV/R2/D1 policy, and optional compose live in
+#   leco.yaml → infrastructure (single source of truth for deployables).
+#
+# ROOT
+#   root: "." → app root is the directory containing this manifest (put this pair
+#   inside your repo next to wrangler.toml, or set root to a subpath like "apps/api").
+#
+# REGISTRY
+#   ecosystem-register uses name as the registry id unless --id overrides.
+#   label in the CLI maps to the Hosted apps card title (not stored in this file).
+#
+# WHAT RUNS ON REGISTER / DEPLOY
+#   provision-local-cf reads infrastructure.cloudflare.wranglerConfig (from profile)
+#   under resolved_root. Traefik merges use profile routing when present.
+#
+# CONFIG REFS
+#   configRefs (optional) lists entrypoint files relative to resolved_root for humans
+#   and tooling; deploy still merges leco.yaml infrastructure.
+# =============================================================================
+lecoAppVersion: '3'
+applicationVersion: '0.1.0-sample'
+name: sample-cloudflare-application
+root: .
+localHostProfile: leco.yaml
+configRefs:
+  wranglerConfig: wrangler.toml
+localhost:
+  notes: |
+    [BRIDGE — Cloudflare application]
+    Pair with leco.yaml: infrastructure.cloudflare + wranglerBindingPreview describe
+    Wrangler bindings; leco-devops still provisions from wrangler.toml only. Add
+    infrastructure.dockerCompose here in leco.yaml if the same repo runs containers
+    next to the Worker.

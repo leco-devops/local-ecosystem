@@ -1,5 +1,7 @@
+import os
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from urllib.parse import urlparse, urlunparse
 
@@ -9,42 +11,93 @@ import urllib3
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# HTTP probes: sequential *.lh checks were a major source of multi-minute /api/overview latency.
+try:
+    _PROBE_TIMEOUT_SEC = max(0.8, min(12.0, float(os.getenv("DASHBOARD_PROBE_TIMEOUT_SEC", "3") or 3)))
+except ValueError:
+    _PROBE_TIMEOUT_SEC = 3.0
+try:
+    _OVERVIEW_LOG_METRICS_TAIL = max(40, min(500, int(os.getenv("DASHBOARD_OVERVIEW_LOG_TAIL", "120") or 120)))
+except ValueError:
+    _OVERVIEW_LOG_METRICS_TAIL = 120
+try:
+    _URL_PROBE_WORKERS = max(4, min(32, int(os.getenv("DASHBOARD_PROBE_WORKERS", "16") or 16)))
+except ValueError:
+    _URL_PROBE_WORKERS = 16
+
 SERVICE_MAP = [
     {
         "service": "Traefik",
         "container": "traefik",
         "urls": ["http://traefik.lh"],
-        "notes": "Reverse proxy and dashboard",
+        "notes": "Reverse proxy and LEco DevOps",
+        "hub_slug": "traefik",
+        "management_links": [
+            {"label": "Dashboard", "url": "http://traefik.lh"},
+            {"label": "Service hub", "url": "http://localhost.lh/hub/traefik"},
+        ],
     },
     {
         "service": "Open WebUI",
         "container": "open-webui",
         "urls": ["http://ai.lh"],
         "notes": "AI chat user interface",
+        "hub_slug": "webui",
+        "credentials": [
+            "First signup creates the admin user. Suggested local dev: admin@local.lh / localdev (edit in UI access vault to match your instance).",
+        ],
+        "management_links": [
+            {"label": "Open WebUI", "url": "http://ai.lh"},
+            {"label": "Service hub", "url": "http://localhost.lh/hub/webui"},
+        ],
     },
     {
         "service": "n8n",
         "container": "n8n",
         "urls": ["http://n8n.lh"],
         "notes": "Workflow automation",
+        "hub_slug": "n8n",
+        "credentials": [
+            "Owner account is created on first visit. Suggested local dev: admin@local.lh / localdev (edit in UI access vault to match your instance).",
+        ],
+        "management_links": [
+            {"label": "Open n8n", "url": "http://n8n.lh"},
+            {"label": "Service hub", "url": "http://localhost.lh/hub/n8n"},
+        ],
     },
     {
         "service": "Ollama",
         "container": "ollama",
         "urls": ["http://ollama.lh"],
-        "notes": "LLM runtime",
+        "notes": "LLM runtime (GGUF models)",
+        "hub_slug": "ollama",
+        "management_links": [
+            {"label": "Web UI", "url": "http://ollama.lh"},
+            {"label": "Service hub", "url": "http://localhost.lh/hub/ollama"},
+        ],
     },
     {
-        "service": "Service Dashboard",
+        "service": "AirLLM",
+        "container": "airllm",
+        "urls": ["http://airllm.lh"],
+        "notes": "Large HF model runtime (layer-by-layer loading, CPU / optional CUDA)",
+        "hub_slug": "airllm",
+        "management_links": [
+            {"label": "API / UI", "url": "http://airllm.lh"},
+            {"label": "Service hub", "url": "http://localhost.lh/hub/airllm"},
+        ],
+    },
+    {
+        "service": "LEco DevOps",
         "container": "service-dashboard",
         "urls": ["http://localhost.lh"],
-        "notes": "Ops monitoring dashboard",
+        "notes": "Ops monitoring and app lifecycle UI",
         "hub_slug": "dashboard",
         "insights": [
             "Service hubs live under /hub/<name> for credentials, TCP hints, and database GUIs.",
         ],
         "management_links": [
-            {"label": "Hub · dashboard", "url": "http://localhost.lh/hub/dashboard"},
+            {"label": "Hub · LEco DevOps", "url": "http://localhost.lh/hub/dashboard"},
         ],
     },
     {
@@ -54,7 +107,7 @@ SERVICE_MAP = [
         "notes": "n8n database · postgres.lh:5432 on host (Docker service n8n_postgres)",
         "hub_slug": "postgres",
         "credentials": [
-            "User postgres · password password · database n8n (from ai-stack/services/postgres.sh defaults).",
+            "User postgres · password password · database n8n (from ecosystem-stack/services/postgres.sh defaults).",
         ],
         "connection_strings": [
             "postgresql://postgres:password@postgres.lh:5432/n8n",
@@ -81,7 +134,7 @@ SERVICE_MAP = [
         ],
         "connection_strings": [
             "S3-style API (adapter): http://r2.lh and https://r2.lh",
-            "Direct MinIO S3 API: http://s3.lh and https://s3.lh (same keys as MinIO console)",
+            "Web UI: minio-console.lh. S3 API: s3.lh (aws-cli/SDK; browsers redirect to minio-console.lh, not :9001).",
         ],
         "insights": [
             "Bucket and object counts appear in Cloudflare local panel when reachable.",
@@ -176,7 +229,7 @@ SERVICE_MAP = [
             "Console login: minioadmin / minioadmin (dev defaults from compose).",
         ],
         "connection_strings": [
-            "Console: http://minio-console.lh · S3 API: http://s3.lh / https://s3.lh",
+            "Web UI: http://minio-console.lh · S3 API: http://s3.lh (not for browser bookmarks — use console host)",
         ],
         "management_links": [
             {"label": "Open console", "url": "http://minio-console.lh"},
@@ -211,6 +264,36 @@ SERVICE_MAP = [
             {"label": "Panel", "url": "http://browser.lh/panel"},
             {"label": "Health JSON", "url": "http://browser.lh/health"},
             {"label": "Service hub", "url": "http://localhost.lh/hub/browser"},
+        ],
+    },
+    {
+        "service": "Valkey",
+        "container": "valkey",
+        "urls": ["http://localhost.lh/hub/valkey"],
+        "notes": "Redis-compatible store backing KV adapter · TCP valkey.lh:6380 (published 6380→6379)",
+        "hub_slug": "valkey",
+        "credentials": [
+            "No password by default. Published as valkey.lh:6380 → container :6379.",
+        ],
+        "connection_strings": [
+            "redis://valkey.lh:6380/0",
+            "redis-cli -h valkey.lh -p 6380",
+        ],
+        "insights": [
+            "Reserved for KV adapter (KV_REDIS_URL). For app queues/cache use infra Redis at redis.lh:6379.",
+        ],
+        "management_links": [
+            {"label": "Service hub", "url": "http://localhost.lh/hub/valkey"},
+        ],
+    },
+    {
+        "service": "Autoscale demo",
+        "container": "autoscale-demo",
+        "urls": [],
+        "notes": "Nginx target for autoscaler — internal only, no user-facing URL",
+        "management_links": [
+            {"label": "Autoscaler panel", "url": "http://autoscale.lh/panel"},
+            {"label": "Autoscaler hub", "url": "http://localhost.lh/hub/autoscale"},
         ],
     },
     {
@@ -373,7 +456,11 @@ CLOUDFLARE_ENDPOINTS = {
     "autoscale": "http://autoscaler:8084",
     "workers": "http://workers-runtime:8787",
     "browser": "http://browser-rendering-local:8085",
+    "minio": "http://minio:9000",
 }
+
+VALKEY_HOST = "valkey"
+VALKEY_PORT = 6379
 
 
 def to_float(value):
@@ -407,6 +494,13 @@ def get_container(client, container_name):
     except Exception:
         pass
     return None
+
+
+def get_container_from_index(by_name: dict | None, container_name: str | None):
+    """Resolve container from a pre-built name→container map (one Docker list per overview)."""
+    if not by_name or not container_name:
+        return None
+    return by_name.get(container_name.lstrip("/"))
 
 
 def get_container_info(container):
@@ -444,7 +538,9 @@ def get_probe_target(url):
         path = parsed.path or "/"
         if parsed.query:
             path = f"{path}?{parsed.query}"
-        probe_url = f"{parsed.scheme}://traefik{path}"
+        # Traefik terminates TLS on :443; the dashboard reaches Traefik on Docker :80 only.
+        # Using https://traefik here fails TLS (wrong cert / no listener) → status None ("HTTP 0").
+        probe_url = f"http://traefik{path}"
         headers = {"Host": host}
         return probe_url, headers
 
@@ -522,13 +618,24 @@ def normalize_lh_probe_urls(urls: list[str] | None) -> list[str]:
     return out
 
 
+def check_urls_many(urls: list[str]) -> list[dict]:
+    """Run edge probes in parallel (order preserved)."""
+    if not urls:
+        return []
+    if len(urls) == 1:
+        return [check_url(urls[0])]
+    workers = min(_URL_PROBE_WORKERS, len(urls))
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        return list(ex.map(check_url, urls))
+
+
 def check_url(url):
     """Probe public URL. Do not follow redirects to https://*.lh — that host often breaks inside the dashboard container."""
     probe_url, headers = get_probe_target(url)
     try:
         response = requests.get(
             probe_url,
-            timeout=5,
+            timeout=_PROBE_TIMEOUT_SEC,
             verify=False,
             allow_redirects=False,
             headers=headers,
@@ -565,9 +672,40 @@ def _probe_backend_internal(container_name: str) -> tuple[bool, int | None, floa
         return False, None, None
 
 
+def _skipped_url_checks(urls: list[str], reason: str) -> list[dict]:
+    """Placeholder checks when the service is intentionally stopped — not counted as failures."""
+    return [
+        {
+            "url": u,
+            "ok": None,
+            "skipped": True,
+            "skip_reason": reason,
+            "status_code": None,
+            "latency_ms": None,
+        }
+        for u in urls
+    ]
+
+
+def _http_probes_suppressed(container_info: dict, container_name: str) -> tuple[bool, str]:
+    """True when edge HTTP probes should not affect health (stopped container or stop/offloaded policy)."""
+    status = str(container_info.get("status") or "").lower()
+    if status and status != "running":
+        return True, f"Container {status} — probes skipped"
+    try:
+        from service_policies import policy_for_container
+
+        pol = policy_for_container(container_name)
+        if pol in ("stop", "offloaded"):
+            return True, f"Policy {pol} — probes skipped"
+    except Exception:
+        pass
+    return False, ""
+
+
 def check_urls_for_service(urls: list[str], container_name: str) -> list[dict]:
     """Run edge probes; if all fail with gateway/connection issues, accept internal Docker-network probe as OK."""
-    checks = [check_url(u) for u in urls]
+    checks = check_urls_many(urls)
     internal_url = INTERNAL_PROBE_BY_CONTAINER.get(container_name)
     if not internal_url or not checks:
         return checks
@@ -616,7 +754,7 @@ def get_container_sizes(client, container):
         return {"size_rw": 0, "size_root_fs": 0}
 
 
-def get_container_metrics(client, container_or_name):
+def get_container_metrics(client, container_or_name, *, include_disk_sizes: bool = True):
     if client is None:
         return {
             "cpu_percent": 0.0,
@@ -677,7 +815,10 @@ def get_container_metrics(client, container_or_name):
     blk_read = sum(int(e.get("value") or 0) for e in blk_entries if e.get("op") == "Read")
     blk_write = sum(int(e.get("value") or 0) for e in blk_entries if e.get("op") == "Write")
 
-    sizes = get_container_sizes(client, container)
+    if include_disk_sizes:
+        sizes = get_container_sizes(client, container)
+    else:
+        sizes = {"size_rw": 0, "size_root_fs": 0}
     return {
         "cpu_percent": round(to_float(cpu_percent), 2),
         "memory_usage": memory_usage,
@@ -692,7 +833,7 @@ def get_container_metrics(client, container_or_name):
     }
 
 
-def get_log_metrics(container, container_name: str | None = None):
+def get_log_metrics(container, container_name: str | None = None, *, tail_lines: int | None = None):
     if container is None:
         return {
             "window_seconds": LOG_WINDOW_SECONDS,
@@ -703,11 +844,12 @@ def get_log_metrics(container, container_name: str | None = None):
         }
 
     cname = (container_name or getattr(container, "name", None) or "").strip().lstrip("/")
+    tail_n = LOG_TAIL_LINES if tail_lines is None else max(1, int(tail_lines))
 
     start_since = int(time.time()) - LOG_WINDOW_SECONDS
     try:
         raw_logs = container.logs(
-            tail=LOG_TAIL_LINES,
+            tail=tail_n,
             since=start_since,
             timestamps=True,
         )
@@ -792,6 +934,7 @@ def build_system_status(services, docker_overview):
     running_services = 0
     paused_services = 0
     missing_services = 0
+    missing_service_names: list[str] = []
     total_urls = 0
     healthy_urls = 0
     total_error_lines = 0
@@ -814,9 +957,11 @@ def build_system_status(services, docker_overview):
             paused_services += 1
         if not info.get("exists", False):
             missing_services += 1
+            missing_service_names.append(service.get("container") or service.get("service", "?"))
 
-        total_urls += len(checks)
-        healthy_urls += sum(1 for check in checks if check.get("ok"))
+        active_checks = [c for c in checks if not c.get("skipped")]
+        total_urls += len(active_checks)
+        healthy_urls += sum(1 for c in active_checks if c.get("ok"))
 
         total_error_lines += int(logs.get("error_lines") or 0)
         total_error_rate_per_min += to_float(logs.get("error_rate_per_min"))
@@ -838,7 +983,9 @@ def build_system_status(services, docker_overview):
     if not docker_overview.get("docker_available"):
         alerts.append("Docker API is unavailable.")
     if missing_services:
-        alerts.append(f"{missing_services} managed service container(s) are missing.")
+        names_preview = ", ".join(missing_service_names[:10])
+        suffix = f" (+{missing_services - 10} more)" if missing_services > 10 else ""
+        alerts.append(f"{missing_services} managed service container(s) are missing: {names_preview}{suffix}.")
     if network_mismatches:
         alerts.append(f"Container(s) missing lh-network: {', '.join(network_mismatches)}")
     if unhealthy_urls:
@@ -858,6 +1005,7 @@ def build_system_status(services, docker_overview):
         "services_total": total_services,
         "services_paused": paused_services,
         "services_missing": missing_services,
+        "services_missing_names": missing_service_names,
         "healthy_urls": healthy_urls,
         "total_urls": total_urls,
         "unhealthy_urls": unhealthy_urls,
@@ -879,14 +1027,19 @@ def build_system_status(services, docker_overview):
 def collect_reference_status():
     from reference_data import REFERENCE_CATEGORIES
 
-    categories = []
+    categories_out: list = []
+    flat_urls: list[str] = []
+    spans: list[tuple[int, int, int, int]] = []
+
     for cat in REFERENCE_CATEGORIES:
         items_out = []
         for item in cat["items"]:
             expanded = normalize_lh_probe_urls(list(item.get("urls", [])))
-            url_checks = [check_url(url) for url in expanded]
-            items_out.append({**item, "urls": expanded, "url_checks": url_checks})
-        categories.append(
+            start = len(flat_urls)
+            flat_urls.extend(expanded)
+            spans.append((len(categories_out), len(items_out), start, len(expanded)))
+            items_out.append({**item, "urls": expanded, "url_checks": []})
+        categories_out.append(
             {
                 "id": cat["id"],
                 "title": cat["title"],
@@ -894,17 +1047,22 @@ def collect_reference_status():
                 "items": items_out,
             }
         )
+
+    url_results = check_urls_many(flat_urls) if flat_urls else []
+    for cat_i, item_i, start, ln in spans:
+        categories_out[cat_i]["items"][item_i]["url_checks"] = url_results[start : start + ln]
+
     healthy = sum(
         1
-        for c in categories
+        for c in categories_out
         for it in c["items"]
         for chk in it.get("url_checks", [])
         if chk.get("ok")
     )
-    total = sum(len(it.get("url_checks", [])) for c in categories for it in c["items"])
+    total = sum(len(it.get("url_checks", [])) for c in categories_out for it in c["items"])
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "categories": categories,
+        "categories": categories_out,
         "healthy_urls": healthy,
         "total_urls": total,
     }
@@ -914,59 +1072,89 @@ def collect_overview():
     client = get_docker_client()
     docker_overview = get_docker_overview(client)
 
-    services = []
-    all_urls = []
-
-    for item in SERVICE_MAP:
-        container = get_container(client, item["container"])
-        container_info = get_container_info(container)
-        expanded_urls = normalize_lh_probe_urls(list(item.get("urls") or []))
-        checks = check_urls_for_service(expanded_urls, item["container"])
-        all_urls.extend(checks)
-        slug = item.get("hub_slug")
-        services.append(
-            {
-                "service": item["service"],
-                "container": item["container"],
-                "notes": item["notes"],
-                "credentials": item.get("credentials") or [],
-                "connection_strings": item.get("connection_strings") or [],
-                "insights": item.get("insights") or [],
-                "database_guis": item.get("database_guis") or [],
-                "management_links": item.get("management_links") or [],
-                "hub_slug": slug,
-                "hub_path": f"/hub/{slug}" if slug else None,
-                "container_info": container_info,
-                "metrics": get_container_metrics(client, container),
-                "logs": get_log_metrics(container, item["container"]),
-                "url_checks": checks,
-            }
-        )
-
     containers = []
+    by_name: dict = {}
     if client is not None:
         try:
             for c in client.containers.list(all=True):
-                ports = c.attrs.get("NetworkSettings", {}).get("Ports", {})
-                state = c.attrs.get("State", {})
-                containers.append(
-                    {
-                        "name": c.name,
-                        "image": c.image.tags[0] if c.image.tags else c.image.short_id,
-                        "status": c.status,
-                        "restart_count": state.get("RestartCount", 0),
-                        "ports": ports,
-                    }
-                )
+                nm = (c.name or "").lstrip("/")
+                if nm:
+                    by_name[nm] = c
+                try:
+                    ports = c.attrs.get("NetworkSettings", {}).get("Ports", {})
+                    state = c.attrs.get("State", {})
+                    try:
+                        image_ref = c.image.tags[0] if c.image.tags else c.image.short_id
+                    except Exception:
+                        image_ref = getattr(c.image, "short_id", None) or str(c.image)
+                    containers.append(
+                        {
+                            "name": c.name,
+                            "image": image_ref,
+                            "status": c.status,
+                            "restart_count": state.get("RestartCount", 0),
+                            "ports": ports,
+                        }
+                    )
+                except Exception:
+                    continue
         except Exception:
             pass
+
+    all_urls = []
+
+    def build_service_row(item):
+        container = get_container_from_index(by_name, item["container"])
+        container_info = get_container_info(container)
+        expanded_urls = normalize_lh_probe_urls(list(item.get("urls") or []))
+        suppressed, skip_reason = _http_probes_suppressed(container_info, item["container"])
+        if suppressed and expanded_urls:
+            checks = _skipped_url_checks(expanded_urls, skip_reason)
+        else:
+            checks = check_urls_for_service(expanded_urls, item["container"])
+        slug = item.get("hub_slug")
+        row = {
+            "service": item["service"],
+            "container": item["container"],
+            "notes": item["notes"],
+            "credentials": item.get("credentials") or [],
+            "connection_strings": item.get("connection_strings") or [],
+            "insights": item.get("insights") or [],
+            "database_guis": item.get("database_guis") or [],
+            "management_links": item.get("management_links") or [],
+            "hub_slug": slug,
+            "hub_path": f"/hub/{slug}" if slug else None,
+            "container_info": container_info,
+            "metrics": get_container_metrics(client, container, include_disk_sizes=False),
+            "logs": get_log_metrics(
+                container, item["container"], tail_lines=_OVERVIEW_LOG_METRICS_TAIL
+            ),
+            "url_checks": checks,
+        }
+        return row, checks
+
+    services = []
+    if SERVICE_MAP:
+        workers = min(12, len(SERVICE_MAP))
+        if workers <= 1:
+            rows = [build_service_row(item) for item in SERVICE_MAP]
+        else:
+            with ThreadPoolExecutor(max_workers=workers) as ex:
+                rows = list(ex.map(build_service_row, SERVICE_MAP))
+        for row, checks in rows:
+            services.append(row)
+            all_urls.extend(checks)
 
     system_status = build_system_status(services, docker_overview)
 
     try:
-        from timeseries import aggregate_running_container_stats, append_snapshot, compute_docker_totals_aligned
+        from timeseries import (
+            append_snapshot,
+            compute_docker_totals_aligned,
+            get_cached_running_container_stats,
+        )
 
-        agg = aggregate_running_container_stats(client) if client is not None else None
+        agg = get_cached_running_container_stats(client) if client is not None else None
         aligned = compute_docker_totals_aligned(client, docker_overview, agg) if agg is not None else None
         if aligned:
             system_status["docker_totals_all_running"] = aligned
@@ -990,6 +1178,34 @@ def collect_overview():
     except Exception as exc:
         ollama_llm = {"ollama_reachable": False, "error": str(exc)[:200], "rows": []}
 
+    # Mirror of `ollama_llm` for the AirLLM shim. Kept here (not on the slower
+    # /api/airllm/models route) so the runtime grid can show one inline table per
+    # LLM backend without an extra round-trip per render. Shim is reached over
+    # lh-network at http://airllm:11435 by default.
+    airllm_llm = None
+    try:
+        from airllm_models import build_models_payload as build_airllm_payload
+
+        am = build_airllm_payload()
+        airllm_llm = {
+            "airllm_reachable": am.get("airllm_reachable"),
+            "airllm_base": am.get("airllm_base"),
+            "server_version": am.get("server_version"),
+            "installed_count": am.get("installed_count"),
+            "running_count": am.get("running_count"),
+            "rows": am.get("rows") or [],
+        }
+    except Exception as exc:
+        airllm_llm = {"airllm_reachable": False, "error": str(exc)[:200], "rows": []}
+
+    update_catalog: dict = {}
+    try:
+        from ecosystem_updates import collect_update_catalog_panel
+
+        update_catalog = collect_update_catalog_panel()
+    except Exception as exc:
+        update_catalog = {"ok": False, "error": str(exc)[:200]}
+
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "service_count": len(services),
@@ -1001,6 +1217,8 @@ def collect_overview():
         "system_status": system_status,
         "reference": collect_reference_status(),
         "ollama_llm": ollama_llm,
+        "airllm_llm": airllm_llm,
+        "update_catalog": update_catalog,
     }
 
 
@@ -1096,17 +1314,68 @@ def _fetch_json(url):
         return False, {"ok": False, "error": str(exc)}
 
 
-def collect_cloudflare_local_status():
-    r2_ok, r2_health = _fetch_json(f"{CLOUDFLARE_ENDPOINTS['r2']}/health")
-    kv_ok, kv_health = _fetch_json(f"{CLOUDFLARE_ENDPOINTS['kv']}/health")
-    d1_ok, d1_health = _fetch_json(f"{CLOUDFLARE_ENDPOINTS['d1']}/health")
-    as_ok, as_status = _fetch_json(f"{CLOUDFLARE_ENDPOINTS['autoscale']}/status")
-    w_ok, w_health = _fetch_json(f"{CLOUDFLARE_ENDPOINTS['workers']}/health")
-    br_ok, br_health = _fetch_json(f"{CLOUDFLARE_ENDPOINTS['browser']}/health")
+def _probe_http_ok(url):
+    try:
+        res = requests.get(url, timeout=3)
+        res.raise_for_status()
+        return True, {"ok": True, "status_code": res.status_code}
+    except Exception as exc:
+        return False, {"ok": False, "error": str(exc)}
 
-    buckets_ok, buckets_data = _fetch_json(f"{CLOUDFLARE_ENDPOINTS['r2']}/buckets")
-    namespaces_ok, ns_data = _fetch_json(f"{CLOUDFLARE_ENDPOINTS['kv']}/namespaces")
-    dbs_ok, dbs_data = _fetch_json(f"{CLOUDFLARE_ENDPOINTS['d1']}/databases")
+
+def collect_cloudflare_local_status():
+    specs = [
+        ("r2_ok", "r2_health", f"{CLOUDFLARE_ENDPOINTS['r2']}/health"),
+        ("kv_ok", "kv_health", f"{CLOUDFLARE_ENDPOINTS['kv']}/health"),
+        ("d1_ok", "d1_health", f"{CLOUDFLARE_ENDPOINTS['d1']}/health"),
+        ("as_ok", "as_status", f"{CLOUDFLARE_ENDPOINTS['autoscale']}/status"),
+        ("w_ok", "w_health", f"{CLOUDFLARE_ENDPOINTS['workers']}/health"),
+        ("br_ok", "br_health", f"{CLOUDFLARE_ENDPOINTS['browser']}/health"),
+        ("buckets_ok", "buckets_data", f"{CLOUDFLARE_ENDPOINTS['r2']}/buckets"),
+        ("namespaces_ok", "ns_data", f"{CLOUDFLARE_ENDPOINTS['kv']}/namespaces"),
+        ("dbs_ok", "dbs_data", f"{CLOUDFLARE_ENDPOINTS['d1']}/databases"),
+    ]
+    out = {}
+    with ThreadPoolExecutor(max_workers=10) as ex:
+        fut_meta = []
+        for ok_key, data_key, url in specs:
+            fut = ex.submit(_fetch_json, url)
+            fut_meta.append((fut, ok_key, data_key))
+        for fut, ok_key, data_key in fut_meta:
+            ok, data = fut.result()
+            out[ok_key] = ok
+            out[data_key] = data
+
+    r2_ok, r2_health = out["r2_ok"], out["r2_health"]
+    kv_ok, kv_health = out["kv_ok"], out["kv_health"]
+    d1_ok, d1_health = out["d1_ok"], out["d1_health"]
+    as_ok, as_status = out["as_ok"], out["as_status"]
+    w_ok, w_health = out["w_ok"], out["w_health"]
+    br_ok, br_health = out["br_ok"], out["br_health"]
+    minio_ok, minio_health = _probe_http_ok(f"{CLOUDFLARE_ENDPOINTS['minio']}/minio/health/live")
+    if not minio_ok:
+        minio_c = get_container(get_docker_client(), "minio")
+        if minio_c is not None:
+            st = (minio_c.status or "").lower()
+            if st in ("running", "restarting"):
+                minio_ok = True
+                minio_health = {"ok": True, "via": "container_status", "status": minio_c.status}
+    buckets_ok, buckets_data = out["buckets_ok"], out["buckets_data"]
+    namespaces_ok, ns_data = out["namespaces_ok"], out["ns_data"]
+    dbs_ok, dbs_data = out["dbs_ok"], out["dbs_data"]
+
+    valkey_ok = False
+    try:
+        import socket as _sock
+        s = _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM)
+        s.settimeout(2)
+        s.connect((VALKEY_HOST, VALKEY_PORT))
+        s.sendall(b"PING\r\n")
+        resp = s.recv(64)
+        s.close()
+        valkey_ok = b"PONG" in resp
+    except Exception:
+        valkey_ok = False
 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -1117,6 +1386,10 @@ def collect_cloudflare_local_status():
             "autoscale": {"reachable": as_ok, "status": as_status},
             "workers": {"reachable": w_ok, "health": w_health},
             "browser": {"reachable": br_ok, "health": br_health},
+            "valkey": {"reachable": valkey_ok},
+            "minio": {"reachable": minio_ok, "health": minio_health if minio_ok else {}},
+            # Alias for overview chart label "S3" (MinIO S3 API backend for R2).
+            "s3": {"reachable": minio_ok, "health": minio_health if minio_ok else {}},
         },
         "counts": {
             "buckets": len(buckets_data.get("buckets", [])) if buckets_ok else 0,

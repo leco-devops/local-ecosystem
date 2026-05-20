@@ -1,0 +1,25 @@
+# Copy to hosting/app-available/<slug>/docker-compose.leco-entry.yml (beside leco.app.yaml).
+# leco.yaml → infrastructure.dockerCompose.composeFileFromManifest: docker-compose.leco-entry.yml
+#
+# Requires: bridge `source` → upstream repo. Match the included filename to the repo (docker-compose.yml vs .yaml).
+# Patch every upstream service that publishes host ports (web :80, Postgres :5432, Redis :6379, etc.).
+# Headwind: services are often `hmdm` + `postgresql` — use those names below instead of my-web / my-database.
+
+include:
+  - path: source/docker-compose.yml
+
+services:
+  my-web:
+    ports: !reset []
+    networks:
+      - default
+      - lh-network
+
+  my-database:
+    ports: !reset []
+    networks:
+      - default
+
+networks:
+  lh-network:
+    external: true

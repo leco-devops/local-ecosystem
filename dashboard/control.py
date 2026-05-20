@@ -3,6 +3,7 @@ import shlex
 import shutil
 import subprocess
 import time
+from pathlib import Path
 from collections.abc import Iterator
 from datetime import datetime, timezone
 from typing import Any
@@ -10,12 +11,22 @@ from typing import Any
 import docker
 import requests
 
-from control_targets import AI_TARGETS, CF_TARGETS, COMPOSE_REL, INFRA_COMPOSE_REL, INFRA_TARGETS
+from control_targets import (
+    AI_TARGETS,
+    CF_TARGETS,
+    COMPOSE_REL,
+    COMPOSE_SERVICE_REQUIRES,
+    INFRA_COMPOSE_REL,
+    INFRA_TARGETS,
+    compose_action_services,
+)
+from leco_control import resolve_leco_target
+from leco_subprocess import run_leco_app
 
 PROJECT_ROOT = os.getenv("DASHBOARD_PROJECT_ROOT", "/project")
 COMPOSE_FILE = os.path.join(PROJECT_ROOT, COMPOSE_REL)
 INFRA_COMPOSE_FILE = os.path.join(PROJECT_ROOT, INFRA_COMPOSE_REL)
-SERVICES_DIR = os.path.join(PROJECT_ROOT, "ai-stack", "services")
+SERVICES_DIR = os.path.join(PROJECT_ROOT, "ecosystem-stack", "services")
 CONTROL_TOKEN = os.getenv("DASHBOARD_CONTROL_TOKEN", "").strip()
 
 D1_BASE = os.getenv("DASHBOARD_D1_URL", "http://d1-adapter:8083").rstrip("/")
@@ -23,7 +34,7 @@ BACKUP_DIR = os.path.join(PROJECT_ROOT, ".local-eco-backups")
 os.makedirs(BACKUP_DIR, mode=0o755, exist_ok=True)
 
 ALLOWED_ACTIONS = frozenset(
-    {"start", "stop", "restart", "remove", "pause", "unpause", "deploy", "recreate", "reset", "backup"}
+    {"start", "stop", "restart", "remove", "pause", "unpause", "deploy", "recreate", "reset", "backup", "staging"}
 )
 
 # Subset passed as a shell function name after `source` (must be identifier-safe).
@@ -32,6 +43,8 @@ _AI_SCRIPT_FN_ACTIONS = frozenset(
 )
 
 _BY_ID = {t["id"]: t for t in CF_TARGETS + AI_TARGETS + INFRA_TARGETS}
+_INFRA_BY_COMPOSE = {t["compose_service"]: t for t in INFRA_TARGETS}
+_CF_BY_COMPOSE = {t["compose_service"]: t for t in CF_TARGETS}
 
 
 def _format_invoked_cmd(cmd: list) -> str:
@@ -96,14 +109,14 @@ def list_targets():
     out = [
         {
             "id": "stack-ecosystem-all",
-            "label": "All AI-stack services (bulk)",
+            "label": "All ecosystem-stack services (bulk)",
             "group": "ecosystem",
             "container": None,
             "actions": sorted(ALLOWED_ACTIONS),
             "runtime": {
                 "kind": "stack",
                 "status": "bulk",
-                "label": "Full action set via ai-stack/core.sh (stop/pause/remove/reset/recreate skip this dashboard so the API can finish)",
+                "label": "Full action set via ecosystem-stack/core.sh (stop/pause/remove/reset/recreate skip this dashboard so the API can finish)",
                 "running": None,
             },
         }
@@ -112,7 +125,7 @@ def list_targets():
         entry = {
             "id": t["id"],
             "label": t["label"],
-            "group": "ai-stack",
+            "group": "ecosystem-stack",
             "container": t.get("container"),
             "actions": sorted(ALLOWED_ACTIONS),
             "runtime": _container_runtime(dc, t.get("container")),
@@ -294,7 +307,7 @@ def _ai_script(script, action, timeout=600):
         return 1, f"script missing: {path}"
     if action not in _AI_SCRIPT_FN_ACTIONS:
         return 1, f"action not invokable as service function: {action}"
-    # Service scripts define bash functions; ai-stack/core.sh uses `source` + call.
+    # Service scripts define bash functions; ecosystem-stack/core.sh uses `source` + call.
     # A bare `bash script.sh stop` only defines functions and exits 0 without running them.
     root_q = shlex.quote(PROJECT_ROOT)
     path_q = shlex.quote(path)
@@ -355,18 +368,35 @@ def run_action(target_id: str, action: str):
     if action not in ALLOWED_ACTIONS:
         return {"ok": False, "error": f"unsupported action: {action}"}
 
-    if target_id == "stack-cf-all":
+    tid = (target_id or "").strip()
+    if not tid:
+        return {
+            "ok": False,
+            "error": "missing target_id — UI sent an empty control target; refresh the page or re-open the Hosted apps tab.",
+        }
+
+    if tid == "stack-cf-all":
         return _stack_cf_all(action)
 
-    if target_id == "stack-infra-all":
+    if tid == "stack-infra-all":
         return _stack_infra_all(action)
 
-    if target_id == "stack-ecosystem-all":
+    if tid == "stack-ecosystem-all":
         return _stack_ecosystem_all(action)
 
-    meta = _BY_ID.get(target_id)
+    leco_m = resolve_leco_target(tid)
+    if leco_m:
+        return _leco_stack_action(leco_m, action)
+
+    meta = _BY_ID.get(tid)
     if not meta:
-        return {"ok": False, "error": "unknown target"}
+        return {
+            "ok": False,
+            "error": (
+                f"unknown target {tid!r} — not a LEco stack (expected leco-stack-<registry id>), "
+                "infra/cf bulk target, or dashboard service id. Refresh the UI if controls look stale."
+            ),
+        }
 
     if "compose_service" in meta:
         if meta.get("compose_project") == "infra":
@@ -400,12 +430,20 @@ def _stack_ecosystem_all(action: str):
         return body
     if action not in _ECOSYSTEM_BULK_BASH_ACTIONS:
         return {"ok": False, "error": f"action {action} not supported for ecosystem bulk"}
-    core_sh = os.path.join(PROJECT_ROOT, "ai-stack", "core.sh")
+    core_sh = os.path.join(PROJECT_ROOT, "ecosystem-stack", "core.sh")
     if not os.path.isfile(core_sh):
         return {"ok": False, "error": f"missing {core_sh}"}
+
+    from service_policies import targets_for_bulk_action
+    policy_info = targets_for_bulk_action(action)
+    skipped = policy_info.get("skip", [])
+
     src = f"source {shlex.quote(core_sh)} && bulk_ecosystem {shlex.quote(action)}"
     code, log = _run(["/bin/bash", "-c", src], cwd=PROJECT_ROOT, timeout=3600)
-    return {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
+    result: dict[str, Any] = {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
+    if skipped:
+        result["policy_skipped"] = skipped
+    return result
 
 
 def _stack_infra_all(action: str):
@@ -451,13 +489,305 @@ def _stack_cf_all(action: str):
     return {"ok": False, "error": f"action {action} not supported for full stack"}
 
 
+def _leco_compose_run(meta: dict, args: list, *, timeout: int) -> tuple[int, str]:
+    tail = meta["compose_tail"]
+    root = meta["root"]
+    return _run(["docker", "compose", *tail, *args], cwd=root, timeout=timeout)
+
+
+def _leco_app_manifest_run(
+    meta: dict,
+    subcommand: str,
+    extra_args: list | None = None,
+    *,
+    timeout: int,
+) -> tuple[int, str]:
+    """Run LEco DevOps CLI (leco-devops) with --manifest (deploy/stop/down)."""
+    mp = meta["manifest_path"]
+    # leco-devops runs in this container; cwd must be the manifest directory (exists here).
+    leco_cwd = str(Path(mp).resolve().parent)
+    # Refresh the local-runtime overlay so its bind-mount paths reflect the
+    # *current* host-side mapping (LECO_WORKSPACE_PARENT_HOST / LECO_PROJECT_ROOT_HOST).
+    # Idempotent — a no-op when the manifest declares no runtimes.
+    if subcommand in {"deploy"}:
+        try:
+            from leco_detect import ensure_local_runtime_overlay
+            ensure_local_runtime_overlay(Path(mp))
+        except Exception:
+            pass
+    argv = [subcommand, "--manifest", mp]
+    if extra_args:
+        argv.extend(extra_args)
+    code, out, err = run_leco_app(argv, cwd=leco_cwd, timeout=timeout)
+    log = ((out or "") + ("\n" if out and err else "") + (err or "")).strip() or "(no output)"
+    return code, log
+
+
+def _leco_autooffboard_after_teardown(meta: dict[str, Any], *, compose_volumes: bool = False) -> dict[str, Any]:
+    """Hosted offboard via leco-devops ecosystem-unregister: local CF teardown, compose down, Traefik strip, registry (order fixed in CLI)."""
+    slug = str(meta.get("leco_slug") or "").strip()
+    if not slug:
+        return {"ok": False, "error": "missing leco_slug"}
+    from hosted_offboard import offboard_hosted_app
+
+    return offboard_hosted_app(
+        slug,
+        strip_traefik=True,
+        clean_local_cf=True,
+        compose_down=True,
+        compose_volumes=compose_volumes,
+    )
+
+
+def _leco_offboard_log(offboard: dict[str, Any]) -> str:
+    return ((offboard.get("leco_log") or "").strip())[-12000:]
+
+
+def _leco_stack_action(meta: dict, action: str) -> dict:
+    """leco.app.yaml stack: LEco DevOps deploy/stop/down where supported; compose for restart/recreate/pause."""
+    if action == "backup":
+        return {"ok": False, "error": "backup not defined for leco compose stacks"}
+    to = 3600 if action in {"deploy", "recreate"} else 600
+    if action == "deploy":
+        code, log = _leco_app_manifest_run(meta, "deploy", timeout=to)
+        return {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
+    if action == "recreate":
+        # leco-devops has no force-recreate; use compose directly
+        code, log = _leco_compose_run(meta, ["up", "-d", "--force-recreate"], timeout=to)
+        return {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
+    if action == "stop":
+        code, log = _leco_app_manifest_run(meta, "stop", timeout=to)
+        return {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
+    if action == "restart":
+        code, log = _leco_compose_run(meta, ["restart"], timeout=to)
+        return {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
+    if action == "remove":
+        ob = _leco_autooffboard_after_teardown(meta, compose_volumes=False)
+        out: dict[str, Any] = {
+            "ok": bool(ob.get("ok")),
+            "exit_code": int(ob.get("exit_code") or (0 if ob.get("ok") else 1)),
+            "log": _leco_offboard_log(ob),
+            "offboard": ob,
+        }
+        if not out["ok"] and ob.get("error"):
+            out["error"] = ob["error"]
+        return out
+    if action == "reset":
+        ob = _leco_autooffboard_after_teardown(meta, compose_volumes=True)
+        out = {
+            "ok": bool(ob.get("ok")),
+            "exit_code": int(ob.get("exit_code") or (0 if ob.get("ok") else 1)),
+            "log": _leco_offboard_log(ob),
+            "offboard": ob,
+        }
+        if not out["ok"] and ob.get("error"):
+            out["error"] = ob["error"]
+        return out
+    if action == "start":
+        code, log = _leco_compose_run(meta, ["start"], timeout=to)
+        if code != 0:
+            code, log = _leco_compose_run(meta, ["up", "-d"], timeout=to)
+        return {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
+    if action == "pause":
+        code, log = _leco_compose_run(meta, ["pause"], timeout=to)
+        return {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
+    if action == "unpause":
+        code, log = _leco_compose_run(meta, ["unpause"], timeout=to)
+        return {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
+    if action == "staging":
+        # Tear down containers + volumes but keep hosting config files.
+        # 1. docker compose down -v --remove-orphans
+        code, log = _leco_compose_run(meta, ["down", "-v", "--remove-orphans"], timeout=to)
+        # 2. Strip Traefik routes so the hostname is freed.
+        try:
+            from traefik_dynamic_file import read_dynamic, strip_router_service_keys
+            slug = str(meta.get("leco_slug") or "").strip()
+            if slug:
+                data = read_dynamic() or {}
+                http = data.get("http") or {}
+                rkeys = [k for k in (http.get("routers") or {}) if k.startswith(slug + "-")]
+                skeys = [k for k in (http.get("services") or {}) if k.startswith(slug + "-")]
+                if rkeys or skeys:
+                    strip_router_service_keys(rkeys, skeys)
+                    log += f"\nTraefik routes stripped for staging ({len(rkeys)} routers, {len(skeys)} services)."
+        except Exception as exc:
+            log += f"\nWarning: could not strip Traefik routes: {exc}"
+        return {"ok": code == 0, "exit_code": code, "log": log[-12000:]}
+    return {"ok": False, "error": f"unsupported action {action} for leco stack"}
+
+
+def _stream_leco_compose(meta: dict, args: list, *, timeout: int) -> Iterator[dict[str, Any] | Any]:
+    tail = meta["compose_tail"]
+    root = meta["root"]
+    code, log = yield from _yield_run(["docker", "compose", *tail, *args], cwd=root, timeout=timeout)
+    return (code, log)
+
+
+def _stream_leco_stack_action(meta: dict, action: str) -> Iterator[dict[str, Any]]:
+    if action == "backup":
+        yield _emit_done(False, error="backup not defined for leco compose stacks")
+        return
+    to = 3600 if action in {"deploy", "recreate"} else 600
+    if action == "deploy":
+        code, log = _leco_app_manifest_run(meta, "deploy", timeout=to)
+        if log:
+            yield {"type": "log", "text": log}
+        yield _emit_done(code == 0, exit_code=code, log=log[-12000:])
+        return
+    if action == "recreate":
+        code, log = yield from _stream_leco_compose(meta, ["up", "-d", "--force-recreate"], timeout=to)
+        yield _emit_done(code == 0, exit_code=code, log=log[-12000:])
+        return
+    if action == "stop":
+        code, log = _leco_app_manifest_run(meta, "stop", timeout=to)
+        if log:
+            yield {"type": "log", "text": log}
+        yield _emit_done(code == 0, exit_code=code, log=log[-12000:])
+        return
+    if action == "restart":
+        code, log = yield from _stream_leco_compose(meta, ["restart"], timeout=to)
+        yield _emit_done(code == 0, exit_code=code, log=log[-12000:])
+        return
+    if action == "remove":
+        ob = _leco_autooffboard_after_teardown(meta, compose_volumes=False)
+        if ob.get("leco_log"):
+            yield {"type": "log", "text": ob["leco_log"]}
+        ok_done = bool(ob.get("ok"))
+        ec = int(ob.get("exit_code") or (0 if ok_done else 1))
+        extra: dict[str, Any] = {
+            "exit_code": ec,
+            "log": _leco_offboard_log(ob),
+            "offboard": ob,
+        }
+        if not ok_done and ob.get("error"):
+            extra["error"] = ob["error"]
+        yield _emit_done(ok_done, **extra)
+        return
+    if action == "reset":
+        ob = _leco_autooffboard_after_teardown(meta, compose_volumes=True)
+        if ob.get("leco_log"):
+            yield {"type": "log", "text": ob["leco_log"]}
+        ok_done = bool(ob.get("ok"))
+        ec = int(ob.get("exit_code") or (0 if ok_done else 1))
+        extra = {
+            "exit_code": ec,
+            "log": _leco_offboard_log(ob),
+            "offboard": ob,
+        }
+        if not ok_done and ob.get("error"):
+            extra["error"] = ob["error"]
+        yield _emit_done(ok_done, **extra)
+        return
+    if action == "start":
+        code, log = yield from _stream_leco_compose(meta, ["start"], timeout=to)
+        if code != 0:
+            code, log = yield from _stream_leco_compose(meta, ["up", "-d"], timeout=to)
+        yield _emit_done(code == 0, exit_code=code, log=log[-12000:])
+        return
+    if action == "pause":
+        code, log = yield from _stream_leco_compose(meta, ["pause"], timeout=to)
+        yield _emit_done(code == 0, exit_code=code, log=log[-12000:])
+        return
+    if action == "unpause":
+        code, log = yield from _stream_leco_compose(meta, ["unpause"], timeout=to)
+        yield _emit_done(code == 0, exit_code=code, log=log[-12000:])
+        return
+    if action == "staging":
+        code, log = yield from _stream_leco_compose(meta, ["down", "-v", "--remove-orphans"], timeout=to)
+        try:
+            from traefik_dynamic_file import read_dynamic, strip_router_service_keys
+            slug = str(meta.get("leco_slug") or "").strip()
+            if slug:
+                data = read_dynamic() or {}
+                http = data.get("http") or {}
+                rkeys = [k for k in (http.get("routers") or {}) if k.startswith(slug + "-")]
+                skeys = [k for k in (http.get("services") or {}) if k.startswith(slug + "-")]
+                if rkeys or skeys:
+                    strip_router_service_keys(rkeys, skeys)
+                    yield {"type": "log", "text": f"Traefik routes stripped for staging ({len(rkeys)} routers, {len(skeys)} services).\n"}
+        except Exception as exc:
+            yield {"type": "log", "text": f"Warning: could not strip Traefik routes: {exc}\n"}
+        yield _emit_done(code == 0, exit_code=code, log=log[-12000:])
+        return
+    yield _emit_done(False, error=f"unsupported action {action} for leco stack")
+
+
+def _compose_start_cascade(
+    svc: str,
+    meta_map: dict[str, dict],
+    compose_runner,
+    *,
+    build: bool = False,
+) -> dict[str, Any]:
+    services = compose_action_services(svc, "deploy" if build else "start", COMPOSE_SERVICE_REQUIRES)
+    logs: list[str] = []
+    ok = True
+    exit_code = 0
+    for s in services:
+        args = ["up", "-d"]
+        if build:
+            args.append("--build")
+        args.append(s)
+        code, log = compose_runner(args)
+        logs.append(f"=== {s}: {' '.join(args)} ===\n{log}\n")
+        if code != 0:
+            ok = False
+            exit_code = code
+            if s != svc:
+                break
+    return {"ok": ok, "exit_code": exit_code, "log": "".join(logs)[-8000:]}
+
+
+def _compose_docker_lifecycle_cascade(
+    svc: str,
+    action: str,
+    meta_map: dict[str, dict],
+) -> dict[str, Any]:
+    """Stop/pause/restart a compose service and its dependents / dependencies in order."""
+    dc = _docker_client()
+    if dc is None:
+        return {"ok": False, "error": "docker unavailable"}
+    if action == "restart":
+        services = [svc]
+    else:
+        services = compose_action_services(svc, action, COMPOSE_SERVICE_REQUIRES)
+    logs: list[str] = []
+    ok = True
+    for s in services:
+        m = meta_map.get(s)
+        if not m:
+            continue
+        cname = m.get("container")
+        if not cname:
+            continue
+        try:
+            c = dc.containers.get(cname)
+        except Exception:
+            logs.append(f"=== {s}: container {cname} not found (skipped)\n")
+            continue
+        try:
+            logs.append(f"=== {s}: {action} {cname} ===\n")
+            if action == "stop":
+                c.stop(timeout=30)
+            elif action == "pause":
+                c.pause()
+            elif action == "restart":
+                c.restart(timeout=30)
+            elif action == "unpause":
+                c.unpause()
+            logs.append("Done.\n")
+        except Exception as exc:
+            ok = False
+            logs.append(f"FAIL: {exc}\n")
+    return {"ok": ok, "log": "".join(logs)[-8000:]}
+
+
 def _cf_service_action(meta: dict, action: str):
     svc = meta["compose_service"]
     cname = meta["container"]
 
     if action == "deploy":
-        code, log = _compose(["up", "-d", "--build", svc])
-        return {"ok": code == 0, "exit_code": code, "log": log[-8000:]}
+        return _compose_start_cascade(svc, _CF_BY_COMPOSE, lambda args: _compose(args), build=True)
     if action == "recreate":
         code, log = _compose(["up", "-d", "--force-recreate", "--no-deps", svc])
         return {"ok": code == 0, "exit_code": code, "log": log[-8000:]}
@@ -477,33 +807,12 @@ def _cf_service_action(meta: dict, action: str):
         return {"ok": False, "error": "backup only defined for d1-adapter or full stack"}
 
     if action == "start":
-        code, log = _compose(["start", svc])
-        if code != 0:
-            code, log = _compose(["up", "-d", svc])
-        return {"ok": code == 0, "exit_code": code, "log": log[-8000:]}
+        return _compose_start_cascade(svc, _CF_BY_COMPOSE, lambda args: _compose(args))
 
-    dc = _docker_client()
-    if dc is None:
-        return {"ok": False, "error": "docker unavailable"}
-    try:
-        c = dc.containers.get(cname)
-    except Exception:
-        return {"ok": False, "error": f"container {cname} not found"}
+    if action in {"stop", "restart", "pause", "unpause"}:
+        return _compose_docker_lifecycle_cascade(svc, action, _CF_BY_COMPOSE)
 
-    try:
-        if action == "stop":
-            c.stop(timeout=30)
-        elif action == "restart":
-            c.restart(timeout=30)
-        elif action == "pause":
-            c.pause()
-        elif action == "unpause":
-            c.unpause()
-        else:
-            return {"ok": False, "error": f"unsupported action {action}"}
-        return {"ok": True, "container": cname, "action": action}
-    except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+    return {"ok": False, "error": f"unsupported action {action}"}
 
 
 def _infra_service_action(meta: dict, action: str):
@@ -511,51 +820,51 @@ def _infra_service_action(meta: dict, action: str):
     cname = meta["container"]
 
     if action == "deploy":
-        code, log = _infra_compose(["up", "-d", "--build", svc])
-        return {"ok": code == 0, "exit_code": code, "log": log[-8000:]}
+        return _compose_start_cascade(svc, _INFRA_BY_COMPOSE, lambda args: _infra_compose(args), build=True)
     if action == "recreate":
         code, log = _infra_compose(["up", "-d", "--force-recreate", "--no-deps", svc])
         return {"ok": code == 0, "exit_code": code, "log": log[-8000:]}
     if action == "reset":
-        code1, log1 = _infra_compose(["stop", svc])
-        code2, log2 = _infra_compose(["rm", "-sf", svc])
+        services = compose_action_services(svc, "reset", COMPOSE_SERVICE_REQUIRES)
+        logs: list[str] = []
+        ok = True
+        exit_code = 0
+        for s in services:
+            code1, log1 = _infra_compose(["stop", s])
+            code2, log2 = _infra_compose(["rm", "-sf", s])
+            logs.append(f"{log1}\n{log2}")
+            if code1 != 0 or code2 != 0:
+                ok = False
+                exit_code = code2 or code1
         code3, log3 = _infra_compose(["up", "-d", svc])
-        log = f"{log1}\n{log2}\n{log3}"
-        return {"ok": code1 == 0 and code2 == 0 and code3 == 0, "exit_code": code3, "log": log[-8000:]}
+        logs.append(log3)
+        if code3 != 0:
+            ok = False
+            exit_code = code3
+        log = "\n".join(logs)
+        return {"ok": ok, "exit_code": exit_code, "log": log[-8000:]}
     if action == "remove":
-        code, log = _infra_compose(["rm", "-sf", svc])
-        return {"ok": code == 0, "exit_code": code, "log": log[-8000:]}
+        services = compose_action_services(svc, "remove", COMPOSE_SERVICE_REQUIRES)
+        logs = []
+        ok = True
+        exit_code = 0
+        for s in services:
+            code, log = _infra_compose(["rm", "-sf", s])
+            logs.append(f"=== {s}: rm ===\n{log}\n")
+            if code != 0:
+                ok = False
+                exit_code = code
+        return {"ok": ok, "exit_code": exit_code, "log": "".join(logs)[-8000:]}
     if action == "backup":
         return {"ok": False, "error": "backup not defined for infra services"}
 
     if action == "start":
-        code, log = _infra_compose(["start", svc])
-        if code != 0:
-            code, log = _infra_compose(["up", "-d", svc])
-        return {"ok": code == 0, "exit_code": code, "log": log[-8000:]}
+        return _compose_start_cascade(svc, _INFRA_BY_COMPOSE, lambda args: _infra_compose(args))
 
-    dc = _docker_client()
-    if dc is None:
-        return {"ok": False, "error": "docker unavailable"}
-    try:
-        c = dc.containers.get(cname)
-    except Exception:
-        return {"ok": False, "error": f"container {cname} not found"}
+    if action in {"stop", "restart", "pause", "unpause"}:
+        return _compose_docker_lifecycle_cascade(svc, action, _INFRA_BY_COMPOSE)
 
-    try:
-        if action == "stop":
-            c.stop(timeout=30)
-        elif action == "restart":
-            c.restart(timeout=30)
-        elif action == "pause":
-            c.pause()
-        elif action == "unpause":
-            c.unpause()
-        else:
-            return {"ok": False, "error": f"unsupported action {action}"}
-        return {"ok": True, "container": cname, "action": action}
-    except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+    return {"ok": False, "error": f"unsupported action {action}"}
 
 
 def _ai_service_action(meta: dict, action: str):
@@ -711,19 +1020,38 @@ def run_action_streaming(target_id: str, action: str) -> Iterator[dict[str, Any]
         yield _emit_done(False, error=f"unsupported action: {action}")
         return
 
-    if target_id == "stack-cf-all":
+    tid = (target_id or "").strip()
+    if not tid:
+        yield _emit_done(
+            False,
+            error="missing target_id — UI sent an empty control target; refresh the page or re-open the Hosted apps tab.",
+        )
+        return
+
+    if tid == "stack-cf-all":
         yield from _stream_stack_cf_all_stream(action)
         return
-    if target_id == "stack-infra-all":
+    if tid == "stack-infra-all":
         yield from _stream_stack_infra_all_stream(action)
         return
-    if target_id == "stack-ecosystem-all":
+    if tid == "stack-ecosystem-all":
         yield from _stream_stack_ecosystem_all_stream(action)
         return
 
-    meta = _BY_ID.get(target_id)
+    leco_m = resolve_leco_target(tid)
+    if leco_m:
+        yield from _stream_leco_stack_action(leco_m, action)
+        return
+
+    meta = _BY_ID.get(tid)
     if not meta:
-        yield _emit_done(False, error="unknown target")
+        yield _emit_done(
+            False,
+            error=(
+                f"unknown target {tid!r} — not a LEco stack (expected leco-stack-<registry id>), "
+                "infra/cf bulk target, or dashboard service id. Refresh the UI if controls look stale."
+            ),
+        )
         return
 
     if "compose_service" in meta:
@@ -751,7 +1079,7 @@ def _stream_stack_ecosystem_all_stream(action: str) -> Iterator[dict[str, Any]]:
     if action not in _ECOSYSTEM_BULK_BASH_ACTIONS:
         yield _emit_done(False, error=f"action {action} not supported for ecosystem bulk")
         return
-    core_sh = os.path.join(PROJECT_ROOT, "ai-stack", "core.sh")
+    core_sh = os.path.join(PROJECT_ROOT, "ecosystem-stack", "core.sh")
     if not os.path.isfile(core_sh):
         yield _emit_done(False, error=f"missing {core_sh}")
         return
@@ -859,40 +1187,18 @@ def _stream_cf_service_action_stream(meta: dict, action: str) -> Iterator[dict[s
         return
 
     if action == "start":
-        code, log = yield from _stream_compose(["start", svc])
-        if code != 0:
-            yield {"type": "log", "text": f"=== compose up -d {svc} (start failed) ===\n"}
-            code, log = yield from _stream_compose(["up", "-d", svc])
-        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        body = _compose_start_cascade(svc, _CF_BY_COMPOSE, lambda args: _compose(args))
+        yield {"type": "log", "text": body.get("log", "")}
+        yield _emit_done(body.get("ok", False), exit_code=body.get("exit_code", 1), log=body.get("log", "")[-8000:])
         return
 
-    dc = _docker_client()
-    if dc is None:
-        yield _emit_done(False, error="docker unavailable")
-        return
-    try:
-        c = dc.containers.get(cname)
-    except Exception:
-        yield _emit_done(False, error=f"container {cname} not found")
+    if action in {"stop", "restart", "pause", "unpause"}:
+        body = _compose_docker_lifecycle_cascade(svc, action, _CF_BY_COMPOSE)
+        yield {"type": "log", "text": body.get("log", "")}
+        yield _emit_done(body.get("ok", False), log=body.get("log", "")[-8000:])
         return
 
-    try:
-        yield {"type": "log", "text": f"Docker {action} {cname} …\n"}
-        if action == "stop":
-            c.stop(timeout=30)
-        elif action == "restart":
-            c.restart(timeout=30)
-        elif action == "pause":
-            c.pause()
-        elif action == "unpause":
-            c.unpause()
-        else:
-            yield _emit_done(False, error=f"unsupported action {action}")
-            return
-        yield {"type": "log", "text": "Done.\n"}
-        yield _emit_done(True, container=cname, action=action)
-    except Exception as exc:
-        yield _emit_done(False, error=str(exc))
+    yield _emit_done(False, error=f"unsupported action {action}")
 
 
 def _stream_infra_service_action_stream(meta: dict, action: str) -> Iterator[dict[str, Any]]:
@@ -926,40 +1232,18 @@ def _stream_infra_service_action_stream(meta: dict, action: str) -> Iterator[dic
         return
 
     if action == "start":
-        code, log = yield from _stream_infra_compose(["start", svc])
-        if code != 0:
-            yield {"type": "log", "text": f"=== compose up -d {svc} (start failed) ===\n"}
-            code, log = yield from _stream_infra_compose(["up", "-d", svc])
-        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        body = _compose_start_cascade(svc, _INFRA_BY_COMPOSE, lambda args: _infra_compose(args))
+        yield {"type": "log", "text": body.get("log", "")}
+        yield _emit_done(body.get("ok", False), exit_code=body.get("exit_code", 1), log=body.get("log", "")[-8000:])
         return
 
-    dc = _docker_client()
-    if dc is None:
-        yield _emit_done(False, error="docker unavailable")
-        return
-    try:
-        c = dc.containers.get(cname)
-    except Exception:
-        yield _emit_done(False, error=f"container {cname} not found")
+    if action in {"stop", "restart", "pause", "unpause"}:
+        body = _compose_docker_lifecycle_cascade(svc, action, _INFRA_BY_COMPOSE)
+        yield {"type": "log", "text": body.get("log", "")}
+        yield _emit_done(body.get("ok", False), log=body.get("log", "")[-8000:])
         return
 
-    try:
-        yield {"type": "log", "text": f"Docker {action} {cname} …\n"}
-        if action == "stop":
-            c.stop(timeout=30)
-        elif action == "restart":
-            c.restart(timeout=30)
-        elif action == "pause":
-            c.pause()
-        elif action == "unpause":
-            c.unpause()
-        else:
-            yield _emit_done(False, error=f"unsupported action {action}")
-            return
-        yield {"type": "log", "text": "Done.\n"}
-        yield _emit_done(True, container=cname, action=action)
-    except Exception as exc:
-        yield _emit_done(False, error=str(exc))
+    yield _emit_done(False, error=f"unsupported action {action}")
 
 
 def _stream_ai_service_action_stream(meta: dict, action: str) -> Iterator[dict[str, Any]]:
