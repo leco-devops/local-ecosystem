@@ -6,9 +6,22 @@ description: >-
 theme: jekyll-theme-cayman
 show_downloads: true
 
+url: "https://leco-project.us"
+baseurl: ""
+
+markdown: kramdown
+kramdown:
+  input: GFM
+  hard_wrap: false
+
 github:
   repository_name: leco-devops/local-ecosystem
   is_project_page: true
+
+plugins:
+  - jekyll-seo-tag
+  - jekyll-github-metadata
+  - jekyll-relative-links
 
 # Do not publish the full monorepo as HTML pages — landing only
 exclude:
@@ -33,6 +46,4 @@ exclude:
   - traefik
   - "*.sh"
   - leco-cli.sh
-  - Gemfile
-  - Gemfile.lock
   - vendor

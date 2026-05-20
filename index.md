@@ -3,17 +3,19 @@ layout: default
 title: LEco DevOps Open Project
 ---
 
+<div class="leco-hero-panel">
+
 <p class="leco-tagline">
   <strong>One-click deploy for almost any application — no manual rewiring.</strong><br />
   LEco reads your repo, converts config, orchestrates Compose &amp; Traefik, and ships on <code>*.lh</code>.
 </p>
 
 <nav class="leco-nav" aria-label="On this page">
-  <a href="#start-in-minutes">Get started</a> ·
-  <a href="#platform">Platform</a> ·
-  <a href="#features">Features</a> ·
-  <a href="#use-cases">Use cases</a> ·
-  <a href="https://github.com/leco-devops/local-ecosystem/blob/main/docs/PROJECT.md">Technical guide</a> ·
+  <a href="#start-in-minutes">Get started</a>
+  <a href="#platform">Platform</a>
+  <a href="#features">Features</a>
+  <a href="#use-cases">Use cases</a>
+  <a href="https://github.com/leco-devops/local-ecosystem/blob/main/docs/PROJECT.md">Technical guide</a>
   <a href="https://github.com/leco-devops/local-ecosystem">Source</a>
 </nav>
 
@@ -24,13 +26,18 @@ title: LEco DevOps Open Project
   <img src="https://img.shields.io/badge/community-open%20source-brightgreen" alt="Open source" />
 </p>
 
-**LEco DevOps** is a free, MIT-licensed local cloud edge: point it at an app repo, and it does the heavy lifting — detect existing Docker Compose, Wrangler, and env layout · generate LEco manifests · merge Traefik routes · deploy.
+</div>
+
+<p class="leco-lead">
+  <strong>LEco DevOps</strong> is a free, MIT-licensed local cloud edge: point it at an app repo, and it does the heavy lifting — detect existing Docker Compose, Wrangler, and env layout · generate LEco manifests · merge Traefik routes · deploy.
+</p>
 
 ## What makes LEco different
 
 > **Our USP: deploy first, configure later.**  
 > You should not have to rewrite every app for a new platform. LEco *reads* what you already have, *converts* it into LEco manifests and hosting slots, *orchestrates* the stack, and *deploys* — often in one click from the dashboard or `leco-devops onboard`.
 
+{: .leco-usp-table}
 | Step | What LEco does |
 |------|----------------|
 | **Read** | Scans `docker-compose.yml`, `wrangler.toml`, `.env`, Dockerfiles, and project layout from your Git tree |
@@ -42,7 +49,11 @@ Works for **Docker Compose apps**, **React/Vue + API splits**, **Workers + Wrang
 
 ## Platform
 
-The **Platform** tab is a first-class capability — not just settings. It is how you run **local or cloud VM** deployments, **curated service bundles**, and **isolated dev stacks** from one UI (mirrored by `leco-devops platform` and `leco-devops dev-stack` on the CLI).
+<div class="leco-platform-callout">
+
+**Platform** is a unique LEco capability — not just settings. Run **local or cloud VM** deployments, **curated service bundles**, and **isolated dev stacks** from one dashboard tab (mirrored by `leco-devops platform` and `leco-devops dev-stack` on the CLI).
+
+</div>
 
 | Capability | What it does for you |
 |------------|----------------------|
@@ -56,9 +67,9 @@ The **Platform** tab is a first-class capability — not just settings. It is ho
 Presets and versions live in **`ecosystem-stack/config/dev-stack-presets.yaml`** and **`component-catalog.yaml`**. Generated stacks land under **`platform/dev-stacks/<id>/`** with Traefik routes in **`hosting/traefik/20-dev-stacks.yml`**.
 
 <p class="leco-cta-row">
-  <a href="https://github.com/leco-devops/local-ecosystem/blob/main/docs/help/03-platform-tab.md"><strong>Platform tab guide</strong></a> ·
-  <a href="https://github.com/leco-devops/local-ecosystem/blob/main/docs/DEV_STACK_ISOLATION.md"><strong>Dev stack isolation</strong></a> ·
-  <a href="https://github.com/leco-devops/local-ecosystem/blob/main/docs/CLOUD_VM_DEPLOYMENT.md"><strong>Cloud VM deployment</strong></a>
+  <a href="https://github.com/leco-devops/local-ecosystem/blob/main/docs/help/03-platform-tab.md">Platform tab guide</a>
+  <a href="https://github.com/leco-devops/local-ecosystem/blob/main/docs/DEV_STACK_ISOLATION.md" class="leco-cta--ghost">Dev stack isolation</a>
+  <a href="https://github.com/leco-devops/local-ecosystem/blob/main/docs/CLOUD_VM_DEPLOYMENT.md" class="leco-cta--ghost">Cloud VM deployment</a>
 </p>
 
 ## Features
@@ -223,8 +234,9 @@ cd local-ecosystem
 Open **http://localhost.lh** or **http://dashboard.lh** for the LEco DevOps dashboard.
 
 <p class="leco-cta-row">
-  <a href="https://github.com/leco-devops/local-ecosystem/blob/main/docs/SETUP.md"><strong>Full first-time setup</strong></a> ·
-  <a href="https://github.com/leco-devops/local-ecosystem/blob/main/docs/DEPLOY_CLI.md"><strong>CLI reference</strong></a>
+  <a href="https://github.com/leco-devops/local-ecosystem/blob/main/docs/SETUP.md">Full first-time setup</a>
+  <a href="https://github.com/leco-devops/local-ecosystem/blob/main/docs/DEPLOY_CLI.md" class="leco-cta--ghost">CLI reference</a>
+  <a href="https://github.com/leco-devops/local-ecosystem" class="leco-cta--ghost">View on GitHub</a>
 </p>
 
 ## Documentation
@@ -242,9 +254,9 @@ Open **http://localhost.lh** or **http://dashboard.lh** for the LEco DevOps dash
 This project is **community-driven**: fork, fix, document, and open pull requests.
 
 <p class="leco-cta-row">
-  <a href="https://github.com/leco-devops/local-ecosystem/blob/main/CONTRIBUTING.md"><strong>Contribution guide</strong></a> ·
-  <a href="https://github.com/leco-devops/local-ecosystem/issues"><strong>Issues</strong></a> ·
-  <a href="https://github.com/leco-devops/local-ecosystem/fork"><strong>Fork</strong></a>
+  <a href="https://github.com/leco-devops/local-ecosystem/blob/main/CONTRIBUTING.md">Contribution guide</a>
+  <a href="https://github.com/leco-devops/local-ecosystem/issues" class="leco-cta--ghost">Issues</a>
+  <a href="https://github.com/leco-devops/local-ecosystem/fork" class="leco-cta--ghost">Fork</a>
 </p>
 
 ## Top contributors
