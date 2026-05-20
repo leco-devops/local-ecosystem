@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
-- **GitHub Pages FAQ:** Escape FAQ HTML and replace `<slug>` / `<id>` in answers so browsers do not treat path segments as tags (fixes nested/broken accordions and raw markdown leaking below FAQ).
+- **GitHub Pages FAQ:** Render FAQ and lower page sections via layout includes (not inside `index.md` markdown); fix `<slug>`, `<id>`, `<your-app>` placeholders in `index.md` that broke HTML parsing; use `xml_escape` on FAQ fields.
 
 ### Added
 
