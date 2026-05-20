@@ -236,6 +236,8 @@ Open **http://localhost.lh** or **http://dashboard.lh** for the LEco DevOps dash
 
 {% include faq-section.html %}
 
+---
+
 ## Documentation
 
 | Guide | For |

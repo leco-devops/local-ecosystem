@@ -7,15 +7,11 @@
   <div class="leco-faq__list">
     {% for item in site.data.faqs %}
     <details class="leco-faq__item">
-      <summary>{{ item.question }}</summary>
-      <p>{{ item.answer }}</p>
+      <summary>{{ item.question | escape }}</summary>
+      <div class="leco-faq__answer">
+        <p>{{ item.answer | escape }}</p>
+      </div>
     </details>
     {% endfor %}
   </div>
-  <p class="leco-faq__llm-links muted">
-    LLM discovery:
-    <a href="{{ '/llms.txt' | relative_url }}">llms.txt</a> ·
-    <a href="{{ '/llms-full.txt' | relative_url }}">llms-full.txt</a> ·
-    <a href="{{ '/ai.txt' | relative_url }}">ai.txt</a>
-  </p>
 </section>
