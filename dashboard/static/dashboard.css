@@ -19,15 +19,53 @@ body {
   align-items: flex-start;
   gap: 20px;
   flex-wrap: wrap;
-  margin-bottom: 8px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid var(--border-subtle);
+  margin: -28px -28px 20px;
+  padding: 22px 28px 20px;
+  background: var(--chrome-bg);
+  border-bottom: 4px solid var(--chrome-border);
+  box-shadow: var(--shadow-md);
+}
+
+.page-header h1,
+.header-brand h1 {
+  color: var(--chrome-text) !important;
+}
+
+.page-header .header-status,
+.page-header .header-sep,
+.page-header .small,
+.page-header .muted {
+  color: var(--text-muted-on-chrome);
+}
+
+.page-header .hl-healthy {
+  color: var(--leco-sky);
+}
+
+.page-header .hl-degraded,
+.page-header .hl-critical {
+  color: var(--leco-white);
+  background: var(--leco-teal);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.page-header select,
+.page-header button {
+  background: var(--leco-white);
+  color: var(--leco-navy);
+  border: 2px solid var(--leco-sky);
+}
+
+.page-header button:hover {
+  border-color: var(--leco-sky);
+  background: var(--leco-sky);
 }
 
 h1 {
   margin: 0 0 12px;
   font-size: 26px;
-  color: var(--cyan);
+  color: var(--leco-teal);
   letter-spacing: -0.02em;
 }
 
@@ -93,9 +131,10 @@ button.btn--inline-loading::after {
   overflow: hidden;
   background: var(--bg-elevated);
   color: var(--text);
-  border: 2px solid var(--border-subtle);
+  border: 2px solid var(--leco-teal);
   border-radius: 10px;
   padding: 10px 16px;
+  font-weight: 600;
   transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
 }
 
@@ -133,18 +172,18 @@ button.btn--inline-loading::after {
 .tabs .tab-btn:nth-child(4),
 .tabs .tab-btn:nth-child(7),
 .tabs .tab-btn:nth-child(10) {
-  border-top: 3px solid var(--leco-teal);
+  border-top: 4px solid var(--leco-teal);
 }
 .tabs .tab-btn:nth-child(2),
 .tabs .tab-btn:nth-child(5),
 .tabs .tab-btn:nth-child(8),
 .tabs .tab-btn:nth-child(11) {
-  border-top: 3px solid var(--leco-navy);
+  border-top: 4px solid var(--leco-navy);
 }
 .tabs .tab-btn:nth-child(3),
 .tabs .tab-btn:nth-child(6),
 .tabs .tab-btn:nth-child(9) {
-  border-top: 3px solid var(--leco-sky);
+  border-top: 4px solid var(--leco-sky);
 }
 
 
@@ -167,8 +206,8 @@ a.tab-btn.tab-btn--link {
 .tab-btn.active {
   background: var(--tab-active-bg);
   color: var(--text-on-accent);
-  border-color: var(--tab-active-border);
-  box-shadow: var(--shadow-sm);
+  border: 2px solid var(--tab-active-border);
+  box-shadow: var(--shadow-md);
 }
 
 .tab-content {
@@ -241,9 +280,15 @@ select,
 button {
   background: var(--bg-elevated);
   color: var(--text);
-  border: 1px solid var(--border-subtle);
+  border: 2px solid var(--leco-teal);
   border-radius: 8px;
   padding: 6px 10px;
+  font-weight: 600;
+}
+
+button:hover {
+  border-color: var(--leco-navy);
+  background: var(--leco-sky);
 }
 
 input[type="text"] {
@@ -275,7 +320,7 @@ button {
 
 .card,
 .chart-card {
-  border: 2px solid var(--border-subtle);
+  border: 2px solid var(--leco-teal);
   border-radius: 14px;
   padding: 20px 22px;
   background-color: var(--bg-card);
@@ -2067,10 +2112,11 @@ button.ollama-act:disabled:hover {
 }
 
 .url-cat {
-  border: 1px solid var(--border-subtle);
+  border: 2px solid var(--leco-navy);
   border-radius: 10px;
   padding: 12px 14px;
   background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
 }
 
 .url-cat h3 {
@@ -2097,9 +2143,10 @@ button.ollama-act:disabled:hover {
   gap: 12px;
   align-items: flex-start;
   padding: 8px 10px;
-  background: var(--leco-mist);
+  background: var(--leco-white);
   border-radius: 8px;
-  border: 1px solid var(--border-subtle);
+  border: 2px solid var(--leco-sky);
+  border-left: 4px solid var(--leco-teal);
 }
 
 .url-row-info {
@@ -2475,7 +2522,7 @@ button.dev-open-doc:hover {
 
 .kpi-cell {
   background-color: var(--bg-card);
-  border: 2px solid var(--border-subtle);
+  border: 2px solid var(--leco-teal);
   border-radius: 12px;
   padding: 14px 16px;
   min-height: 72px;
@@ -2537,7 +2584,7 @@ button.dev-open-doc:hover {
 
 .dash-panel {
   background-color: var(--bg-card);
-  border: 2px solid var(--border-subtle);
+  border: 2px solid var(--leco-teal);
   border-radius: 14px;
   padding: 18px 20px;
   display: flex;
@@ -2548,8 +2595,8 @@ button.dev-open-doc:hover {
 
 .overview-secondary-charts .dash-panel,
 .overview-primary-charts .dash-panel--hero {
-  border-color: var(--border-subtle);
-  box-shadow: var(--shadow-sm);
+  border-color: var(--leco-teal);
+  box-shadow: var(--shadow-md);
 }
 .overview-secondary-charts .dash-panel:nth-child(3n + 2) {
   border-color: var(--leco-teal);
@@ -2698,45 +2745,51 @@ button.dev-open-doc:hover {
 
 .chip {
   font-size: 12px;
-  color: var(--text);
-  background: rgba(30, 27, 70, 0.85);
-  border: 1px solid rgba(129, 140, 248, 0.45);
+  font-weight: 600;
+  color: var(--leco-navy);
+  background: var(--leco-white);
+  border: 2px solid var(--leco-teal);
   border-radius: 999px;
   padding: 8px 14px;
 }
 
 .overview-chips .chip:nth-child(4n + 1) {
-  border-color: rgba(56, 189, 248, 0.55);
-  background: rgba(56, 189, 248, 0.1);
+  border-color: var(--leco-teal);
+  background: var(--leco-white);
 }
 .overview-chips .chip:nth-child(4n + 2) {
-  border-color: rgba(167, 139, 250, 0.55);
-  background: rgba(167, 139, 250, 0.1);
+  border-color: var(--leco-navy);
+  background: var(--leco-sky);
 }
 .overview-chips .chip:nth-child(4n + 3) {
-  border-color: rgba(244, 114, 182, 0.55);
-  background: rgba(244, 114, 182, 0.1);
+  border-color: var(--leco-teal);
+  background: var(--leco-mist);
 }
 .overview-chips .chip:nth-child(4n + 4) {
-  border-color: rgba(52, 211, 153, 0.55);
-  background: rgba(52, 211, 153, 0.1);
+  border-color: var(--leco-navy);
+  background: var(--leco-white);
 }
 
 .chip code {
   font-size: 11px;
-  color: #67e8f9;
+  color: var(--leco-teal);
 }
 
 .chip--warn {
-  border-color: rgba(251, 191, 36, 0.75);
-  color: #fef3c7;
-  background: rgba(251, 191, 36, 0.12);
+  border: 2px solid var(--leco-navy);
+  color: var(--leco-navy);
+  background: var(--leco-sky);
 }
 
 .chip--bad {
-  border-color: rgba(251, 113, 133, 0.75);
-  color: #fecdd3;
-  background: rgba(251, 113, 133, 0.12);
+  border: 2px solid var(--leco-navy);
+  color: var(--leco-white);
+  background: var(--leco-navy);
+}
+
+.chip a {
+  color: var(--leco-teal);
+  font-weight: 700;
 }
 
 /* Control console */
@@ -4560,18 +4613,19 @@ button.dev-open-doc:hover {
   margin-top: 40px;
   margin-bottom: 8px;
   padding: 28px 24px 32px;
-  border: 2px solid var(--border-subtle);
-  border-radius: 14px;
-  background: var(--bg-card);
+  border: none;
+  border-top: 4px solid var(--chrome-border);
+  border-radius: 14px 14px 0 0;
+  background: var(--chrome-bg);
   text-align: center;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
 }
 
 .project-footer__brand {
   margin: 0;
   font-size: 14px;
   line-height: 1.55;
-  color: var(--text);
+  color: var(--chrome-text);
 }
 
 .project-footer__copy {
@@ -4580,12 +4634,17 @@ button.dev-open-doc:hover {
   max-width: 52rem;
   margin-left: auto;
   margin-right: auto;
+  color: var(--text-muted-on-chrome);
+}
+
+.project-footer__copy a {
+  color: var(--leco-sky);
 }
 
 .project-footer__links {
   margin-top: 22px;
   padding-top: 20px;
-  border-top: 2px solid var(--border-subtle);
+  border-top: 2px solid var(--leco-teal);
   display: flex;
   flex-wrap: wrap;
   gap: 12px 14px;
@@ -4598,18 +4657,20 @@ button.dev-open-doc:hover {
   align-items: center;
   justify-content: center;
   font-size: 12px;
+  font-weight: 600;
   padding: 9px 14px;
   border-radius: 10px;
-  border: 2px solid var(--border-subtle);
-  background: var(--bg-elevated);
-  color: var(--text);
+  border: 2px solid var(--leco-sky);
+  background: transparent;
+  color: var(--chrome-text);
   text-decoration: none;
   cursor: pointer;
 }
 
 .project-footer__link:hover {
-  border-color: var(--leco-teal);
-  color: var(--leco-navy);
+  border-color: var(--leco-white);
+  background: var(--leco-teal);
+  color: var(--leco-white);
 }
 
 @media (max-width: 900px) {
@@ -5460,6 +5521,8 @@ body.help-page {
 /* Overview — update catalog panel */
 .dash-panel--update-catalog {
   grid-column: 1 / -1;
+  border-color: var(--leco-navy);
+  border-width: 3px;
 }
 
 .dash-panel__head--catalog {
@@ -5571,8 +5634,18 @@ body.help-page {
 .uc-block {
   padding: 10px;
   border-radius: 8px;
-  background: rgba(15, 12, 32, 0.5);
-  border: 1px solid rgba(76, 61, 122, 0.5);
+  background: var(--chrome-bg);
+  border: 2px solid var(--leco-teal);
+  color: var(--chrome-text);
+}
+
+.uc-block .uc-label {
+  color: var(--chrome-muted);
+}
+
+.uc-block .uc-hint,
+.uc-block .uc-row {
+  color: var(--chrome-text);
 }
 
 .uc-block--summary {
@@ -5604,18 +5677,18 @@ body.help-page {
 }
 
 .uc-status--ok {
-  background: rgba(34, 197, 94, 0.2);
-  color: #86efac;
+  background: var(--leco-teal);
+  color: var(--leco-white);
 }
 
 .uc-status--warn {
-  background: rgba(251, 191, 36, 0.2);
-  color: #fcd34d;
+  background: var(--leco-sky);
+  color: var(--leco-navy);
 }
 
 .uc-status--muted {
-  background: rgba(100, 116, 139, 0.25);
-  color: var(--text-muted);
+  background: var(--leco-mist);
+  color: var(--leco-navy);
 }
 
 .uc-hint {
@@ -5627,25 +5700,26 @@ body.help-page {
   text-align: center;
   padding: 8px 4px;
   border-radius: 6px;
-  background: rgba(88, 28, 135, 0.12);
+  background: rgba(31, 122, 140, 0.35);
+  border: 1px solid var(--leco-sky);
 }
 
 .uc-stat--alert {
-  background: rgba(251, 191, 36, 0.15);
-  border: 1px solid rgba(251, 191, 36, 0.35);
+  background: var(--leco-teal);
+  border: 2px solid var(--leco-sky);
 }
 
 .uc-stat__n {
   display: block;
   font-size: 20px;
   font-weight: 700;
-  color: var(--text);
+  color: var(--leco-white);
 }
 
 .uc-stat__l {
   display: block;
   font-size: 10px;
-  color: var(--text-muted);
+  color: var(--chrome-muted);
   margin-top: 2px;
 }
 
@@ -5657,7 +5731,7 @@ body.help-page {
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-  color: var(--leco-teal);
+  color: var(--leco-sky);
   margin-bottom: 6px;
 }
 

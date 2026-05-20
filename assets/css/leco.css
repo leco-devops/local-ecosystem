@@ -36,9 +36,22 @@
 
 /* Header — matches dashboard h1 / tab accent */
 .leco-page-header {
-  border-bottom: 2px solid var(--border-subtle);
-  background: var(--bg-elevated);
+  border-bottom: 4px solid var(--chrome-border);
+  background: var(--chrome-bg);
   padding: 2.5rem 1.25rem 2rem;
+  color: var(--chrome-text);
+}
+
+.leco-page-header .leco-brand__name {
+  color: var(--leco-sky) !important;
+}
+
+.leco-page-header .leco-brand__suffix {
+  color: var(--chrome-text) !important;
+}
+
+.leco-page-header__tagline {
+  color: var(--text-muted-on-chrome) !important;
 }
 
 .leco-page-header__inner {
@@ -140,7 +153,7 @@
   border-radius: 10px;
   font-size: 0.88rem;
   font-weight: 600;
-  border: 2px solid var(--border-subtle);
+  border: 2px solid var(--leco-teal);
   transition: transform 0.12s, border-color 0.12s, background-color 0.12s;
 }
 
@@ -282,7 +295,7 @@
 /* Hero panel */
 .leco-hero-panel {
   background: var(--bg-elevated);
-  border: 1px solid var(--border-subtle);
+  border: 2px solid var(--leco-teal);
   border-radius: var(--leco-radius);
   padding: 1.35rem 1.25rem 1.15rem;
   margin-bottom: 1.75rem;
@@ -513,8 +526,9 @@
 .leco-footer {
   margin-top: auto;
   padding: 2rem 1.25rem 2.5rem;
-  border-top: 2px solid var(--border-subtle);
-  background: var(--leco-navy);
+  border-top: 4px solid var(--chrome-border);
+  background: var(--chrome-bg);
+  color: var(--chrome-text);
 }
 
 .leco-footer__inner {
@@ -527,7 +541,7 @@
   margin: 0;
   font-size: 14px;
   line-height: 1.55;
-  color: var(--leco-white);
+  color: var(--chrome-text);
 }
 
 .leco-footer__copy {
@@ -535,13 +549,13 @@
   max-width: 52rem;
   font-size: 13px;
   line-height: 1.55;
-  color: var(--text-muted);
+  color: var(--text-muted-on-chrome);
 }
 
 .leco-footer__links {
   margin-top: 22px;
   padding-top: 20px;
-  border-top: 2px solid var(--border-subtle);
+  border-top: 2px solid var(--leco-teal);
   display: flex;
   flex-wrap: wrap;
   gap: 12px 14px;
@@ -554,15 +568,17 @@
   align-items: center;
   justify-content: center;
   font-size: 12px;
+  font-weight: 600;
   padding: 9px 14px;
   border-radius: 10px;
-  border: 2px solid var(--border-subtle);
-  background: var(--bg-elevated);
-  color: var(--leco-sky) !important;
+  border: 2px solid var(--leco-sky);
+  background: transparent;
+  color: var(--chrome-text) !important;
 }
 
 .leco-footer__link:hover {
   border-color: var(--leco-white);
+  background: var(--leco-teal);
   color: var(--leco-white) !important;
 }
 
@@ -594,7 +610,7 @@
 }
 
 .leco-faq__item {
-  border: 2px solid var(--border-subtle);
+  border: 2px solid var(--leco-teal);
   border-radius: var(--leco-radius);
   background: var(--bg-elevated);
   overflow: hidden;

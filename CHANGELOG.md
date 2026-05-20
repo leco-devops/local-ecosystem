@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
-- **Brand palette:** Professional **light** UI — mist page background, white cards, navy text, teal actions; strict five-color palette, no gradients; unified service accents; light/dark logo SVGs; shared `leco-palette.css` on Pages and dashboard.
+- **Brand palette:** Professional **light** UI — mist page background, navy header/footer chrome, bold teal/navy/sky borders on cards/tabs/chips; strict five-color palette, no gradients; shared `leco-palette.css` on Pages and dashboard.
 - **GitHub Pages:** Download .zip / .tar.gz header buttons open the repository on GitHub instead of triggering a direct archive download.
 - **Update catalog:** Track [`ecosystem-stack/config/generated/update-catalog-read-state.json`](ecosystem-stack/config/generated/update-catalog-read-state.json) in git (removed from `.gitignore`).
 

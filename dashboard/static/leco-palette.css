@@ -1,13 +1,4 @@
-/* LEco brand palette — five solids only, no gradients
- *
- * | Token        | Hex       | Role (light UI)                                      |
- * |--------------|-----------|------------------------------------------------------|
- * | --leco-navy  | #022B3A   | Headings, primary text, strong borders, danger text  |
- * | --leco-teal  | #1F7A8C   | Links, primary buttons, active tabs, success badges  |
- * | --leco-sky   | #BFDBF7   | Borders, table stripes, muted panels, hover fills    |
- * | --leco-mist  | #E1E5F2   | Page background                                      |
- * | --leco-white | #FFFFFF   | Cards, inputs, header bar, text on teal/navy buttons |
- */
+/* LEco brand palette — five solids only, no gradients */
 
 :root {
   color-scheme: light;
@@ -18,18 +9,26 @@
   --leco-mist: #e1e5f2;
   --leco-white: #ffffff;
 
-  /* Surfaces */
+  /* Page */
   --bg-base: var(--leco-mist);
   --bg-elevated: var(--leco-white);
   --bg-card: var(--leco-white);
   --surface-muted: var(--leco-sky);
-  --border-subtle: var(--leco-sky);
-  --border-strong: var(--leco-teal);
+  --border-subtle: var(--leco-teal);
+  --border-strong: var(--leco-navy);
 
-  /* Typography */
+  /* Header / footer chrome */
+  --chrome-bg: var(--leco-navy);
+  --chrome-text: var(--leco-white);
+  --chrome-muted: var(--leco-sky);
+  --chrome-border: var(--leco-teal);
+
+  /* Typography on light surfaces */
   --text: var(--leco-navy);
   --text-muted: var(--leco-teal);
   --text-on-accent: var(--leco-white);
+  --text-on-chrome: var(--leco-white);
+  --text-muted-on-chrome: var(--leco-sky);
 
   /* Actions */
   --link: var(--leco-teal);
@@ -38,14 +37,17 @@
   --tab-active-bg: var(--leco-teal);
   --tab-active-border: var(--leco-navy);
 
-  /* Status (palette only) */
+  /* Status accents (palette-only, high contrast) */
   --ok: var(--leco-teal);
   --warn-fg: var(--leco-navy);
   --warn-bg: var(--leco-sky);
   --bad-fg: var(--leco-white);
   --bad-bg: var(--leco-navy);
+  --accent-border-teal: var(--leco-teal);
+  --accent-border-navy: var(--leco-navy);
+  --accent-border-sky: var(--leco-sky);
 
-  /* Legacy aliases used in dashboard.css */
+  /* Legacy aliases */
   --cyan: var(--leco-teal);
   --violet: var(--leco-teal);
   --pink: var(--leco-teal);
@@ -62,6 +64,6 @@
   --warn: var(--leco-navy);
   --bad: var(--leco-navy);
 
-  --shadow-sm: 0 1px 3px rgba(2, 43, 58, 0.08);
-  --shadow-md: 0 4px 14px rgba(2, 43, 58, 0.1);
+  --shadow-sm: 0 2px 6px rgba(2, 43, 58, 0.12);
+  --shadow-md: 0 6px 20px rgba(2, 43, 58, 0.14);
 }

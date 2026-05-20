@@ -6,11 +6,13 @@ Flat palette (no gradients): **Navy** `#022B3A` · **Teal** `#1F7A8C` · **Sky**
 
 | Color | Role |
 |-------|------|
-| **Mist** `#E1E5F2` | Page background |
-| **White** `#FFFFFF` | Cards, header, inputs, footer panels |
-| **Sky** `#BFDBF7` | Borders, zebra rows, muted bands, warning badge background |
-| **Teal** `#1F7A8C` | Links, primary buttons, active tabs, success badges, chart accents |
-| **Navy** `#022B3A` | Headings and body text, strong borders, danger/degraded badges |
+| **Mist** `#E1E5F2` | Page background (main content area) |
+| **White** `#FFFFFF` | Cards, inputs, inactive tabs |
+| **Sky** `#BFDBF7` | Chrome accents, warning chips, secondary borders |
+| **Teal** `#1F7A8C` | Primary borders, links, buttons, active tabs, OK status |
+| **Navy** `#022B3A` | **Header & footer chrome**, headings, body text, strong card borders |
+
+Header and footer use **navy background + white/sky text**. Cards and tabs use **2–4px teal/navy/sky borders** (no washed-out grey).
 
 Tokens live in [`leco-palette.css`](leco-palette.css) (imported by dashboard and GitHub Pages).
 
