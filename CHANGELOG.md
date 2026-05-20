@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- **GitHub Pages (Jekyll):** [index.md](index.md) landing with [Cayman theme](https://docs.github.com/en/pages/setting-up-a-github-pages-site-with-jekyll/adding-a-theme-to-your-github-pages-site-using-jekyll), [_config.yml](_config.yml), LEco-branded [assets/css/leco.css](assets/css/leco.css) + [_includes/head-custom.html](_includes/head-custom.html), and [CNAME](CNAME) for `leco-project.us`.
+- **GitHub Pages (Jekyll):** [index.md](index.md) landing with [_layouts/default.html](_layouts/default.html), control-panel dark theme ([assets/css/leco.css](assets/css/leco.css)), [_includes/leco-footer.html](_includes/leco-footer.html), Vision &amp; Mission section, and [CNAME](CNAME) for `leco-project.us`.
 
 ### Changed
 
