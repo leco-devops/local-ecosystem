@@ -5,3 +5,29 @@
   rel="stylesheet"
 />
 <link rel="stylesheet" href="{{ '/assets/css/leco.css' | relative_url }}" />
+
+{% if site.keywords %}
+<meta name="keywords" content="{{ site.keywords }}" />
+{% endif %}
+<meta name="author" content="{{ site.author.name }}" />
+<meta name="robots" content="index, follow, max-image-preview:large" />
+<link rel="canonical" href="{{ page.url | absolute_url }}" />
+
+<!-- Open Graph extras (jekyll-seo-tag covers basics; reinforce application name) -->
+<meta property="og:site_name" content="{{ site.title }}" />
+<meta property="og:locale" content="en_US" />
+<meta name="twitter:card" content="{{ site.twitter.card | default: 'summary_large_image' }}" />
+{% if site.twitter.site %}
+<meta name="twitter:site" content="{{ site.twitter.site }}" />
+{% endif %}
+
+<!-- GEO — generative engine optimization / LLM discovery -->
+<link rel="alternate" type="text/plain" href="{{ '/llms.txt' | absolute_url }}" title="LLMs.txt" />
+<link rel="alternate" type="text/plain" href="{{ '/llms-full.txt' | absolute_url }}" title="LLMs full guide" />
+<link rel="alternate" type="text/plain" href="{{ '/ai.txt' | absolute_url }}" title="AI discovery" />
+
+{% if site.google_site_verification and site.google_site_verification != "" %}
+<meta name="google-site-verification" content="{{ site.google_site_verification }}" />
+{% endif %}
+
+{% include analytics.html %}

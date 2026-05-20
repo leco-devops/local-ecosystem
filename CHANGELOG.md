@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **SEO & GEO:** Meta keywords, canonical URLs, Open Graph/Twitter cards, JSON-LD (WebSite, Organization, SoftwareApplication, FAQPage), `jekyll-sitemap`, [`robots.txt`](robots.txt) with AI crawler rules, FAQ section from [`_data/faqs.yml`](_data/faqs.yml).
+- **LLM discovery files:** [`llms.txt`](llms.txt), [`llms-full.txt`](llms-full.txt), [`ai.txt`](ai.txt) for generative-engine optimization; optional Google Analytics / GTM IDs in [`_config.yml`](_config.yml).
+
 ### Fixed
 
 - **GitHub Pages:** Use cases cards use HTML instead of markdown inside `<div>` blocks so headings and bold text render correctly under Jekyll.

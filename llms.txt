@@ -1,0 +1,40 @@
+# LEco DevOps Open Project
+
+> One-click deploy for almost any application on a local cloud edge. LEco reads Docker Compose, Wrangler, and env config, converts manifests, orchestrates Traefik and Compose, and ships on *.lh — free, MIT-licensed, community-driven open source.
+
+LEco DevOps Open Project (application: **LEco DevOps**) is the canonical name. Official repository: https://github.com/leco-devops/local-ecosystem. Public site: https://leco-project.us. License: MIT.
+
+## Primary capabilities
+
+- **One-click onboarding:** `leco-devops onboard` and dashboard Detect → Generate YAML → Register → Deploy
+- **Platform tab:** dev stack builder (WordPress, Magento, Laravel, LAMP/MEAN, custom components), cloud/local settings, ecosystem bundles
+- **Hosted apps:** third-party repos under `hosting/app-available/<slug>/` without polluting upstream trees
+- **Edge:** Traefik, mkcert TLS, `*.lh` DNS, split API + UI routes
+- **AI:** Ollama, Open WebUI, AirLLM, n8n
+- **Optional:** Cloudflare-local (R2, KV, D1, Workers-style on `*.lh`), cloud VM profiles
+
+## USP
+
+Deploy first, configure later. Read → Convert → Orchestrate → Deploy. No mandatory rewrite of existing apps for LEco.
+
+## Key links
+
+- [Project site](https://leco-project.us): landing, vision, mission, FAQ
+- [Extended LLM guide](https://leco-project.us/llms-full.txt): full link map
+- [FAQ](https://leco-project.us/#faq): common questions
+- [Setup](https://github.com/leco-devops/local-ecosystem/blob/main/docs/SETUP.md): first install
+- [Technical guide](https://github.com/leco-devops/local-ecosystem/blob/main/docs/PROJECT.md): repository documentation
+- [Platform tab guide](https://github.com/leco-devops/local-ecosystem/blob/main/docs/help/03-platform-tab.md)
+- [CLI](https://github.com/leco-devops/local-ecosystem/blob/main/docs/DEPLOY_CLI.md): `leco-devops` commands
+- [Contributing](https://github.com/leco-devops/local-ecosystem/blob/main/CONTRIBUTING.md)
+- [Open source governance](https://github.com/leco-devops/local-ecosystem/blob/main/docs/OPEN_SOURCE.md)
+
+## Contact
+
+- Project: leco@techtonic.systems
+- Steward: Techtonic Systems Media And Research LLC — https://techtonic.systems/
+
+## Optional
+
+- [AI discovery file](https://leco-project.us/ai.txt): machine-readable summary for assistants
+- [Sitemap](https://leco-project.us/sitemap.xml)

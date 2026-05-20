@@ -5,9 +5,28 @@ description: >-
   manifests, orchestrates Docker & Traefik, and ships on *.lh — local cloud edge on Docker.
 theme: jekyll-theme-cayman
 show_downloads: true
+lang: en
 
 url: "https://leco-project.us"
 baseurl: ""
+
+image: /assets/img/leco-og.svg
+
+keywords: >-
+  LEco DevOps, local cloud, Docker, Traefik, dev stack, one-click deploy, open source,
+  Platform tab, leco-devops, *.lh, Ollama, Cloudflare-local, WordPress, Magento, cloud VM
+
+author:
+  name: LEco DevOps Open Project
+  email: leco@techtonic.systems
+
+twitter:
+  card: summary_large_image
+
+# Google Analytics / Tag Manager — set when ready (leave empty to disable)
+google_analytics: ""
+google_tag_manager: ""
+google_site_verification: ""
 
 markdown: kramdown
 kramdown:
@@ -20,6 +39,7 @@ github:
 
 plugins:
   - jekyll-seo-tag
+  - jekyll-sitemap
   - jekyll-github-metadata
   - jekyll-relative-links
 

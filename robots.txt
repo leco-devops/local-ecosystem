@@ -1,0 +1,36 @@
+---
+layout: null
+permalink: /robots.txt
+---
+# LEco DevOps Open Project — https://leco-project.us
+User-agent: *
+Allow: /
+
+Sitemap: {{ site.url }}/sitemap.xml
+
+# LLM / AI crawlers (GEO — generative engine optimization)
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: cohere-ai
+Allow: /
+
+# Discovery hints
+# llms: {{ site.url }}/llms.txt
+# llms-full: {{ site.url }}/llms-full.txt
+# ai: {{ site.url }}/ai.txt

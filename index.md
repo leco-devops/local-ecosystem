@@ -15,6 +15,7 @@ title: LEco DevOps Open Project
   <a href="#platform">Platform</a>
   <a href="#features">Features</a>
   <a href="#use-cases">Use cases</a>
+  <a href="#faq">FAQ</a>
   <a href="https://github.com/leco-devops/local-ecosystem/blob/main/docs/PROJECT.md">Technical guide</a>
   <a href="https://github.com/leco-devops/local-ecosystem">Source</a>
 </nav>
@@ -232,6 +233,8 @@ Open **http://localhost.lh** or **http://dashboard.lh** for the LEco DevOps dash
   <a href="https://github.com/leco-devops/local-ecosystem/blob/main/docs/DEPLOY_CLI.md" class="leco-cta--ghost">CLI reference</a>
   <a href="https://github.com/leco-devops/local-ecosystem" class="leco-cta--ghost">View on GitHub</a>
 </p>
+
+{% include faq-section.html %}
 
 ## Documentation
 

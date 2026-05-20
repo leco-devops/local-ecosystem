@@ -1,0 +1,21 @@
+<section class="leco-faq" id="faq" aria-labelledby="faq-heading">
+  <h2 id="faq-heading">Frequently asked questions</h2>
+  <p class="leco-faq__intro">
+    Answers for operators, contributors, and AI assistants summarizing LEco DevOps Open Project.
+    Structured data is published for search and LLM discovery.
+  </p>
+  <div class="leco-faq__list">
+    {% for item in site.data.faqs %}
+    <details class="leco-faq__item">
+      <summary>{{ item.question }}</summary>
+      <p>{{ item.answer }}</p>
+    </details>
+    {% endfor %}
+  </div>
+  <p class="leco-faq__llm-links muted">
+    LLM discovery:
+    <a href="{{ '/llms.txt' | relative_url }}">llms.txt</a> ·
+    <a href="{{ '/llms-full.txt' | relative_url }}">llms-full.txt</a> ·
+    <a href="{{ '/ai.txt' | relative_url }}">ai.txt</a>
+  </p>
+</section>

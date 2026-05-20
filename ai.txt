@@ -1,0 +1,34 @@
+# LEco DevOps — AI discovery (ai.txt)
+
+name: LEco DevOps Open Project
+application: LEco DevOps
+url: https://leco-project.us
+repository: https://github.com/leco-devops/local-ecosystem
+license: MIT
+contact: leco@techtonic.systems
+
+summary: |
+  Open-source local cloud edge on Docker. One-click deploy: LEco reads docker-compose.yml,
+  wrangler.toml, and env files, converts LEco manifests, orchestrates Traefik and Compose,
+  and publishes apps on *.lh hostnames. Includes Platform dev stacks (WordPress, Magento,
+  Laravel, etc.), hosted app lifecycle, Ollama/Open WebUI/AirLLM, optional Cloudflare-local.
+
+capabilities:
+  - one_click_onboard
+  - platform_dev_stacks
+  - hosted_apps
+  - traefik_edge_routing
+  - local_tls_mkcert
+  - cloud_vm_profiles
+  - cloudflare_local_emulation
+  - leco_devops_cli
+
+llm_files:
+  - https://leco-project.us/llms.txt
+  - https://leco-project.us/llms-full.txt
+  - https://leco-project.us/#faq
+
+docs:
+  - https://github.com/leco-devops/local-ecosystem/blob/main/docs/PROJECT.md
+  - https://github.com/leco-devops/local-ecosystem/blob/main/docs/SETUP.md
+  - https://github.com/leco-devops/local-ecosystem/blob/main/docs/help/03-platform-tab.md
