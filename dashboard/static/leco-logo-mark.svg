@@ -1,22 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="LEco">
-  <defs>
-    <linearGradient id="leco-g" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#22d3ee"/>
-      <stop offset="55%" stop-color="#38bdf8"/>
-      <stop offset="100%" stop-color="#a78bfa"/>
-    </linearGradient>
-    <linearGradient id="leco-bg" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#1e2038"/>
-      <stop offset="100%" stop-color="#0c0d18"/>
-    </linearGradient>
-  </defs>
-  <rect width="64" height="64" rx="14" fill="url(#leco-bg)"/>
-  <path
-    fill="none"
-    stroke="url(#leco-g)"
-    stroke-width="2.5"
-    stroke-linejoin="round"
-    d="M32 9l19 11v24L32 55 13 44V20L32 9z"
-  />
-  <circle cx="32" cy="32" r="10" fill="url(#leco-g)"/>
+  <rect width="64" height="64" rx="14" fill="#1e2038"/>
+  <path fill="none" stroke="#22d3ee" stroke-width="2.5" stroke-linejoin="round" d="M32 9l19 11v24L32 55 13 44V20L32 9z"/>
+  <circle cx="32" cy="32" r="10" fill="#22d3ee"/>
 </svg>

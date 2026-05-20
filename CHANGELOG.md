@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **UI:** Remove CSS and SVG gradients across dashboard, GitHub Pages theme, and brand logos; keep existing dark cyan/violet color scheme.
 - **GitHub Pages:** Download .zip / .tar.gz header buttons open the repository on GitHub instead of triggering a direct archive download.
 - **Update catalog:** Track [`ecosystem-stack/config/generated/update-catalog-read-state.json`](ecosystem-stack/config/generated/update-catalog-read-state.json) in git (removed from `.gitignore`).
 

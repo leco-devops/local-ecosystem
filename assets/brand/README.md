@@ -7,7 +7,7 @@
 | `leco-logo-round.svg` | **Profile picture** (GitHub org/user avatar, social) — 512×512 circle |
 | `leco-logo-round.png` | PNG export of round logo (when SVG upload is not supported) |
 
-Colors align with the LEco DevOps control panel: cyan `#22d3ee`, sky `#38bdf8`, violet `#a78bfa`, background `#0c0d18`.
+Colors align with the LEco DevOps control panel: cyan `#22d3ee`, sky `#38bdf8`, violet `#a78bfa`, background `#0c0d18`. Logo SVGs use **flat fills only** (no gradients).
 
 Copies used in the repo:
 
