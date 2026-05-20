@@ -64,18 +64,16 @@ title: LEco DevOps Open Project
 | Step | What LEco does |
 |------|----------------|
 | **Read** | Scans `docker-compose.yml`, `wrangler.toml`, `.env`, Dockerfiles, and project layout from your Git tree |
-| **Convert** | Builds `leco.app.yaml` + `leco.yaml`, materializes `hosting/app-available/<slug>/`, symlinks config without touching upstream |
+| **Convert** | Builds `leco.app.yaml` + `leco.yaml`, materializes `hosting/app-available/{slug}/`, symlinks config without touching upstream |
 | **Orchestrate** | Wires Compose projects, `lh-network`, Traefik host rules, optional Cloudflare-local bindings |
-| **Deploy** | `compose up`, registry entry, route merge — reachable at `https://<your-app>.lh` with no hand-edited port maps |
+| **Deploy** | `compose up`, registry entry, route merge — reachable at `https://{your-app}.lh` with no hand-edited port maps |
 
 Works for **Docker Compose apps**, **React/Vue + API splits**, **Workers + Wrangler**, and **preset CMS/framework stacks** — the same operator experience whether the source is your monorepo or a third-party checkout.
 
 ## Platform
 
 <div class="leco-platform-callout">
-
-**Platform** is a unique LEco capability — not just settings. Run **local or cloud VM** deployments, **curated service bundles**, and **isolated dev stacks** from one dashboard tab (mirrored by `leco-devops platform` and `leco-devops dev-stack` on the CLI).
-
+  <p><strong>Platform</strong> is a unique LEco capability — not just settings. Run <strong>local or cloud VM</strong> deployments, <strong>curated service bundles</strong>, and <strong>isolated dev stacks</strong> from one dashboard tab (mirrored by <code>leco-devops platform</code> and <code>leco-devops dev-stack</code> on the CLI).</p>
 </div>
 
 | Capability | What it does for you |
@@ -87,7 +85,7 @@ Works for **Docker Compose apps**, **React/Vue + API splits**, **Workers + Wrang
 | **Cloud VM path** | Selective install on a Linux VM with real domains and external LLM providers — same Platform model as your laptop |
 | **Bind hosted apps** | Point `platform.devStackId` at a stack so a LEco-hosted app shares DB/redis endpoints without port conflicts |
 
-Presets and versions live in **`ecosystem-stack/config/dev-stack-presets.yaml`** and **`component-catalog.yaml`**. Generated stacks land under **`platform/dev-stacks/<id>/`** with Traefik routes in **`hosting/traefik/20-dev-stacks.yml`**.
+Presets and versions live in **`ecosystem-stack/config/dev-stack-presets.yaml`** and **`component-catalog.yaml`**. Generated stacks land under **`platform/dev-stacks/{id}/`** with Traefik routes in **`hosting/traefik/20-dev-stacks.yml`**.
 
 <p class="leco-cta-row">
   <a href="https://github.com/leco-devops/local-ecosystem/blob/main/docs/help/03-platform-tab.md">Platform tab guide</a>
@@ -121,7 +119,7 @@ Presets and versions live in **`ecosystem-stack/config/dev-stack-presets.yaml`**
 | Capability | What it does for you |
 |------------|----------------------|
 | **`leco-devops` CLI** | `detect`, `init`, `onboard`, scaffold, platform, and dev-stack commands — same brain as the dashboard |
-| **Hosted app slots** | Keep upstream repos clean; overrides and symlinks live in `hosting/app-available/<slug>/` |
+| **Hosted app slots** | Keep upstream repos clean; overrides and symlinks live in `hosting/app-available/{slug}/` |
 | **Isolated dev stacks** | Per-team or per-CMS Compose projects (`platform/dev-stacks/`) with their own DB/network |
 | **Manifest binding** | Attach a hosted app to a dev stack via `platform.devStackId` for shared infra without port clashes |
 | **Split API + UI routes** | Traefik rules for React/Vue frontends and `/api` backends (same pattern as production edge configs) |
@@ -233,40 +231,3 @@ Open **http://localhost.lh** or **http://dashboard.lh** for the LEco DevOps dash
   <a href="https://github.com/leco-devops/local-ecosystem/blob/main/docs/DEPLOY_CLI.md" class="leco-cta--ghost">CLI reference</a>
   <a href="https://github.com/leco-devops/local-ecosystem" class="leco-cta--ghost">View on GitHub</a>
 </p>
-
-{% include faq-section.html %}
-
----
-
-## Documentation
-
-| Guide | For |
-|-------|-----|
-| [Setup](https://github.com/leco-devops/local-ecosystem/blob/main/docs/SETUP.md) | First machine install |
-| [Deployment](https://github.com/leco-devops/local-ecosystem/blob/main/docs/DEPLOYMENT.md) | Day-2 operations |
-| [Platform tab](https://github.com/leco-devops/local-ecosystem/blob/main/docs/help/03-platform-tab.md) | Dev stacks and cloud platform UI |
-| [Architecture](https://github.com/leco-devops/local-ecosystem/blob/main/docs/ARCHITECTURE.md) | System design |
-| [PROJECT.md](https://github.com/leco-devops/local-ecosystem/blob/main/docs/PROJECT.md) | Full technical guide |
-
-## Contribute
-
-This project is **community-driven**: fork, fix, document, and open pull requests.
-
-<p class="leco-cta-row">
-  <a href="https://github.com/leco-devops/local-ecosystem/blob/main/CONTRIBUTING.md">Contribution guide</a>
-  <a href="https://github.com/leco-devops/local-ecosystem/issues" class="leco-cta--ghost">Issues</a>
-  <a href="https://github.com/leco-devops/local-ecosystem/fork" class="leco-cta--ghost">Fork</a>
-</p>
-
-## Top contributors
-
-| Role | Name | Links |
-|------|------|--------|
-| **Manager & moderator** | [Techtonic Systems Media And Research LLC](https://techtonic.systems/) | [Website](https://techtonic.systems/) · [leco@techtonic.systems](mailto:leco@techtonic.systems) |
-| **Contributor** | Rajneesh Maurya | [GitHub](https://github.com/rmaurya) · [LinkedIn](https://www.linkedin.com/in/rajneeshmaurya/) |
-
-The **official repository** is hosted under [`leco-devops`](https://github.com/leco-devops) on GitHub. **Commits and pushes** are made by contributors under their own accounts — primarily [@rmaurya](https://github.com/rmaurya) (Rajneesh Maurya).
-
-## Governance
-
-**LEco DevOps Open Project** grows through contributors and maintainers. **[Techtonic Systems Media And Research LLC](https://techtonic.systems/)** provides operational stewardship ([leco@techtonic.systems](mailto:leco@techtonic.systems)) — supporting the community under the [MIT License](https://github.com/leco-devops/local-ecosystem/blob/main/LICENSE).

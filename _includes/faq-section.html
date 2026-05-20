@@ -5,13 +5,11 @@
     Structured data is published for search and LLM discovery.
   </p>
   <div class="leco-faq__list">
-    {% for item in site.data.faqs %}
+{% for item in site.data.faqs %}
     <details class="leco-faq__item">
       <summary>{{ item.question | escape }}</summary>
-      <div class="leco-faq__answer">
-        <p>{{ item.answer | escape }}</p>
-      </div>
+      <div class="leco-faq__answer"><p>{{ item.answer | escape }}</p></div>
     </details>
-    {% endfor %}
+{% endfor %}
   </div>
 </section>
