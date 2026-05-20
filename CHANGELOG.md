@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - **SEO & GEO:** Meta keywords, canonical URLs, Open Graph/Twitter cards, JSON-LD (WebSite, Organization, SoftwareApplication, FAQPage), `jekyll-sitemap`, [`robots.txt`](robots.txt) with AI crawler rules, FAQ section from [`_data/faqs.yml`](_data/faqs.yml).
 - **LLM discovery files:** [`llms.txt`](llms.txt), [`llms-full.txt`](llms-full.txt), [`ai.txt`](ai.txt) for generative-engine optimization; optional Google Analytics / GTM IDs in [`_config.yml`](_config.yml).
+- **Sitemap:** Explicit [`sitemap.xml`](sitemap.xml) (homepage + `llms.txt`, `llms-full.txt`, `ai.txt`) from [`_data/sitemap.yml`](_data/sitemap.yml); linked in `robots.txt` and site footer.
 
 ### Fixed
 

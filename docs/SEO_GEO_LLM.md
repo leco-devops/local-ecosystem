@@ -9,7 +9,7 @@ Site: **https://leco-project.us** · Source: [`index.md`](../index.md) + Jekyll 
 | jekyll-seo-tag | [`_layouts/default.html`](../_layouts/default.html) `{% seo %}` |
 | Meta / canonical / OG | [`_includes/head-custom.html`](../_includes/head-custom.html) |
 | JSON-LD | [`_includes/structured-data.html`](../_includes/structured-data.html) |
-| Sitemap | Auto `sitemap.xml` via `jekyll-sitemap` in [`_config.yml`](../_config.yml) |
+| Sitemap | [`sitemap.xml`](../sitemap.xml) built from [`_data/sitemap.yml`](../_data/sitemap.yml) (home + LLM discovery files) |
 | `robots.txt` | [`robots.txt`](../robots.txt) |
 | Social image | [`assets/img/leco-og.svg`](../assets/img/leco-og.svg) |
 
