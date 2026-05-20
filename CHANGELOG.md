@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **Contributor attribution:** README and [OPEN_SOURCE.md](docs/OPEN_SOURCE.md) clarify that the `leco-devops` org hosts the official repo while commits and pushes come from individual GitHub accounts (primary: [@rmaurya](https://github.com/rmaurya)).
+
 - **Official repository:** Canonical GitHub home is [leco-devops/local-ecosystem](https://github.com/leco-devops/local-ecosystem) (README, docs, update watcher, changelog compare links).
 
 - **README & governance copy:** Project-first landing (no company header); community ownership language; Techtonic Systems Media And Research LLC framed as operational steward only ([OPEN_SOURCE.md](docs/OPEN_SOURCE.md), [CONTRIBUTING.md](CONTRIBUTING.md)).

@@ -60,6 +60,8 @@ This repository belongs to the **community**: anyone can use it, fork it, improv
 | **Manager & moderator** | [Techtonic Systems Media And Research LLC](https://techtonic.systems/) | [Website](https://techtonic.systems/) · [leco@techtonic.systems](mailto:leco@techtonic.systems) |
 | **Contributor** | Rajneesh Maurya | [GitHub](https://github.com/rmaurya) · [LinkedIn](https://www.linkedin.com/in/rajneeshmaurya/) |
 
+The **official repository** lives under the [`leco-devops`](https://github.com/leco-devops) organization on GitHub. **Commits and pushes** are made by contributors under their own GitHub accounts — primarily [@rmaurya](https://github.com/rmaurya) (Rajneesh Maurya).
+
 ---
 
 ## Why teams use it

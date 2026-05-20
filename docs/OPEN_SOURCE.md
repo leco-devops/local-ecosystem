@@ -50,6 +50,8 @@ The steward supports the community; it does not block forks, competing maintaine
 | **Manager & moderator** | [Techtonic Systems Media And Research LLC](https://techtonic.systems/) | [Website](https://techtonic.systems/) · [leco@techtonic.systems](mailto:leco@techtonic.systems) |
 | **Contributor** | Rajneesh Maurya | [GitHub](https://github.com/rmaurya) · [LinkedIn](https://www.linkedin.com/in/rajneeshmaurya/) |
 
+The project is hosted at the **official** [leco-devops/local-ecosystem](https://github.com/leco-devops/local-ecosystem) repository. **Git history** records individual authors; day-to-day commits and pushes to this repo are made from contributor accounts (primary maintainer: [@rmaurya](https://github.com/rmaurya)).
+
 ## Questions
 
 - **Code, bugs, features:** GitHub Issues in this repository.
