@@ -1,0 +1,59 @@
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "{{ site.url }}/#website",
+      "url": "{{ site.url }}/",
+      "name": {{ site.title | jsonify }},
+      "description": {{ site.description | jsonify }},
+      "inLanguage": "en",
+      "publisher": { "@id": "{{ site.url }}/#organization" }
+    },
+    {
+      "@type": "Organization",
+      "@id": "{{ site.url }}/#organization",
+      "name": {{ site.title | jsonify }},
+      "url": "{{ site.url }}/",
+      "email": "{{ site.author.email }}",
+      "sameAs": [
+        "https://github.com/leco-devops/local-ecosystem",
+        "https://techtonic.systems/"
+      ]
+    },
+    {
+      "@type": "SoftwareApplication",
+      "name": "LEco DevOps",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "Linux, macOS",
+      "description": {{ site.description | jsonify }},
+      "url": "{{ site.url }}/",
+      "downloadUrl": "https://github.com/leco-devops/local-ecosystem",
+      "softwareHelp": "https://github.com/leco-devops/local-ecosystem/blob/main/docs/SETUP.md",
+      "license": "https://opensource.org/licenses/MIT",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      }
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "{{ site.url }}/#faq",
+      "mainEntity": [
+        {% for item in site.data.faqs %}
+        {
+          "@type": "Question",
+          "name": {{ item.question | jsonify }},
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": {{ item.answer | jsonify }}
+          }
+        }{% unless forloop.last %},{% endunless %}
+        {% endfor %}
+      ]
+    }
+  ]
+}
+</script>

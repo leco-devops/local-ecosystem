@@ -11,8 +11,12 @@
       media="screen"
     />
     {% include head-custom.html %}
+    {% include structured-data.html %}
   </head>
   <body class="leco-site">
+    {% if site.google_tag_manager and site.google_tag_manager != "" %}
+    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id={{ site.google_tag_manager }}" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+    {% endif %}
     <header class="leco-page-header" role="banner">
       <div class="leco-page-header__inner">
         <h1 class="leco-page-header__title">

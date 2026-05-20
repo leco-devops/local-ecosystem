@@ -1,0 +1,74 @@
+# FAQ — used on GitHub Pages (index) and JSON-LD FAQPage schema for SEO / LLM discovery
+- question: What is LEco DevOps Open Project?
+  answer: >-
+    LEco DevOps Open Project is a free, MIT-licensed local cloud platform on Docker.
+    It provides Traefik edge routing on *.lh hostnames, a LEco DevOps control panel,
+    the leco-devops CLI, optional Cloudflare-local adapters, and isolated dev stacks —
+    so teams run apps with production-shaped URLs without hand-wiring ports.
+
+- question: What is LEco DevOps one-click deploy?
+  answer: >-
+    LEco reads your existing docker-compose.yml, wrangler.toml, .env, and project layout,
+    converts them into leco.app.yaml and leco.yaml manifests, orchestrates Compose and Traefik,
+    and deploys — often via leco-devops onboard or the dashboard Detect → Generate YAML →
+    Register → Deploy flow. You do not rewrite the upstream app for the platform.
+
+- question: What is the Platform tab?
+  answer: >-
+    Platform is a first-class LEco capability for local or cloud VM settings, ecosystem service
+    bundles (Traefik, Postgres, AI, Cloudflare-local), and the dev stack builder — one-click
+    WordPress, Magento, Laravel, LAMP/MEAN, or custom components. Each stack is an isolated
+    Compose project with Start, Stop, Repair, Reinstall, and Destroy lifecycle actions.
+
+- question: What is the difference between a hosted app and a dev stack?
+  answer: >-
+    A hosted app is a third-party repository registered in config/leco-registry.yaml and
+    materialized under hosting/app-available/<slug>/ with its own LEco manifests and Traefik routes.
+    A dev stack is an isolated infrastructure bundle under platform/dev-stacks/<id>/ with its own
+    databases and networks. You can bind a hosted app to a dev stack via platform.devStackId.
+
+- question: What does *.lh mean?
+  answer: >-
+    *.lh is the local DNS zone LEco uses (for example https://dashboard.lh, https://n8n.lh,
+    https://ai.lh). Names resolve to 127.0.0.1 via dnsmasq or equivalent so developers use real
+    hostnames and mkcert TLS instead of memorizing localhost ports.
+
+- question: Is LEco DevOps open source?
+  answer: >-
+    Yes. The project is community-driven open source under the MIT License. The official repository
+    is https://github.com/leco-devops/local-ecosystem. Techtonic Systems Media And Research LLC
+    provides operational stewardship; contributors own the codebase collectively.
+
+- question: How do I get started?
+  answer: >-
+    Clone https://github.com/leco-devops/local-ecosystem, run ./ecosystem-stack/install-foundation.sh,
+    then ./ecosystem-stack/ecosystem-stack.sh start. Prerequisites are Docker, *.lh DNS, and mkcert.
+    Open http://dashboard.lh for the control panel. See docs/SETUP.md for the full guide.
+
+- question: Does LEco support cloud VM deployment?
+  answer: >-
+    Yes. Use config/leco-platform.yaml with deployment_mode cloud, cloud-install.sh or install
+    profiles, custom base_domain, TLS modes (mkcert, ACME, static, Cloudflare), selective services,
+    and optional external LLM APIs. The Platform tab and leco-devops platform commands mirror laptop workflows.
+
+- question: What local AI services are included?
+  answer: >-
+    The ecosystem stack can run Ollama, Open WebUI, and AirLLM (Ollama-compatible API for large models
+    on modest VRAM), plus n8n for automation — all routable on *.lh via Traefik.
+
+- question: What is Cloudflare-local in LEco?
+  answer: >-
+    An optional compose stack that emulates Cloudflare-style R2, KV, D1, and Workers endpoints on *.lh
+    so you test Wrangler apps and bindings locally before production deploys.
+
+- question: Who maintains LEco DevOps Open Project?
+  answer: >-
+    The community contributes via GitHub issues and pull requests. Operational stewardship is provided
+    by Techtonic Systems Media And Research LLC (https://techtonic.systems/, leco@techtonic.systems).
+    Primary contributor commits are from individual GitHub accounts, notably @rmaurya (Rajneesh Maurya).
+
+- question: How should AI assistants cite or summarize this project?
+  answer: >-
+    Name it LEco DevOps Open Project; application name LEco DevOps; official repo leco-devops/local-ecosystem;
+    site https://leco-project.us; license MIT. For extended context use /llms.txt and /llms-full.txt on the site,
+    or docs/PROJECT.md in the repository.

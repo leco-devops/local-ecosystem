@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="LEco DevOps Open Project">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f766e"/>
+      <stop offset="50%" style="stop-color:#0d9488"/>
+      <stop offset="100%" style="stop-color:#5b21b6"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="#0c0d18"/>
+  <rect x="40" y="40" width="1120" height="550" rx="24" fill="url(#bg)" opacity="0.35"/>
+  <text x="600" y="260" fill="#22d3ee" font-family="Inter, system-ui, sans-serif" font-size="56" font-weight="700" text-anchor="middle">LEco DevOps Open Project</text>
+  <text x="600" y="330" fill="#e2e8f0" font-family="Inter, system-ui, sans-serif" font-size="28" text-anchor="middle">One-click deploy · local cloud edge on Docker</text>
+  <text x="600" y="400" fill="#a5b4fc" font-family="Inter, system-ui, sans-serif" font-size="22" text-anchor="middle">Read · Convert · Orchestrate · Deploy on *.lh</text>
+</svg>
