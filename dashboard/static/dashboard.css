@@ -138,7 +138,7 @@ button.btn--inline-loading::after {
   height: 3px;
   width: 38%;
   max-width: 140px;
-  background: linear-gradient(90deg, #22d3ee, #38bdf8, #a78bfa, #22d3ee);
+  background: #8b5cf6;
   background-size: 200% 100%;
   border-radius: 0 0 8px 8px;
   box-shadow: 0 0 10px rgba(56, 189, 248, 0.65);
@@ -262,7 +262,7 @@ a.tab-btn.tab-btn--link {
 
 .infra-group--cf {
   border-color: rgba(251, 191, 36, 0.28);
-  background: linear-gradient(135deg, rgba(15, 23, 42, 0.4) 0%, rgba(120, 53, 15, 0.12) 100%);
+  background: rgba(15, 23, 42, 0.55);
 }
 
 .infra-group--cf .infra-group__title {
@@ -699,7 +699,7 @@ input[type="password"] {
   padding: 18px 20px;
   border-radius: 14px;
   border: 1px solid rgba(129, 140, 248, 0.45);
-  background: linear-gradient(165deg, rgba(30, 27, 75, 0.95), rgba(15, 12, 32, 0.98));
+  background: rgba(30, 32, 56, 0.9);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
 }
 
@@ -799,7 +799,7 @@ button.ctrl-bulk--unpause {
 
 .control-target-group--cf {
   border-color: rgba(251, 191, 36, 0.3);
-  background: linear-gradient(145deg, rgba(15, 23, 42, 0.38) 0%, rgba(120, 53, 15, 0.1) 100%);
+  background: rgba(15, 23, 42, 0.55);
 }
 
 .control-target-group__title {
@@ -1242,12 +1242,7 @@ button.ctrl-bulk--unpause {
   width: 100%;
   padding: 6px 10px 8px;
   border-bottom: 1px solid rgba(125, 211, 252, 0.28);
-  background: linear-gradient(
-    90deg,
-    rgba(8, 47, 73, 0.38),
-    rgba(30, 58, 138, 0.36),
-    rgba(76, 29, 149, 0.34)
-  );
+  background: rgba(30, 32, 56, 0.9);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   color: #f8fafc;
@@ -1408,7 +1403,7 @@ button.ctrl-bulk--unpause {
   display: block;
   width: 45%;
   min-width: 120px;
-  background: linear-gradient(90deg, #22d3ee, #38bdf8, #60a5fa, #a78bfa, #22d3ee);
+  background: #8b5cf6;
   opacity: 0.92;
   box-shadow: 0 0 14px rgba(56, 189, 248, 0.55);
   animation: dashboard-global-preloader-slide 1.2s linear infinite;
@@ -1464,7 +1459,7 @@ button.ctrl-bulk--unpause {
   justify-content: center;
   gap: 10px;
   padding: 12px 16px;
-  background: linear-gradient(135deg, rgba(76, 29, 149, 0.55), rgba(30, 27, 75, 0.9));
+  background: rgba(30, 32, 56, 0.9);
   border-bottom: 1px solid rgba(167, 139, 250, 0.35);
   font-size: 13px;
   font-weight: 600;
@@ -1668,7 +1663,7 @@ button.ctrl-bulk--unpause {
   height: 100%;
   width: 0%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #6366f1, #22d3ee);
+  background: #22d3ee;
   transition: width 0.35s ease;
 }
 
@@ -3113,7 +3108,7 @@ button.dev-open-doc:hover {
   height: 3px;
   width: 38%;
   max-width: 120px;
-  background: linear-gradient(90deg, #22d3ee, #38bdf8, #a78bfa, #22d3ee);
+  background: #8b5cf6;
   background-size: 200% 100%;
   border-radius: 0 0 8px 8px;
   box-shadow: 0 0 10px rgba(56, 189, 248, 0.65);
@@ -3203,7 +3198,7 @@ button.dev-open-doc:hover {
   padding: 14px 16px;
   border-radius: 12px;
   border: 1px solid rgba(34, 197, 94, 0.35);
-  background: linear-gradient(145deg, rgba(22, 163, 74, 0.14) 0%, rgba(15, 23, 42, 0.55) 55%, rgba(15, 23, 42, 0.4) 100%);
+  background: rgba(15, 23, 42, 0.55);
 }
 
 .hosted-apps-staging-bar__row {
@@ -3220,7 +3215,7 @@ button.dev-open-doc:hover {
   border-radius: 10px;
   border: 1px solid rgba(21, 128, 61, 0.9);
   cursor: pointer;
-  background: linear-gradient(180deg, #4ade80 0%, #22c55e 42%, #16a34a 100%);
+  background: #4ade80;
   color: #052e16;
   box-shadow: 0 2px 14px rgba(34, 197, 94, 0.4);
   letter-spacing: 0.02em;
@@ -3688,7 +3683,7 @@ button.dev-open-doc:hover {
 }
 
 .hosted-reg-workflow__rail--active {
-  background: linear-gradient(90deg, rgba(56, 189, 248, 0.35), rgba(129, 140, 248, 0.45));
+  background: #22d3ee;
 }
 
 .hosted-reg-workflow__btn {
@@ -3927,7 +3922,7 @@ button.dev-open-doc:hover {
   padding: 14px 16px;
   border-radius: 12px;
   border: 1px solid rgba(56, 189, 248, 0.35);
-  background: linear-gradient(145deg, rgba(12, 74, 110, 0.22), rgba(15, 23, 42, 0.55));
+  background: rgba(15, 23, 42, 0.55);
 }
 
 .hosted-resource-ledger__title {
@@ -5047,7 +5042,7 @@ button.dev-open-doc:hover {
   display: block;
   width: 40%;
   min-width: 100px;
-  background: linear-gradient(90deg, #7c3aed, #a78bfa, #c4b5fd, #a78bfa, #7c3aed);
+  background: #8b5cf6;
   opacity: 0.92;
   box-shadow: 0 0 12px rgba(139, 92, 246, 0.5);
   animation: aiTrackSlide 1.4s ease-in-out infinite;
@@ -5298,7 +5293,7 @@ button.dev-open-doc:hover {
   padding: 12px 14px 14px;
   border-radius: 12px;
   border: 2px solid rgba(139, 92, 246, 0.55);
-  background: linear-gradient(135deg, rgba(88, 28, 135, 0.18), rgba(30, 27, 75, 0.35));
+  background: rgba(30, 32, 56, 0.9);
   box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.15);
 }
 
@@ -6823,16 +6818,50 @@ body.help-page {
 
 .devstack-config-files {
   margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+ul.devstack-config-files {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.devstack-config-files--grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 14px;
+}
+
+@media (max-width: 560px) {
+  .devstack-config-files--grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .devstack-config-file-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+}
+
+ul.devstack-config-files .devstack-config-file-row {
+  padding: 4px 0;
+  border: none;
+  background: transparent;
+}
+
+.devstack-config-files--grid .devstack-config-file-row code {
+  flex: 1 1 100%;
+  min-width: 0;
+  word-break: break-all;
 }
 
 .devstack-config-file-row code {
@@ -6941,7 +6970,7 @@ body.help-page {
 .platform-stack-row .dev-stack-act--start:not(:disabled) {
   border-color: rgba(52, 211, 153, 0.95);
   color: #ecfdf5;
-  background: linear-gradient(180deg, rgba(6, 95, 70, 0.92), rgba(4, 47, 46, 0.95));
+  background: #4ade80;
   box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.28);
 }
 
@@ -6955,14 +6984,14 @@ body.help-page {
 .platform-stack-row .dev-stack-act--stop:not(:disabled) {
   border-color: rgba(251, 191, 36, 0.9);
   color: #fffbeb;
-  background: linear-gradient(180deg, rgba(146, 64, 14, 0.88), rgba(69, 26, 3, 0.95));
+  background: #fbbf24;
   box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.22);
 }
 
 .platform-stack-row .dev-stack-act--stop.platform-svc-act--primary:not(:disabled) {
   border-color: rgba(248, 113, 113, 0.95);
   color: #fee2e2;
-  background: linear-gradient(180deg, rgba(153, 27, 27, 0.9), rgba(69, 10, 10, 0.95));
+  background: #fb7185;
   box-shadow:
     0 0 0 1px rgba(248, 113, 113, 0.4),
     0 4px 14px rgba(239, 68, 68, 0.22);
@@ -6972,7 +7001,7 @@ body.help-page {
 .platform-stack-row .dev-stack-act--repair:not(:disabled) {
   border-color: rgba(56, 189, 248, 0.9);
   color: #e0f2fe;
-  background: linear-gradient(180deg, rgba(3, 105, 161, 0.88), rgba(12, 74, 110, 0.95));
+  background: rgba(12, 74, 110, 0.55);
   box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25);
 }
 
@@ -6980,7 +7009,7 @@ body.help-page {
 .platform-stack-row .dev-stack-act--reinstall:not(:disabled) {
   border-color: rgba(167, 139, 250, 0.92);
   color: #f5f3ff;
-  background: linear-gradient(180deg, rgba(91, 33, 182, 0.88), rgba(46, 16, 101, 0.95));
+  background: rgba(30, 32, 56, 0.9);
   box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.28);
 }
 
@@ -6988,7 +7017,7 @@ body.help-page {
 .platform-stack-row .dev-stack-act--destroy:not(:disabled) {
   border-color: rgba(248, 113, 113, 0.95);
   color: #fef2f2;
-  background: linear-gradient(180deg, rgba(185, 28, 28, 0.92), rgba(69, 10, 10, 0.98));
+  background: #fb7185;
   box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.32);
 }
 

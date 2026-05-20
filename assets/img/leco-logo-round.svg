@@ -1,30 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="LEco DevOps">
-  <defs>
-    <linearGradient id="leco-ring" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#22d3ee"/>
-      <stop offset="50%" stop-color="#38bdf8"/>
-      <stop offset="100%" stop-color="#c026d3"/>
-    </linearGradient>
-    <linearGradient id="leco-g" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#22d3ee"/>
-      <stop offset="100%" stop-color="#a78bfa"/>
-    </linearGradient>
-    <radialGradient id="leco-bg" cx="50%" cy="35%" r="75%">
-      <stop offset="0%" stop-color="#252845"/>
-      <stop offset="100%" stop-color="#0c0d18"/>
-    </radialGradient>
-  </defs>
-  <circle cx="256" cy="256" r="256" fill="url(#leco-bg)"/>
-  <circle cx="256" cy="256" r="240" fill="none" stroke="url(#leco-ring)" stroke-width="10"/>
+  <circle cx="256" cy="256" r="256" fill="#0c0d18"/>
+  <circle cx="256" cy="256" r="240" fill="none" stroke="#22d3ee" stroke-width="10"/>
   <g transform="translate(256 248)">
-    <path
-      fill="none"
-      stroke="url(#leco-g)"
-      stroke-width="14"
-      stroke-linejoin="round"
-      transform="scale(2.85)"
-      d="M0 -38l38 22v44L0 50-38 28V-16L0 -38z"
-    />
-    <circle cx="0" cy="0" r="22" fill="url(#leco-g)"/>
+    <path fill="none" stroke="#22d3ee" stroke-width="14" stroke-linejoin="round" transform="scale(2.85)" d="M0 -38l38 22v44L0 50-38 28V-16L0 -38z"/>
+    <circle cx="0" cy="0" r="22" fill="#22d3ee"/>
   </g>
 </svg>

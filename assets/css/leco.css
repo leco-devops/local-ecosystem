@@ -53,11 +53,7 @@
 /* Header — matches dashboard h1 / tab accent */
 .leco-page-header {
   border-bottom: 1px solid var(--border-subtle);
-  background: linear-gradient(
-    180deg,
-    rgba(22, 24, 42, 0.98) 0%,
-    rgba(12, 13, 24, 0.92) 100%
-  );
+  background: var(--bg-elevated);
   padding: 2.5rem 1.25rem 2rem;
 }
 
@@ -135,10 +131,6 @@
 
 .leco-page-header__title a {
   color: var(--cyan) !important;
-  background: linear-gradient(90deg, var(--cyan), var(--link), var(--violet));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
 }
 
 .leco-page-header__tagline {
@@ -394,11 +386,11 @@
 }
 
 .leco-vision-mission__card--vision::before {
-  background: linear-gradient(90deg, var(--cyan), var(--link));
+  background: var(--cyan);
 }
 
 .leco-vision-mission__card--mission::before {
-  background: linear-gradient(90deg, var(--violet), var(--tab-active-border));
+  background: var(--violet);
 }
 
 .leco-vision-mission__label {
@@ -448,7 +440,7 @@
 
 /* Platform callout */
 .leco-platform-callout {
-  background: linear-gradient(135deg, rgba(91, 33, 182, 0.2) 0%, rgba(30, 32, 56, 0.9) 55%);
+  background: rgba(30, 32, 56, 0.9);
   border: 1px solid rgba(192, 38, 211, 0.45);
   border-radius: var(--leco-radius);
   padding: 1rem 1.15rem;

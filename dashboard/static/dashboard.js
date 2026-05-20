@@ -12322,7 +12322,7 @@ function renderDevStackConfigHtml(cfg) {
   const notes = (cfg.notes || []).map((n) => `<li class="muted small">${escapeHtml(n)}</li>`).join("");
   return `<ul class="devstack-config-paths">${pathRows.join("")}</ul>
     ${related ? `<p class="muted small"><strong>Hosting / platform (shared)</strong></p><ul class="devstack-config-files">${related}</ul>` : ""}
-    ${files ? `<p class="muted small"><strong>Stack files</strong> (under <code>${escapeHtml(cfg.stack_dir || "")}</code>)</p><div class="devstack-config-files">${files}</div>` : ""}
+    ${files ? `<p class="muted small"><strong>Stack files</strong> (under <code>${escapeHtml(cfg.stack_dir || "")}</code>)</p><div class="devstack-config-files devstack-config-files--grid">${files}</div>` : ""}
     ${notes ? `<ul class="devstack-access__notes">${notes}</ul>` : ""}`;
 }
 
