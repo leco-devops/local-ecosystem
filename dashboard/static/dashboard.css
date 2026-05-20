@@ -6818,16 +6818,50 @@ body.help-page {
 
 .devstack-config-files {
   margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+ul.devstack-config-files {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.devstack-config-files--grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 14px;
+}
+
+@media (max-width: 560px) {
+  .devstack-config-files--grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .devstack-config-file-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+}
+
+ul.devstack-config-files .devstack-config-file-row {
+  padding: 4px 0;
+  border: none;
+  background: transparent;
+}
+
+.devstack-config-files--grid .devstack-config-file-row code {
+  flex: 1 1 100%;
+  min-width: 0;
+  word-break: break-all;
 }
 
 .devstack-config-file-row code {
