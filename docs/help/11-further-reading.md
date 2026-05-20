@@ -34,7 +34,7 @@ Open **Docs** (`/?tab=docsTab`) for canonical technical references:
 
 | Path | Topic |
 |------|--------|
-| `README.md` | Landing page (open source · Techtonic Systems) |
+| `README.md` | Landing page (open source · Techtonic Systems Media And Research LLC) |
 | `docs/PROJECT.md` | Full repository guide |
 | `docs/OPEN_SOURCE.md` | Stewardship & license |
 | `docs/LECO_APP_BLUEPRINT.md` | Bridge/profile, compose, CF, Traefik (canonical) |

@@ -1,6 +1,6 @@
 # LEco DevOps Open Project — repository guide
 
-> **Open source** · [MIT License](../LICENSE) · Maintained by **[Techtonic Systems Media and Research LLC](https://techtonic.systems/)**  
+> **Open source** · [MIT License](../LICENSE) · Maintained by **[Techtonic Systems Media And Research LLC](https://techtonic.systems/)**  
 > Landing page: [README](../README.md) · Stewardship: [OPEN_SOURCE.md](OPEN_SOURCE.md)
 
 A **Docker-based open-source local platform** that mimics a small cloud edge: Traefik on `*.lh`, TLS, Ollama, Open WebUI, n8n, PostgreSQL, **LEco DevOps** (ops UI + app lifecycle tooling), and optional **Cloudflare-local** adapters (R2/KV/D1/Workers-style APIs).
@@ -18,7 +18,7 @@ You access services by name (**`https://n8n.lh`**, **`https://ai.lh`**, …) ins
 
 ## Project name
 
-**LEco DevOps** is the application name (CLI + web UI). **LEco DevOps Open Project** is the open-source repository and community project, stewarded by [Techtonic Systems](https://techtonic.systems/).
+**LEco DevOps** is the application name (CLI + web UI). **LEco DevOps Open Project** is the open-source repository and community project, stewarded by [Techtonic Systems Media And Research LLC](https://techtonic.systems/).
 
 ---
 
@@ -184,6 +184,8 @@ More: **[DEPLOYMENT.md](DEPLOYMENT.md)** §12.
 
 This project is **open source** under the **[MIT License](../LICENSE)**.
 
-**Copyright (c) Techtonic Systems Media and Research LLC** and contributors. See **[NOTICE.md](../NOTICE.md)** and **[OPEN_SOURCE.md](OPEN_SOURCE.md)**.
+**Copyright (c) Techtonic Systems Media And Research LLC** and contributors. See **[NOTICE.md](../NOTICE.md)** and **[OPEN_SOURCE.md](OPEN_SOURCE.md)**.
 
 To contribute, open an issue or pull request and follow **[CONTRIBUTING.md](../CONTRIBUTING.md)** and **[DEVELOPMENT_PLAYBOOK.md](DEVELOPMENT_PLAYBOOK.md)**. Control actions can be destructive; use **`DASHBOARD_CONTROL_TOKEN`** in production-like environments.
+
+**Contact:** [leco@techtonic.systems](mailto:leco@techtonic.systems) · **Top contributor:** [Rajneesh Maurya](https://github.com/rmaurya) ([LinkedIn](https://www.linkedin.com/in/rajneeshmaurya/))

@@ -7,7 +7,7 @@ This file gives automation agents the minimum complete context to work safely an
 - Project: **LEco DevOps Open Project**
 - Application: **LEco DevOps** (web UI + LEco tooling experience)
 - License: **MIT** (`LICENSE`) — open source
-- Steward: **[Techtonic Systems Media and Research LLC](https://techtonic.systems/)**
+- Steward: **[Techtonic Systems Media And Research LLC](https://techtonic.systems/)**
 - Repository guide: **`docs/PROJECT.md`** (landing CTA: root **`README.md`**)
 
 ## Repository intent

@@ -311,7 +311,7 @@ n8n is configured for **proxy trust** and **`N8N_SECURE_COOKIE=false`** in the s
 | [../cloudflare-local/docs/USER_MANUAL.md](../cloudflare-local/docs/USER_MANUAL.md) | CF-local usage |
 | [../README.md](../README.md) | Landing page (GitHub Pages) |
 | [PROJECT.md](PROJECT.md) | Full repository guide |
-| [OPEN_SOURCE.md](OPEN_SOURCE.md) | Open source & Techtonic Systems stewardship |
+| [OPEN_SOURCE.md](OPEN_SOURCE.md) | Open source & Techtonic Systems Media And Research LLC stewardship |
 
 ---
 

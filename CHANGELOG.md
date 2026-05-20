@@ -8,7 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
-- **Open source stewardship:** Project documentation, [LICENSE](LICENSE), [NOTICE](NOTICE.md), and root [README](README.md) (GitHub Pages landing) now identify **LEco DevOps Open Project** as open source managed by **[Techtonic Systems Media and Research LLC](https://techtonic.systems/)**. Full technical guide moved to [docs/PROJECT.md](docs/PROJECT.md).
+- **Steward branding:** Use legal name **Techtonic Systems Media And Research LLC** and [https://techtonic.systems/](https://techtonic.systems/) across docs, LICENSE, NOTICE, dashboard footer, and README (GitHub Pages contributor CTA).
+
+- **Contact & contributors:** Project email [leco@techtonic.systems](mailto:leco@techtonic.systems); top contributor credit for Rajneesh Maurya ([GitHub](https://github.com/rmaurya), [LinkedIn](https://www.linkedin.com/in/rajneeshmaurya/)).
+
+- **Open source stewardship:** Project documentation, [LICENSE](LICENSE), [NOTICE](NOTICE.md), and root [README](README.md) (GitHub Pages landing) now identify **LEco DevOps Open Project** as open source managed by **[Techtonic Systems Media And Research LLC](https://techtonic.systems/)**. Full technical guide moved to [docs/PROJECT.md](docs/PROJECT.md).
 
 - **Platform documentation:** New Help manual [docs/help/03-platform-tab.md](docs/help/03-platform-tab.md) (dev stack builder, Repair/Reinstall/Destroy, stack cards, cloud VM). Updated [DEV_STACK_ISOLATION.md](docs/DEV_STACK_ISOLATION.md), [CLOUD_VM_DEPLOYMENT.md](docs/CLOUD_VM_DEPLOYMENT.md), [LECO_USER_MANUAL.md](docs/LECO_USER_MANUAL.md), and developer API guide [docs/help/dev-09-platform-cloud.md](docs/help/dev-09-platform-cloud.md).
 

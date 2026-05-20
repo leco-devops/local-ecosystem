@@ -2,15 +2,20 @@
 
 ## LEco DevOps Open Project
 
-Copyright (c) 2026 Techtonic Systems Media and Research LLC and contributors.
+Copyright (c) 2026 Techtonic Systems Media And Research LLC and contributors.
 
 This project is **open-source software** released under the **MIT License** (see [LICENSE](LICENSE)).
 
 ## Stewardship
 
-**Techtonic Systems Media and Research LLC** manages and maintains this open-source project:
+**Techtonic Systems Media And Research LLC** manages and maintains this open-source project:
 
 - [https://techtonic.systems/](https://techtonic.systems/)
+- [leco@techtonic.systems](mailto:leco@techtonic.systems)
+
+## Top contributors
+
+- **Rajneesh Maurya** — [GitHub](https://github.com/rmaurya) · [LinkedIn](https://www.linkedin.com/in/rajneeshmaurya/)
 
 ## Third-party software
 

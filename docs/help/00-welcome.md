@@ -1,6 +1,6 @@
 # Welcome to LEco DevOps
 
-**LEco DevOps Open Project** is **open source** ([MIT License](../../LICENSE)), maintained by **[Techtonic Systems Media and Research LLC](https://techtonic.systems/)**.
+**LEco DevOps Open Project** is **open source** ([MIT License](../../LICENSE)), maintained by **[Techtonic Systems Media And Research LLC](https://techtonic.systems/)**.
 
 **LEco DevOps** is the local platform UI and CLI for running a personal DevOps stack on your machine: Traefik edge routing (`*.lh`), Ollama, AirLLM, Open WebUI, n8n, Postgres, Cloudflare-local adapters, and **hosted apps** you register with `leco-devops`.
 

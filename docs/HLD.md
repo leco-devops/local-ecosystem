@@ -1,6 +1,6 @@
 # LEco DevOps Open Project - HLD
 
-> **Open source** · [MIT License](../LICENSE) · Maintained by [Techtonic Systems Media and Research LLC](https://techtonic.systems/)
+> **Open source** · [MIT License](../LICENSE) · Maintained by [Techtonic Systems Media And Research LLC](https://techtonic.systems/)
 
 This High-Level Design (HLD) defines major components, boundaries, and data/control flows.
 

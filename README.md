@@ -1,9 +1,9 @@
 <p align="center">
-  <a href="https://techtonic.systems/" title="Techtonic Systems Media and Research LLC">
-    <strong>Techtonic Systems</strong>
+  <a href="https://techtonic.systems/" title="Techtonic Systems Media And Research LLC">
+    <strong>Techtonic Systems Media And Research LLC</strong>
   </a>
   <br />
-  <sub>Open-source software · Media and Research</sub>
+  <sub>Open-source software · <a href="https://techtonic.systems/">techtonic.systems</a></sub>
 </p>
 
 <h1 align="center">LEco DevOps Open Project</h1>
@@ -24,7 +24,25 @@
 <p align="center">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" />
   <img src="https://img.shields.io/badge/open%20source-yes-brightgreen.svg" alt="Open source" />
-  <img src="https://img.shields.io/badge/maintained%20by-Techtonic%20Systems-8b5cf6.svg" alt="Maintained by Techtonic Systems" />
+  <img src="https://img.shields.io/badge/steward-Techtonic%20Systems%20Media%20And%20Research%20LLC-8b5cf6.svg" alt="Steward: Techtonic Systems Media And Research LLC" />
+</p>
+
+---
+
+## Contribute to this project
+
+**LEco DevOps Open Project** is community-driven open source. Whether you fix a bug, improve docs, add a dev-stack preset, or review a pull request — your help matters.
+
+<p align="center">
+  <a href="CONTRIBUTING.md"><strong>Contribution guide</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/rmaurya/local-ecosystem/issues"><strong>Open an issue</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/rmaurya/local-ecosystem/fork"><strong>Fork &amp; pull request</strong></a>
+</p>
+
+<p align="center">
+  <em>New here?</em> Read <a href="docs/DEVELOPMENT_PLAYBOOK.md">Development playbook</a> and <a href="docs/help/03-platform-tab.md">Platform tab guide</a> before your first PR.
 </p>
 
 ---
@@ -37,7 +55,16 @@
 |---|---|
 | **Application** | **LEco DevOps** — web UI + `leco-devops` CLI |
 | **License** | [MIT](LICENSE) — use commercially, fork, contribute |
-| **Maintainer** | [Techtonic Systems Media and Research LLC](https://techtonic.systems/) |
+| **Steward** | [Techtonic Systems Media And Research LLC](https://techtonic.systems/) |
+| **Contact** | [leco@techtonic.systems](mailto:leco@techtonic.systems) |
+
+---
+
+## Top contributors
+
+| Contributor | Links |
+|-------------|--------|
+| **Rajneesh Maurya** | [GitHub](https://github.com/rmaurya) · [LinkedIn](https://www.linkedin.com/in/rajneeshmaurya/) |
 
 ---
 
@@ -84,9 +111,7 @@ Open **http://localhost.lh** or **http://dashboard.lh** for the LEco DevOps dash
 
 ---
 
-## Contribute and report issues
-
-This project is **open source**. We welcome issues and pull requests.
+## Security & releases
 
 | | |
 |---|---|
@@ -104,10 +129,14 @@ To publish this landing page: **Repository → Settings → Pages → Build and 
 
 ## Stewardship
 
-**LEco DevOps Open Project** is an **open-source project** managed by **[Techtonic Systems Media and Research LLC](https://techtonic.systems/)**.
+**LEco DevOps Open Project** is an **open-source project** managed by **[Techtonic Systems Media And Research LLC](https://techtonic.systems/)**.
 
-Copyright (c) Techtonic Systems Media and Research LLC and contributors. Licensed under the [MIT License](LICENSE). See [NOTICE](NOTICE.md).
+**Contact:** [leco@techtonic.systems](mailto:leco@techtonic.systems)
+
+Copyright (c) Techtonic Systems Media And Research LLC and contributors. Licensed under the [MIT License](LICENSE). See [NOTICE](NOTICE.md).
 
 <p align="center">
-  <a href="https://techtonic.systems/"><strong>techtonic.systems</strong></a>
+  <a href="https://techtonic.systems/"><strong>Techtonic Systems Media And Research LLC</strong></a>
+  <br />
+  <a href="mailto:leco@techtonic.systems">leco@techtonic.systems</a>
 </p>

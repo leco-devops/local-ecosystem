@@ -17,7 +17,7 @@ DOC_MODULES = [
         "title": "Open source — stewardship",
         "category": "Open source",
         "rel_path": "docs/OPEN_SOURCE.md",
-        "blurb": "MIT license, Techtonic Systems stewardship, and contributor pointers.",
+        "blurb": "MIT license, Techtonic Systems Media And Research LLC stewardship, and contributor pointers.",
     },
     {
         "id": "open-source-notice",

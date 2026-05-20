@@ -1,6 +1,6 @@
 # LEco DevOps Open Project - Architecture
 
-> **Open source** · [MIT License](../LICENSE) · Maintained by [Techtonic Systems Media and Research LLC](https://techtonic.systems/)
+> **Open source** · [MIT License](../LICENSE) · Maintained by [Techtonic Systems Media And Research LLC](https://techtonic.systems/)
 
 This document is the architecture entry point for the project.
 

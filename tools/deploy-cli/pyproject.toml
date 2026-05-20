@@ -9,7 +9,7 @@ description = "LEco DevOps — multi-app deploy CLI for Docker Compose and Cloud
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
-  {name = "Techtonic Systems Media and Research LLC"},
+  {name = "Techtonic Systems Media And Research LLC"},
 ]
 license = "MIT"
 dependencies = [

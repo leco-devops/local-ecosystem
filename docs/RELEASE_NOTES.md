@@ -2,7 +2,7 @@
 
 **Current platform version:** `0.3.0` (see [`VERSION`](../VERSION) and [`version.json`](../version.json))
 
-**Application:** LEco DevOps · **License:** MIT · **Open source** · Maintained by [Techtonic Systems Media and Research LLC](https://techtonic.systems/)
+**Application:** LEco DevOps · **License:** MIT · **Open source** · Maintained by [Techtonic Systems Media And Research LLC](https://techtonic.systems/)
 
 ---
 

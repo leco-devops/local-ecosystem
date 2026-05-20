@@ -1,6 +1,6 @@
 # LEco DevOps Open Project - LLD
 
-> **Open source** · [MIT License](../LICENSE) · Maintained by [Techtonic Systems Media and Research LLC](https://techtonic.systems/)
+> **Open source** · [MIT License](../LICENSE) · Maintained by [Techtonic Systems Media And Research LLC](https://techtonic.systems/)
 
 This Low-Level Design (LLD) maps concrete modules, APIs, and responsibilities.
 
