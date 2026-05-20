@@ -1,16 +1,15 @@
 # LEco brand assets
 
+Flat palette (no gradients): **Navy** `#022B3A` · **Teal** `#1F7A8C` · **Sky** `#BFDBF7` · **Mist** `#E1E5F2` · **White** `#FFFFFF`
+
 | File | Use |
 |------|-----|
-| `leco-logo-mark.svg` | Favicon, app icon, small UI (64×64) |
-| `leco-logo.svg` | Horizontal lockup with wordmark |
-| `leco-logo-round.svg` | **Profile picture** (GitHub org/user avatar, social) — 512×512 circle |
-| `leco-logo-round.png` | PNG export of round logo (when SVG upload is not supported) |
+| `leco-logo-mark-dark.svg` / `leco-logo-mark-light.svg` | Icon / favicon (dark UI vs light backgrounds) |
+| `leco-logo-dark.svg` / `leco-logo-light.svg` | Horizontal lockup |
+| `leco-logo-round-dark.svg` / `leco-logo-round-light.svg` | Profile / social avatar (SVG) |
+| `leco-logo-round.png` | PNG avatar (regenerate from round-dark when palette changes) |
+| `leco-palette.css` | Shared CSS variables |
 
-Colors align with the LEco DevOps control panel: cyan `#22d3ee`, sky `#38bdf8`, violet `#a78bfa`, background `#0c0d18`.
+Default filenames (`leco-logo-mark.svg`, `leco-logo.svg`, …) are **dark** variants for the site and dashboard.
 
-Copies used in the repo:
-
-- `dashboard/static/favicon.svg` — dashboard + hubs
-- `assets/img/favicon.svg` — GitHub Pages
-- `assets/img/leco-og.svg` — Open Graph (site share card)
+Copies: `dashboard/static/`, `assets/img/`.

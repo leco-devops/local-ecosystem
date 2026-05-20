@@ -1,7 +1,7 @@
 # LEco DevOps Open Project
 
 <p align="center">
-  <img src="assets/brand/leco-logo.svg" width="360" height="72" alt="LEco DevOps" />
+  <img src="assets/brand/leco-logo-light.svg" width="360" height="72" alt="LEco DevOps" />
 </p>
 
 **One-click deploy for almost any application — no manual rewiring.**  

@@ -1,0 +1,10 @@
+/* LEco brand palette — flat solids only (no gradients)
+ * Navy #022B3A · Teal #1F7A8C · Sky #BFDBF7 · Mist #E1E5F2 · White #FFFFFF
+ */
+:root {
+  --leco-navy: #022b3a;
+  --leco-teal: #1f7a8c;
+  --leco-sky: #bfdbf7;
+  --leco-mist: #e1e5f2;
+  --leco-white: #ffffff;
+}

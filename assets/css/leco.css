@@ -1,25 +1,31 @@
 /* LEco DevOps — GitHub Pages theme aligned with dashboard control panel (dashboard.css) */
 
 :root {
-  --bg-base: #0c0d18;
-  --bg-elevated: #16182a;
-  --bg-card: #1e2038;
-  --surface-muted: #252845;
-  --border-subtle: #3d4270;
-  --text: #f1f5f9;
-  --text-muted: #a5b4fc;
-  --cyan: #22d3ee;
-  --violet: #a78bfa;
-  --accent: #8b5cf6;
-  --accent-strong: #7c3aed;
-  --tab-active-bg: #5b21b6;
-  --tab-active-border: #c026d3;
-  --link: #7dd3fc;
-  --emerald: #34d399;
-  --teal: #2dd4bf;
+  color-scheme: dark;
+  --leco-navy: #022b3a;
+  --leco-teal: #1f7a8c;
+  --leco-sky: #bfdbf7;
+  --leco-mist: #e1e5f2;
+  --leco-white: #ffffff;
+  --bg-base: var(--leco-navy);
+  --bg-elevated: #033547;
+  --bg-card: var(--leco-teal);
+  --surface-muted: var(--leco-teal);
+  --border-subtle: var(--leco-sky);
+  --text: var(--leco-white);
+  --text-muted: var(--leco-sky);
+  --cyan: var(--leco-sky);
+  --violet: var(--leco-teal);
+  --accent: var(--leco-teal);
+  --accent-strong: var(--leco-navy);
+  --tab-active-bg: var(--leco-teal);
+  --tab-active-border: var(--leco-sky);
+  --link: var(--leco-sky);
+  --emerald: #0d9488;
+  --teal: var(--leco-teal);
   --leco-max: 920px;
   --leco-radius: 14px;
-  --leco-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  --leco-shadow: 0 8px 24px rgba(2, 43, 58, 0.45);
 }
 
 /* Hide Cayman default chrome — we use leco layout */
@@ -47,17 +53,13 @@
 }
 
 .leco-site a:hover {
-  color: var(--cyan);
+  color: var(--leco-white);
 }
 
 /* Header — matches dashboard h1 / tab accent */
 .leco-page-header {
-  border-bottom: 1px solid var(--border-subtle);
-  background: linear-gradient(
-    180deg,
-    rgba(22, 24, 42, 0.98) 0%,
-    rgba(12, 13, 24, 0.92) 100%
-  );
+  border-bottom: 2px solid var(--border-subtle);
+  background: var(--bg-elevated);
   padding: 2.5rem 1.25rem 2rem;
 }
 
@@ -81,7 +83,7 @@
 .leco-brand__mark {
   flex-shrink: 0;
   border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(34, 211, 238, 0.15);
+  border: 1px solid var(--border-subtle);
 }
 
 .leco-brand__text {
@@ -134,11 +136,7 @@
 }
 
 .leco-page-header__title a {
-  color: var(--cyan) !important;
-  background: linear-gradient(90deg, var(--cyan), var(--link), var(--violet));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--leco-sky) !important;
 }
 
 .leco-page-header__tagline {
@@ -164,31 +162,31 @@
   border-radius: 10px;
   font-size: 0.88rem;
   font-weight: 600;
-  border: 1px solid rgba(129, 140, 248, 0.5);
-  transition: transform 0.12s, box-shadow 0.12s, border-color 0.12s;
+  border: 2px solid var(--border-subtle);
+  transition: transform 0.12s, border-color 0.12s, background-color 0.12s;
 }
 
 .leco-btn--primary {
-  background: var(--tab-active-bg);
-  border-color: var(--tab-active-border);
-  color: #fff !important;
-  box-shadow: 0 4px 14px rgba(91, 33, 182, 0.4);
+  background: var(--leco-teal);
+  border-color: var(--leco-sky);
+  color: var(--leco-white) !important;
 }
 
 .leco-btn--primary:hover {
   transform: translateY(-1px);
-  color: #fff !important;
-  border-color: var(--violet);
+  color: var(--leco-white) !important;
+  background: var(--leco-navy);
+  border-color: var(--leco-white);
 }
 
 .leco-btn--ghost {
   background: var(--bg-elevated);
-  color: #e0e7ff !important;
+  color: var(--leco-white) !important;
 }
 
 .leco-btn--ghost:hover {
-  border-color: rgba(56, 189, 248, 0.75);
-  color: #e2e8f0 !important;
+  border-color: var(--leco-white);
+  color: var(--leco-white) !important;
 }
 
 /* Main content */
@@ -226,11 +224,11 @@
 
 .leco-main p {
   margin: 0 0 1rem;
-  color: #e2e8f0;
+  color: var(--leco-sky);
 }
 
 .leco-main strong {
-  color: #fff;
+  color: var(--leco-white);
 }
 
 .leco-main code,
@@ -244,7 +242,7 @@
 }
 
 .leco-main pre {
-  background: #0a0b14 !important;
+  background: var(--leco-navy) !important;
   border: 1px solid var(--border-subtle);
   border-radius: var(--leco-radius);
   padding: 1rem 1.15rem;
@@ -255,17 +253,17 @@
 .leco-main pre code {
   background: transparent;
   border: none;
-  color: #e2e8f0;
+  color: var(--leco-sky);
   padding: 0;
 }
 
 .leco-main blockquote {
   margin: 1.25rem 0 1.5rem;
   padding: 1rem 1.15rem;
-  border-left: 4px solid var(--accent);
-  background: rgba(30, 32, 56, 0.85);
+  border-left: 4px solid var(--leco-teal);
+  background: var(--bg-elevated);
   border-radius: 0 var(--leco-radius) var(--leco-radius) 0;
-  color: #e0e7ff;
+  color: var(--leco-white);
   box-shadow: var(--leco-shadow);
 }
 
@@ -296,16 +294,16 @@
 }
 
 .leco-main table tr:nth-child(even) td {
-  background: rgba(22, 24, 42, 0.6);
+  background: var(--bg-elevated);
 }
 
 .leco-main table td {
-  background: rgba(30, 32, 56, 0.5);
+  background: var(--bg-base);
 }
 
 /* Hero panel */
 .leco-hero-panel {
-  background: rgba(30, 32, 56, 0.75);
+  background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
   border-radius: var(--leco-radius);
   padding: 1.35rem 1.25rem 1.15rem;
@@ -318,7 +316,7 @@
   font-size: 1.12rem;
   line-height: 1.55;
   margin: 0 0 1rem;
-  color: #e2e8f0;
+  color: var(--leco-white);
 }
 
 .leco-tagline strong {
@@ -336,16 +334,16 @@
 .leco-nav a {
   padding: 0.4rem 0.85rem;
   background: var(--bg-elevated);
-  border: 1px solid rgba(129, 140, 248, 0.5);
+  border: 2px solid var(--border-subtle);
   border-radius: 10px;
   font-size: 0.88rem;
   font-weight: 600;
-  color: #e0e7ff !important;
+  color: var(--leco-white) !important;
 }
 
 .leco-nav a:hover {
-  border-color: rgba(56, 189, 248, 0.75);
-  color: #fff !important;
+  border-color: var(--leco-white);
+  color: var(--leco-white) !important;
   transform: translateY(-1px);
 }
 
@@ -361,7 +359,7 @@
 
 .leco-lead {
   font-size: 1.05rem;
-  color: #c7d2fe;
+  color: var(--leco-sky);
   margin: 0 0 1.5rem;
   line-height: 1.6;
 }
@@ -377,8 +375,8 @@
 .leco-vision-mission__card {
   padding: 1.35rem 1.4rem;
   border-radius: var(--leco-radius);
-  border: 1px solid var(--border-subtle);
-  background: rgba(30, 32, 56, 0.85);
+  border: 2px solid var(--border-subtle);
+  background: var(--bg-elevated);
   box-shadow: var(--leco-shadow);
   position: relative;
   overflow: hidden;
@@ -390,15 +388,15 @@
   top: 0;
   left: 0;
   right: 0;
-  height: 3px;
+  height: 4px;
 }
 
 .leco-vision-mission__card--vision::before {
-  background: linear-gradient(90deg, var(--cyan), var(--link));
+  background: var(--leco-sky);
 }
 
 .leco-vision-mission__card--mission::before {
-  background: linear-gradient(90deg, var(--violet), var(--tab-active-border));
+  background: var(--leco-teal);
 }
 
 .leco-vision-mission__label {
@@ -420,14 +418,14 @@
   padding: 0 !important;
   border: none !important;
   font-size: 1.25rem !important;
-  color: #fff !important;
+  color: var(--leco-white) !important;
 }
 
 .leco-vision-mission__card p {
   margin: 0;
   font-size: 1.02rem;
   line-height: 1.65;
-  color: #cbd5e1;
+  color: var(--leco-sky);
 }
 
 .leco-vision-mission__card p strong {
@@ -448,12 +446,12 @@
 
 /* Platform callout */
 .leco-platform-callout {
-  background: linear-gradient(135deg, rgba(91, 33, 182, 0.2) 0%, rgba(30, 32, 56, 0.9) 55%);
-  border: 1px solid rgba(192, 38, 211, 0.45);
+  background: var(--bg-elevated);
+  border: 2px solid var(--leco-teal);
   border-radius: var(--leco-radius);
   padding: 1rem 1.15rem;
   margin: 0 0 1.25rem;
-  color: #e2e8f0;
+  color: var(--leco-white);
 }
 
 /* CTAs */
@@ -471,24 +469,25 @@
   border-radius: 10px;
   font-weight: 600;
   font-size: 0.9rem;
-  background: var(--tab-active-bg);
-  border: 1px solid var(--tab-active-border);
-  color: #fff !important;
+  background: var(--leco-teal);
+  border: 2px solid var(--leco-sky);
+  color: var(--leco-white) !important;
 }
 
 .leco-cta-row a:hover {
-  color: #fff !important;
-  border-color: var(--violet);
+  color: var(--leco-white) !important;
+  border-color: var(--leco-white);
+  background: var(--leco-navy);
 }
 
 .leco-cta-row a.leco-cta--ghost {
   background: var(--bg-elevated);
-  border-color: rgba(129, 140, 248, 0.5);
-  color: #e0e7ff !important;
+  border: 2px solid var(--border-subtle);
+  color: var(--leco-white) !important;
 }
 
 .leco-cta-row a.leco-cta--ghost:hover {
-  border-color: rgba(56, 189, 248, 0.75);
+  border-color: var(--leco-white);
 }
 
 /* Use case cards */
@@ -500,8 +499,8 @@
 }
 
 .use-case-card {
-  background: rgba(30, 32, 56, 0.85);
-  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  border: 2px solid var(--border-subtle);
   border-radius: var(--leco-radius);
   padding: 1.1rem 1.15rem;
   box-shadow: var(--leco-shadow);
@@ -510,7 +509,7 @@
 
 .use-case-card:hover {
   transform: translateY(-2px);
-  border-color: rgba(56, 189, 248, 0.5);
+  border-color: var(--leco-white);
 }
 
 .use-case-card h3 {
@@ -523,7 +522,7 @@
 
 .use-case-card p {
   margin: 0 0 0.65rem;
-  color: #e2e8f0;
+  color: var(--leco-sky);
 }
 
 .use-case-card__ideal {
@@ -536,8 +535,8 @@
 .leco-footer {
   margin-top: auto;
   padding: 2rem 1.25rem 2.5rem;
-  border-top: 1px solid var(--border-subtle);
-  background: rgba(12, 13, 24, 0.95);
+  border-top: 2px solid var(--border-subtle);
+  background: var(--leco-navy);
 }
 
 .leco-footer__inner {
@@ -550,7 +549,7 @@
   margin: 0;
   font-size: 14px;
   line-height: 1.55;
-  color: #e2e8f0;
+  color: var(--leco-white);
 }
 
 .leco-footer__copy {
@@ -564,7 +563,7 @@
 .leco-footer__links {
   margin-top: 22px;
   padding-top: 20px;
-  border-top: 1px solid rgba(100, 116, 139, 0.28);
+  border-top: 2px solid var(--border-subtle);
   display: flex;
   flex-wrap: wrap;
   gap: 12px 14px;
@@ -579,20 +578,20 @@
   font-size: 12px;
   padding: 9px 14px;
   border-radius: 10px;
-  border: 1px solid rgba(125, 211, 252, 0.35);
-  background: rgba(30, 41, 59, 0.85);
-  color: #c7d2fe !important;
+  border: 2px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--leco-sky) !important;
 }
 
 .leco-footer__link:hover {
-  border-color: rgba(56, 189, 248, 0.75);
-  color: #e2e8f0 !important;
+  border-color: var(--leco-white);
+  color: var(--leco-white) !important;
 }
 
 .leco-footer__legal {
   margin: 1.25rem 0 0;
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--leco-sky);
 }
 
 .leco-footer__legal a {
@@ -617,9 +616,9 @@
 }
 
 .leco-faq__item {
-  border: 1px solid var(--border-subtle);
+  border: 2px solid var(--border-subtle);
   border-radius: var(--leco-radius);
-  background: rgba(30, 32, 56, 0.75);
+  background: var(--bg-elevated);
   overflow: hidden;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
 }
@@ -648,8 +647,9 @@
 }
 
 .leco-faq__item[open] summary {
-  border-bottom: 1px solid var(--border-subtle);
-  background: rgba(91, 33, 182, 0.15);
+  border-bottom: 2px solid var(--border-subtle);
+  background: var(--leco-teal);
+  color: var(--leco-white);
 }
 
 .leco-faq__answer {
@@ -658,7 +658,7 @@
 
 .leco-faq__answer p {
   margin: 0;
-  color: #cbd5e1;
+  color: var(--leco-sky);
   font-size: 0.96rem;
   line-height: 1.6;
 }

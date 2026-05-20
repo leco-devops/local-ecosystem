@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="LEco DevOps">
+  <circle cx="256" cy="256" r="256" fill="#E1E5F2"/>
+  <circle cx="256" cy="256" r="232" fill="none" stroke="#1F7A8C" stroke-width="12"/>
+  <g transform="translate(256 248)">
+    <path fill="none" stroke="#1F7A8C" stroke-width="14" stroke-linejoin="round" transform="scale(2.85)" d="M0 -38l38 22v44L0 50-38 28V-16L0 -38z"/>
+    <circle cx="0" cy="0" r="22" fill="#022B3A"/>
+  </g>
+</svg>
