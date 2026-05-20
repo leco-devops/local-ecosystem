@@ -1,0 +1,352 @@
+/* LEco DevOps Open Project — GitHub Pages site styles (plain CSS, always published as-is) */
+
+:root {
+  --leco-accent: #0d9488;
+  --leco-accent-dark: #0f766e;
+  --leco-accent-light: #14b8a6;
+  --leco-surface: #f0fdfa;
+  --leco-surface-2: #ccfbf1;
+  --leco-text: #134e4a;
+  --leco-muted: #5b6b7a;
+  --leco-border: rgba(13, 148, 136, 0.22);
+  --leco-shadow: 0 8px 28px rgba(15, 118, 110, 0.12);
+  --leco-radius: 10px;
+  --leco-max: 920px;
+}
+
+/* Cayman header — force branded gradient */
+.page-header {
+  background-image: linear-gradient(135deg, #0f766e 0%, #0d9488 45%, #14b8a6 100%) !important;
+  padding: 3.5rem 1.5rem 3rem !important;
+}
+
+.page-header .project-name,
+.page-header .project-name a {
+  font-family: Inter, system-ui, sans-serif !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em;
+}
+
+.page-header .project-tagline {
+  font-family: Inter, system-ui, sans-serif !important;
+  font-weight: 400 !important;
+  opacity: 0.95;
+  max-width: 42rem;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.5;
+}
+
+.page-header .btn {
+  border-radius: 6px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Main content — typography & rhythm */
+.main-content {
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  color: #1e293b !important;
+  font-size: 1.02rem !important;
+  line-height: 1.65 !important;
+  max-width: var(--leco-max) !important;
+  margin: 0 auto !important;
+  padding: 2rem 1.25rem 3rem !important;
+}
+
+.main-content h2 {
+  font-size: 1.55rem !important;
+  font-weight: 700 !important;
+  color: var(--leco-accent-dark) !important;
+  border-bottom: 2px solid var(--leco-border) !important;
+  padding-bottom: 0.45rem !important;
+  margin-top: 2.5rem !important;
+  margin-bottom: 1rem !important;
+  letter-spacing: -0.02em;
+}
+
+.main-content h3 {
+  font-size: 1.15rem !important;
+  font-weight: 600 !important;
+  color: var(--leco-text) !important;
+  margin-top: 1.5rem !important;
+}
+
+.main-content h4 {
+  font-size: 1rem !important;
+  font-weight: 600 !important;
+  color: var(--leco-muted) !important;
+}
+
+.main-content p {
+  margin-bottom: 1rem !important;
+}
+
+.main-content a {
+  color: var(--leco-accent-dark) !important;
+  font-weight: 500;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.main-content a:hover {
+  color: var(--leco-accent) !important;
+  border-bottom-color: var(--leco-accent-light);
+}
+
+.main-content code,
+.main-content tt {
+  font-size: 0.88em !important;
+  background: var(--leco-surface) !important;
+  color: var(--leco-accent-dark) !important;
+  border: 1px solid var(--leco-border);
+  border-radius: 4px;
+  padding: 0.12em 0.35em !important;
+}
+
+.main-content pre {
+  background: #0f172a !important;
+  color: #e2e8f0 !important;
+  border-radius: var(--leco-radius) !important;
+  padding: 1rem 1.15rem !important;
+  font-size: 0.9rem !important;
+  line-height: 1.5 !important;
+  box-shadow: var(--leco-shadow);
+  overflow-x: auto;
+}
+
+.main-content pre code {
+  background: transparent !important;
+  border: none !important;
+  color: inherit !important;
+  padding: 0 !important;
+}
+
+/* Tables */
+.main-content table {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  border-collapse: separate !important;
+  border-spacing: 0;
+  margin: 1.25rem 0 1.5rem !important;
+  border: 1px solid var(--leco-border) !important;
+  border-radius: var(--leco-radius) !important;
+  box-shadow: var(--leco-shadow);
+  font-size: 0.95rem;
+}
+
+.main-content table th,
+.main-content table td {
+  padding: 0.65rem 0.85rem !important;
+  border: 1px solid var(--leco-border) !important;
+  text-align: left;
+  vertical-align: top;
+}
+
+.main-content table th {
+  background: linear-gradient(180deg, var(--leco-surface), var(--leco-surface-2)) !important;
+  color: var(--leco-accent-dark) !important;
+  font-weight: 600 !important;
+}
+
+.main-content table tr:nth-child(even) td {
+  background: #fafcfd;
+}
+
+/* Blockquotes / USP */
+.main-content blockquote {
+  border-left: 4px solid var(--leco-accent) !important;
+  background: var(--leco-surface) !important;
+  color: var(--leco-text) !important;
+  padding: 1rem 1.15rem !important;
+  margin: 1.25rem 0 1.5rem !important;
+  border-radius: 0 var(--leco-radius) var(--leco-radius) 0;
+  box-shadow: var(--leco-shadow);
+  font-size: 1.02rem;
+}
+
+/* Hero panel (below Cayman header) */
+.leco-hero-panel {
+  background: linear-gradient(180deg, var(--leco-surface) 0%, #fff 100%);
+  border: 1px solid var(--leco-border);
+  border-radius: var(--leco-radius);
+  padding: 1.35rem 1.25rem 1.15rem;
+  margin-bottom: 1.75rem;
+  box-shadow: var(--leco-shadow);
+}
+
+.leco-tagline {
+  text-align: center;
+  font-size: 1.12rem;
+  line-height: 1.55;
+  margin: 0 0 1rem;
+  color: #0f172a;
+}
+
+.leco-tagline strong {
+  color: var(--leco-accent-dark);
+}
+
+/* Pill navigation */
+.leco-nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.45rem;
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.leco-nav a {
+  display: inline-block;
+  padding: 0.4rem 0.85rem;
+  background: #fff;
+  border: 1px solid var(--leco-border);
+  border-radius: 999px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--leco-accent-dark) !important;
+  text-decoration: none !important;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+
+.leco-nav a:hover {
+  background: var(--leco-surface-2);
+  border-color: var(--leco-accent);
+  transform: translateY(-1px);
+}
+
+.leco-badges {
+  text-align: center;
+  margin: 0;
+}
+
+.leco-badges img {
+  margin: 0.2rem;
+  vertical-align: middle;
+  height: 22px;
+}
+
+/* Section intro */
+.leco-lead {
+  font-size: 1.05rem;
+  color: #334155;
+  margin: 0 0 1.5rem;
+  line-height: 1.6;
+}
+
+/* USP steps — highlight row */
+.leco-usp-table tbody tr:hover td {
+  background: var(--leco-surface) !important;
+}
+
+/* Feature group labels */
+.leco-feature-group {
+  margin-top: 2rem;
+}
+
+/* CTA rows */
+.leco-cta-row {
+  text-align: center;
+  margin: 1.35rem 0;
+}
+
+.leco-cta-row a {
+  display: inline-block;
+  margin: 0 0.35rem;
+  padding: 0.5rem 1rem;
+  background: var(--leco-accent-dark);
+  color: #fff !important;
+  border-radius: 6px;
+  font-weight: 600;
+  border: none !important;
+}
+
+.leco-cta-row a:hover {
+  background: var(--leco-accent) !important;
+  color: #fff !important;
+}
+
+.leco-cta-row a.leco-cta--ghost {
+  background: #fff;
+  color: var(--leco-accent-dark) !important;
+  border: 1px solid var(--leco-border) !important;
+}
+
+.leco-cta-row a.leco-cta--ghost:hover {
+  background: var(--leco-surface) !important;
+}
+
+/* Use case cards */
+.use-case-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+  margin: 1.25rem 0 1.75rem;
+}
+
+.use-case-card {
+  background: #fff;
+  border: 1px solid var(--leco-border);
+  border-radius: var(--leco-radius);
+  padding: 1.1rem 1.15rem;
+  box-shadow: var(--leco-shadow);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.use-case-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(15, 118, 110, 0.16);
+}
+
+.use-case-card h3 {
+  margin-top: 0 !important;
+  font-size: 1.05rem !important;
+  color: var(--leco-accent-dark) !important;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px dashed var(--leco-border);
+}
+
+.use-case-card p:last-child {
+  margin-bottom: 0 !important;
+  font-size: 0.92rem;
+  color: var(--leco-muted);
+}
+
+/* Platform callout */
+.leco-platform-callout {
+  background: linear-gradient(135deg, var(--leco-surface) 0%, #fff 60%);
+  border: 1px solid var(--leco-accent);
+  border-radius: var(--leco-radius);
+  padding: 1rem 1.15rem;
+  margin: 0 0 1.25rem;
+}
+
+/* Footer */
+.site-footer {
+  font-family: Inter, system-ui, sans-serif !important;
+  border-top: 1px solid var(--leco-border);
+  padding-top: 1.5rem !important;
+}
+
+.site-footer-owner,
+.site-footer-credits {
+  color: var(--leco-muted) !important;
+}
+
+@media (max-width: 640px) {
+  .page-header {
+    padding: 2.25rem 1rem 2rem !important;
+  }
+
+  .main-content {
+    padding: 1.25rem 1rem 2rem !important;
+  }
+
+  .main-content h2 {
+    font-size: 1.35rem !important;
+  }
+}

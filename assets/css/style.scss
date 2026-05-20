@@ -3,96 +3,11 @@
 
 @import "{{ site.theme }}";
 
-/* LEco DevOps — brand accents on Cayman (GitHub Pages theme) */
+/* Cayman SCSS hooks (also mirrored in assets/css/leco.css for reliability) */
 
 $leco-accent: #0d9488;
 $leco-accent-dark: #0f766e;
-$leco-hero-bg: #f0fdfa;
 
 .page-header {
-  background-image: linear-gradient(120deg, $leco-accent-dark, $leco-accent);
-}
-
-.main-content {
-  h2 {
-    border-bottom: 1px solid rgba($leco-accent, 0.35);
-    padding-bottom: 0.35em;
-  }
-
-  h3 {
-    color: $leco-accent-dark;
-  }
-
-  a {
-    color: $leco-accent-dark;
-
-    &:hover {
-      color: $leco-accent;
-    }
-  }
-
-  table th {
-    background-color: $leco-hero-bg;
-  }
-
-  blockquote {
-    border-left-color: $leco-accent;
-    background: $leco-hero-bg;
-    color: #134e4a;
-  }
-}
-
-.leco-nav {
-  text-align: center;
-  margin: 1rem 0 1.5rem;
-  font-size: 0.95rem;
-
-  a {
-    font-weight: 600;
-    margin: 0 0.35rem;
-  }
-}
-
-.leco-badges {
-  text-align: center;
-  margin: 1rem 0;
-
-  img {
-    margin: 0.2rem;
-    vertical-align: middle;
-  }
-}
-
-.leco-tagline {
-  text-align: center;
-  font-size: 1.05rem;
-  margin: 1.25rem 0;
-}
-
-.leco-cta-row {
-  text-align: center;
-  margin: 1.25rem 0;
-}
-
-.use-case-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1.25rem;
-  margin: 1.5rem 0;
-}
-
-.use-case-card {
-  padding: 1rem 1.1rem;
-  border: 1px solid rgba($leco-accent, 0.25);
-  border-radius: 8px;
-  background: $leco-hero-bg;
-
-  h3 {
-    margin-top: 0;
-    font-size: 1.1rem;
-  }
-
-  p:last-child {
-    margin-bottom: 0;
-  }
+  background-image: linear-gradient(135deg, $leco-accent-dark, $leco-accent) !important;
 }

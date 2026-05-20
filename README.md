@@ -10,7 +10,7 @@ LEco reads your repo, converts config, orchestrates Compose & Traefik, and ships
 ![Traefik](https://img.shields.io/badge/routing-Traefik-24A1C1)
 ![Open source](https://img.shields.io/badge/community-open%20source-brightgreen)
 
-> **GitHub Pages site:** themed landing at [leco-devops.github.io/local-ecosystem](https://leco-devops.github.io/local-ecosystem/) — built from [`index.md`](index.md) with the [Cayman Jekyll theme](https://docs.github.com/en/pages/setting-up-a-github-pages-site-with-jekyll/adding-a-theme-to-your-github-pages-site-using-jekyll) and [`assets/css/style.scss`](assets/css/style.scss).
+> **Project site:** [leco-project.us](https://leco-project.us) — built from [`index.md`](index.md) with the [Cayman Jekyll theme](https://docs.github.com/en/pages/setting-up-a-github-pages-site-with-jekyll/adding-a-theme-to-your-github-pages-site-using-jekyll) and [`assets/css/leco.css`](assets/css/leco.css).
 
 **LEco DevOps** is a free, MIT-licensed local cloud edge: point it at an app repo, and it does the heavy lifting — detect existing Docker Compose, Wrangler, and env layout · generate LEco manifests · merge Traefik routes · deploy.
 
