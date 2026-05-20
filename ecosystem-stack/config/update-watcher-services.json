@@ -83,7 +83,7 @@
     {
       "id": "local-ecosystem",
       "label": "LEco DevOps Open Project",
-      "repo": "rmaurya/local-ecosystem",
+      "repo": "leco-devops/local-ecosystem",
       "version_file": "VERSION",
       "skip_if_private": true,
       "upgrade_help": "ecosystem-updates",

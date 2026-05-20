@@ -36,7 +36,7 @@ Use any Linux/macOS machine with **Docker Engine + Compose v2** and enough disk/
 ### 2.1 Clone and prerequisites
 
 ```bash
-git clone <your-repo-url> local-ecosystem
+git clone https://github.com/leco-devops/local-ecosystem.git local-ecosystem
 cd local-ecosystem
 ```
 

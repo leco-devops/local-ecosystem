@@ -2,7 +2,8 @@
 
 Thanks for contributing to this **community-driven open-source** project.
 
-> **[MIT License](LICENSE)** · [Open source governance](docs/OPEN_SOURCE.md) · Operational steward: [Techtonic Systems Media And Research LLC](https://techtonic.systems/)
+> **[MIT License](LICENSE)** · [Open source governance](docs/OPEN_SOURCE.md) · Operational steward: [Techtonic Systems Media And Research LLC](https://techtonic.systems/)  
+> **Official repository:** [https://github.com/leco-devops/local-ecosystem](https://github.com/leco-devops/local-ecosystem)
 
 ## Project scope
 

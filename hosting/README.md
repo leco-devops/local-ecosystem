@@ -1,13 +1,15 @@
 # Hosting layout (`hosting/`)
 
-Writable area under the **local-ecosystem** repo (mounted `/project` in the dashboard container). Sibling app repos under `workspace-parent` are often **read-only**; manifests and generated files must not be written there.
+Writable area under the **local-ecosystem** repo ([official repository](https://github.com/leco-devops/local-ecosystem); mounted `/project` in the dashboard container). Sibling app repos under `workspace-parent` are often **read-only**; manifests and generated files must not be written there.
 
 ## Directories
 
 | Path | Purpose |
 |------|---------|
 | **`samples/`** | Reference **`leco.app.yaml`** / **`leco.yaml`** packs (not under **`app-available/`**); the dashboard does not list them as staging apps. See **`samples/README.md`**. |
-| **`app-available/<slug>/`** | Real content: `leco.app.yaml`, `leco.yaml`, optional `source` symlink to the real app tree, optional **config symlinks** (paths from `configRefs`, every `infrastructure.runtimes[].config`, and any `wrangler.*.toml` discovered under the resolved app root — refreshed on **Generate YAML** / **Save YAML**), or an unzipped app tree. |
+| **`app-available/<slug>/`** | Real content: `leco.app.yaml`, `leco.yaml`, optional `source` symlink to the real app tree, optional **config symlinks** (paths from `configRefs`, every `infrastructure.runtimes[].config`, and any `wrangler.*.toml` discovered under the resolved app root — refreshed on **Generate YAML** / **Save YAML**), or an unzipped app tree. See **`app-available/README.md`**. |
+
+**Dev stacks** (isolated compose per team/CMS) live under **`platform/dev-stacks/<id>/`**, not here — see **`../platform/README.md`**.
 | **`app-available/<slug>/data/`** | Optional seed dumps (Mongo, MySQL, Postgres, Redis, D1, R2, KV, files) for **Import data** after deploy — see **`hosting/samples/data-template/`** and **[docs/help/13-hosted-app-data-import.md](../docs/help/13-hosted-app-data-import.md)**. Gitignored when under local-only trees. |
 | **`app-available/<slug>/docker-compose.leco-hosting.yml`** (optional) | Compose **merge** file loaded via **`leco.yaml` → `infrastructure.dockerCompose.additionalComposeFilesFromManifest`**: attach **`lh-network`**, strip upstream host `ports` with **`!reset`**, and set `*.lh` / Traefik-facing env defaults, without changing the upstream app repo. See **`hosting/samples/sample-leco-hosting-overlay/`**, **`app-available/cvision/docker-compose.leco-hosting.yml`**, and **[docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md](../docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md)**. |
 

@@ -7,7 +7,7 @@ Requirements: [SRS_CLOUD_VM_PLATFORM.md](SRS_CLOUD_VM_PLATFORM.md).
 ## Quick start
 
 ```bash
-git clone …/local-ecosystem && cd local-ecosystem
+git clone https://github.com/leco-devops/local-ecosystem.git && cd local-ecosystem
 cp config/leco-platform.yaml.example config/leco-platform.yaml
 cp config/ai-providers.yaml.example config/ai-providers.yaml   # optional
 

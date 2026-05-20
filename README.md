@@ -10,7 +10,7 @@
   &nbsp;·&nbsp;
   <a href="docs/PROJECT.md"><strong>Repository guide</strong></a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/rmaurya/local-ecosystem"><strong>View source</strong></a>
+  <a href="https://github.com/leco-devops/local-ecosystem"><strong>View source</strong></a>
 </p>
 
 <p align="center">
@@ -28,9 +28,9 @@ This repository belongs to the **community**: anyone can use it, fork it, improv
 <p align="center">
   <a href="CONTRIBUTING.md"><strong>Contribution guide</strong></a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/rmaurya/local-ecosystem/issues"><strong>Open an issue</strong></a>
+  <a href="https://github.com/leco-devops/local-ecosystem/issues"><strong>Open an issue</strong></a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/rmaurya/local-ecosystem/fork"><strong>Fork &amp; pull request</strong></a>
+  <a href="https://github.com/leco-devops/local-ecosystem/fork"><strong>Fork &amp; pull request</strong></a>
 </p>
 
 <p align="center">
@@ -48,6 +48,7 @@ This repository belongs to the **community**: anyone can use it, fork it, improv
 | **Application** | **LEco DevOps** — web UI + `leco-devops` CLI |
 | **License** | [MIT](LICENSE) — use commercially, fork, contribute |
 | **Governance** | Community-owned; see [Open source](docs/OPEN_SOURCE.md) |
+| **Official repository** | [github.com/leco-devops/local-ecosystem](https://github.com/leco-devops/local-ecosystem) |
 | **Contact** | [leco@techtonic.systems](mailto:leco@techtonic.systems) |
 
 ---
@@ -76,7 +77,7 @@ This repository belongs to the **community**: anyone can use it, fork it, improv
 Prerequisites: **Docker**, **`*.lh` DNS**, **mkcert** (see the setup guide).
 
 ```bash
-git clone https://github.com/rmaurya/local-ecosystem.git
+git clone https://github.com/leco-devops/local-ecosystem.git
 cd local-ecosystem
 ./ecosystem-stack/install-foundation.sh
 ./ecosystem-stack/ecosystem-stack.sh start

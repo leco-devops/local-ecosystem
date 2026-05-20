@@ -21,6 +21,7 @@ The steward supports the community; it does not block forks, competing maintaine
 | | |
 |---|---|
 | **Project** | LEco DevOps Open Project (this repository) |
+| **Official repository** | [https://github.com/leco-devops/local-ecosystem](https://github.com/leco-devops/local-ecosystem) |
 | **Application** | **LEco DevOps** (dashboard + `leco-devops` CLI) |
 
 ## What “open source” means here

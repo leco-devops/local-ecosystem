@@ -6,6 +6,8 @@ Copyright (c) 2026 Techtonic Systems Media And Research LLC and contributors.
 
 This project is **open-source software** released under the **MIT License** (see [LICENSE](LICENSE)).
 
+**Official repository:** [https://github.com/leco-devops/local-ecosystem](https://github.com/leco-devops/local-ecosystem)
+
 ## Stewardship
 
 **Techtonic Systems Media And Research LLC** provides operational stewardship for this community-driven open-source project:

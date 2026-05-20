@@ -1,6 +1,7 @@
 # LEco DevOps Open Project — repository guide
 
 > **Open source** · [MIT License](../LICENSE) · Maintained by **[Techtonic Systems Media And Research LLC](https://techtonic.systems/)**  
+> **Official repository:** [https://github.com/leco-devops/local-ecosystem](https://github.com/leco-devops/local-ecosystem)  
 > Landing page: [README](../README.md) · Stewardship: [OPEN_SOURCE.md](OPEN_SOURCE.md)
 
 A **Docker-based open-source local platform** that mimics a small cloud edge: Traefik on `*.lh`, TLS, Ollama, Open WebUI, n8n, PostgreSQL, **LEco DevOps** (ops UI + app lifecycle tooling), and optional **Cloudflare-local** adapters (R2/KV/D1/Workers-style APIs).

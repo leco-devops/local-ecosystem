@@ -4,6 +4,8 @@ This CLI is part of the **LEco DevOps Open Project** and is released under the *
 
 **LEco DevOps** is the product name for this tooling. The published CLI command is **`leco-devops`** (the PyPI distribution / import package remains **`leco-app`** / `leco_app`). It inspects an application repository, writes a small manifest (`leco.app.yaml`), and runs **Docker Compose** and optionally **Wrangler** lifecycle commands. The CLI is **orthogonal** to the local-ecosystem core: third-party apps stay in their own repos and compose files.
 
+**Official repository:** [https://github.com/leco-devops/local-ecosystem](https://github.com/leco-devops/local-ecosystem)
+
 ## Resource model (one package per app)
 
 - **One manifest per application** lists what that app uses: compose file, optional Wrangler config, optional Traefik routing hints, health URLs.

@@ -1,6 +1,7 @@
 # Security policy
 
-> **Open source** · Maintained by [Techtonic Systems Media And Research LLC](https://techtonic.systems/)
+> **Open source** · Maintained by [Techtonic Systems Media And Research LLC](https://techtonic.systems/)  
+> **Official repository:** [https://github.com/leco-devops/local-ecosystem](https://github.com/leco-devops/local-ecosystem)
 
 ## Reporting a vulnerability
 

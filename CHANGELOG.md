@@ -6,7 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Platform READMEs:** [platform/README.md](platform/README.md) and [platform/dev-stacks/README.md](platform/dev-stacks/README.md) document dev stack layout (parallel to [hosting/app-available/README.md](hosting/app-available/README.md)).
+
 ### Changed
+
+- **Official repository:** Canonical GitHub home is [leco-devops/local-ecosystem](https://github.com/leco-devops/local-ecosystem) (README, docs, update watcher, changelog compare links).
 
 - **README & governance copy:** Project-first landing (no company header); community ownership language; Techtonic Systems Media And Research LLC framed as operational steward only ([OPEN_SOURCE.md](docs/OPEN_SOURCE.md), [CONTRIBUTING.md](CONTRIBUTING.md)).
 
@@ -135,7 +141,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Cloudflare-local** optional stack; AI-assisted onboarding; local edge runtimes for Workers-style apps.
 - Foundation installer, `leco-cli.sh` unified entrypoint, hosted-app Traefik runbook.
 
-[Unreleased]: https://github.com/rmaurya/local-ecosystem/compare/v0.3.0...HEAD
-[0.3.0]: https://github.com/rmaurya/local-ecosystem/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/rmaurya/local-ecosystem/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/rmaurya/local-ecosystem/releases/tag/v0.1.0
+[Unreleased]: https://github.com/leco-devops/local-ecosystem/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/leco-devops/local-ecosystem/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/leco-devops/local-ecosystem/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/leco-devops/local-ecosystem/releases/tag/v0.1.0

@@ -41,7 +41,7 @@ cd "$REPO"
 ## 3. Clone the repository
 
 ```bash
-git clone <your-remote-url> "$REPO"
+git clone https://github.com/leco-devops/local-ecosystem.git "$REPO"
 cd "$REPO"
 ```
 

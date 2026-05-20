@@ -35,6 +35,8 @@ POST /api/dev-stacks
 
 Files land in `platform/dev-stacks/billing/` (`docker-compose.yml`, `stack.yaml`).
 
+Layout guide: [platform/README.md](../platform/README.md) · [platform/dev-stacks/README.md](../platform/dev-stacks/README.md).
+
 ## Where configuration lives (not under `hosting/app-available/`)
 
 | What | Path |
