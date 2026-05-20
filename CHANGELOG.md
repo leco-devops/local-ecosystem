@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
-- **README (GitHub Pages):** Brand-style landing with Features, Use cases, and How it fits together sections; technical detail remains in [docs/PROJECT.md](docs/PROJECT.md).
+- **README (GitHub Pages):** Brand-style landing — USP (read/convert/orchestrate/deploy), dedicated **Platform** section, Features and use cases; removed in-repo GitHub Pages setup instructions; technical detail in [docs/PROJECT.md](docs/PROJECT.md).
 
 ### Added
 

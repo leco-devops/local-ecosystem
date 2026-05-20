@@ -1,12 +1,14 @@
 <h1 align="center">LEco DevOps Open Project</h1>
 
 <p align="center">
-  <strong>Your local cloud edge — on Docker</strong><br />
-  Named HTTPS hosts · AI stack · app lifecycle · optional Cloudflare-local — all on <code>*.lh</code>
+  <strong>One-click deploy for almost any application — no manual rewiring</strong><br />
+  LEco reads your repo, converts config, orchestrates Compose &amp; Traefik, and ships on <code>*.lh</code>
 </p>
 
 <p align="center">
   <a href="#start-in-minutes"><strong>Get started</strong></a>
+  &nbsp;·&nbsp;
+  <a href="#platform"><strong>Platform</strong></a>
   &nbsp;·&nbsp;
   <a href="#features"><strong>Features</strong></a>
   &nbsp;·&nbsp;
@@ -27,8 +29,52 @@
 ---
 
 <p align="center">
-  Stop memorizing ports. Run <strong>LEco DevOps</strong> — a free, MIT-licensed platform that gives your laptop the feel of a small cloud:<br />
-  real hostnames, TLS, a control dashboard, LLM tooling, and repeatable deploys for the apps you already have in Git.
+  <strong>LEco DevOps</strong> is a free, MIT-licensed local cloud edge: point it at an app repo, and it does the heavy lifting —<br />
+  detect existing Docker Compose, Wrangler, and env layout · generate LEco manifests · merge Traefik routes · deploy.
+</p>
+
+---
+
+## What makes LEco different
+
+<p align="center">
+  <strong>Our USP: deploy first, configure later.</strong><br />
+  You should not have to rewrite every app for a new platform. LEco <em>reads</em> what you already have,<br />
+  <em>converts</em> it into LEco manifests and hosting slots, <em>orchestrates</em> the stack, and <em>deploys</em> — often in one click from the dashboard or <code>leco-devops onboard</code>.
+</p>
+
+| Step | What LEco does |
+|------|----------------|
+| **Read** | Scans `docker-compose.yml`, `wrangler.toml`, `.env`, Dockerfiles, and project layout from your Git tree |
+| **Convert** | Builds `leco.app.yaml` + `leco.yaml`, materializes `hosting/app-available/<slug>/`, symlinks config without touching upstream |
+| **Orchestrate** | Wires Compose projects, `lh-network`, Traefik host rules, optional Cloudflare-local bindings |
+| **Deploy** | `compose up`, registry entry, route merge — reachable at `https://<your-app>.lh` with no hand-edited port maps |
+
+Works for **Docker Compose apps**, **React/Vue + API splits**, **Workers + Wrangler**, and **preset CMS/framework stacks** — the same operator experience whether the source is your monorepo or a third-party checkout.
+
+---
+
+## Platform
+
+The **Platform** tab is a first-class capability — not just settings. It is how you run **local or cloud VM** deployments, **curated service bundles**, and **isolated dev stacks** from one UI (mirrored by `leco-devops platform` and `leco-devops dev-stack` on the CLI).
+
+| Capability | What it does for you |
+|------------|----------------------|
+| **Platform settings** | `config/leco-platform.yaml` — deployment mode, `base_domain`, TLS (mkcert / ACME / static / Cloudflare), which ecosystem services are enabled |
+| **Ecosystem bundles** | Start or stop groups of stack services (Traefik, Postgres, AI, Cloudflare-local, …) without memorizing script order |
+| **Dev stack builder** | One-click **WordPress**, **Magento**, **Laravel**, LAMP/MEAN, or custom component picks — each stack is its own Compose project and network |
+| **Stack lifecycle** | **Start**, **Stop**, **Repair**, **Reinstall**, **Destroy** with live logs — fix routing in place or wipe and regenerate from template |
+| **Cloud VM path** | Selective install on a Linux VM with real domains and external LLM providers — same Platform model as your laptop |
+| **Bind hosted apps** | Point `platform.devStackId` at a stack so a LEco-hosted app shares DB/redis endpoints without port conflicts |
+
+Presets and versions live in **`ecosystem-stack/config/dev-stack-presets.yaml`** and **`component-catalog.yaml`**. Generated stacks land under **`platform/dev-stacks/<id>/`** with Traefik routes in **`hosting/traefik/20-dev-stacks.yml`**.
+
+<p align="center">
+  <a href="docs/help/03-platform-tab.md"><strong>→ Platform tab guide</strong></a>
+  &nbsp;·&nbsp;
+  <a href="docs/DEV_STACK_ISOLATION.md"><strong>→ Dev stack isolation</strong></a>
+  &nbsp;·&nbsp;
+  <a href="docs/CLOUD_VM_DEPLOYMENT.md"><strong>→ Cloud VM deployment</strong></a>
 </p>
 
 ---
@@ -50,15 +96,15 @@
 |------------|----------------------|
 | **LEco DevOps UI** | Single pane for stack status, metrics, logs, in-app docs, and service control |
 | **Control tab** | Start, stop, restart, and repair ecosystem services without memorizing shell scripts |
-| **Hosted apps** | Register third-party repos, materialize manifests under `hosting/`, probe URLs, manage lifecycle |
-| **Platform tab** | Cloud/local platform settings, component catalog, and **dev stack builder** with Start / Stop / Repair / Reinstall / Destroy |
+| **Hosted apps** | Register third-party repos, **Detect → Generate YAML → Register → Deploy** in the UI, probe URLs, manage lifecycle |
+| **One-click onboarding** | `leco-devops onboard` / **init --onboard** — deploy, registry, and Traefik merge in one flow |
 | **Built-in help** | Operator and developer manuals served from the same UI you run the stack with |
 
 ### Application toolchain
 
 | Capability | What it does for you |
 |------------|----------------------|
-| **`leco-devops` CLI** | Scaffold apps, generate `leco.app.yaml` + profiles, run Compose and Wrangler, merge Traefik routes |
+| **`leco-devops` CLI** | `detect`, `init`, `onboard`, scaffold, platform, and dev-stack commands — same brain as the dashboard |
 | **Hosted app slots** | Keep upstream repos clean; overrides and symlinks live in `hosting/app-available/<slug>/` |
 | **Isolated dev stacks** | Per-team or per-CMS Compose projects (`platform/dev-stacks/`) with their own DB/network |
 | **Manifest binding** | Attach a hosted app to a dev stack via `platform.devStackId` for shared infra without port clashes |
@@ -87,6 +133,26 @@
 ## Use cases
 
 <table>
+<tr>
+<td width="50%" valign="top">
+
+### Onboard an existing app in one click
+
+Point LEco at a repo that already has Compose or Wrangler. It **reads** the layout, **writes** manifests, **registers** the app, **merges** Traefik, and **deploys** — you skip hand-copying ports, env files, and route YAML.
+
+**Ideal for:** teams onboarding legacy or vendor apps, consultants standing up client demos fast, anyone tired of “works on my machine” port docs.
+
+</td>
+<td width="50%" valign="top">
+
+### Spin up a full stack from Platform
+
+Use the **dev stack builder** for Magento, WordPress, Laravel, or infra-only bundles. **Start** gives you URLs and credentials; **Repair** fixes routing without wiping data.
+
+**Ideal for:** e-commerce, CMS, and framework specialists who need a clean stack per customer or branch.
+
+</td>
+</tr>
 <tr>
 <td width="50%" valign="top">
 
@@ -159,16 +225,21 @@ flowchart LR
     Browser["Browser"]
     Traefik["Traefik · *.lh"]
     Dash["LEco DevOps"]
-    Apps["Hosted apps & dev stacks"]
+    Plat["Platform · dev stacks"]
+    Apps["Hosted apps"]
     AI["Ollama · WebUI · AirLLM"]
     CF["Cloudflare-local optional"]
   end
+  Repo["Your app repos"]
   Browser --> Traefik
   Traefik --> Dash
+  Traefik --> Plat
   Traefik --> Apps
   Traefik --> AI
   Traefik --> CF
-  Dash --> Apps
+  Repo --> Dash
+  Dash -->|"read · convert · deploy"| Apps
+  Dash --> Plat
 ```
 
 | Layer | Role |
@@ -176,10 +247,11 @@ flowchart LR
 | **DNS** (`*.lh`) | Resolve friendly hostnames to `127.0.0.1` |
 | **Traefik** | TLS termination and HTTP routing |
 | **ecosystem-stack** | Start order, service scripts, repair, updates |
-| **LEco DevOps** | Dashboard + APIs + docs |
-| **`leco-devops`** | CLI for manifests, deploy, platform, and dev stacks |
+| **LEco DevOps** | Dashboard + APIs + docs + onboarding |
+| **Platform** | Cloud/local settings, bundles, isolated dev stacks |
+| **`leco-devops`** | CLI — detect, onboard, platform, dev-stack |
 
-Deep dive: [Architecture](docs/ARCHITECTURE.md) · [Hosted apps runbook](docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md) · [Dev stack isolation](docs/DEV_STACK_ISOLATION.md)
+Deep dive: [Architecture](docs/ARCHITECTURE.md) · [LECo user manual](docs/LECO_USER_MANUAL.md) · [Platform tab](docs/help/03-platform-tab.md) · [Hosted apps runbook](docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md)
 
 ---
 
@@ -257,12 +329,6 @@ This project is **community-driven**: fork, fix, document, and open pull request
 | **Contributor** | Rajneesh Maurya | [GitHub](https://github.com/rmaurya) · [LinkedIn](https://www.linkedin.com/in/rajneeshmaurya/) |
 
 The **official repository** is hosted under [`leco-devops`](https://github.com/leco-devops) on GitHub. **Commits and pushes** are made by contributors under their own accounts — primarily [@rmaurya](https://github.com/rmaurya) (Rajneesh Maurya).
-
----
-
-## GitHub Pages
-
-Publish this landing page: **Repository → Settings → Pages → Deploy from branch → `main` → `/ (root)`**. GitHub serves this `README.md` as your project homepage.
 
 ---
 
