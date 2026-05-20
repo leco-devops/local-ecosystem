@@ -34,13 +34,18 @@ Open **Docs** (`/?tab=docsTab`) for canonical technical references:
 
 | Path | Topic |
 |------|--------|
-| `README.md` | Project overview |
+| `README.md` | Landing page (open source · Techtonic Systems) |
+| `docs/PROJECT.md` | Full repository guide |
+| `docs/OPEN_SOURCE.md` | Stewardship & license |
 | `docs/LECO_APP_BLUEPRINT.md` | Bridge/profile, compose, CF, Traefik (canonical) |
 | `docs/LECO_USER_MANUAL.md` | Operator CLI workflows |
 | `docs/DEPLOY_CLI.md` | CLI/YAML field reference |
 | `docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md` | 502, lh-network, probes |
 | `hosting/README.md` | Writable hosting, wsp:, zip |
 | `docs/DEPLOYMENT.md` | Stack deployment |
+| `docs/help/03-platform-tab.md` | Platform tab & dev stacks (Help manual) |
+| `docs/DEV_STACK_ISOLATION.md` | Dev stack architecture & APIs |
+| `docs/CLOUD_VM_DEPLOYMENT.md` | Cloud VM operator guide |
 | `docs/DEVELOPMENT_PLAYBOOK.md` | Maintainer daily commands |
 | `CHANGELOG.md` | Changelog |
 | `docs/RELEASE_NOTES.md` | Release index |
@@ -51,6 +56,7 @@ Open **Docs** (`/?tab=docsTab`) for canonical technical references:
 ## Bookmarks
 
 - **Help:** `https://localhost.lh/help`
+- **Platform / dev stacks:** `https://localhost.lh/?tab=platformTab`
 - **Hosted apps:** `https://localhost.lh/?tab=hostedAppsTab`
 - **Register wizard:** Hosted apps → Register application
 

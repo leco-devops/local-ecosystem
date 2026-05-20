@@ -67,10 +67,14 @@ python3 scripts/render-platform-traefik.py --write
 
 Isolated compose projects under `platform/dev-stacks/<id>/` — see [DEV_STACK_ISOLATION.md](DEV_STACK_ISOLATION.md).
 
-Dashboard **Platform** tab → **Dev stack builder**, or API:
+Dashboard **Platform** tab → **Dev stack builder** → per-stack **Start**, **Stop**, **Repair**, **Reinstall**, **Destroy** (live operation log). User guide: [help/03-platform-tab.md](help/03-platform-tab.md).
 
-- `GET/POST /api/dev-stacks`
-- `POST /api/dev-stacks/<id>/action` — `start` | `stop` | `destroy`
+API:
+
+- `GET/POST /api/dev-stacks` — list / create (preset, template, or components)
+- `POST /api/dev-stacks/<id>/action` — `start` | `stop` | `destroy` | `repair` | `reinstall`
+- `POST /api/dev-stacks/<id>/action/stream` — same actions with NDJSON logs
+- `GET /api/dev-stacks/<id>/access` — networking, credentials, quick links for the UI card
 
 ## External LLM
 

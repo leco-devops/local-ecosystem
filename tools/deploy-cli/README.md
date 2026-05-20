@@ -90,6 +90,15 @@ leco-devops traefik-fragment -o /tmp/traefik-snippet.yml
 leco-devops cf-secrets-checklist --env staging
 leco-devops cf-deploy --env staging
 leco-devops cf-deploy --env production --confirm-production
+
+# Platform & dev stacks (LECO_ECOSYSTEM_ROOT required)
+export LECO_ECOSYSTEM_ROOT=/path/to/local-ecosystem
+leco-devops platform show
+leco-devops platform presets
+leco-devops dev-stack create wordpress --preset wordpress --sample-data
+leco-devops dev-stack start wordpress --stream
+leco-devops dev-stack repair magento-full
+leco-devops platform bind billing -f hosting/app-available/myapp/leco.app.yaml
 ```
 
 State/metadata: `~/.local/share/leco/apps/<slug>/` (override with `XDG_DATA_HOME`).
@@ -145,6 +154,19 @@ Written next to the app root (or path given to `--out`). Uses **camelCase** keys
 | `runtimes` | List declared local edge runtimes + the adapter registry. Defaults to `--detect`: scans the resolved source root for Worker entrypoints (prints a copy-pasteable `routing.entries[].upstream` YAML hint) AND scans Worker source for `env.<NAME>` references not declared in wrangler.toml `[vars]`/bindings (prints expected `.dev.vars` secrets with `wired: M/N (missing: …)` against the operator's actual `.dev.vars` — values are never logged). `--json` for machine output. The same hints surface in the dashboard Register flow log. |
 | `cf-deploy` | `wrangler deploy -c …` (requires `wrangler login`) |
 | `cf-secrets-checklist` | Heuristic list of `[vars]` keys that may need `wrangler secret put` |
+| `platform show` | `config/leco-platform.yaml` summary |
+| `platform catalog` | Install profiles, bundles; `--components` for dev-stack catalog |
+| `platform presets` | Dev stack quick presets |
+| `platform services` | Ecosystem service/bundle status |
+| `platform service <id> <action>` | Start/stop service or bundle |
+| `platform traefik-apply` | Render cloud domain routes + Traefik heal |
+| `platform bind [id]` | Set `platform.devStackId` on app `leco.yaml` (`--clear` to remove) |
+| `platform binding` | Show dev stack binding for current app |
+| `dev-stack list` | List isolated dev stacks |
+| `dev-stack create <id>` | `--preset`, `--template`, or `--component id:version` |
+| `dev-stack start\|stop\|repair\|reinstall\|destroy <id>` | Lifecycle (see [DEPLOY_CLI.md](../../docs/DEPLOY_CLI.md)) |
+| `dev-stack snapshot\|access <id>` | Connection / UI metadata (`--json`) |
+| `dev-stack logs <id>` | Compose logs (`-f`, `--tail`) |
 
 ## Traefik
 

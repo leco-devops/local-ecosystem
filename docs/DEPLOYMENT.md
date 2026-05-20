@@ -284,4 +284,5 @@ Cloudflare-local HTTP checks (expects Traefik routing to backends):
 | [SETUP.md](SETUP.md) | First-time full setup |
 | [DEVELOPMENT_PLAYBOOK.md](DEVELOPMENT_PLAYBOOK.md) | Development workflow and APIs |
 | [HOSTED_APPS_TRAEFIK_RUNBOOK.md](HOSTED_APPS_TRAEFIK_RUNBOOK.md) | Hosted apps: Traefik 502, probes, compose overlays |
-| [../README.md](../README.md) | Overview and quick links |
+| [../README.md](../README.md) | Landing page |
+| [PROJECT.md](PROJECT.md) | Full repository guide |

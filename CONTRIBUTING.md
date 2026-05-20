@@ -1,12 +1,14 @@
 # Contributing to LEco DevOps Open Project
 
-Thanks for contributing.
+Thanks for contributing to this **open-source** project.
+
+> **Maintained by** [Techtonic Systems Media and Research LLC](https://techtonic.systems/) · [MIT License](LICENSE) · [Open source guide](docs/OPEN_SOURCE.md)
 
 ## Project scope
 
 - **Project:** LEco DevOps Open Project (this repository and community).
 - **Application:** LEco DevOps (the web UI and CLI experience inside this project).
-- **Maintainer:** Rajneesh Maurya (individual).
+- **Steward:** [Techtonic Systems Media and Research LLC](https://techtonic.systems/) — open-source maintainer.
 
 ## How to contribute
 
@@ -21,6 +23,7 @@ Thanks for contributing.
 - Start with **[docs/SETUP.md](docs/SETUP.md)** for first-time machine setup.
 - Use **[docs/DEVELOPMENT_PLAYBOOK.md](docs/DEVELOPMENT_PLAYBOOK.md)** for architecture, service wiring, and extension guidance.
 - Read architecture docs before large changes: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**, **[docs/HLD.md](docs/HLD.md)**, **[docs/LLD.md](docs/LLD.md)**, **[docs/LECO_TOOLING.md](docs/LECO_TOOLING.md)**.
+- Full repository guide: **[docs/PROJECT.md](docs/PROJECT.md)**.
 - For LEco app tooling details, see **[docs/DEPLOY_CLI.md](docs/DEPLOY_CLI.md)** and **[docs/LECO_USER_MANUAL.md](docs/LECO_USER_MANUAL.md)**.
 
 ## Safety notes

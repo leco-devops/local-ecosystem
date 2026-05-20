@@ -12,6 +12,7 @@ Hosted apps are third-party applications registered in **`config/leco-registry.y
 | **Attached services** | Per-app inventory: data stores, runtimes, CF bindings, credentials, **host vs Docker DNS** connection strings, management UIs |
 | **Seed data** | Discover `data/` dumps; **Import data** / dry-run (NDJSON stream, reimport) — not run at register |
 | **Remove / Reset** | Full unregister: CF teardown → compose down → Traefik strip → delete hosting slot |
+| **Dev stack binding** | Attach app to an isolated **Platform** dev stack (`platform.devStackId` in manifest) |
 
 **Pending registration:** folders in `app-available/` with valid YAML but no registry row yet — finish **Register**.
 
@@ -48,6 +49,7 @@ Dashboard or `POST /api/hosted/upload-zip` (control token) extracts into `hostin
 
 ## Deep dives
 
+- [Platform tab & dev stacks](help:dash-platform)
 - [Hosting layout](help:hosting-layout)
 - [Attached services panel](help:hosted-app-attached-services)
 - [Seed data import](help:hosted-app-data-import)

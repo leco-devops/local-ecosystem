@@ -2,7 +2,7 @@
 
 This guide helps you **extend**, **debug**, and **ship** changes across the ecosystem stack, Traefik, Cloudflare-local adapters, and LEco DevOps.
 
-**First-time setup:** [SETUP.md](SETUP.md) · **Deploy / stop / troubleshoot:** [DEPLOYMENT.md](DEPLOYMENT.md) · **Project hub:** [../README.md](../README.md)
+**First-time setup:** [SETUP.md](SETUP.md) · **Deploy / stop / troubleshoot:** [DEPLOYMENT.md](DEPLOYMENT.md) · **Repository guide:** [PROJECT.md](PROJECT.md) · **Landing:** [../README.md](../README.md)
 
 ## Architecture documentation map
 
@@ -125,6 +125,6 @@ When changing registration, materialization, or compose behavior, treat these as
 - **Read-only `wsp:` paths:** **`source`** symlink target and **config symlinks** (`configRefs`, `runtimes[].config`, wrangler scan; host `/workspace-parent` remap) live in **`dashboard/leco_detect.py`**, **`dashboard/leco_wrangler_paths.py`**, **`dashboard/leco_materialize.py`**, **`dashboard/hosting_layout.py`**.
 - **Teardown:** **`dashboard/control.py`** + **`dashboard/hosted_offboard.py`** — offboard after **`leco-devops down`** even on failure.
 - **Attached services:** **`dashboard/hosted_app_services.py`** builds snapshot `attached_services` (compose + runtimes + CF + labeled host/Docker connection URIs). Operator help: **`docs/help/12-hosted-app-attached-services.md`**; API/fields: **`docs/help/dev-08-hosted-app-services.md`**.
-- **Cloud VM platform:** Requirements **`docs/SRS_CLOUD_VM_PLATFORM.md`**; runbook **`docs/CLOUD_VM_DEPLOYMENT.md`**, isolation **`docs/DEV_STACK_ISOLATION.md`**; `config/leco-platform.yaml`, install profiles, Platform tab, `/api/platform/*`, `/api/dev-stacks/*`, `platform.devStackId` in schema.
+- **Cloud VM platform:** Requirements **`docs/SRS_CLOUD_VM_PLATFORM.md`**; runbook **`docs/CLOUD_VM_DEPLOYMENT.md`**, isolation **`docs/DEV_STACK_ISOLATION.md`**; user help **`docs/help/03-platform-tab.md`** (`help:dash-platform`); `config/leco-platform.yaml`, install profiles, Platform tab, `/api/platform/*`, `/api/dev-stacks/*` (incl. `repair`, `reinstall`, `/action/stream`), `platform.devStackId` in schema.
 
 Operator-facing map: **[LECO_APP_BLUEPRINT.md](LECO_APP_BLUEPRINT.md)**. Dashboard **Docs** catalog: **`dashboard/docs_catalog.py`** (`leco-app-blueprint` id).

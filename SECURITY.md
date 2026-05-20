@@ -1,8 +1,10 @@
 # Security policy
 
+> **Open source** · Maintained by [Techtonic Systems Media and Research LLC](https://techtonic.systems/)
+
 ## Reporting a vulnerability
 
-If you discover a security issue in LEco DevOps Open Project, please report it privately to **Rajneesh Maurya** at [hi@rajneeshmaurya.com](mailto:hi@rajneeshmaurya.com).
+If you discover a security issue in **LEco DevOps Open Project**, please report it **privately** to **Techtonic Systems** via the contact options on **[https://techtonic.systems/](https://techtonic.systems/)** (use a subject line such as “LEco DevOps security”).
 
 Please include:
 
@@ -12,3 +14,5 @@ Please include:
 - Suggested mitigation if available.
 
 Please do not open a public issue for undisclosed vulnerabilities.
+
+We aim to acknowledge reports within a reasonable timeframe and will coordinate disclosure and fixes with reporters when appropriate.

@@ -19,6 +19,8 @@ This document explains the LEco toolchain in one place: CLI, manifests, registry
 | `hosting/traefik/dynamic.yml` | Writable merge file for **`leco-devops`** / LEco DevOps Routes (empty document **`{}`**, not **`http: {}`**) |
 | `hosting/app-available/<slug>/docker-compose.leco-hosting.yml` (optional) | Compose overlay via **`additionalComposeFilesFromManifest`** — LEco-only network/env without editing the upstream app repo |
 | `hosting/app-available/<slug>/` | Materialized writable hosted app layout |
+| `config/leco-platform.yaml` | Cloud/local platform mode, enabled services, dev stack registry |
+| `platform/dev-stacks/<id>/` | Isolated compose project per dev stack |
 
 ## 3) Common lifecycle commands
 
@@ -30,6 +32,19 @@ leco-devops deploy
 leco-devops ecosystem-register --ecosystem-root /path/to/local-ecosystem
 leco-devops ecosystem-unregister <slug> --ecosystem-root /path/to/local-ecosystem
 ```
+
+**Platform / dev stacks** (run from ecosystem root context; `LECO_ECOSYSTEM_ROOT` or `-E`):
+
+```bash
+export LECO_ECOSYSTEM_ROOT=/path/to/local-ecosystem
+leco-devops platform presets
+leco-devops dev-stack create wordpress --preset wordpress --sample-data
+leco-devops dev-stack start wordpress --stream
+leco-devops dev-stack repair magento-full
+leco-devops platform bind billing -f hosting/app-available/myapp/leco.app.yaml
+```
+
+See [DEPLOY_CLI.md](DEPLOY_CLI.md) and [help/03-platform-tab.md](help/03-platform-tab.md).
 
 ## 4) Dashboard <-> CLI relationship
 

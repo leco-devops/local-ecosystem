@@ -7,10 +7,24 @@ PROJECT_ROOT = os.getenv("DASHBOARD_PROJECT_ROOT", "/project")
 DOC_MODULES = [
     {
         "id": "ecosystem-readme",
-        "title": "Platform stack — README",
+        "title": "Platform stack — repository guide",
         "category": "Develop",
-        "rel_path": "README.md",
+        "rel_path": "docs/PROJECT.md",
         "blurb": "LEco DevOps Open Project guide: identity, URLs, CLI, and repository structure.",
+    },
+    {
+        "id": "open-source-stewardship",
+        "title": "Open source — stewardship",
+        "category": "Open source",
+        "rel_path": "docs/OPEN_SOURCE.md",
+        "blurb": "MIT license, Techtonic Systems stewardship, and contributor pointers.",
+    },
+    {
+        "id": "open-source-notice",
+        "title": "Open source — NOTICE",
+        "category": "Open source",
+        "rel_path": "NOTICE.md",
+        "blurb": "Copyright notice and third-party attribution.",
     },
     {
         "id": "architecture-overview",
@@ -206,14 +220,21 @@ DOC_MODULES = [
         "title": "Cloud VM deployment",
         "category": "DevOps",
         "rel_path": "docs/CLOUD_VM_DEPLOYMENT.md",
-        "blurb": "Install profiles, custom domain/TLS, dev stack builder, Platform tab, ai-cloud external LLM keys.",
+        "blurb": "Install profiles, custom domain/TLS, dev stack builder, Repair/Reinstall, Platform tab, ai-cloud external LLM keys.",
+    },
+    {
+        "id": "help-platform-tab",
+        "title": "Help — Platform tab & dev stacks",
+        "category": "DevOps",
+        "rel_path": "docs/help/03-platform-tab.md",
+        "blurb": "User manual: dev stack builder, presets, lifecycle actions, stack cards, cloud VM URLs.",
     },
     {
         "id": "dev-stack-isolation",
         "title": "Dev stack isolation",
         "category": "DevOps",
         "rel_path": "docs/DEV_STACK_ISOLATION.md",
-        "blurb": "Isolated compose projects, networks, multi-Node/Python on one VM, platform.devStackId binding.",
+        "blurb": "Isolated compose projects, repair/reinstall/destroy, networks, platform.devStackId binding.",
     },
     {
         "id": "srs-cloud-vm-platform",
@@ -234,7 +255,7 @@ DOC_MODULES = [
         "title": "Platform cloud APIs (developers)",
         "category": "Develop",
         "rel_path": "docs/help/dev-09-platform-cloud.md",
-        "blurb": "REST APIs, component catalog, dev stack generator, Traefik render, manifest platform.devStackId.",
+        "blurb": "REST APIs, repair/reinstall/stream, component catalog, dev stack generator, platform.devStackId.",
     },
     {
         "id": "dev-data-import",

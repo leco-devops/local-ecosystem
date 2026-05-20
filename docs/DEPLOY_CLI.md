@@ -45,6 +45,14 @@ leco-devops down
 
 leco-devops runtimes                       # list adapters + declared runtimes + onboarding hint
 leco-devops runtimes --json --no-detect    # machine output, skip the Worker-path scan
+
+# Platform & isolated dev stacks (requires LECO_ECOSYSTEM_ROOT)
+leco-devops platform show
+leco-devops platform presets
+leco-devops dev-stack create wordpress --preset wordpress --sample-data
+leco-devops dev-stack start wordpress --stream
+leco-devops dev-stack repair magento-full
+leco-devops dev-stack bind billing -f hosting/app-available/myapp/leco.app.yaml
 ```
 
 **Runtime diagnostic.** `leco-devops runtimes` is the canonical "did the local
@@ -333,6 +341,70 @@ leco-devops scaffold myapp -E /path/to/local-ecosystem --template sample-compose
 Available templates are listed in `hosting/samples/`. The default template is **`sample-node-varnish-multiprocess`** (multi-process Node.js + Varnish + MongoDB + Redis). It includes **`server` healthchecks**, **`varnish` → `server: service_healthy`**, and **`LECO_DISABLE_VARNISH_NCSA`** to avoid Varnish **503** on restart. After scaffolding, edit the generated files (especially `docker-compose.yml` source paths, health path, and `conf/varnish/default.vcl`), then register and deploy. See **`docs/help/09-503-varnish-backend.md`**.
 
 The `init` wizard also detects `conf/` directories, `leco-docker-preload.js`, and `docker-compose.leco-hosting.yml` hosting overlays — it will offer to add the overlay to `additionalComposeFilesFromManifest` automatically.
+
+## Platform and dev stacks
+
+These commands operate on the **local-ecosystem checkout** (not a third-party app directory). Set:
+
+```bash
+export LECO_ECOSYSTEM_ROOT=/path/to/local-ecosystem
+```
+
+They use the same Python modules as the dashboard **Platform** tab (`dashboard/dev_stacks.py`, `platform_config`, …).
+
+### `leco-devops platform`
+
+| Subcommand | Description |
+|------------|-------------|
+| `show` | Print `config/leco-platform.yaml` summary (`--json` for full YAML dict) |
+| `catalog` | Install profiles + ecosystem bundles; `--components` adds dev-stack component catalog |
+| `presets` | List dev stack quick presets (WordPress, Magento, Laravel, …) |
+| `services` | Enabled/running state for ecosystem services and bundles |
+| `service <id> <action>` | `start` / `stop` / `install` / `disable` on a service or bundle (`ai-full`, `traefik`, …) |
+| `traefik-apply` | Render platform Traefik routes for `base_domain` and run `traefik.sh heal` |
+| `bind [id]` | Set `platform.devStackId` on the app’s `leco.yaml` (`-f` / `--cwd`; `--clear` to remove) |
+| `binding` | Show current `platform.devStackId` for an app |
+
+### `leco-devops dev-stack`
+
+| Subcommand | Description |
+|------------|-------------|
+| `list` | List stacks and state |
+| `create <id>` | Create stack — **exactly one of**: `--preset`, `--template`, or repeatable `--component id:version` |
+| `start <id>` | `compose up -d` (default `--stream`) |
+| `stop <id>` | Stop containers (keeps volumes) |
+| `repair <id>` | Fix images/routing in place (keeps volumes and manual edits) |
+| `reinstall <id>` | Regenerate from template + `down -v` (**destructive**; confirm or `-y`) |
+| `destroy <id>` | Remove stack, data, and `platform/dev-stacks/<id>/` (**destructive**) |
+| `snapshot <id>` | Connection endpoints (JSON by default) |
+| `access <id>` | Networking, quick links, credentials (JSON by default) |
+| `logs <id>` | `docker compose logs` (`-f`, `--tail`) |
+
+**Examples:**
+
+```bash
+leco-devops platform presets
+leco-devops dev-stack create billing --preset level-1
+leco-devops dev-stack create shop --preset woocommerce --sample-data
+leco-devops dev-stack create api --component postgres:16 --component redis:7 --component python:3.12
+leco-devops dev-stack start shop --stream
+leco-devops dev-stack repair magento-full
+leco-devops dev-stack reinstall magento-full -y
+leco-devops platform bind billing -f hosting/app-available/myapp/leco.app.yaml
+```
+
+Operator guide: [help/03-platform-tab.md](help/03-platform-tab.md) · Architecture: [DEV_STACK_ISOLATION.md](DEV_STACK_ISOLATION.md).
+
+### `platform` in `leco.yaml`
+
+```yaml
+platform:
+  devStackId: billing
+  toolchain:
+    node: "20"
+```
+
+Use **`leco-devops platform bind`** / **`platform binding`** from the app directory, or set manually before deploy/register.
 
 ## Relationship to local-ecosystem
 

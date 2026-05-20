@@ -6,8 +6,9 @@ This file gives automation agents the minimum complete context to work safely an
 
 - Project: **LEco DevOps Open Project**
 - Application: **LEco DevOps** (web UI + LEco tooling experience)
-- License: **MIT** (`LICENSE`)
-- Maintainer: **Rajneesh Maurya**
+- License: **MIT** (`LICENSE`) — open source
+- Steward: **[Techtonic Systems Media and Research LLC](https://techtonic.systems/)**
+- Repository guide: **`docs/PROJECT.md`** (landing CTA: root **`README.md`**)
 
 ## Repository intent
 
@@ -58,7 +59,12 @@ This repo is a local platform with:
      - `dashboard/hosted_apps.py` (snapshot)
      - `dashboard/static/dashboard.js` (Attached services UI)
      - `docs/help/12-hosted-app-attached-services.md`, `docs/help/dev-08-hosted-app-services.md`
-   - When changing update-catalog / LLM catalogs, also update:
+   - When changing Platform tab / dev stacks / cloud VM platform, also update:
+ - `docs/help/03-platform-tab.md`, `docs/DEV_STACK_ISOLATION.md`, `docs/CLOUD_VM_DEPLOYMENT.md`
+ - `docs/help/dev-09-platform-cloud.md`, `docs/help/12-cloud-vm-deployment.md`
+ - `docs/DEPLOY_CLI.md`, `tools/deploy-cli/README.md`, `tools/deploy-cli/leco_app/ecosystem_platform.py`, `tools/deploy-cli/leco_app/cli.py`
+ - `dashboard/help_manual.py` (help tree), `dashboard/docs_catalog.py`
+ - When changing update-catalog / LLM catalogs, also update:
  - `ecosystem-stack/update-catalog/watcher.py`
  - `ecosystem-stack/config/llm-catalog-*-seed.json`
  - `ecosystem-stack/services/update-catalog.sh`

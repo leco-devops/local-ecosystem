@@ -24,8 +24,12 @@ Install: `cd tools/deploy-cli && pip install -e .`
 | `traefik-fragment` | Emit YAML preview |
 | `runtimes` | Runtime diagnostic (`--detect`) |
 | `stop` / `down` / `status` / `logs` | Compose lifecycle |
+| `platform …` | `config/leco-platform.yaml`, bundles, presets, Traefik apply, manifest bind |
+| `dev-stack …` | Isolated stacks: create/start/stop/repair/reinstall/destroy |
 
-Env: **`LECO_ECOSYSTEM_ROOT`** required for register/unregister/onboard.
+**`ecosystem_platform.py`** — bootstraps `dashboard/` on `sys.path` and calls `dev_stacks`, `platform_services`, `dev_stack_binding`.
+
+Env: **`LECO_ECOSYSTEM_ROOT`** required for register/unregister/onboard/**platform**/**dev-stack**.
 
 ## Schema (`schema.py`)
 

@@ -1,5 +1,7 @@
 # Welcome to LEco DevOps
 
+**LEco DevOps Open Project** is **open source** ([MIT License](../../LICENSE)), maintained by **[Techtonic Systems Media and Research LLC](https://techtonic.systems/)**.
+
 **LEco DevOps** is the local platform UI and CLI for running a personal DevOps stack on your machine: Traefik edge routing (`*.lh`), Ollama, AirLLM, Open WebUI, n8n, Postgres, Cloudflare-local adapters, and **hosted apps** you register with `leco-devops`.
 
 This **Help & User Manual** is a guided tour from first install through daily management and complete removal. Use the **tree on the left** to jump between topics, or **search** (top) for keywords like `ollama`, `airllm`, `502`, or `uninstall`.
@@ -27,7 +29,7 @@ flowchart LR
 | **Updates & LLM catalogs** | Auto-checked stack versions + Ollama/AirLLM model tables |
 | **Requirements** | Docker, disk, RAM, macOS vs Linux notes |
 | **Installation** | Stack, CLI, DNS (`*.lh`) |
-| **Daily operations** | Dashboard tabs, Control, Infrastructure |
+| **Daily operations** | Dashboard tabs, **Platform** (dev stacks), Control, Infrastructure |
 | **Local AI** | Ollama + AirLLM model managers (UI + CLI) |
 | **Hosting & onboarding** | New apps, `wsp:` materialize, overrides, deploy/rebuild |
 | **LEco CLI** | `leco-devops`, register, offload, hooks |
@@ -39,8 +41,9 @@ flowchart LR
 
 - **Overview** — live CPU/RAM charts and service health.
 - **Infrastructure** — scroll to **5 · Ollama** and **6 · AirLLM** for the **Model manager** panels (Popular dropdown, Install / Load / Unload / Remove, **Show CLI**).
+- **Platform** — dev stack builder (WordPress, Magento, frameworks), **Repair** / **Reinstall**, isolated databases per team — [Platform tab guide](help:dash-platform).
 - **Control** — start/stop/restart ecosystem services (needs optional control token).
-- **Hosted apps** — register, deploy, logs; wizard under **Register application**.
+- **Hosted apps** — register, deploy, logs; wizard under **Register application**; optional **dev stack binding**.
 - **Help** (this page) — `https://localhost.lh/help` — includes **Hosting & onboarding** and **Developer's guide**.
 - **Docs** — deep technical markdown (architecture, blueprint, runbooks).
 

@@ -32,7 +32,18 @@ Use the dashboard **Platform** tab to edit config, start/stop bundles, and build
 
 Create isolated Postgres/MySQL/Redis/Node/Python stacks that do not share one global database. Each stack is its own compose project (`leco-devstack-<id>`).
 
-See [DEV_STACK_ISOLATION.md](../DEV_STACK_ISOLATION.md).
+**Dashboard:** **Platform** tab → **Dev stack builder** → **Your dev stacks**.
+
+| Action | Use on cloud VM |
+|--------|-----------------|
+| **Start** / **Stop** | Normal up/down; data kept on stop |
+| **Repair** | Traefik + network + image fixes without wiping volumes |
+| **Reinstall** | Fresh template + `down -v` when DB/version is wrong |
+| **Destroy** | Remove stack and all data from the VM |
+
+Public URLs use **`https://<stackId>.<base_domain>`** instead of `*.lh`.
+
+Operator guide: [Platform tab & dev stacks](help:dash-platform) · Technical: [DEV_STACK_ISOLATION.md](../DEV_STACK_ISOLATION.md).
 
 ## Hosted apps
 

@@ -1,5 +1,7 @@
 # LEco DevOps Open Project - Architecture
 
+> **Open source** · [MIT License](../LICENSE) · Maintained by [Techtonic Systems Media and Research LLC](https://techtonic.systems/)
+
 This document is the architecture entry point for the project.
 
 - High-level design (HLD): [`HLD.md`](HLD.md)

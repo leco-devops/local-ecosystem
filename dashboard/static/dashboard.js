@@ -11884,30 +11884,30 @@ function devStackActionBtn(id, action, state) {
   const rowBusy = inflight && inflight.stackId === id;
   const inflightAction = rowBusy ? inflight.action : null;
   const label = devStackActionLabel(action, inflightAction);
+  const actKey = action === "redeploy" ? "reinstall" : action;
+  const baseCls = `ctrl-act platform-svc-act dev-stack-act dev-stack-act--${actKey}`;
   if (action === "repair" || action === "reinstall" || action === "redeploy") {
     const dis = rowBusy ? " disabled" : "";
     const busyCls = rowBusy && inflightAction === action ? " dev-stack-act--busy" : "";
     const ariaBusy = rowBusy && inflightAction === action ? ' aria-busy="true"' : "";
-    const tone = action === "repair" ? "ctrl-act--ops" : "ctrl-act--deploy";
-    return `<button type="button" class="ctrl-act ${tone} platform-svc-act dev-stack-act dev-stack-maint-act${busyCls}" data-id="${escapeAttr(id)}" data-action="${action}"${dis}${ariaBusy} aria-label="${escapeAttr(label)} ${escapeAttr(id)}">${label}</button>`;
+    return `<button type="button" class="${baseCls}${busyCls}" data-id="${escapeAttr(id)}" data-action="${action}"${dis}${ariaBusy} aria-label="${escapeAttr(label)} ${escapeAttr(id)}">${label}</button>`;
   }
   if (action === "destroy") {
     const dis = rowBusy ? " disabled" : "";
     const busyCls = inflightAction === "destroy" ? " dev-stack-act--busy" : "";
     const ariaBusy = inflightAction === "destroy" ? ' aria-busy="true"' : "";
-    return `<button type="button" class="ctrl-act ctrl-act--caution dev-stack-act${busyCls}" data-id="${escapeAttr(id)}" data-action="destroy"${dis}${ariaBusy} aria-label="${escapeAttr(label)} ${escapeAttr(id)}">${label}</button>`;
+    return `<button type="button" class="${baseCls}${busyCls}" data-id="${escapeAttr(id)}" data-action="destroy"${dis}${ariaBusy} aria-label="${escapeAttr(label)} ${escapeAttr(id)}">${label}</button>`;
   }
   const running = devStackIsRunning(state);
   const isStart = action === "start";
   let disabled = (isStart && running) || (!isStart && !running);
   if (rowBusy) disabled = true;
-  const primary = !disabled && isStart;
-  const tone = isStart ? "ctrl-act--safe" : "ctrl-act--caution";
+  const primary = !disabled && (isStart || action === "stop");
   const stateCls = disabled ? "platform-svc-act--inactive" : primary ? "platform-svc-act--primary" : "";
   const busyCls = rowBusy && inflightAction === action ? " dev-stack-act--busy" : "";
   const dis = disabled ? " disabled" : "";
   const ariaBusy = rowBusy && inflightAction === action ? ' aria-busy="true"' : "";
-  return `<button type="button" class="ctrl-act ${tone} platform-svc-act dev-stack-act ${stateCls}${busyCls}" data-id="${escapeAttr(id)}" data-action="${action}"${dis}${ariaBusy} aria-label="${escapeAttr(label)} ${escapeAttr(id)}">${label}</button>`;
+  return `<button type="button" class="${baseCls} ${stateCls}${busyCls}" data-id="${escapeAttr(id)}" data-action="${action}"${dis}${ariaBusy} aria-label="${escapeAttr(label)} ${escapeAttr(id)}">${label}</button>`;
 }
 
 function setDevStackActionBusy(stackId, action) {
@@ -12479,10 +12479,10 @@ function renderDevStacksList(stacks) {
         </header>
         ${cardBody}
         <details class="devstack-advanced-panel">
-          <summary>Advanced — configuration &amp; files</summary>
+          <summary class="devstack-advanced-panel__summary">Advanced — configuration &amp; files</summary>
           <div class="devstack-advanced-panel__body" data-stack-id="${escapeAttr(rawId)}"></div>
         </details>
-        <div class="platform-svc-tile__actions">
+        <div class="platform-svc-tile__actions platform-svc-tile__actions--devstack">
           ${devStackRowActionButtons(rawId, state)}
         </div>
       </div>`;

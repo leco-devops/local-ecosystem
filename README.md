@@ -1,197 +1,113 @@
-# LEco DevOps Open Project
+<p align="center">
+  <a href="https://techtonic.systems/" title="Techtonic Systems Media and Research LLC">
+    <strong>Techtonic Systems</strong>
+  </a>
+  <br />
+  <sub>Open-source software · Media and Research</sub>
+</p>
 
-A **Docker-based open-source local platform** that mimics a small cloud edge: Traefik on `*.lh`, TLS, Ollama, Open WebUI, n8n, PostgreSQL, **LEco DevOps** (ops UI + app lifecycle tooling), and optional **Cloudflare-local** adapters (R2/KV/D1/Workers-style APIs).
+<h1 align="center">LEco DevOps Open Project</h1>
 
-| Layer | Role |
-|--------|------|
-| **DNS** (`*.lh`) | Resolve local hostnames to `127.0.0.1` (e.g. dnsmasq) |
-| **Traefik** | HTTP/HTTPS entrypoints **80 / 443**, dashboard API **8080** |
-| **mkcert** | Trusted dev certificates in `certs/` |
-| **Containers** | Attached to Docker network **`lh-network`** |
+<p align="center">
+  <strong>Your local cloud edge on Docker</strong><br />
+  Traefik · TLS · AI · automation · app lifecycle — all on <code>*.lh</code>
+</p>
 
-You access services by name (**`https://n8n.lh`**, **`https://ai.lh`**, …) instead of memorizing ports.
+<p align="center">
+  <a href="docs/SETUP.md"><strong>Get started</strong></a>
+  &nbsp;·&nbsp;
+  <a href="docs/PROJECT.md"><strong>Repository guide</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/rmaurya/local-ecosystem"><strong>View source</strong></a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" />
+  <img src="https://img.shields.io/badge/open%20source-yes-brightgreen.svg" alt="Open source" />
+  <img src="https://img.shields.io/badge/maintained%20by-Techtonic%20Systems-8b5cf6.svg" alt="Maintained by Techtonic Systems" />
+</p>
 
 ---
 
-## Project name
+## What you get
 
-**LEco DevOps** is the application name (CLI + web UI). **LEco DevOps Open Project** is the open-source repository and community project.
+**LEco DevOps Open Project** is a **free, open-source** platform for developers who want a realistic local stack: named HTTPS hosts, a control dashboard, LLM tooling, and repeatable app deploys — without wiring ports by hand.
+
+| | |
+|---|---|
+| **Application** | **LEco DevOps** — web UI + `leco-devops` CLI |
+| **License** | [MIT](LICENSE) — use commercially, fork, contribute |
+| **Maintainer** | [Techtonic Systems Media and Research LLC](https://techtonic.systems/) |
+
+---
+
+## Why teams use it
+
+- **Edge routing** — Traefik on `https://n8n.lh`, `https://ai.lh`, `https://dashboard.lh`, and more  
+- **AI ready** — Ollama, Open WebUI, AirLLM (Ollama-compatible API)  
+- **Operations UI** — metrics, logs, Control tab, hosted apps, Platform / dev stacks  
+- **App toolchain** — LEco manifests, Traefik routes, isolated dev-stack compose projects  
+- **Optional Cloudflare-local** — R2, KV, D1, Workers-style adapters on `*.lh`  
+
+---
+
+## Start in minutes
+
+Prerequisites: **Docker**, **`*.lh` DNS**, **mkcert** (see the setup guide).
+
+```bash
+git clone https://github.com/rmaurya/local-ecosystem.git
+cd local-ecosystem
+./ecosystem-stack/install-foundation.sh
+./ecosystem-stack/ecosystem-stack.sh start
+```
+
+Open **http://localhost.lh** or **http://dashboard.lh** for the LEco DevOps dashboard.
+
+<p align="center">
+  <a href="docs/SETUP.md">→ Full first-time setup (DNS, TLS, troubleshooting)</a>
+</p>
 
 ---
 
 ## Documentation
 
-| Guide | Description |
-|--------|-------------|
-| **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** | Architecture hub: system overview plus links to HLD, LLD, and LEco tooling docs |
-| **[docs/HLD.md](docs/HLD.md)** | High-level design: runtime layers, key flows, and integration boundaries |
-| **[docs/LLD.md](docs/LLD.md)** | Low-level design: module ownership, API surface, and execution sequences |
-| **[docs/LECO_TOOLING.md](docs/LECO_TOOLING.md)** | LEco toolchain map: CLI, manifests, registry, and dashboard interaction |
-| **[docs/SETUP.md](docs/SETUP.md)** | **Complete first-time setup** — DNS, Docker, TLS, stack start, macOS host CPU metrics, optional Cloudflare-local |
-| **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** | **Deployment and operations** — start/stop, updates, bulk vs Control API behavior, troubleshooting |
-| **[docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md)** | **Release notes** — current version, history, upgrade notes |
-| **[CHANGELOG.md](CHANGELOG.md)** | Full changelog ([Keep a Changelog](https://keepachangelog.com/)) |
-| **[docs/VERSIONING.md](docs/VERSIONING.md)** | Versioning policy, `VERSION` / `version.json`, release workflow |
-| **[docs/DEVELOPMENT_PLAYBOOK.md](docs/DEVELOPMENT_PLAYBOOK.md)** | Extending services, LEco DevOps APIs, Traefik routes |
-| **[docs/LECO_APP_BLUEPRINT.md](docs/LECO_APP_BLUEPRINT.md)** | LEco apps: bridge vs profile (v3), hosting symlinks, compose extras, teardown semantics |
-| **[docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md](docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md)** | Hosted apps behind Traefik: 502, `lh-network`, DNS names, dashboard probes, same-origin `/api`, local edge runtimes (Workers / Pages / Vercel / Lambda / Deno) |
-| **[cloudflare-local/README.md](cloudflare-local/README.md)** | CF-local stack entry + links to architecture and user manual |
-| **[docs/CF_LECO_SERVICE_MAP.md](docs/CF_LECO_SERVICE_MAP.md)** | Cloudflare ↔ LEco binding coverage, reuse rules, and adapter roadmap |
+| | |
+|---|---|
+| [Setup](docs/SETUP.md) | First machine install |
+| [Deployment](docs/DEPLOYMENT.md) | Day-2 operations |
+| [Architecture](docs/ARCHITECTURE.md) | How it fits together |
+| [Develop](docs/DEVELOPMENT_PLAYBOOK.md) | Extend services and APIs |
+| [Open source](docs/OPEN_SOURCE.md) | License, stewardship, contributing |
+
+**Full technical guide:** [docs/PROJECT.md](docs/PROJECT.md)
 
 ---
 
-## Quick start (after prerequisites)
+## Contribute and report issues
 
-Prerequisites: **Docker**, **dnsmasq** (or equivalent) for **`*.lh`**, **mkcert** and certs for `*.lh`. Full steps are in **[docs/SETUP.md](docs/SETUP.md)**.
+This project is **open source**. We welcome issues and pull requests.
 
-```bash
-export REPO="$HOME/path/to/local-ecosystem"
-cd "$REPO"
-
-# Foundation installer (checks deps + asks each service)
-./ecosystem-stack/install-foundation.sh
-
-# Interactive menu
-./ecosystem-stack/ecosystem-stack.sh menu
-
-# Or start everything in dependency order
-./ecosystem-stack/ecosystem-stack.sh start
-```
-
-**Default start order** (`ecosystem-stack/core.sh`): `traefik` → `postgres` → `ollama` → `webui` → `n8n` → `dashboard` → `cloudflare-local`.
-
-Repair routing and network attachments anytime:
-
-```bash
-./ecosystem-stack/ecosystem-stack.sh repair-network
-```
+| | |
+|---|---|
+| [Contributing](CONTRIBUTING.md) | Branch workflow, changelog, safety |
+| [Security](SECURITY.md) | Responsible disclosure |
+| [Changelog](CHANGELOG.md) | Release history |
 
 ---
 
-## Common URLs
+## GitHub Pages
 
-| URL | Service |
-|-----|---------|
-| http://localhost.lh | LEco DevOps (via Traefik) |
-| http://dashboard.lh | LEco DevOps (same app; add `dashboard.lh` to `*.lh` DNS like other `.lh` hosts) |
-| http://localhost:8090 | LEco DevOps (direct host port; override with `DASHBOARD_HOST_PORT`) |
-| https://traefik.lh | Traefik routing (TLS) |
-| https://ai.lh | Open WebUI |
-| https://n8n.lh | n8n |
-| https://ollama.lh | Ollama |
-| https://airllm.lh | AirLLM (large HuggingFace models) |
-| http://r2.lh , http://kv.lh , http://d1.lh , http://workers.lh | Cloudflare-local (when started) |
-| http://minio-console.lh , http://autoscale.lh | CF-local related UIs |
-
-LEco DevOps provides **overview**, **metrics** (with optional host CPU temperature on macOS), **logs**, **docs**, **Control** (stack actions), and **Ollama** model management. Containers started via `ecosystem-stack` use **`--restart unless-stopped`** where applicable so they come back after a Docker daemon restart unless you stopped them explicitly.
+To publish this landing page: **Repository → Settings → Pages → Build and deployment → Source: Deploy from a branch → Branch: `main` → Folder: `/ (root)`**. GitHub will serve this `README.md` as your site home.
 
 ---
 
-## CLI reference (repository root)
+## Stewardship
 
-```bash
-./ecosystem-stack/ecosystem-stack.sh menu
-./ecosystem-stack/ecosystem-stack.sh start [service]
-./ecosystem-stack/ecosystem-stack.sh stop [service]
-./ecosystem-stack/ecosystem-stack.sh restart [service]
-./ecosystem-stack/ecosystem-stack.sh pause [service]
-./ecosystem-stack/ecosystem-stack.sh unpause [service]
-./ecosystem-stack/ecosystem-stack.sh status [service]
-./ecosystem-stack/ecosystem-stack.sh logs [service]
-./ecosystem-stack/ecosystem-stack.sh remove [service]
-./ecosystem-stack/ecosystem-stack.sh reset [service]    # destructive — confirm prompts
-./ecosystem-stack/ecosystem-stack.sh repair-network
-./ecosystem-stack/ecosystem-stack.sh ollama-pull-models
-```
+**LEco DevOps Open Project** is an **open-source project** managed by **[Techtonic Systems Media and Research LLC](https://techtonic.systems/)**.
 
-Per-service scripts (same actions as each `*.sh` defines):
+Copyright (c) Techtonic Systems Media and Research LLC and contributors. Licensed under the [MIT License](LICENSE). See [NOTICE](NOTICE.md).
 
-```bash
-./ecosystem-stack/services/dashboard.sh deploy
-./ecosystem-stack/services/cloudflare-local.sh start
-```
-
----
-
-## Repository layout (high level)
-
-```
-local-ecosystem/
-├── ecosystem-stack/
-│   ├── ecosystem-stack.sh   # CLI entry
-│   ├── core.sh              # start order, network repair, bulk_ecosystem
-│   ├── services/*.sh        # traefik, postgres, ollama, webui, n8n, dashboard, cloudflare-local
-│   ├── scripts/             # macOS host CPU temp writer + LaunchAgent installer
-│   └── config/              # e.g. ollama-pinned-models.txt, dynamic.yml copy
-├── dashboard/               # LEco DevOps Flask app (image local/service-dashboard)
-├── traefik/
-│   ├── traefik-static.yaml  # entrypoints, file provider → hosting/traefik/
-│   └── dynamic.yml          # canonical *.lh stack routes (copied to hosting/traefik/01-stack-core.yml on Traefik start)
-├── hosting/traefik/         # runtime dynamic dir (gitignored: dynamic.yml merge fragment; 01-stack-core.yml copy)
-├── cloudflare-local/        # docker-compose + adapters
-├── certs/                   # mkcert *.lh PEMs
-└── docs/                    # SETUP.md, DEPLOYMENT.md, DEVELOPMENT_PLAYBOOK.md
-```
-
----
-
-## macOS: host CPU temperature and LaunchAgent
-
-The LEco DevOps container cannot read Apple SMC. On **macOS**, **`dashboard.sh`** mounts **`~/.local-eco-host-metrics`** and sets **`DASHBOARD_HOST_CPU_TEMP_FILE`**.
-
-When you **deploy/start** LEco DevOps via **`ecosystem-stack/services/dashboard.sh`**, a **LaunchAgent** is installed to run **`ecosystem-stack/scripts/macos-write-cpu-temp.sh`** every **30s**. **Stop/remove** via the same script **uninstalls** that agent. Optional **`brew install osx-cpu-temp`**; Apple Silicon often needs **`sudo powermetrics`** (see script and **[docs/SETUP.md](docs/SETUP.md)** §8).
-
----
-
-## Ollama pinned models
-
-Edit **`ecosystem-stack/config/ollama-pinned-models.txt`** (one model per line). On Ollama service start, pulls run in the background. To refresh a running container:
-
-```bash
-./ecosystem-stack/ecosystem-stack.sh ollama-pull-models
-```
-
-## AirLLM (large HuggingFace models)
-
-[AirLLM](https://github.com/lyogavin/airllm) enables 70B/405B inference on modest hardware by streaming model layers from disk. It runs as a dedicated `airllm` Docker container on `lh-network` and exposes an **Ollama-compatible** API (`/api/tags`, `/api/pull`, `/api/generate`, `/api/chat`, …) so the existing dashboard, AI provider abstraction and Ollama-compatible clients all work without special-casing.
-
-- **URL**: `https://airllm.lh` (Traefik) or `http://airllm:11435` (intra-network) or `http://127.0.0.1:11435` (host)
-- **Pinned models**: `ecosystem-stack/config/airllm-pinned-models.txt` (HuggingFace ids, one per line)
-- **CLI**: `./ecosystem-stack/ecosystem-stack.sh airllm-pull-models` or `./leco-cli.sh airllm pull`
-- **Build**: `./leco-cli.sh airllm build` (or `AIRLLM_FORCE_BUILD=1` to rebuild after editing the shim)
-- **Dashboard**: Infrastructure → 6 · AirLLM (Large Models)
-
-AirLLM uses HuggingFace `safetensors`, not Ollama's GGUF, so its model registry is separate from Ollama. On macOS the container is CPU-only (Docker Desktop's Linux VM can't see Apple Silicon GPU); on Linux+CUDA hosts you can rebuild with a CUDA torch wheel and add `--gpus=all`.
-
-See **[docs/AIRLLM_INTEGRATION.md](docs/AIRLLM_INTEGRATION.md)** for full details.
-
----
-
-## Troubleshooting (short)
-
-| Issue | Action |
-|-------|--------|
-| `*.lh` does not resolve | dnsmasq + `/etc/resolver/lh` — see [docs/SETUP.md](docs/SETUP.md) §4 |
-| Bad Gateway | `./ecosystem-stack/ecosystem-stack.sh repair-network`; Hosted apps: **[docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md](docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md)** |
-| TLS warnings | mkcert CA + files in `certs/` |
-| n8n cookies / HTTPS | Env in `ecosystem-stack/services/n8n.sh` (`N8N_TRUST_PROXY`, `N8N_SECURE_COOKIE`) |
-
-More: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** §12.
-
----
-
-## License / contributing
-
-This project is released under the **MIT License**. See **[LICENSE](LICENSE)**.
-
-Maintainer: **Rajneesh Maurya** (individual open-source steward).
-
-To contribute, open an issue or pull request and follow **[CONTRIBUTING.md](CONTRIBUTING.md)** and **[docs/DEVELOPMENT_PLAYBOOK.md](docs/DEVELOPMENT_PLAYBOOK.md)**. Control actions can be destructive; use **`DASHBOARD_CONTROL_TOKEN`** in production-like environments.
-
-## Important links
-
-- **Project docs:** [docs/SETUP.md](docs/SETUP.md), [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), [docs/DEVOPS_GUIDE.md](docs/DEVOPS_GUIDE.md)
-- **Architecture docs:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/HLD.md](docs/HLD.md), [docs/LLD.md](docs/LLD.md)
-- **LEco DevOps app tooling:** [docs/LECO_TOOLING.md](docs/LECO_TOOLING.md), [docs/DEPLOY_CLI.md](docs/DEPLOY_CLI.md), [docs/LECO_USER_MANUAL.md](docs/LECO_USER_MANUAL.md), [docs/LECO_APP_BLUEPRINT.md](docs/LECO_APP_BLUEPRINT.md), [docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md](docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md)
-- **Open-source docs:** [LICENSE](LICENSE), [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md)
-- **Automation guide:** [AGENTS.md](AGENTS.md)
+<p align="center">
+  <a href="https://techtonic.systems/"><strong>techtonic.systems</strong></a>
+</p>

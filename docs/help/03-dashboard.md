@@ -9,6 +9,7 @@ Open **`https://localhost.lh`** (or `http://localhost.lh`).
 | **Overview** | Live charts, URL probe summary, hosted app links |
 | **Reference** | All `*.lh` URLs grouped by category |
 | **Infrastructure** | Health, service cards, **Ollama/AirLLM model managers**, CF local, Docker inventory |
+| **Platform** | `leco-platform.yaml`, ecosystem bundles, **dev stack builder**, isolated stacks (Start/Stop/Repair/Reinstall/Destroy) — see [Platform tab guide](help:dash-platform) |
 | **Metrics** | Host CPU/RAM/temp history |
 | **Control** | Start/stop/restart/pause ecosystem services |
 | **Hosted apps** | Registered apps from `leco-registry.yaml`; detail pane includes **Attached services** (host vs Docker connection strings) |
@@ -34,4 +35,4 @@ Some actions (model install/remove, Control bulk ops) require `DASHBOARD_CONTROL
 
 Service cards on Overview/Infrastructure section 2 show model *tables* when data is loaded; the **Install / Load / Popular** controls are in section 5/6.
 
-Next: [Infrastructure tab](help:dash-infra) · [Control](help:dash-control)
+Next: [Platform tab](help:dash-platform) · [Infrastructure tab](help:dash-infra) · [Control](help:dash-control)

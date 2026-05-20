@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **Open source stewardship:** Project documentation, [LICENSE](LICENSE), [NOTICE](NOTICE.md), and root [README](README.md) (GitHub Pages landing) now identify **LEco DevOps Open Project** as open source managed by **[Techtonic Systems Media and Research LLC](https://techtonic.systems/)**. Full technical guide moved to [docs/PROJECT.md](docs/PROJECT.md).
+
+- **Platform documentation:** New Help manual [docs/help/03-platform-tab.md](docs/help/03-platform-tab.md) (dev stack builder, Repair/Reinstall/Destroy, stack cards, cloud VM). Updated [DEV_STACK_ISOLATION.md](docs/DEV_STACK_ISOLATION.md), [CLOUD_VM_DEPLOYMENT.md](docs/CLOUD_VM_DEPLOYMENT.md), [LECO_USER_MANUAL.md](docs/LECO_USER_MANUAL.md), and developer API guide [docs/help/dev-09-platform-cloud.md](docs/help/dev-09-platform-cloud.md).
+
+- **CLI — platform & dev stacks:** `leco-devops platform` (show, catalog, presets, services, traefik-apply, bind) and `leco-devops dev-stack` (create, start/stop, repair, reinstall, destroy, snapshot, access, logs) call the same dashboard modules as the Platform tab. Documented in [DEPLOY_CLI.md](docs/DEPLOY_CLI.md) and [tools/deploy-cli/README.md](tools/deploy-cli/README.md).
+
 ### Fixed
 
 - **Platform — dev stack builder:** Builder form is a collapsible panel (closed by default); **Your dev stacks** list stays visible outside it.

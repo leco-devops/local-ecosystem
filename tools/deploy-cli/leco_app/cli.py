@@ -52,6 +52,7 @@ from leco_app.schema import (
 )
 from leco_app.traefik_dynamic_cleanup import manifest_traefik_keys, strip_traefik_dynamic_yml
 from leco_app.traefik_fragment import manifest_to_traefik_yaml
+from leco_app import ecosystem_platform as eplat
 
 app = typer.Typer(
     name="leco-devops",
@@ -1767,3 +1768,521 @@ def cmd_cf_secrets_checklist(
         raise typer.Exit(0)
     for k in keys:
         typer.echo(k)
+
+
+# ---------- Platform & dev stacks (local-ecosystem checkout) -----------------
+
+
+platform_cmd = typer.Typer(
+    help="Cloud/local platform config, ecosystem bundles, Traefik domain routes.",
+)
+devstack_cmd = typer.Typer(
+    help="Isolated dev stacks (Docker Compose per stack under platform/dev-stacks/).",
+)
+
+
+def _cli_ecosystem_root(ecosystem_root: Path | None) -> Path:
+    try:
+        return eplat.require_ecosystem_root(ecosystem_root)
+    except ValueError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from exc
+
+
+def _emit_platform_result(result: dict[str, Any], *, as_json: bool) -> None:
+    if as_json:
+        typer.echo(json.dumps(result, indent=2, default=str))
+        return
+    if result.get("ok") is False:
+        typer.secho(result.get("error") or "failed", fg=typer.colors.RED, err=True)
+    out = result.get("output")
+    if out:
+        typer.echo(str(out))
+    if result.get("ok") is not False and not out and result.get("error"):
+        typer.secho(str(result["error"]), fg=typer.colors.YELLOW, err=True)
+
+
+def _confirm_destructive(prompt: str, *, yes: bool) -> None:
+    if yes or typer.confirm(prompt, default=False):
+        return
+    raise typer.Exit(0)
+
+
+@platform_cmd.command("show")
+def cmd_platform_show(
+    ecosystem_root: EcosystemRootOption = None,
+    as_json: Annotated[bool, typer.Option("--json", help="Emit JSON")] = False,
+) -> None:
+    """Print config/leco-platform.yaml (deployment mode, domain, dev_stacks registry)."""
+    er = _cli_ecosystem_root(ecosystem_root)
+    cfg = eplat.load_platform_config_dict(er)
+    if as_json:
+        eplat.emit_json(cfg)
+        return
+    typer.echo(f"deployment_mode: {cfg.get('deployment_mode', 'local')}")
+    typer.echo(f"base_domain: {cfg.get('base_domain', 'lh')}")
+    typer.echo(f"install_profile: {cfg.get('install_profile') or '—'}")
+    tls = cfg.get("tls") if isinstance(cfg.get("tls"), dict) else {}
+    typer.echo(f"tls.mode: {tls.get('mode', 'mkcert')}")
+    stacks = cfg.get("dev_stacks") or []
+    typer.echo(f"dev_stacks: {len(stacks)} registered")
+    for s in stacks:
+        if isinstance(s, dict):
+            typer.echo(f"  - {s.get('id')} ({s.get('state', '?')})")
+
+
+@platform_cmd.command("catalog")
+def cmd_platform_catalog(
+    ecosystem_root: EcosystemRootOption = None,
+    components: Annotated[
+        bool,
+        typer.Option("--components/--bundles-only", help="Include dev-stack component catalog"),
+    ] = False,
+    as_json: Annotated[bool, typer.Option("--json", help="Emit JSON")] = False,
+) -> None:
+    """List install profiles, ecosystem bundles, and optionally component catalog."""
+    er = _cli_ecosystem_root(ecosystem_root)
+    data: dict[str, Any] = {"platform": eplat.platform_catalog_dict(er)}
+    if components:
+        data["components"] = eplat.component_catalog_dict(er)
+    if as_json:
+        eplat.emit_json(data)
+        return
+    plat = data["platform"]
+    typer.echo("Install profiles:")
+    for k, desc in (plat.get("profiles") or {}).items():
+        typer.echo(f"  {k}: {desc}")
+    typer.echo("Bundles:")
+    for k, meta in (plat.get("bundles") or {}).items():
+        typer.echo(f"  {k}: {meta.get('label', k)}")
+    if components:
+        comps = (data.get("components") or {}).get("components") or {}
+        typer.echo(f"Components ({len(comps)}):")
+        for cid, row in sorted(comps.items()):
+            if isinstance(row, dict):
+                vers = ", ".join((row.get("versions") or [])[:6])
+                typer.echo(f"  {cid}: {row.get('label', cid)} [{vers}]")
+
+
+@platform_cmd.command("presets")
+def cmd_platform_presets(
+    ecosystem_root: EcosystemRootOption = None,
+    as_json: Annotated[bool, typer.Option("--json", help="Emit JSON")] = False,
+) -> None:
+    """List dev stack quick presets (WordPress, Magento, frameworks, …)."""
+    er = _cli_ecosystem_root(ecosystem_root)
+    data = eplat.dev_stack_presets_dict(er)
+    if as_json:
+        eplat.emit_json(data)
+        return
+    groups = {g.get("id"): g.get("label") for g in (data.get("groups") or []) if isinstance(g, dict)}
+    for key, row in sorted((data.get("presets") or {}).items()):
+        if not isinstance(row, dict):
+            continue
+        grp = groups.get(row.get("group"), row.get("group") or "")
+        tmpl = f" template={row['template']}" if row.get("template") else ""
+        sample = " +sample" if row.get("supports_sample_data") else ""
+        typer.echo(f"{key}: [{grp}] {row.get('label', key)}{tmpl}{sample}")
+
+
+@platform_cmd.command("services")
+def cmd_platform_services(
+    ecosystem_root: EcosystemRootOption = None,
+    as_json: Annotated[bool, typer.Option("--json", help="Emit JSON")] = False,
+) -> None:
+    """Show ecosystem services and bundles (enabled / running)."""
+    er = _cli_ecosystem_root(ecosystem_root)
+    from platform_services import list_services
+
+    items = list_services()
+    if as_json:
+        eplat.emit_json({"services": items})
+        return
+    for row in items:
+        en = "enabled" if row.get("enabled") else "disabled"
+        run = "running" if row.get("running") else "stopped"
+        typer.echo(f"{row.get('id')}: {en}, {run} ({row.get('type')})")
+
+
+@platform_cmd.command("service")
+def cmd_platform_service(
+    service_id: Annotated[str, typer.Argument(help="Service or bundle id (e.g. traefik, ai-full)")],
+    action: Annotated[str, typer.Argument(help="start | stop | install | disable")],
+    ecosystem_root: EcosystemRootOption = None,
+    as_json: Annotated[bool, typer.Option("--json", help="Emit JSON")] = False,
+) -> None:
+    """Start/stop an ecosystem service or enable/start a bundle."""
+    er = _cli_ecosystem_root(ecosystem_root)
+    result = eplat.platform_service_action(er, service_id.strip().lower(), action.strip().lower())
+    if as_json:
+        eplat.emit_json(result)
+    else:
+        _emit_platform_result(result, as_json=False)
+    if result.get("ok") is False:
+        raise typer.Exit(1)
+
+
+@platform_cmd.command("traefik-apply")
+def cmd_platform_traefik_apply(
+    ecosystem_root: EcosystemRootOption = None,
+    as_json: Annotated[bool, typer.Option("--json", help="Emit JSON")] = False,
+) -> None:
+    """Render platform Traefik routes for base_domain and run traefik heal."""
+    er = _cli_ecosystem_root(ecosystem_root)
+    result = eplat.apply_platform_traefik(er)
+    if as_json:
+        eplat.emit_json(result)
+    else:
+        if result.get("render"):
+            typer.echo("--- render ---")
+            typer.echo(str(result["render"]))
+        if result.get("heal"):
+            typer.echo("--- traefik heal ---")
+            typer.echo(str(result["heal"]))
+    if not result.get("ok"):
+        raise typer.Exit(1)
+    typer.secho("Traefik routes applied.", fg=typer.colors.GREEN)
+
+
+@platform_cmd.command("bind")
+def cmd_platform_bind(
+    dev_stack_id: Annotated[
+        Optional[str],
+        typer.Argument(help="Dev stack id (omit with --clear to unbind)"),
+    ] = None,
+    cwd: Annotated[Path, typer.Option("--cwd", help="Directory containing leco.app.yaml")] = Path("."),
+    manifest: ManifestPathOption = None,
+    ecosystem_root: EcosystemRootOption = None,
+    clear: Annotated[bool, typer.Option("--clear", help="Remove platform.devStackId binding")] = False,
+    as_json: Annotated[bool, typer.Option("--json", help="Emit JSON")] = False,
+) -> None:
+    """Set or clear platform.devStackId on leco.yaml for the current app."""
+    _cli_ecosystem_root(ecosystem_root)
+    mp = _find_manifest(cwd, manifest)
+    sid = None if clear else (dev_stack_id or "").strip().lower() or None
+    if not clear and not sid:
+        typer.secho("Provide dev_stack_id or use --clear.", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+    result = eplat.bind_manifest_dev_stack(mp, sid)
+    if as_json:
+        eplat.emit_json(result)
+    else:
+        _emit_platform_result(result, as_json=False)
+    if result.get("ok") is False:
+        raise typer.Exit(1)
+    if not as_json:
+        typer.secho(
+            f"Bound {mp.parent / 'leco.yaml'} → devStackId={sid!r}" if sid else "Cleared dev stack binding.",
+            fg=typer.colors.GREEN,
+        )
+
+
+@platform_cmd.command("binding")
+def cmd_platform_binding(
+    cwd: Annotated[Path, typer.Option("--cwd", help="Directory containing leco.app.yaml")] = Path("."),
+    manifest: ManifestPathOption = None,
+    ecosystem_root: EcosystemRootOption = None,
+    as_json: Annotated[bool, typer.Option("--json", help="Emit JSON")] = False,
+) -> None:
+    """Show platform.devStackId binding for the current app."""
+    _cli_ecosystem_root(ecosystem_root)
+    mp = _find_manifest(cwd, manifest)
+    data = eplat.read_manifest_dev_stack_binding(mp)
+    if as_json:
+        eplat.emit_json(data)
+        return
+    typer.echo(f"dev_stack_id: {data.get('dev_stack_id') or '—'}")
+    tc = data.get("toolchain") or {}
+    if tc:
+        typer.echo(f"toolchain: {tc}")
+
+
+@devstack_cmd.command("list")
+def cmd_devstack_list(
+    ecosystem_root: EcosystemRootOption = None,
+    as_json: Annotated[bool, typer.Option("--json", help="Emit JSON")] = False,
+) -> None:
+    """List dev stacks and runtime state."""
+    er = _cli_ecosystem_root(ecosystem_root)
+    stacks = eplat.list_dev_stacks(er)
+    if as_json:
+        eplat.emit_json({"stacks": stacks})
+        return
+    if not stacks:
+        typer.echo("No dev stacks.")
+        return
+    for s in stacks:
+        sid = s.get("id")
+        typer.echo(f"{sid}: {s.get('state')} — {s.get('name')}")
+        if s.get("template"):
+            typer.echo(f"  template: {s['template']}")
+        access = s.get("access") if isinstance(s.get("access"), dict) else {}
+        host = access.get("hostname")
+        if host:
+            typer.echo(f"  url: http://{host}")
+
+
+@devstack_cmd.command("create")
+def cmd_devstack_create(
+    stack_id: Annotated[str, typer.Argument(help="Stack id (slug, e.g. billing)")],
+    name: Annotated[
+        Optional[str],
+        typer.Option("--name", "-n", help="Display name (default: stack id)"),
+    ] = None,
+    preset: Annotated[
+        Optional[str],
+        typer.Option("--preset", "-p", help="Quick preset key from `platform presets`"),
+    ] = None,
+    template: Annotated[
+        Optional[str],
+        typer.Option("--template", "-t", help="Ready/template id (wordpress, laravel, …)"),
+    ] = None,
+    component: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "--component",
+            "-c",
+            help="Component id:version (repeatable); omit when using --preset/--template",
+        ),
+    ] = None,
+    sample_data: Annotated[
+        bool,
+        typer.Option("--sample-data", help="Auto-install demo content when supported"),
+    ] = False,
+    ecosystem_root: EcosystemRootOption = None,
+    as_json: Annotated[bool, typer.Option("--json", help="Emit JSON")] = False,
+) -> None:
+    """Create an isolated dev stack under platform/dev-stacks/<id>/."""
+    er = _cli_ecosystem_root(ecosystem_root)
+    sid = _slugify(stack_id)
+    if not sid:
+        typer.secho("Invalid stack id.", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+    modes = sum(1 for x in (preset, template, component) if x)
+    if modes != 1:
+        typer.secho(
+            "Use exactly one of: --preset, --template, or one/more --component.",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(1)
+    comps: list[dict[str, str]] | None = None
+    if component:
+        try:
+            comps = eplat.parse_component_specs(component)
+        except ValueError as exc:
+            typer.secho(str(exc), fg=typer.colors.RED, err=True)
+            raise typer.Exit(1) from exc
+    try:
+        result = eplat.create_dev_stack(
+            er,
+            sid,
+            name or stack_id,
+            preset=preset,
+            template=template,
+            components=comps,
+            sample_data=sample_data,
+        )
+    except Exception as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from exc
+    if as_json:
+        eplat.emit_json(result)
+    else:
+        _emit_platform_result(result, as_json=False)
+    if result.get("ok") is False:
+        raise typer.Exit(1)
+    typer.secho(f"Created dev stack {sid}", fg=typer.colors.GREEN)
+
+
+def _devstack_lifecycle_run(
+    action: str,
+    stack_id: str,
+    *,
+    ecosystem_root: Path | None,
+    stream: bool,
+    yes: bool,
+    as_json: bool,
+) -> None:
+    er = _cli_ecosystem_root(ecosystem_root)
+    sid = _slugify(stack_id)
+    if action == "destroy":
+        _confirm_destructive(
+            f"Destroy stack {sid!r} and delete all volumes/data?",
+            yes=yes,
+        )
+    elif action == "reinstall":
+        _confirm_destructive(
+            f"Reinstall stack {sid!r} (compose down -v, wipe data)?",
+            yes=yes,
+        )
+    use_stream = stream or action in ("start", "repair", "reinstall")
+    try:
+        if use_stream and not as_json:
+            result = eplat.dev_stack_action(
+                er,
+                sid,
+                action,
+                stream=True,
+                echo=typer.echo,
+            )
+        else:
+            result = eplat.dev_stack_action(er, sid, action, stream=False)
+    except Exception as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from exc
+    if as_json:
+        eplat.emit_json(result)
+    else:
+        _emit_platform_result(result, as_json=False)
+    if result.get("ok") is False:
+        raise typer.Exit(1)
+    if not as_json and result.get("ok") is not False:
+        typer.secho(f"{action} finished ({result.get('state', 'ok')})", fg=typer.colors.GREEN)
+
+
+@devstack_cmd.command("start")
+def cmd_devstack_start(
+    stack_id: Annotated[str, typer.Argument(help="Dev stack id")],
+    ecosystem_root: EcosystemRootOption = None,
+    stream: Annotated[bool, typer.Option("--stream/--no-stream", help="Stream compose output")] = True,
+    as_json: Annotated[bool, typer.Option("--json", help="Emit JSON result only")] = False,
+) -> None:
+    """Start a dev stack (compose up -d)."""
+    _devstack_lifecycle_run(
+        "start",
+        stack_id,
+        ecosystem_root=ecosystem_root,
+        stream=stream,
+        yes=True,
+        as_json=as_json,
+    )
+
+
+@devstack_cmd.command("stop")
+def cmd_devstack_stop(
+    stack_id: Annotated[str, typer.Argument(help="Dev stack id")],
+    ecosystem_root: EcosystemRootOption = None,
+    as_json: Annotated[bool, typer.Option("--json", help="Emit JSON")] = False,
+) -> None:
+    """Stop a dev stack (keeps volumes)."""
+    _devstack_lifecycle_run(
+        "stop",
+        stack_id,
+        ecosystem_root=ecosystem_root,
+        stream=False,
+        yes=True,
+        as_json=as_json,
+    )
+
+
+@devstack_cmd.command("repair")
+def cmd_devstack_repair(
+    stack_id: Annotated[str, typer.Argument(help="Dev stack id")],
+    ecosystem_root: EcosystemRootOption = None,
+    stream: Annotated[bool, typer.Option("--stream/--no-stream", help="Stream compose output")] = True,
+    as_json: Annotated[bool, typer.Option("--json", help="Emit JSON")] = False,
+) -> None:
+    """Repair routing/images in place (keeps volumes and manual edits)."""
+    _devstack_lifecycle_run(
+        "repair",
+        stack_id,
+        ecosystem_root=ecosystem_root,
+        stream=stream,
+        yes=True,
+        as_json=as_json,
+    )
+
+
+@devstack_cmd.command("reinstall")
+def cmd_devstack_reinstall(
+    stack_id: Annotated[str, typer.Argument(help="Dev stack id")],
+    ecosystem_root: EcosystemRootOption = None,
+    stream: Annotated[bool, typer.Option("--stream/--no-stream", help="Stream compose output")] = True,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Skip confirmation")] = False,
+    as_json: Annotated[bool, typer.Option("--json", help="Emit JSON")] = False,
+) -> None:
+    """Regenerate stack from template and wipe volumes (destructive)."""
+    _devstack_lifecycle_run(
+        "reinstall",
+        stack_id,
+        ecosystem_root=ecosystem_root,
+        stream=stream,
+        yes=yes,
+        as_json=as_json,
+    )
+
+
+@devstack_cmd.command("destroy")
+def cmd_devstack_destroy(
+    stack_id: Annotated[str, typer.Argument(help="Dev stack id")],
+    ecosystem_root: EcosystemRootOption = None,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Skip confirmation")] = False,
+    as_json: Annotated[bool, typer.Option("--json", help="Emit JSON")] = False,
+) -> None:
+    """Remove stack, volumes, and platform/dev-stacks/<id>/ (destructive)."""
+    _devstack_lifecycle_run(
+        "destroy",
+        stack_id,
+        ecosystem_root=ecosystem_root,
+        stream=False,
+        yes=yes,
+        as_json=as_json,
+    )
+
+
+@devstack_cmd.command("snapshot")
+def cmd_devstack_snapshot(
+    stack_id: Annotated[str, typer.Argument(help="Dev stack id")],
+    ecosystem_root: EcosystemRootOption = None,
+    as_json: Annotated[bool, typer.Option("--json", help="Emit JSON")] = True,
+) -> None:
+    """Connection endpoints (host + Docker DNS) for databases and services."""
+    er = _cli_ecosystem_root(ecosystem_root)
+    data = eplat.dev_stack_snapshot_dict(er, _slugify(stack_id))
+    if as_json:
+        eplat.emit_json(data)
+        return
+    for ep in data.get("connection_endpoints") or []:
+        if isinstance(ep, dict):
+            typer.echo(f"{ep.get('label')}: {ep.get('host_url') or ep.get('docker_url')}")
+
+
+@devstack_cmd.command("access")
+def cmd_devstack_access(
+    stack_id: Annotated[str, typer.Argument(help="Dev stack id")],
+    ecosystem_root: EcosystemRootOption = None,
+    as_json: Annotated[bool, typer.Option("--json", help="Emit JSON")] = True,
+) -> None:
+    """Full access metadata (networking, quick links, credentials) for a stack."""
+    er = _cli_ecosystem_root(ecosystem_root)
+    data = eplat.dev_stack_access_dict(er, _slugify(stack_id))
+    if as_json:
+        eplat.emit_json(data)
+        return
+    net = data.get("networking") or {}
+    typer.echo(f"hostname: {net.get('hostname') or data.get('hostname')}")
+    for link in data.get("quick_links") or []:
+        if isinstance(link, dict) and link.get("url"):
+            typer.echo(f"  {link.get('label')}: {link['url']}")
+
+
+@devstack_cmd.command("logs")
+def cmd_devstack_logs(
+    stack_id: Annotated[str, typer.Argument(help="Dev stack id")],
+    follow: Annotated[bool, typer.Option("-f", "--follow", help="Follow log output")] = False,
+    tail: Annotated[int, typer.Option("--tail", help="Lines of history")] = 100,
+    ecosystem_root: EcosystemRootOption = None,
+) -> None:
+    """Tail docker compose logs for a dev stack."""
+    _cli_ecosystem_root(ecosystem_root)
+    sid = _slugify(stack_id)
+    try:
+        for line in eplat.tail_dev_stack_logs(sid, follow=follow, tail=tail):
+            typer.echo(line, nl=False)
+    except KeyboardInterrupt:
+        raise typer.Exit(0) from None
+
+
+app.add_typer(platform_cmd, name="platform")
+app.add_typer(devstack_cmd, name="dev-stack")

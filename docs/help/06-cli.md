@@ -16,6 +16,28 @@ leco-devops onboard -E "$LECO_ECOSYSTEM_ROOT"
 leco-devops ecosystem-unregister myapp -E "$LECO_ECOSYSTEM_ROOT"
 ```
 
+## Platform & dev stacks
+
+Requires **`LECO_ECOSYSTEM_ROOT`** (same checkout as the dashboard). Mirrors the **Platform** tab.
+
+```bash
+leco-devops platform show
+leco-devops platform presets
+leco-devops platform catalog --components
+
+leco-devops dev-stack list
+leco-devops dev-stack create wordpress --preset wordpress --sample-data
+leco-devops dev-stack start wordpress --stream
+leco-devops dev-stack repair magento-full
+leco-devops dev-stack reinstall magento-full -y
+leco-devops dev-stack destroy old-stack -y
+
+leco-devops platform bind billing -f hosting/app-available/myapp/leco.app.yaml
+leco-devops platform binding -f hosting/app-available/myapp/leco.app.yaml
+```
+
+Full reference: **Docs** → *Deploy CLI* · Help → [Platform tab](help:dash-platform).
+
 ## Hosted app commands
 
 ```bash
@@ -46,9 +68,10 @@ leco-devops provision-local-cf -f hosting/app-available/myapp/leco.app.yaml
 | File | Role |
 |------|------|
 | `leco.app.yaml` | Bridge: name, root, profile pointer |
-| `leco.yaml` | URLs, lifecycle, infrastructure (v3) |
+| `leco.yaml` | URLs, lifecycle, infrastructure (v3), optional `platform.devStackId` |
 | `config/leco-registry.yaml` | Hosted apps registry |
+| `config/leco-platform.yaml` | Cloud/local platform + dev stack registry |
 
 Field-level detail: **Docs** tab → *Deploy CLI*, *App blueprint*, *User manual*.
 
-Next: [Hosted apps](help:hosted-apps) · [Onboarding](help:onboarding-overview)
+Next: [Platform tab](help:dash-platform) · [Hosted apps](help:hosted-apps) · [Onboarding](help:onboarding-overview)

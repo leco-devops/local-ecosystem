@@ -10,7 +10,13 @@ A **dev stack** is an isolated Docker Compose project (`leco-devstack-<id>`) wit
 
 ## Create a stack
 
-**Dashboard:** Platform → Dev stack builder → components like `postgres:16,redis:7,node:20`.
+**Dashboard:** **Platform** tab → **Dev stack builder** (collapsible panel).
+
+- **Quick preset** — infrastructure levels, LAMP/MEAN, ready CMS (WordPress, Magento, …), or **application frameworks** (Laravel, Django, NestJS, …).
+- **Custom components** — pick from `component-catalog.yaml` (e.g. `postgres:16`, `redis:7`, `node:20`).
+- Optional **sample data** for supported CMS presets.
+
+User guide: [help/03-platform-tab.md](help/03-platform-tab.md).
 
 **API:**
 
@@ -52,9 +58,13 @@ Files land in `platform/dev-stacks/billing/` (`docker-compose.yml`, `stack.yaml`
 
 | Action | Effect |
 |--------|--------|
-| `start` | `docker compose -p leco-devstack-billing up -d` only |
-| `stop` | Stops billing stack; other stacks keep running |
+| `start` | `docker compose -p leco-devstack-billing up -d`; image preflight; CMS URL repair when install is ready |
+| `stop` | Stops billing stack; other stacks keep running; **volumes retained** |
+| `repair` | In-place fixes (images, edge configs), Traefik sync, `lh-network`, `compose up`, URL repair — **keeps volumes and manual file edits** |
+| `reinstall` | Regenerate from template, `compose down -v`, full start — **wipes data** (`redeploy` API alias) |
 | `destroy` | `compose down -v --remove-orphans`, prunes leftover project containers/volumes/networks, removes `platform/dev-stacks/<id>/`, drops the stack from `config/leco-platform.yaml`, and regenerates `hosting/traefik/20-dev-stacks.yml` |
+
+The dashboard uses **`POST /api/dev-stacks/<id>/action/stream`** for live compose logs during these actions.
 
 **Image preflight:** On **Start**, LEco rewrites deprecated image names in `docker-compose.yml` (e.g. `bitnami/magento` → `bitnamilegacy/magento-archived`) and verifies every image exists on the registry before `compose up`. **Create** rejects known-removed images immediately.
 

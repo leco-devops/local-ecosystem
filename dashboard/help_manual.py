@@ -44,6 +44,7 @@ HELP_TREE: list[dict] = [
         "title": "Daily operations",
         "children": [
             {"id": "dash-overview", "title": "Dashboard tour", "file": "03-dashboard.md"},
+            {"id": "dash-platform", "title": "Platform tab & dev stacks", "file": "03-platform-tab.md"},
             {"id": "dash-control", "title": "Control tab (start/stop)", "file": "03-control.md"},
             {"id": "dash-infra", "title": "Infrastructure tab", "file": "03-infrastructure.md"},
         ],

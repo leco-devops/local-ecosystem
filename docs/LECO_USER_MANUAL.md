@@ -26,6 +26,33 @@ The ecosystem **`config/leco-registry.yaml`** lists registered apps so the **Hos
 | **Cloudflare Workers** with **Wrangler** + optional compose | LEco DevOps: manifest **`cloudflare.wranglerConfig`**; **`cf-deploy`**, **`provision-local-cf`** as needed |
 | **WordPress, Magento, Node, PHP**, etc. without Workers | **`leco.yaml`** for URLs, hooks, and (v3) **`infrastructure.routing`**; Traefik merge uses the **effective** manifest (see **[LECO_APP_BLUEPRINT.md](LECO_APP_BLUEPRINT.md)**) |
 | No compose file yet | **`leco-devops init --manifest-only`** (TTY) or LEco DevOps wizard to stub manifest + **`leco.yaml`** |
+| Isolated DB/runtime per team on one VM (not a hosted app repo) | Dashboard **Platform** tab → **dev stacks** — see **[help/03-platform-tab.md](help/03-platform-tab.md)** and **[DEV_STACK_ISOLATION.md](DEV_STACK_ISOLATION.md)** |
+| Bind an app to a dev stack’s Postgres/MySQL | Set **`platform.devStackId`** in **`leco.yaml`**; register/deploy from **Hosted apps** |
+
+---
+
+## Platform tab and dev stacks
+
+**LEco DevOps → Platform** manages `config/leco-platform.yaml`, ecosystem bundles, and **isolated compose projects** under `platform/dev-stacks/<id>/`.
+
+- **Create** — presets (WordPress, Magento, Laravel, …) or custom components.
+- **Operate** — **Start**, **Stop**, **Repair** (fix routing/images, keep data), **Reinstall** (wipe volumes), **Destroy** (remove stack).
+- **Bind apps** — `platform.devStackId: <stackId>` in the app manifest.
+
+Full operator guide: **[help/03-platform-tab.md](help/03-platform-tab.md)** (also in **Help** → *Platform tab & dev stacks*).
+
+**CLI** (from any directory with `LECO_ECOSYSTEM_ROOT` set):
+
+```bash
+export LECO_ECOSYSTEM_ROOT=/path/to/local-ecosystem
+leco-devops platform presets
+leco-devops dev-stack create wordpress --preset wordpress --sample-data
+leco-devops dev-stack start wordpress --stream
+leco-devops dev-stack repair magento-full
+leco-devops platform bind billing -f hosting/app-available/myapp/leco.app.yaml
+```
+
+See **[DEPLOY_CLI.md](DEPLOY_CLI.md)** § Platform and dev stacks.
 
 ---
 
