@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **Update catalog:** Track [`ecosystem-stack/config/generated/update-catalog-read-state.json`](ecosystem-stack/config/generated/update-catalog-read-state.json) in git (removed from `.gitignore`).
+
 ### Added
 
 - **Brand assets:** LEco logo set under [`assets/brand/`](assets/brand/) (hexagon mark with center dot only—no monogram text, horizontal lockup, round avatar PNG/SVG); favicon and Open Graph image updated; logo in GitHub Pages header/hero/footer, README, and dashboard header.

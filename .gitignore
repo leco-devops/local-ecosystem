@@ -42,9 +42,6 @@ platform/dev-stacks/*
 !platform/dev-stacks/.gitkeep
 !platform/dev-stacks/README.md
 
-# Dashboard "mark updates read" state (per machine)
-ecosystem-stack/config/generated/update-catalog-read-state.json
-
 # leco-cli wrapper logs (per-run JSONL emitted by tools/leco-cli.sh)
 .leco-cli-logs/
 
