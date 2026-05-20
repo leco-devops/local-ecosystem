@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **GitHub Pages (Jekyll):** [index.md](index.md) landing with [Cayman theme](https://docs.github.com/en/pages/setting-up-a-github-pages-site-with-jekyll/adding-a-theme-to-your-github-pages-site-using-jekyll), [_config.yml](_config.yml), and LEco-branded [assets/css/style.scss](assets/css/style.scss).
+
 ### Changed
 
 - **README (GitHub Pages):** Brand-style landing — USP (read/convert/orchestrate/deploy), dedicated **Platform** section, Features and use cases; removed in-repo GitHub Pages setup instructions; technical detail in [docs/PROJECT.md](docs/PROJECT.md).

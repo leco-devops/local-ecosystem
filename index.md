@@ -1,16 +1,28 @@
-# LEco DevOps Open Project
+---
+layout: default
+title: LEco DevOps Open Project
+---
 
-**One-click deploy for almost any application — no manual rewiring.**  
-LEco reads your repo, converts config, orchestrates Compose & Traefik, and ships on `*.lh`.
+<p class="leco-tagline">
+  <strong>One-click deploy for almost any application — no manual rewiring.</strong><br />
+  LEco reads your repo, converts config, orchestrates Compose &amp; Traefik, and ships on <code>*.lh</code>.
+</p>
 
-[Get started](#start-in-minutes) · [Platform](#platform) · [Features](#features) · [Use cases](#use-cases) · [Technical guide](docs/PROJECT.md) · [Source](https://github.com/leco-devops/local-ecosystem)
+<nav class="leco-nav" aria-label="On this page">
+  <a href="#start-in-minutes">Get started</a> ·
+  <a href="#platform">Platform</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#use-cases">Use cases</a> ·
+  <a href="https://github.com/leco-devops/local-ecosystem/blob/main/docs/PROJECT.md">Technical guide</a> ·
+  <a href="https://github.com/leco-devops/local-ecosystem">Source</a>
+</nav>
 
-![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Docker](https://img.shields.io/badge/stack-Docker-2496ED?logo=docker&logoColor=white)
-![Traefik](https://img.shields.io/badge/routing-Traefik-24A1C1)
-![Open source](https://img.shields.io/badge/community-open%20source-brightgreen)
-
-> **GitHub Pages site:** themed landing at [leco-devops.github.io/local-ecosystem](https://leco-devops.github.io/local-ecosystem/) — built from [`index.md`](index.md) with the [Cayman Jekyll theme](https://docs.github.com/en/pages/setting-up-a-github-pages-site-with-jekyll/adding-a-theme-to-your-github-pages-site-using-jekyll) and [`assets/css/style.scss`](assets/css/style.scss).
+<p class="leco-badges">
+  <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" />
+  <img src="https://img.shields.io/badge/stack-Docker-2496ED?logo=docker&amp;logoColor=white" alt="Docker" />
+  <img src="https://img.shields.io/badge/routing-Traefik-24A1C1" alt="Traefik" />
+  <img src="https://img.shields.io/badge/community-open%20source-brightgreen" alt="Open source" />
+</p>
 
 **LEco DevOps** is a free, MIT-licensed local cloud edge: point it at an app repo, and it does the heavy lifting — detect existing Docker Compose, Wrangler, and env layout · generate LEco manifests · merge Traefik routes · deploy.
 
@@ -43,7 +55,11 @@ The **Platform** tab is a first-class capability — not just settings. It is ho
 
 Presets and versions live in **`ecosystem-stack/config/dev-stack-presets.yaml`** and **`component-catalog.yaml`**. Generated stacks land under **`platform/dev-stacks/<id>/`** with Traefik routes in **`hosting/traefik/20-dev-stacks.yml`**.
 
-→ [Platform tab guide](docs/help/03-platform-tab.md) · [Dev stack isolation](docs/DEV_STACK_ISOLATION.md) · [Cloud VM deployment](docs/CLOUD_VM_DEPLOYMENT.md)
+<p class="leco-cta-row">
+  <a href="https://github.com/leco-devops/local-ecosystem/blob/main/docs/help/03-platform-tab.md"><strong>Platform tab guide</strong></a> ·
+  <a href="https://github.com/leco-devops/local-ecosystem/blob/main/docs/DEV_STACK_ISOLATION.md"><strong>Dev stack isolation</strong></a> ·
+  <a href="https://github.com/leco-devops/local-ecosystem/blob/main/docs/CLOUD_VM_DEPLOYMENT.md"><strong>Cloud VM deployment</strong></a>
+</p>
 
 ## Features
 
@@ -96,11 +112,19 @@ Presets and versions live in **`ecosystem-stack/config/dev-stack-presets.yaml`**
 
 ## Use cases
 
+<div class="use-case-grid">
+
+<div class="use-case-card">
+
 ### Onboard an existing app in one click
 
 Point LEco at a repo that already has Compose or Wrangler. It **reads** the layout, **writes** manifests, **registers** the app, **merges** Traefik, and **deploys** — you skip hand-copying ports, env files, and route YAML.
 
 **Ideal for:** teams onboarding legacy or vendor apps, consultants standing up client demos fast.
+
+</div>
+
+<div class="use-case-card">
 
 ### Spin up a full stack from Platform
 
@@ -108,11 +132,19 @@ Use the **dev stack builder** for Magento, WordPress, Laravel, or infra-only bun
 
 **Ideal for:** e-commerce, CMS, and framework specialists who need a clean stack per customer or branch.
 
+</div>
+
+<div class="use-case-card">
+
 ### Develop like production — locally
 
 Use real hostnames and HTTPS while you code. Frontend, API, and workers each get Traefik routes; no more “works on `localhost:3000` only.”
 
 **Ideal for:** full-stack and platform engineers validating routing before deploy.
+
+</div>
+
+<div class="use-case-card">
 
 ### Many apps, one machine
 
@@ -120,11 +152,19 @@ Materialize multiple LEco-hosted apps from separate Git repos. Each slot has its
 
 **Ideal for:** agencies, consultants, and polyglot teams juggling client projects.
 
+</div>
+
+<div class="use-case-card">
+
 ### AI product development offline
 
 Run **Ollama**, **Open WebUI**, and **AirLLM** on the same `lh-network` as your app. Prototype RAG, agents, and automation (n8n) without cloud API keys for every iteration.
 
 **Ideal for:** AI engineers, hackathons, air-gapped or cost-sensitive experimentation.
+
+</div>
+
+<div class="use-case-card">
 
 ### Cloudflare Workers & bindings — locally
 
@@ -132,36 +172,21 @@ Start **cloudflare-local** to exercise R2, KV, D1, and Workers-style endpoints o
 
 **Ideal for:** edge developers using Wrangler who want fast feedback loops.
 
+</div>
+
+<div class="use-case-card">
+
 ### Preproduction on a cloud VM
 
 Use **Platform** profiles and `cloud-install.sh` on a VM with your domain, TLS mode, and optional external LLM providers — closer to staging than laptop-only compose.
 
 **Ideal for:** small teams without Kubernetes, demos, and partner sandboxes.
 
-## How it fits together
+</div>
 
-```mermaid
-flowchart LR
-  subgraph You["Your machine or VM"]
-    Browser["Browser"]
-    Traefik["Traefik · *.lh"]
-    Dash["LEco DevOps"]
-    Plat["Platform · dev stacks"]
-    Apps["Hosted apps"]
-    AI["Ollama · WebUI · AirLLM"]
-    CF["Cloudflare-local optional"]
-  end
-  Repo["Your app repos"]
-  Browser --> Traefik
-  Traefik --> Dash
-  Traefik --> Plat
-  Traefik --> Apps
-  Traefik --> AI
-  Traefik --> CF
-  Repo --> Dash
-  Dash -->|"read · convert · deploy"| Apps
-  Dash --> Plat
-```
+</div>
+
+## How it fits together
 
 | Layer | Role |
 |-------|------|
@@ -172,21 +197,21 @@ flowchart LR
 | **Platform** | Cloud/local settings, bundles, isolated dev stacks |
 | **`leco-devops`** | CLI — detect, onboard, platform, dev-stack |
 
-Deep dive: [Architecture](docs/ARCHITECTURE.md) · [LECo user manual](docs/LECO_USER_MANUAL.md) · [Platform tab](docs/help/03-platform-tab.md) · [Hosted apps runbook](docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md)
+Deep dive: [Architecture](https://github.com/leco-devops/local-ecosystem/blob/main/docs/ARCHITECTURE.md) · [LECo user manual](https://github.com/leco-devops/local-ecosystem/blob/main/docs/LECO_USER_MANUAL.md) · [Platform tab](https://github.com/leco-devops/local-ecosystem/blob/main/docs/help/03-platform-tab.md)
 
 ## What you get
 
 | | |
 |---|---|
 | **Application** | **LEco DevOps** — web UI + `leco-devops` CLI |
-| **License** | [MIT](LICENSE) — commercial use, fork, contribute |
+| **License** | [MIT](https://github.com/leco-devops/local-ecosystem/blob/main/LICENSE) — commercial use, fork, contribute |
 | **Official repository** | [github.com/leco-devops/local-ecosystem](https://github.com/leco-devops/local-ecosystem) |
-| **Governance** | Community-owned; [Open source](docs/OPEN_SOURCE.md) |
+| **Governance** | Community-owned; [Open source](https://github.com/leco-devops/local-ecosystem/blob/main/docs/OPEN_SOURCE.md) |
 | **Contact** | [leco@techtonic.systems](mailto:leco@techtonic.systems) |
 
 ## Start in minutes
 
-**Prerequisites:** Docker, `*.lh` DNS, mkcert ([setup guide](docs/SETUP.md)).
+**Prerequisites:** Docker, `*.lh` DNS, mkcert ([setup guide](https://github.com/leco-devops/local-ecosystem/blob/main/docs/SETUP.md)).
 
 ```bash
 git clone https://github.com/leco-devops/local-ecosystem.git
@@ -197,29 +222,30 @@ cd local-ecosystem
 
 Open **http://localhost.lh** or **http://dashboard.lh** for the LEco DevOps dashboard.
 
-→ [Full first-time setup](docs/SETUP.md) · [CLI reference](docs/DEPLOY_CLI.md)
+<p class="leco-cta-row">
+  <a href="https://github.com/leco-devops/local-ecosystem/blob/main/docs/SETUP.md"><strong>Full first-time setup</strong></a> ·
+  <a href="https://github.com/leco-devops/local-ecosystem/blob/main/docs/DEPLOY_CLI.md"><strong>CLI reference</strong></a>
+</p>
 
 ## Documentation
 
 | Guide | For |
 |-------|-----|
-| [Setup](docs/SETUP.md) | First machine install |
-| [Deployment](docs/DEPLOYMENT.md) | Day-2 operations |
-| [Platform tab](docs/help/03-platform-tab.md) | Dev stacks and cloud platform UI |
-| [Architecture](docs/ARCHITECTURE.md) | System design |
-| [PROJECT.md](docs/PROJECT.md) | Full technical guide |
+| [Setup](https://github.com/leco-devops/local-ecosystem/blob/main/docs/SETUP.md) | First machine install |
+| [Deployment](https://github.com/leco-devops/local-ecosystem/blob/main/docs/DEPLOYMENT.md) | Day-2 operations |
+| [Platform tab](https://github.com/leco-devops/local-ecosystem/blob/main/docs/help/03-platform-tab.md) | Dev stacks and cloud platform UI |
+| [Architecture](https://github.com/leco-devops/local-ecosystem/blob/main/docs/ARCHITECTURE.md) | System design |
+| [PROJECT.md](https://github.com/leco-devops/local-ecosystem/blob/main/docs/PROJECT.md) | Full technical guide |
 
 ## Contribute
 
 This project is **community-driven**: fork, fix, document, and open pull requests.
 
-[Contribution guide](CONTRIBUTING.md) · [Issues](https://github.com/leco-devops/local-ecosystem/issues) · [Fork](https://github.com/leco-devops/local-ecosystem/fork)
-
-| | |
-|---|---|
-| [Contributing](CONTRIBUTING.md) | Branch workflow, changelog, safety |
-| [Security](SECURITY.md) | Responsible disclosure |
-| [Changelog](CHANGELOG.md) | Release history |
+<p class="leco-cta-row">
+  <a href="https://github.com/leco-devops/local-ecosystem/blob/main/CONTRIBUTING.md"><strong>Contribution guide</strong></a> ·
+  <a href="https://github.com/leco-devops/local-ecosystem/issues"><strong>Issues</strong></a> ·
+  <a href="https://github.com/leco-devops/local-ecosystem/fork"><strong>Fork</strong></a>
+</p>
 
 ## Top contributors
 
@@ -232,6 +258,6 @@ The **official repository** is hosted under [`leco-devops`](https://github.com/l
 
 ## Governance
 
-**LEco DevOps Open Project** grows through contributors and maintainers. **[Techtonic Systems Media And Research LLC](https://techtonic.systems/)** provides operational stewardship ([leco@techtonic.systems](mailto:leco@techtonic.systems)) — supporting the community under the [MIT License](LICENSE).
+**LEco DevOps Open Project** grows through contributors and maintainers. **[Techtonic Systems Media And Research LLC](https://techtonic.systems/)** provides operational stewardship ([leco@techtonic.systems](mailto:leco@techtonic.systems)) — supporting the community under the [MIT License](https://github.com/leco-devops/local-ecosystem/blob/main/LICENSE).
 
-Copyright (c) contributors · [NOTICE](NOTICE.md) · [OPEN_SOURCE.md](docs/OPEN_SOURCE.md)
+Copyright (c) contributors · [NOTICE](https://github.com/leco-devops/local-ecosystem/blob/main/NOTICE.md) · [OPEN_SOURCE](https://github.com/leco-devops/local-ecosystem/blob/main/docs/OPEN_SOURCE.md)

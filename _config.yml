@@ -1,0 +1,38 @@
+# GitHub Pages (Jekyll) — https://docs.github.com/en/pages/setting-up-a-github-pages-site-with-jekyll
+title: LEco DevOps Open Project
+description: >-
+  One-click deploy for almost any application. LEco reads your config, converts
+  manifests, orchestrates Docker & Traefik, and ships on *.lh — local cloud edge on Docker.
+theme: jekyll-theme-cayman
+show_downloads: true
+
+github:
+  repository_name: leco-devops/local-ecosystem
+  is_project_page: true
+
+# Do not publish the full monorepo as HTML pages — landing only
+exclude:
+  - AGENTS.md
+  - CHANGELOG.md
+  - CONTRIBUTING.md
+  - LICENSE
+  - NOTICE.md
+  - SECURITY.md
+  - README.md
+  - Backup
+  - cloudflare-local
+  - config
+  - dashboard
+  - docs
+  - ecosystem-stack
+  - hosting
+  - infra
+  - platform
+  - scripts
+  - tools
+  - traefik
+  - "*.sh"
+  - leco-cli.sh
+  - Gemfile
+  - Gemfile.lock
+  - vendor
