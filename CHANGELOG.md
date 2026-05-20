@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **GitHub Pages FAQ:** Escape FAQ HTML and replace `<slug>` / `<id>` in answers so browsers do not treat path segments as tags (fixes nested/broken accordions and raw markdown leaking below FAQ).
+
 ### Added
 
 - **SEO & GEO:** Meta keywords, canonical URLs, Open Graph/Twitter cards, JSON-LD (WebSite, Organization, SoftwareApplication, FAQPage), `jekyll-sitemap`, [`robots.txt`](robots.txt) with AI crawler rules, FAQ section from [`_data/faqs.yml`](_data/faqs.yml).

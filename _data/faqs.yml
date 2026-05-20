@@ -23,8 +23,8 @@
 - question: What is the difference between a hosted app and a dev stack?
   answer: >-
     A hosted app is a third-party repository registered in config/leco-registry.yaml and
-    materialized under hosting/app-available/<slug>/ with its own LEco manifests and Traefik routes.
-    A dev stack is an isolated infrastructure bundle under platform/dev-stacks/<id>/ with its own
+    materialized under hosting/app-available/{slug}/ with its own LEco manifests and Traefik routes.
+    A dev stack is an isolated infrastructure bundle under platform/dev-stacks/{id}/ with its own
     databases and networks. You can bind a hosted app to a dev stack via platform.devStackId.
 
 - question: What does *.lh mean?
