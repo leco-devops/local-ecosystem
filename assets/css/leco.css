@@ -462,10 +462,15 @@
   border-bottom: 1px dashed var(--border-subtle);
 }
 
-.use-case-card p:last-child {
+.use-case-card p {
+  margin: 0 0 0.65rem;
+  color: #e2e8f0;
+}
+
+.use-case-card__ideal {
   margin-bottom: 0 !important;
   font-size: 0.92rem;
-  color: var(--text-muted);
+  color: var(--text-muted) !important;
 }
 
 /* Footer — matches dashboard .project-footer */

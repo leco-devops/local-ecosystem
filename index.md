@@ -148,73 +148,45 @@ Presets and versions live in **`ecosystem-stack/config/dev-stack-presets.yaml`**
 <div class="use-case-grid">
 
 <div class="use-case-card">
-
-### Onboard an existing app in one click
-
-Point LEco at a repo that already has Compose or Wrangler. It **reads** the layout, **writes** manifests, **registers** the app, **merges** Traefik, and **deploys** — you skip hand-copying ports, env files, and route YAML.
-
-**Ideal for:** teams onboarding legacy or vendor apps, consultants standing up client demos fast.
-
+  <h3>Onboard an existing app in one click</h3>
+  <p>Point LEco at a repo that already has Compose or Wrangler. It <strong>reads</strong> the layout, <strong>writes</strong> manifests, <strong>registers</strong> the app, <strong>merges</strong> Traefik, and <strong>deploys</strong> — you skip hand-copying ports, env files, and route YAML.</p>
+  <p class="use-case-card__ideal"><strong>Ideal for:</strong> teams onboarding legacy or vendor apps, consultants standing up client demos fast.</p>
 </div>
 
 <div class="use-case-card">
-
-### Spin up a full stack from Platform
-
-Use the **dev stack builder** for Magento, WordPress, Laravel, or infra-only bundles. **Start** gives you URLs and credentials; **Repair** fixes routing without wiping data.
-
-**Ideal for:** e-commerce, CMS, and framework specialists who need a clean stack per customer or branch.
-
+  <h3>Spin up a full stack from Platform</h3>
+  <p>Use the <strong>dev stack builder</strong> for Magento, WordPress, Laravel, or infra-only bundles. <strong>Start</strong> gives you URLs and credentials; <strong>Repair</strong> fixes routing without wiping data.</p>
+  <p class="use-case-card__ideal"><strong>Ideal for:</strong> e-commerce, CMS, and framework specialists who need a clean stack per customer or branch.</p>
 </div>
 
 <div class="use-case-card">
-
-### Develop like production — locally
-
-Use real hostnames and HTTPS while you code. Frontend, API, and workers each get Traefik routes; no more “works on `localhost:3000` only.”
-
-**Ideal for:** full-stack and platform engineers validating routing before deploy.
-
+  <h3>Develop like production — locally</h3>
+  <p>Use real hostnames and HTTPS while you code. Frontend, API, and workers each get Traefik routes; no more “works on <code>localhost:3000</code> only.”</p>
+  <p class="use-case-card__ideal"><strong>Ideal for:</strong> full-stack and platform engineers validating routing before deploy.</p>
 </div>
 
 <div class="use-case-card">
-
-### Many apps, one machine
-
-Materialize multiple LEco-hosted apps from separate Git repos. Each slot has its own manifest, compose merge, and Traefik fragment — without one mega-compose file.
-
-**Ideal for:** agencies, consultants, and polyglot teams juggling client projects.
-
+  <h3>Many apps, one machine</h3>
+  <p>Materialize multiple LEco-hosted apps from separate Git repos. Each slot has its own manifest, compose merge, and Traefik fragment — without one mega-compose file.</p>
+  <p class="use-case-card__ideal"><strong>Ideal for:</strong> agencies, consultants, and polyglot teams juggling client projects.</p>
 </div>
 
 <div class="use-case-card">
-
-### AI product development offline
-
-Run **Ollama**, **Open WebUI**, and **AirLLM** on the same `lh-network` as your app. Prototype RAG, agents, and automation (n8n) without cloud API keys for every iteration.
-
-**Ideal for:** AI engineers, hackathons, air-gapped or cost-sensitive experimentation.
-
+  <h3>AI product development offline</h3>
+  <p>Run <strong>Ollama</strong>, <strong>Open WebUI</strong>, and <strong>AirLLM</strong> on the same <code>lh-network</code> as your app. Prototype RAG, agents, and automation (n8n) without cloud API keys for every iteration.</p>
+  <p class="use-case-card__ideal"><strong>Ideal for:</strong> AI engineers, hackathons, air-gapped or cost-sensitive experimentation.</p>
 </div>
 
 <div class="use-case-card">
-
-### Cloudflare Workers & bindings — locally
-
-Start **cloudflare-local** to exercise R2, KV, D1, and Workers-style endpoints on `*.lh`. Provision bindings from `leco-devops` before CI deploys.
-
-**Ideal for:** edge developers using Wrangler who want fast feedback loops.
-
+  <h3>Cloudflare Workers &amp; bindings — locally</h3>
+  <p>Start <strong>cloudflare-local</strong> to exercise R2, KV, D1, and Workers-style endpoints on <code>*.lh</code>. Provision bindings from <code>leco-devops</code> before CI deploys.</p>
+  <p class="use-case-card__ideal"><strong>Ideal for:</strong> edge developers using Wrangler who want fast feedback loops.</p>
 </div>
 
 <div class="use-case-card">
-
-### Preproduction on a cloud VM
-
-Use **Platform** profiles and `cloud-install.sh` on a VM with your domain, TLS mode, and optional external LLM providers — closer to staging than laptop-only compose.
-
-**Ideal for:** small teams without Kubernetes, demos, and partner sandboxes.
-
+  <h3>Preproduction on a cloud VM</h3>
+  <p>Use <strong>Platform</strong> profiles and <code>cloud-install.sh</code> on a VM with your domain, TLS mode, and optional external LLM providers — closer to staging than laptop-only compose.</p>
+  <p class="use-case-card__ideal"><strong>Ideal for:</strong> small teams without Kubernetes, demos, and partner sandboxes.</p>
 </div>
 
 </div>

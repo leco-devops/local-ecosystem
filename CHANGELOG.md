@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **GitHub Pages:** Use cases cards use HTML instead of markdown inside `<div>` blocks so headings and bold text render correctly under Jekyll.
+
 ### Added
 
 - **GitHub Pages (Jekyll):** [index.md](index.md) landing with [_layouts/default.html](_layouts/default.html), control-panel dark theme ([assets/css/leco.css](assets/css/leco.css)), [_includes/leco-footer.html](_includes/leco-footer.html), Vision &amp; Mission section, and [CNAME](CNAME) for `leco-project.us`.
