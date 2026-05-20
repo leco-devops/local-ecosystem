@@ -12,13 +12,16 @@ from dev_stack_compose import STACKS_ROOT, _slugify
 
 # Bitnami removed public Magento images (2025); legacy archive preserves paths/env.
 MAGENTO_APP_IMAGE = "docker.io/bitnamilegacy/magento-archived:2"
-MAGENTO_DB_IMAGE = "docker.io/bitnamilegacy/mariadb:11.4"
+# Magento 2 (Bitnami) supports MariaDB 10.2–10.4; 11.x breaks the install script.
+MAGENTO_DB_IMAGE = "docker.io/bitnamilegacy/mariadb:10.6"
 
 # Exact or substring replacements applied to existing compose files on start/create.
 IMAGE_REWRITES: tuple[tuple[str, str], ...] = (
     ("docker.io/bitnami/magento:2", MAGENTO_APP_IMAGE),
     ("bitnami/magento:2", "bitnamilegacy/magento-archived:2"),
     ("docker.io/bitnami/mariadb:latest", MAGENTO_DB_IMAGE),
+    ("docker.io/bitnamilegacy/mariadb:11.4", MAGENTO_DB_IMAGE),
+    ("bitnamilegacy/mariadb:11.4", "bitnamilegacy/mariadb:10.6"),
 )
 
 # Images that will never pull; fail fast with a clear message (no network call).
@@ -76,8 +79,22 @@ def _service_has_host_bind(spec: dict[str, Any], host_path_fragment: str) -> boo
     return False
 
 
-def upgrade_magento_full_bind_mounts(compose: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
-    """Replace Varnish/Nginx host bind mounts with Compose configs (cloud VM / Docker-in-Docker safe)."""
+def _nginx_compose_config_needs_fix(compose: dict[str, Any]) -> bool:
+    """Detect nginx edge config missing Compose $$ escapes (breaks proxy_set_header)."""
+    configs = compose.get("configs")
+    if not isinstance(configs, dict):
+        return True
+    nginx = configs.get("nginx_edge_conf")
+    if not isinstance(nginx, dict):
+        return True
+    content = str(nginx.get("content") or "")
+    if not content.strip():
+        return True
+    return "$host" in content and "$$host" not in content
+
+
+def upgrade_magento_full_edge_compose(compose: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """Varnish/Nginx via Compose configs (no host bind mounts); refresh nginx $$ escapes."""
     services = compose.get("services")
     if not isinstance(services, dict):
         return compose, []
@@ -87,7 +104,8 @@ def upgrade_magento_full_bind_mounts(compose: dict[str, Any]) -> tuple[dict[str,
         return compose, []
     needs_varnish = _service_has_host_bind(varnish, "varnish/default.vcl")
     needs_nginx = _service_has_host_bind(edge, "nginx/default.conf")
-    if not needs_varnish and not needs_nginx:
+    needs_configs = not compose.get("configs") or _nginx_compose_config_needs_fix(compose)
+    if not needs_varnish and not needs_nginx and not needs_configs:
         return compose, []
 
     from dev_stack_templates import magento_full_edge_configs
@@ -95,20 +113,27 @@ def upgrade_magento_full_bind_mounts(compose: dict[str, Any]) -> tuple[dict[str,
     updated = dict(compose)
     updated["configs"] = magento_full_edge_configs()
     services = dict(services)
-    if needs_varnish:
-        v = dict(varnish)
-        v.pop("volumes", None)
-        v["configs"] = [{"source": "varnish_vcl", "target": "/etc/varnish/default.vcl"}]
-        services["varnish"] = v
-    if needs_nginx:
-        e = dict(edge)
-        e.pop("volumes", None)
-        e["configs"] = [{"source": "nginx_edge_conf", "target": "/etc/nginx/conf.d/default.conf"}]
-        services["edge"] = e
+    v = dict(varnish)
+    v.pop("volumes", None)
+    v["configs"] = [{"source": "varnish_vcl", "target": "/etc/varnish/default.vcl"}]
+    services["varnish"] = v
+    e = dict(edge)
+    e.pop("volumes", None)
+    e["configs"] = [{"source": "nginx_edge_conf", "target": "/etc/nginx/conf.d/default.conf"}]
+    services["edge"] = e
     updated["services"] = services
-    return updated, [
-        "Varnish/Nginx: switched host bind mounts to Compose configs (no Docker file-sharing required)"
-    ]
+    logs: list[str] = []
+    if needs_varnish or needs_nginx:
+        logs.append(
+            "Varnish/Nginx: switched host bind mounts to Compose configs (no Docker file-sharing required)"
+        )
+    if needs_configs:
+        logs.append("Nginx edge: fixed Compose config ($$ escapes for proxy_set_header variables)")
+    return updated, logs
+
+
+# Backward-compatible alias for tests
+upgrade_magento_full_bind_mounts = upgrade_magento_full_edge_compose
 
 
 def normalize_stack_compose_file(stack_id: str) -> list[str]:
@@ -124,7 +149,7 @@ def normalize_stack_compose_file(stack_id: str) -> list[str]:
     if not isinstance(raw, dict):
         return []
     updated, logs = normalize_compose_images(raw)
-    updated, mount_logs = upgrade_magento_full_bind_mounts(updated)
+    updated, mount_logs = upgrade_magento_full_edge_compose(updated)
     logs = [*logs, *mount_logs]
     if logs:
         path.write_text(yaml.safe_dump(updated, sort_keys=False), encoding="utf-8")

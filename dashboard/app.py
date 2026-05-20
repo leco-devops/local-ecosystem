@@ -363,7 +363,7 @@ def api_dev_stack_action(stack_id: str):
     if not check_control_token(request, data):
         return jsonify({"ok": False, "error": "unauthorized"}), 401
     action = str(data.get("action") or "").strip().lower()
-    if action not in ("start", "stop", "destroy"):
+    if action not in ("start", "stop", "destroy", "repair", "reinstall", "redeploy"):
         return jsonify({"ok": False, "error": "invalid action"}), 400
     return jsonify(stack_action(stack_id, action))
 
@@ -377,7 +377,7 @@ def api_dev_stack_action_stream(stack_id: str):
     if not check_control_token(request, data):
         return jsonify({"ok": False, "error": "unauthorized"}), 401
     action = str(data.get("action") or "").strip().lower()
-    if action not in ("start", "stop", "destroy"):
+    if action not in ("start", "stop", "destroy", "repair", "reinstall", "redeploy"):
         return jsonify({"ok": False, "error": "invalid action"}), 400
 
     @stream_with_context
@@ -414,6 +414,70 @@ def api_dev_stack_access(stack_id: str):
 
     try:
         return jsonify(stack_access_info(stack_id))
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@app.get("/api/dev-stacks/<stack_id>/config")
+def api_dev_stack_config(stack_id: str):
+    from dev_stack_config import stack_config_info
+
+    try:
+        return jsonify(stack_config_info(stack_id))
+    except FileNotFoundError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 404
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@app.get("/api/dev-stacks/<stack_id>/files")
+def api_dev_stack_file_read(stack_id: str):
+    from dev_stack_config import read_stack_file
+
+    rel = str(request.args.get("path") or "").strip()
+    if not rel:
+        return jsonify({"ok": False, "error": "path query required"}), 400
+    try:
+        return jsonify(read_stack_file(stack_id, rel))
+    except FileNotFoundError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 404
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@app.put("/api/dev-stacks/<stack_id>/files")
+def api_dev_stack_file_write(stack_id: str):
+    from dev_stack_config import write_stack_file
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    rel = str(data.get("path") or "").strip()
+    if not rel:
+        return jsonify({"ok": False, "error": "path required"}), 400
+    if "content" not in data:
+        return jsonify({"ok": False, "error": "content required"}), 400
+    try:
+        return jsonify(write_stack_file(stack_id, rel, str(data.get("content") or "")))
+    except FileNotFoundError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 404
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@app.get("/api/dev-stacks/<stack_id>/related-files/<file_id>")
+def api_dev_stack_related_file(stack_id: str, file_id: str):
+    from dev_stack_config import read_related_file
+
+    _ = stack_id  # routes are global; stack id kept for REST symmetry
+    try:
+        return jsonify(read_related_file(file_id))
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
 

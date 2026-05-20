@@ -11863,7 +11863,20 @@ function devStackActionLabel(action, inflightAction) {
   if (action === "start") return inflightAction === "start" ? "Starting…" : "Start";
   if (action === "stop") return inflightAction === "stop" ? "Stopping…" : "Stop";
   if (action === "destroy") return inflightAction === "destroy" ? "Destroying…" : "Destroy";
+  if (action === "repair") return inflightAction === "repair" ? "Repairing…" : "Repair";
+  if (action === "reinstall") return inflightAction === "reinstall" ? "Reinstalling…" : "Reinstall";
+  if (action === "redeploy") return inflightAction === "redeploy" ? "Reinstalling…" : "Reinstall";
   return action;
+}
+
+function devStackRowActionButtons(rowId, state) {
+  return (
+    devStackActionBtn(rowId, "start", state) +
+    devStackActionBtn(rowId, "stop", state) +
+    devStackActionBtn(rowId, "repair", state) +
+    devStackActionBtn(rowId, "reinstall", state) +
+    devStackActionBtn(rowId, "destroy", state)
+  );
 }
 
 function devStackActionBtn(id, action, state) {
@@ -11871,6 +11884,13 @@ function devStackActionBtn(id, action, state) {
   const rowBusy = inflight && inflight.stackId === id;
   const inflightAction = rowBusy ? inflight.action : null;
   const label = devStackActionLabel(action, inflightAction);
+  if (action === "repair" || action === "reinstall" || action === "redeploy") {
+    const dis = rowBusy ? " disabled" : "";
+    const busyCls = rowBusy && inflightAction === action ? " dev-stack-act--busy" : "";
+    const ariaBusy = rowBusy && inflightAction === action ? ' aria-busy="true"' : "";
+    const tone = action === "repair" ? "ctrl-act--ops" : "ctrl-act--deploy";
+    return `<button type="button" class="ctrl-act ${tone} platform-svc-act dev-stack-act dev-stack-maint-act${busyCls}" data-id="${escapeAttr(id)}" data-action="${action}"${dis}${ariaBusy} aria-label="${escapeAttr(label)} ${escapeAttr(id)}">${label}</button>`;
+  }
   if (action === "destroy") {
     const dis = rowBusy ? " disabled" : "";
     const busyCls = inflightAction === "destroy" ? " dev-stack-act--busy" : "";
@@ -11911,10 +11931,7 @@ function setDevStackActionBusy(stackId, action) {
     const state = row.getAttribute("data-stack-state") || "unknown";
     const actions = row.querySelector(".platform-svc-tile__actions");
     if (!actions) return;
-    actions.innerHTML =
-      devStackActionBtn(rowId, "start", state) +
-      devStackActionBtn(rowId, "stop", state) +
-      devStackActionBtn(rowId, "destroy", state);
+    actions.innerHTML = devStackRowActionButtons(rowId, state);
     actions.querySelectorAll(".dev-stack-act").forEach((btn) => {
       btn.addEventListener("click", () => devStackAction(btn));
     });
@@ -12100,43 +12117,338 @@ function devStackDualUrlRow(u) {
   return `<div class="row"><span>${escapeHtml(label)}</span><a href="${oneA}"${externalNavigationAttrs(one)}>${escapeHtml(one)}</a></div>`;
 }
 
-function devStackLoginLinks(c) {
-  const httpUrl = c.login_url_http || "";
-  const httpsUrl = c.login_url_https || c.login_url || "";
-  if (httpUrl && httpsUrl) {
-    return ` · <a href="${escapeAttr(httpUrl)}"${externalNavigationAttrs(httpUrl)}>Login (HTTP)</a> · <a href="${escapeAttr(httpsUrl)}"${externalNavigationAttrs(httpsUrl)}>Login (HTTPS)</a>`;
-  }
-  if (httpsUrl) {
-    return ` · <a href="${escapeAttr(httpsUrl)}"${externalNavigationAttrs(httpsUrl)}>Open login</a>`;
-  }
-  return "";
+function devStackOpenLinkBtn(url, label, { primary = false, tone = "ops" } = {}) {
+  const u = String(url || "").trim();
+  if (!u) return "";
+  const cls = primary ? "ctrl-act--safe" : tone === "deploy" ? "ctrl-act--deploy" : "ctrl-act--ops";
+  return `<a class="ctrl-act ${cls} devstack-quick-link" href="${escapeAttr(u)}"${externalNavigationAttrs(u)}>${escapeHtml(label)}</a>`;
 }
 
-function renderDevStackAccessHtml(access, rawId) {
-  if (!access || typeof access !== "object") return "";
-  const urls = Array.isArray(access.urls) ? access.urls : [];
-  const creds = Array.isArray(access.credentials) ? access.credentials : [];
-  const notes = Array.isArray(access.notes) ? access.notes : [];
-  const urlRows = urls.map((u) => devStackDualUrlRow(u)).join("");
-  const credRows = creds
+async function devStackCopyMagicLink(url, label) {
+  const u = String(url || "").trim();
+  if (!u) return;
+  try {
+    await navigator.clipboard.writeText(u);
+    setDevStackStatus(`Copied ${label || "link"} to clipboard.`, { error: false });
+  } catch (_) {
+    await showAppCopyLinkModal(u, label || "Magic link");
+  }
+}
+
+function renderDevStackNetworkDiagram(net) {
+  if (!net || !Array.isArray(net.nodes) || !net.nodes.length) {
+    return '<p class="muted small">No networking diagram for this stack.</p>';
+  }
+  const nodeMap = new Map(net.nodes.map((n) => [n.id, n]));
+  const tierClass = (tier) => {
+    const t = String(tier || "").toLowerCase();
+    if (t === "edge") return "devstack-net-node--edge";
+    if (t === "cache") return "devstack-net-node--cache";
+    if (t === "data") return "devstack-net-node--data";
+    return "devstack-net-node--app";
+  };
+  const nodeHtml = (id) => {
+    const n = nodeMap.get(id);
+    if (!n) return "";
+    const detail = n.detail ? `<span class="devstack-net-node__detail">${escapeHtml(n.detail)}</span>` : "";
+    return `<div class="devstack-net-node ${tierClass(n.tier)}" title="${escapeAttr(n.detail || n.label || id)}"><span class="devstack-net-node__label">${escapeHtml(n.label || id)}</span>${detail}</div>`;
+  };
+  let flow = "";
+  const layers = Array.isArray(net.layers) ? net.layers : [];
+  if (layers.length) {
+    flow = layers
+      .map((layer) => {
+        const ids = Array.isArray(layer) ? layer : [];
+        const parts = [];
+        ids.forEach((id, idx) => {
+          if (idx > 0) parts.push('<span class="devstack-net-arrow" aria-hidden="true">→</span>');
+          parts.push(nodeHtml(id));
+        });
+        return `<div class="devstack-net-flow">${parts.join("")}</div>`;
+      })
+      .join("");
+    flow = `<div class="devstack-net-layers">${flow}</div>`;
+  } else {
+    const edges = Array.isArray(net.edges) ? net.edges : [];
+    if (edges.length) {
+      const parts = [];
+      edges.forEach((pair, idx) => {
+        if (!Array.isArray(pair) || pair.length < 2) return;
+        if (idx === 0) parts.push(nodeHtml(pair[0]));
+        parts.push('<span class="devstack-net-arrow" aria-hidden="true">→</span>');
+        parts.push(nodeHtml(pair[1]));
+      });
+      flow = `<div class="devstack-net-flow">${parts.join("")}</div>`;
+    } else {
+      flow = `<div class="devstack-net-flow devstack-net-flow--grid">${net.nodes.map((n) => nodeHtml(n.id)).join("")}</div>`;
+    }
+  }
+  const host = net.hostname ? `<p class="devstack-net-host muted small"><strong>Public host</strong> <code>${escapeHtml(net.hostname)}</code></p>` : "";
+  const route = net.route_file
+    ? `<p class="devstack-net-route muted small"><strong>Traefik</strong> <code>${escapeHtml(net.route_file)}</code></p>`
+    : "";
+  return `${host}${route}${flow}`;
+}
+
+function renderDevStackQuickLinks(links) {
+  const items = Array.isArray(links) ? links : [];
+  if (!items.length) return "";
+  return `<div class="devstack-quick-links">${items
+    .map((link) => {
+      const httpUrl = link.url_http || link.url || "";
+      const httpsUrl = link.url_https || httpUrl;
+      const openUrl = httpUrl.includes(".lh") ? httpUrl : httpsUrl || httpUrl;
+      const kind = String(link.kind || "");
+      const primary = !!link.primary || kind === "admin";
+      const tone = kind === "database_gui" || kind === "redis_gui" ? "deploy" : "ops";
+      const hint = link.hint ? `<p class="devstack-quick-link__hint muted small">${escapeHtml(link.hint)}</p>` : "";
+      const copyTarget = kind === "admin" ? httpsUrl || httpUrl : openUrl;
+      return `<div class="devstack-quick-link-card">
+        <div class="devstack-quick-link-card__actions">
+          ${devStackOpenLinkBtn(openUrl, link.label || "Open", { primary, tone })}
+          ${copyTarget ? `<button type="button" class="ctrl-act ctrl-act--ops devstack-copy-magic-link" data-url="${escapeAttr(copyTarget)}" data-label="${escapeAttr(link.label || "Link")}">Copy link</button>` : ""}
+        </div>
+        ${hint}
+      </div>`;
+    })
+    .join("")}</div>`;
+}
+
+function renderDevStackCredentialsBlock(access, rawId) {
+  const creds = Array.isArray(access?.credentials) ? access.credentials : [];
+  const adminReset = access?.admin_reset || {};
+  const rows = creds
     .map((c) => {
-      const login = devStackLoginLinks(c);
-      return `<li><strong>${escapeHtml(c.label || "Login")}:</strong> <code>${escapeHtml(c.username || "")}</code> / <code>${escapeHtml(c.password || "")}</code>${login}</li>`;
+      const httpUrl = c.login_url_http || "";
+      const httpsUrl = c.login_url_https || c.login_url || "";
+      const openUrl = httpUrl && httpUrl.includes(".lh") ? httpUrl : httpsUrl || httpUrl;
+      return `<li class="devstack-cred-row">
+        <div class="devstack-cred-row__head"><strong>${escapeHtml(c.label || "Login")}</strong></div>
+        <div class="devstack-cred-row__vals"><code>${escapeHtml(c.username || "")}</code> <span class="muted">/</span> <code>${escapeHtml(c.password || "")}</code></div>
+        <div class="devstack-cred-row__actions">
+          ${openUrl ? devStackOpenLinkBtn(openUrl, "Open admin", { primary: true }) : ""}
+          ${openUrl ? `<button type="button" class="ctrl-act ctrl-act--ops devstack-copy-magic-link" data-url="${escapeAttr(openUrl)}" data-label="${escapeAttr(c.label || "Admin")}">Copy magic link</button>` : ""}
+        </div>
+      </li>`;
     })
     .join("");
+  const resetBtn = adminReset.supported
+    ? `<button type="button" class="ctrl-act ctrl-act--caution dev-stack-reset-admin" data-id="${escapeAttr(rawId)}">Reset credentials${adminReset.username ? ` → ${escapeHtml(adminReset.username)} / ${escapeHtml(adminReset.password || "•••")}` : ""}</button>`
+    : "";
+  if (!rows && !resetBtn) {
+    return '<p class="muted small">No preset admin credentials — complete the installer in the browser.</p>';
+  }
+  return `<ul class="devstack-cred-list">${rows}</ul>${resetBtn ? `<div class="devstack-cred-reset">${resetBtn}</div>` : ""}`;
+}
+
+function renderDevStackDataStoresBlock(dataStores) {
+  const stores = Array.isArray(dataStores) ? dataStores : [];
+  if (!stores.length) return "";
+  return `<ul class="devstack-data-stores">${stores
+    .map((store) => {
+      const creds = store.credentials || {};
+      const user = creds.username || creds.user || "—";
+      const pw = creds.password !== undefined && creds.password !== null ? creds.password : "—";
+      const db = creds.database || creds.dbname || "";
+      const eps = (store.connection_endpoints || [])
+        .slice(0, 3)
+        .map((ep) => `<li><span class="muted small">${escapeHtml(ep.label || ep.scope || "")}</span> <code>${escapeHtml(ep.uri || "")}</code></li>`)
+        .join("");
+      const cli = store.cli_hint
+        ? `<p class="muted small devstack-data-store__cli"><strong>CLI</strong> <code>${escapeHtml(store.cli_hint)}</code></p>`
+        : "";
+      return `<li class="devstack-data-store">
+        <strong>${escapeHtml(store.name || store.kind)}</strong> <span class="muted small">(${escapeHtml(store.kind || "")} · Docker <code>${escapeHtml(store.docker_host || store.name || "")}</code>)</span>
+        <div class="devstack-data-store__creds muted small">${db ? `DB <code>${escapeHtml(db)}</code> · ` : ""}User <code>${escapeHtml(user)}</code> · Pass <code>${escapeHtml(pw === "" ? "(empty)" : pw)}</code></div>
+        ${eps ? `<ul class="devstack-data-store__eps">${eps}</ul>` : ""}
+        ${cli}
+      </li>`;
+    })
+    .join("")}</ul>`;
+}
+
+function renderDevStackCardBody(access, rawId) {
+  if (!access || typeof access !== "object") return "";
+  if (access.error) {
+    return `<p class="devstack-status-line--error muted small">${escapeHtml(access.error)}</p>`;
+  }
+  const notes = Array.isArray(access.notes) ? access.notes : [];
   const noteRows = notes.map((n) => `<li class="muted small">${escapeHtml(n)}</li>`).join("");
-  const resetBtn =
-    access.template === "wordpress" || access.template === "woocommerce"
-      ? `<button type="button" class="ctrl-act ctrl-act--ops dev-stack-reset-admin" data-id="${escapeAttr(rawId)}">Reset WP admin → admin / admin</button>`
-      : "";
-  return `<div class="devstack-access muted small">
-    ${access.hostname ? `<p><strong>Host:</strong> <code>${escapeHtml(access.hostname)}</code></p>` : ""}
-    ${urlRows ? `<div class="devstack-access__urls">${urlRows}</div>` : ""}
-    ${credRows ? `<ul class="devstack-access__creds">${credRows}</ul>` : ""}
-    ${noteRows ? `<ul class="devstack-access__notes">${noteRows}</ul>` : ""}
-    <p class="devstack-access__hint muted small">Routes: <code>hosting/traefik/20-dev-stacks.yml</code>. If the site 404s, use <strong>Apply Traefik routes</strong> above or <code>traefik.sh heal</code>.</p>
-    ${resetBtn}
-  </div>`;
+  return `<div class="platform-stack-row__grid">
+    <section class="devstack-card-panel devstack-card-panel--network">
+      <h4 class="devstack-card-panel__title">Networking</h4>
+      ${renderDevStackNetworkDiagram(access.networking)}
+    </section>
+    <section class="devstack-card-panel devstack-card-panel--admin">
+      <h4 class="devstack-card-panel__title">Admin &amp; credentials</h4>
+      ${renderDevStackCredentialsBlock(access, rawId)}
+    </section>
+    <section class="devstack-card-panel devstack-card-panel--links devstack-card-panel--wide">
+      <h4 class="devstack-card-panel__title">Quick open</h4>
+      ${renderDevStackQuickLinks(access.quick_links)}
+    </section>
+    <section class="devstack-card-panel devstack-card-panel--data">
+      <h4 class="devstack-card-panel__title">Data stores</h4>
+      ${renderDevStackDataStoresBlock(access.data_stores) || '<p class="muted small">No database/cache services in this stack compose file.</p>'}
+    </section>
+    ${noteRows ? `<section class="devstack-card-panel devstack-card-panel--notes"><h4 class="devstack-card-panel__title">Notes</h4><ul class="devstack-access__notes">${noteRows}</ul></section>` : ""}
+  </div>
+  <p class="devstack-access__hint muted small">Stack files: <code>platform/dev-stacks/${escapeHtml(rawId)}/</code> · <strong>Advanced</strong> below to edit.</p>`;
+}
+
+
+let devStackFileEditorState = { stackId: "", path: "", readOnly: false, relatedId: "" };
+
+function renderDevStackConfigHtml(cfg) {
+  if (!cfg || !cfg.ok) {
+    return `<p class="muted small">${escapeHtml(cfg?.error || "Could not load configuration.")}</p>`;
+  }
+  const pathRows = [
+    `<li><strong>Stack root</strong> — <code>${escapeHtml(cfg.stack_dir || "")}</code></li>`,
+    `<li><strong>Compose project</strong> — <code>${escapeHtml(cfg.compose_project || "")}</code></li>`,
+    `<li><strong>Platform registry</strong> — <code>${escapeHtml(cfg.platform_registry_path || "")}</code></li>`,
+  ];
+  const related = (cfg.related_files || [])
+    .map((r) => {
+      const btn = `<button type="button" class="ctrl-act ctrl-act--ops dev-stack-view-related" data-related-id="${escapeAttr(r.id)}">${r.editable ? "Edit" : "View"}</button>`;
+      return `<li class="devstack-config-file-row"><span><code>${escapeHtml(r.path || "")}</code> <span class="muted small">${escapeHtml(r.description || "")}</span></span>${btn}</li>`;
+    })
+    .join("");
+  const files = (cfg.files || [])
+    .map((f) => {
+      return `<div class="devstack-config-file-row"><code>${escapeHtml(f.path)}</code><button type="button" class="ctrl-act ctrl-act--ops dev-stack-edit-file" data-file-path="${escapeAttr(f.path)}">Edit</button></div>`;
+    })
+    .join("");
+  const notes = (cfg.notes || []).map((n) => `<li class="muted small">${escapeHtml(n)}</li>`).join("");
+  return `<ul class="devstack-config-paths">${pathRows.join("")}</ul>
+    ${related ? `<p class="muted small"><strong>Hosting / platform (shared)</strong></p><ul class="devstack-config-files">${related}</ul>` : ""}
+    ${files ? `<p class="muted small"><strong>Stack files</strong> (under <code>${escapeHtml(cfg.stack_dir || "")}</code>)</p><div class="devstack-config-files">${files}</div>` : ""}
+    ${notes ? `<ul class="devstack-access__notes">${notes}</ul>` : ""}`;
+}
+
+async function loadDevStackConfigPanel(stackId, bodyEl) {
+  if (!bodyEl || bodyEl.dataset.loaded === "1") return;
+  bodyEl.innerHTML = '<p class="muted small">Loading configuration…</p>';
+  try {
+    const cfg = await fetchPlatformJson(`/api/dev-stacks/${encodeURIComponent(stackId)}/config`);
+    bodyEl.innerHTML = renderDevStackConfigHtml(cfg);
+    bodyEl.dataset.loaded = "1";
+    bodyEl.querySelectorAll(".dev-stack-edit-file").forEach((btn) => {
+      btn.addEventListener("click", () =>
+        openDevStackFileEditor(stackId, btn.getAttribute("data-file-path") || "", { readOnly: false }),
+      );
+    });
+    bodyEl.querySelectorAll(".dev-stack-view-related").forEach((btn) => {
+      btn.addEventListener("click", () =>
+        openDevStackFileEditor(stackId, "", {
+          readOnly: true,
+          relatedId: btn.getAttribute("data-related-id") || "",
+        }),
+      );
+    });
+  } catch (e) {
+    bodyEl.innerHTML = `<p class="muted small devstack-status-line--error">${escapeHtml(String(e.message || e))}</p>`;
+  }
+}
+
+function closeDevStackFileEditor() {
+  const overlay = document.getElementById("devStackFileOverlay");
+  const editor = document.getElementById("devStackFileEditor");
+  if (editor) editor.value = "";
+  devStackFileEditorState = { stackId: "", path: "", readOnly: false, relatedId: "" };
+  if (overlay) {
+    overlay.hidden = true;
+    overlay.classList.add("is-hidden");
+  }
+}
+
+async function openDevStackFileEditor(stackId, relPath, { readOnly = false, relatedId = "" } = {}) {
+  const overlay = document.getElementById("devStackFileOverlay");
+  const titleEl = document.getElementById("devStackFileTitle");
+  const pathEl = document.getElementById("devStackFilePath");
+  const hintEl = document.getElementById("devStackFileHint");
+  const editor = document.getElementById("devStackFileEditor");
+  const saveBtn = document.getElementById("devStackFileSave");
+  const statusEl = document.getElementById("devStackFileStatus");
+  if (!overlay || !editor) return;
+  devStackFileEditorState = { stackId, path: relPath, readOnly, relatedId };
+  if (statusEl) statusEl.textContent = "";
+  if (titleEl) titleEl.textContent = readOnly ? "View file" : "Edit file";
+  if (pathEl) pathEl.textContent = relPath || relatedId || "";
+  if (hintEl) {
+    if (readOnly) {
+      hintEl.textContent = "Read-only. Edit stack files below or change compose, then Start to regenerate Traefik routes.";
+      hintEl.classList.remove("is-hidden");
+    } else {
+      hintEl.classList.add("is-hidden");
+      hintEl.textContent = "";
+    }
+  }
+  if (saveBtn) saveBtn.hidden = !!readOnly;
+  editor.readOnly = !!readOnly;
+  editor.value = "Loading…";
+  overlay.hidden = false;
+  overlay.classList.remove("is-hidden");
+  try {
+    let data;
+    if (relatedId) {
+      data = await fetchPlatformJson(
+        `/api/dev-stacks/${encodeURIComponent(stackId)}/related-files/${encodeURIComponent(relatedId)}`,
+      );
+      if (pathEl && data.path) pathEl.textContent = data.path;
+    } else {
+      data = await fetchPlatformJson(
+        `/api/dev-stacks/${encodeURIComponent(stackId)}/files?path=${encodeURIComponent(relPath)}`,
+      );
+    }
+    editor.value = data.content ?? "";
+    if (data.missing) {
+      if (statusEl) statusEl.textContent = "File does not exist yet.";
+    }
+  } catch (e) {
+    editor.value = "";
+    if (statusEl) statusEl.textContent = String(e.message || e);
+  }
+}
+
+async function saveDevStackFileEditor() {
+  const { stackId, path, readOnly } = devStackFileEditorState;
+  const statusEl = document.getElementById("devStackFileStatus");
+  const editor = document.getElementById("devStackFileEditor");
+  if (readOnly || !stackId || !path || !editor) return;
+  if (dashboardTokenRequired() && !controlToken()) {
+    if (statusEl) statusEl.textContent = "Control token required — set it on the Control tab.";
+    return;
+  }
+  if (statusEl) statusEl.textContent = "Saving…";
+  try {
+    const data = await fetchPlatformJson(`/api/dev-stacks/${encodeURIComponent(stackId)}/files`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path, content: editor.value, token: controlToken() }),
+    });
+    const logs = Array.isArray(data.logs) ? data.logs.join(" ") : "";
+    if (statusEl) statusEl.textContent = data.ok ? `Saved.${logs ? ` ${logs}` : ""}` : data.error || "Save failed";
+    if (data.ok) {
+      document.querySelectorAll(`.devstack-advanced-panel__body[data-stack-id="${CSS.escape(stackId)}"]`).forEach((el) => {
+        el.dataset.loaded = "0";
+      });
+    }
+  } catch (e) {
+    if (statusEl) statusEl.textContent = String(e.message || e);
+  }
+}
+
+function wireDevStackFileEditorModal() {
+  if (document.body.dataset.devStackFileEditorBound === "1") return;
+  document.body.dataset.devStackFileEditorBound = "1";
+  ["devStackFileClose", "devStackFileCancel"].forEach((id) => {
+    document.getElementById(id)?.addEventListener("click", closeDevStackFileEditor);
+  });
+  document.getElementById("devStackFileSave")?.addEventListener("click", saveDevStackFileEditor);
+  document.getElementById("devStackFileOverlay")?.addEventListener("click", (ev) => {
+    if (ev.target?.id === "devStackFileOverlay") closeDevStackFileEditor();
+  });
 }
 
 function renderDevStacksList(stacks) {
@@ -12159,15 +12471,19 @@ function renderDevStacksList(stacks) {
         .map((c) => escapeHtml(`${c.id || "?"}:${c.version || "?"}`))
         .join(", ");
       const rowCls = devStackIsRunning(state) ? "platform-stack-row--running" : "platform-stack-row--stopped";
-      const accessHtml = renderDevStackAccessHtml(s.access, rawId);
-      return `<div class="platform-stack-row ${rowCls}" data-id="${id}" data-stack-id="${escapeAttr(rawId)}" data-stack-state="${escapeAttr(state)}">
-        <div><strong>${name}</strong> <span class="muted small">(${id}) — ${st}${template ? ` · ${template}` : ""}${sampleTag}</span></div>
-        ${comps ? `<span class="muted small">${comps}</span>` : ""}
-        ${accessHtml}
+      const cardBody = renderDevStackCardBody(s.access, rawId);
+      return `<div class="platform-stack-row platform-stack-row--wide ${rowCls}" data-id="${id}" data-stack-id="${escapeAttr(rawId)}" data-stack-state="${escapeAttr(state)}">
+        <header class="platform-stack-row__header">
+          <div><strong>${name}</strong> <span class="muted small">(${id}) — ${st}${template ? ` · ${template}` : ""}${sampleTag}</span></div>
+          ${comps ? `<div class="muted small platform-stack-row__comps">${comps}</div>` : ""}
+        </header>
+        ${cardBody}
+        <details class="devstack-advanced-panel">
+          <summary>Advanced — configuration &amp; files</summary>
+          <div class="devstack-advanced-panel__body" data-stack-id="${escapeAttr(rawId)}"></div>
+        </details>
         <div class="platform-svc-tile__actions">
-          ${devStackActionBtn(rawId, "start", state)}
-          ${devStackActionBtn(rawId, "stop", state)}
-          ${devStackActionBtn(rawId, "destroy", state)}
+          ${devStackRowActionButtons(rawId, state)}
         </div>
       </div>`;
     })
@@ -12178,6 +12494,20 @@ function renderDevStacksList(stacks) {
   el.querySelectorAll(".dev-stack-reset-admin").forEach((btn) => {
     btn.addEventListener("click", () => devStackResetAdmin(btn.getAttribute("data-id") || ""));
   });
+  el.querySelectorAll(".devstack-copy-magic-link").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      devStackCopyMagicLink(btn.getAttribute("data-url") || "", btn.getAttribute("data-label") || "Link");
+    });
+  });
+  el.querySelectorAll(".devstack-advanced-panel").forEach((panel) => {
+    panel.addEventListener("toggle", () => {
+      if (!panel.open) return;
+      const body = panel.querySelector(".devstack-advanced-panel__body");
+      const stackId = body?.getAttribute("data-stack-id") || "";
+      if (stackId && body) loadDevStackConfigPanel(stackId, body);
+    });
+  });
+  wireDevStackFileEditorModal();
 }
 
 let devStackLogBuffer = "";
@@ -12310,10 +12640,30 @@ async function devStackResetAdmin(stackId) {
 async function devStackAction(btn) {
   if (btn.disabled && btn.getAttribute("data-action") !== "destroy") return;
   const id = btn.getAttribute("data-id");
-  const action = btn.getAttribute("data-action");
+  let action = btn.getAttribute("data-action");
   if (dashboardTokenRequired() && !controlToken()) {
     setDevStackStatus("Control token required — set it on the Control tab.");
     return;
+  }
+  if (action === "repair") {
+    const ok = await showAppConfirm({
+      title: `Repair ${id}`,
+      message:
+        "Applies current LEco configuration fixes (images, edge configs), refreshes Traefik routes, reconnects lh-network, runs docker compose up -d, and repairs public URLs. Does not revert manual edits in Advanced. Keeps Docker volumes.",
+      confirmText: "Repair",
+    });
+    if (!ok) return;
+  }
+  if (action === "reinstall" || action === "redeploy") {
+    const ok = await showAppConfirm({
+      title: `Reinstall ${id}`,
+      message:
+        "Regenerates all stack files from the template (reverts manual edits in Advanced), deletes Docker volumes for a clean database and app data, reconfigures the app, then deploys again. First boot can take 15–30 minutes for Magento with sample data.",
+      confirmText: "Reinstall",
+      danger: true,
+    });
+    if (!ok) return;
+    if (action === "redeploy") action = "reinstall";
   }
   if (action === "destroy") {
     const ok = await showAppConfirm({
@@ -12332,9 +12682,17 @@ async function devStackAction(btn) {
         ? data.ok
           ? `Destroyed stack ${id}.`
           : `Destroy failed for ${id}.`
-        : data.ok
-          ? `${action === "start" ? "Started" : "Stopped"} ${id}.`
-          : `${action === "start" ? "Start" : "Stop"} failed for ${id}.`;
+        : action === "repair"
+          ? data.ok
+            ? `Repaired stack ${id}.`
+            : `Repair failed for ${id}.`
+          : action === "reinstall" || action === "redeploy"
+            ? data.ok
+              ? `Reinstalled stack ${id}.`
+              : `Reinstall failed for ${id}.`
+            : data.ok
+              ? `${action === "start" ? "Started" : "Stopped"} ${id}.`
+              : `${action === "start" ? "Start" : "Stop"} failed for ${id}.`;
     const warn = data.public_url_repair_warning ? ` Warning: ${data.public_url_repair_warning}` : "";
     setDevStackStatus(`${head}${warn} See log below — Close clears it.`, { error: !data.ok });
     _hostedDevStacksCache = null;

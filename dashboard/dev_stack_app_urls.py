@@ -29,6 +29,8 @@ _BAD_BASES = (
     "https://127.0.0.1",
 )
 
+_MAGENTO_CLI = "/bitnami/magento/bin/magento"
+
 
 def stack_public_host(stack_id: str) -> str:
     return stack_hostname(_slugify(stack_id))
@@ -150,6 +152,27 @@ def _compose_wait_service(stack_id: str, service: str, *, timeout: int = 300) ->
     return proc.returncode, out
 
 
+def _magento_cli(stack_id: str, *args: str, timeout: int = 300) -> tuple[int, str]:
+    return _compose_exec(stack_id, "magento", _MAGENTO_CLI, *args, timeout=timeout)
+
+
+def _wait_magento_ready(stack_id: str, *, timeout: int = 900) -> tuple[bool, str]:
+    """Wait for Bitnami first-boot install (bin/magento appears, setup:db:status OK)."""
+    deadline = time.monotonic() + timeout
+    last = ""
+    while time.monotonic() < deadline:
+        code, out = _compose_exec(stack_id, "magento", "test", "-x", _MAGENTO_CLI, timeout=60)
+        if code != 0:
+            last = out or "Waiting for Magento install (bin/magento)…"
+        else:
+            code2, out2 = _magento_cli(stack_id, "setup:db:status", timeout=120)
+            if code2 == 0:
+                return True, "Magento is installed."
+            last = out2 or "Magento CLI ready; setup still in progress…"
+        time.sleep(10)
+    return False, last or f"Timed out after {timeout}s waiting for Magento install."
+
+
 def _wait_wordpress_installed(stack_id: str, *, timeout: int = 180) -> tuple[bool, str]:
     deadline = time.monotonic() + timeout
     last = ""
@@ -204,6 +227,13 @@ def wait_for_stack_app_ready(stack_id: str) -> str:
             else:
                 hint = out or "Complete setup in the browser, then Start again for URL repair."
                 sections.append(hint)
+
+    if template in ("magento-min", "magento-full"):
+        sections.append("--- Magento install ---")
+        ok, msg = _wait_magento_ready(stack_id)
+        sections.append(msg)
+        if not ok:
+            sections.append("(URL repair will run after install completes on a later start.)")
 
     return "\n".join(sections).strip()
 
@@ -275,16 +305,35 @@ def repair_joomla_urls(stack_id: str) -> dict[str, object]:
 
 def repair_magento_urls(stack_id: str) -> dict[str, object]:
     base = stack_public_url(stack_id).rstrip("/") + "/"
+    code, check_out = _compose_exec(stack_id, "magento", "test", "-x", _MAGENTO_CLI, timeout=60)
+    if code != 0:
+        return {
+            "ok": False,
+            "skipped": True,
+            "url": base,
+            "error": "Magento is not installed yet",
+            "output": check_out or "Run stack Start again after the Magento container finishes first boot.",
+        }
+    code, status_out = _magento_cli(stack_id, "setup:db:status", timeout=120)
+    if code != 0:
+        return {
+            "ok": False,
+            "skipped": True,
+            "url": base,
+            "error": "Magento setup is not complete yet",
+            "output": status_out or "Wait for install, then Start again for URL repair.",
+        }
+
     logs: list[str] = []
     ok = True
     commands = [
-        ["bin/magento", "setup:store-config:set", f"--base-url={base}"],
-        ["bin/magento", "config:set", "web/unsecure/base_url", base],
-        ["bin/magento", "config:set", "web/secure/base_url", base],
-        ["bin/magento", "cache:flush"],
+        ["setup:store-config:set", f"--base-url={base}"],
+        ["config:set", "web/unsecure/base_url", base],
+        ["config:set", "web/secure/base_url", base],
+        ["cache:flush"],
     ]
     for cmd in commands:
-        code, out = _compose_exec(stack_id, "magento", *cmd, timeout=600)
+        code, out = _magento_cli(stack_id, *cmd, timeout=600)
         if out:
             logs.append(out)
         if code != 0:

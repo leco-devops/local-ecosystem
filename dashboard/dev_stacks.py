@@ -36,6 +36,96 @@ def _ensure_lh_network() -> None:
     )
 
 
+def _compose_services_on_lh_network(stack_id: str) -> set[str]:
+    """Service keys in docker-compose.yml that attach to external lh-network."""
+    import yaml
+
+    path = stack_dir_for(stack_id) / "docker-compose.yml"
+    if not path.is_file():
+        return set()
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return set()
+    if not isinstance(raw, dict):
+        return set()
+    services = raw.get("services")
+    if not isinstance(services, dict):
+        return set()
+    on_lh: set[str] = set()
+    for name, spec in services.items():
+        if not isinstance(spec, dict):
+            continue
+        nets = spec.get("networks")
+        if isinstance(nets, list) and "lh-network" in nets:
+            on_lh.add(str(name))
+        elif isinstance(nets, dict) and "lh-network" in nets:
+            on_lh.add(str(name))
+    return on_lh
+
+
+def repair_stack_lh_network(stack_id: str) -> list[str]:
+    """Ensure lh-network exists and connect stack edge containers that lost it."""
+    sid = _slugify(stack_id)
+    logs: list[str] = []
+    _ensure_lh_network()
+    expected = _compose_services_on_lh_network(sid)
+    if not expected:
+        return logs
+    project = _compose_project_name(sid)
+    proc = subprocess.run(
+        ["docker", "ps", "-q", "--filter", f"label=com.docker.compose.project={project}"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    cids = [ln.strip() for ln in (proc.stdout or "").splitlines() if ln.strip()]
+    if not cids:
+        return logs
+    for cid in cids:
+        insp = subprocess.run(
+            ["docker", "inspect", cid, "--format", "{{json .Name}}\t{{json .Config.Labels}}"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if insp.returncode != 0:
+            continue
+        line = (insp.stdout or "").strip()
+        if not line:
+            continue
+        try:
+            name_raw, labels_raw = line.split("\t", 1)
+            name = json.loads(name_raw).lstrip("/")
+            labels = json.loads(labels_raw)
+        except (ValueError, json.JSONDecodeError):
+            continue
+        svc = str(labels.get("com.docker.compose.service") or "")
+        if svc not in expected:
+            continue
+        net_proc = subprocess.run(
+            ["docker", "inspect", cid, "--format", "{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        attached = set((net_proc.stdout or "").split())
+        if "lh-network" in attached:
+            continue
+        conn = subprocess.run(
+            ["docker", "network", "connect", "lh-network", cid],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if conn.returncode == 0:
+            logs.append(f"Connected {name} ({svc}) to lh-network")
+        else:
+            err = (conn.stderr or conn.stdout or "connect failed").strip()
+            logs.append(f"Could not connect {name} ({svc}) to lh-network: {err[:200]}")
+    return logs
+
+
 def _compose_cmd(stack_id: str, *args: str) -> tuple[int, str]:
     d = stack_dir_for(stack_id)
     compose_file = d / "docker-compose.yml"
@@ -302,6 +392,15 @@ def stack_action(stack_id: str, action: str) -> dict[str, Any]:
         code, out = _compose_cmd(sid, "stop")
     elif action == "destroy":
         return destroy_stack(sid)
+    elif action == "repair":
+        from dev_stack_redeploy import repair_stack
+
+        return _finish_stack_lifecycle_action(sid, repair_stack(sid), action)
+    elif action in ("reinstall", "redeploy"):
+        from dev_stack_redeploy import reinstall_stack, redeploy_stack
+
+        fn = redeploy_stack if action == "redeploy" else reinstall_stack
+        return _finish_stack_lifecycle_action(sid, fn(sid), action)
     else:
         return {"ok": False, "error": f"Unknown action: {action}"}
     if action in ("start", "stop") and code == 0:
@@ -316,34 +415,58 @@ def stack_action(stack_id: str, action: str) -> dict[str, Any]:
     result: dict[str, Any] = {"ok": code == 0, "output": out, "state": _docker_ps_state(sid)}
     if code != 0 and out:
         result["error"] = out.splitlines()[-1] if out else "compose failed"
-    if action == "start" and code == 0:
-        from dev_stack_app_urls import (
-            format_compose_log,
-            repair_stack_public_urls,
-            wait_for_stack_app_ready,
-        )
-
-        sections: list[str] = []
-        compose_log = format_compose_log(out)
-        if compose_log:
-            sections.append("--- Docker Compose ---")
-            sections.append(compose_log)
-        ready_log = wait_for_stack_app_ready(sid)
-        if ready_log:
-            sections.append(ready_log)
-        repair = repair_stack_public_urls(sid)
-        if repair.get("output"):
-            sections.append("--- Public URL repair ---")
-            sections.append(str(repair["output"]))
-        if sections:
-            result["output"] = "\n".join(sections)
-        if repair.get("ok") is False and not repair.get("skipped"):
-            result["public_url_repair_warning"] = repair.get("error") or "URL repair failed"
-        result["public_url_repair"] = repair
+    if action == "start" and result.get("ok"):
+        result = _append_post_start_sections(sid, result, compose_raw=out)
     elif out:
         from dev_stack_app_urls import format_compose_log
 
         result["output"] = format_compose_log(out)
+    result["access"] = stack_access_info(sid)
+    return result
+
+
+def _append_post_start_sections(
+    sid: str, result: dict[str, Any], *, compose_raw: str = ""
+) -> dict[str, Any]:
+    from dev_stack_app_urls import (
+        format_compose_log,
+        repair_stack_public_urls,
+        wait_for_stack_app_ready,
+    )
+
+    sections: list[str] = []
+    if result.get("output"):
+        sections.append(str(result["output"]))
+    compose_log = format_compose_log(compose_raw)
+    if compose_log:
+        sections.append("--- Docker Compose ---")
+        sections.append(compose_log)
+    ready_log = wait_for_stack_app_ready(sid)
+    if ready_log:
+        sections.append(ready_log)
+    repair = repair_stack_public_urls(sid)
+    if repair.get("output"):
+        sections.append("--- Public URL repair ---")
+        sections.append(str(repair["output"]))
+    if sections:
+        result["output"] = "\n".join(sections)
+    if repair.get("ok") is False and not repair.get("skipped"):
+        result["public_url_repair_warning"] = repair.get("error") or "URL repair failed"
+    result["public_url_repair"] = repair
+    return result
+
+
+def _finish_stack_lifecycle_action(sid: str, result: dict[str, Any], action: str) -> dict[str, Any]:
+    if result.get("ok"):
+        cfg = load_platform_config()
+        for s in cfg.get("dev_stacks") or []:
+            if str(s.get("id")) == sid or _slugify(str(s.get("id") or "")) == sid:
+                s["state"] = _docker_ps_state(sid)
+        save_platform_config(cfg)
+        from dev_stack_routes import sync_dev_stack_routes
+
+        sync_dev_stack_routes(sid)
+        result = _append_post_start_sections(sid, result)
     result["access"] = stack_access_info(sid)
     return result
 

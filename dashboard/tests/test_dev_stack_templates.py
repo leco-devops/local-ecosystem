@@ -63,6 +63,9 @@ def test_magento_presets_and_templates(tmp_path, monkeypatch):
     assert (stacks_root / "magento-full" / "varnish" / "default.vcl").is_file()
     assert "varnish_vcl" in raw_full.get("configs", {})
     assert "./varnish/" not in str(raw_full["services"]["varnish"].get("volumes", []))
+    nginx_content = raw_full["configs"]["nginx_edge_conf"]["content"]
+    assert "$$host" in nginx_content
+    assert "proxy_set_header Host $host" not in nginx_content.replace("$$", "")
 
     path_es, meta_es = create_from_preset("elasticsearch", sample_data=False)
     raw_es = yaml.safe_load(path_es.read_text(encoding="utf-8"))

@@ -45,6 +45,23 @@ def test_all_ready_presets_create_and_access(tmp_path, monkeypatch):
         assert compose_path.is_file(), f"{preset}: compose not written"
         raw = yaml.safe_load(compose_path.read_text(encoding="utf-8"))
         assert isinstance(raw.get("services"), dict) and raw["services"], f"{preset}: empty services"
+        net = access.get("networking") or {}
+        assert net.get("nodes"), f"{preset}: missing networking.nodes"
+        assert access.get("quick_links"), f"{preset}: missing quick_links"
+
+
+def test_magento_full_networking_layers(tmp_path, monkeypatch):
+    stacks_root = tmp_path / "platform" / "dev-stacks"
+    monkeypatch.setattr("dev_stack_compose.STACKS_ROOT", stacks_root)
+    monkeypatch.setattr("dev_stack_templates.STACKS_ROOT", stacks_root)
+    monkeypatch.setattr("dev_stack_routes.STACKS_ROOT", stacks_root)
+
+    create_stack("mag-full", "M", preset="magento-full", sample_data=False)
+    access = stack_access_info("mag-full")
+    layers = (access.get("networking") or {}).get("layers") or []
+    assert len(layers) >= 2
+    assert "magento" in layers[0]
+    assert "mariadb" in layers[1]
 
 
 def test_magento_access_note_uses_base_url(tmp_path, monkeypatch):

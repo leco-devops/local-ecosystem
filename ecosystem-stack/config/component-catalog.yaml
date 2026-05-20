@@ -137,6 +137,15 @@ components:
       "8.3": { image: php:8.3-cli-bookworm }
     command: ["sleep", "infinity"]
 
+  ruby:
+    category: toolchain
+    label: Ruby
+    default_port: null
+    max_per_stack: 2
+    versions:
+      "3.3": { image: ruby:3.3-bookworm }
+    command: ["sleep", "infinity"]
+
   mailpit:
     category: messaging
     label: Mailpit

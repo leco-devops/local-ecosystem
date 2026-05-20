@@ -328,6 +328,12 @@ def _magento_app_env(sid: str, *, sample_data: bool, with_search_cache: bool) ->
         "MAGENTO_LAST_NAME": "User",
         "MAGENTO_LOAD_SAMPLE_DATA": "yes" if sample_data else "no",
         "ALLOW_EMPTY_PASSWORD": "yes",
+        "MAGENTO_DATABASE_HOST": "mariadb",
+        "MAGENTO_DATABASE_PORT_NUMBER": "3306",
+        "MARIADB_HOST": "mariadb",
+        "MARIADB_PORT_NUMBER": "3306",
+        # Surfaces install failures in container logs during dev-stack Start.
+        "BITNAMI_DEBUG": "true",
     }
     if with_search_cache:
         env.update(
@@ -352,15 +358,16 @@ sub vcl_recv {
 }
 """
 
+# $$ escapes Compose env interpolation; nginx receives $host, $remote_addr, etc.
 MAGENTO_FULL_NGINX_EDGE_CONF = """server {
   listen 80;
   server_name _;
   location / {
     proxy_pass http://varnish:80;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Host $$host;
+    proxy_set_header X-Real-IP $$remote_addr;
+    proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $$scheme;
   }
 }
 """
@@ -397,6 +404,16 @@ def _template_magento_min(sid: str, name: str, *, sample_data: bool) -> tuple[Pa
             "environment": _magento_app_env(sid, sample_data=sample_data, with_search_cache=False),
             "volumes": ["magento_data:/bitnami/magento"],
             "networks": [internal_net, NETWORK_EXTERNAL],
+            "healthcheck": {
+                "test": [
+                    "CMD-SHELL",
+                    "test -x /bitnami/magento/bin/magento && /bitnami/magento/bin/magento setup:db:status >/dev/null 2>&1",
+                ],
+                "interval": "30s",
+                "timeout": "10s",
+                "retries": 40,
+                "start_period": "1200s",
+            },
         },
     }
     compose = _base_compose(sid, services, {"magento_db": {}, "magento_data": {}})
@@ -469,11 +486,21 @@ def _template_magento_full(sid: str, name: str, *, sample_data: bool) -> tuple[P
             "environment": _magento_app_env(sid, sample_data=sample_data, with_search_cache=True),
             "volumes": ["magento_data:/bitnami/magento"],
             "networks": [internal_net],
+            "healthcheck": {
+                "test": [
+                    "CMD-SHELL",
+                    "test -x /bitnami/magento/bin/magento && /bitnami/magento/bin/magento setup:db:status >/dev/null 2>&1",
+                ],
+                "interval": "30s",
+                "timeout": "10s",
+                "retries": 40,
+                "start_period": "1200s",
+            },
         },
         "varnish": {
             "image": "varnish:7.4",
             "restart": "unless-stopped",
-            "depends_on": ["magento"],
+            "depends_on": {"magento": {"condition": "service_started"}},
             "configs": [{"source": "varnish_vcl", "target": "/etc/varnish/default.vcl"}],
             "networks": [internal_net],
         },
@@ -481,7 +508,7 @@ def _template_magento_full(sid: str, name: str, *, sample_data: bool) -> tuple[P
             "image": "nginx:alpine",
             "container_name": http_container_name(sid, "app"),
             "restart": "unless-stopped",
-            "depends_on": ["varnish"],
+            "depends_on": {"varnish": {"condition": "service_started"}},
             "configs": [{"source": "nginx_edge_conf", "target": "/etc/nginx/conf.d/default.conf"}],
             "networks": [internal_net, NETWORK_EXTERNAL],
         },
@@ -635,6 +662,10 @@ def generate_from_template(
     sample_data: bool = False,
 ) -> tuple[Path, dict[str, Any]]:
     fn = _TEMPLATES.get(template_id)
+    if not fn:
+        from dev_stack_frameworks import FRAMEWORK_TEMPLATES
+
+        fn = FRAMEWORK_TEMPLATES.get(template_id)
     if not fn:
         raise ValueError(f"Unknown dev stack template: {template_id}")
     return fn(_slugify(stack_id), name, sample_data=sample_data)

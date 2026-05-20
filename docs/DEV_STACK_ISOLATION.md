@@ -29,6 +29,25 @@ POST /api/dev-stacks
 
 Files land in `platform/dev-stacks/billing/` (`docker-compose.yml`, `stack.yaml`).
 
+## Where configuration lives (not under `hosting/app-available/`)
+
+| What | Path |
+|------|------|
+| Stack compose + metadata | `platform/dev-stacks/<id>/` (`docker-compose.yml`, `stack.yaml`, optional `varnish/`, `nginx/`) |
+| Platform registry row | `config/leco-platform.yaml` → `dev_stacks[]` |
+| Traefik HTTP routes | `hosting/traefik/20-dev-stacks.yml` (generated for all stacks) |
+
+**Hosted apps** use `hosting/app-available/<slug>/` and `config/leco-registry.yaml`. Dev stacks are a separate model.
+
+**Dashboard:** Platform → each stack card shows **Networking** (Traefik → app flow), **Admin & credentials** (open admin, copy magic link, reset), **Quick open** (storefront, Adminer, Redis Commander), and **Data stores** (connection strings). **Advanced — configuration & files** (view paths, edit stack files, view shared Traefik/platform files).
+
+| Action | Effect |
+|--------|--------|
+| **Repair** | Apply LEco config fixes (images, edge configs), sync Traefik, reconnect `lh-network`, `compose up -d`, public URL repair — **keeps volumes** and **manual Advanced edits** |
+| **Reinstall** | Regenerate files from template (reverts manual edits), `compose down -v`, fresh deploy and reconfigure — **wipes DB/app data** (use after wrong MariaDB version or broken install) |
+
+**Framework stacks** (Platform → Stack preset → *Application frameworks*): Yii2, CakePHP, Symfony, Laravel, Django, Ruby on Rails, NestJS, FastAPI, Flask, Express. First **Start** installs dependencies inside the app container; use `docker compose logs -f app` to watch bootstrap.
+
 ## Lifecycle
 
 | Action | Effect |

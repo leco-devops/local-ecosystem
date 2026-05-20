@@ -24,6 +24,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - **Magento full (Varnish/Nginx):** Edge config uses Compose `configs` instead of host bind mounts so **Start** works when the dashboard runs under `/project` (no Docker Desktop file-sharing for `varnish/default.vcl`). Existing `magento-full` stacks auto-upgrade on **Start**.
 
+- **Magento URL repair:** Waits for Bitnami first-boot (`/bitnami/magento/bin/magento`, `setup:db:status`) before `bin/magento` URL repair; skips with a clear message instead of exec errors. Nginx edge config uses `$$` in Compose so `proxy_set_header` variables are not stripped.
+
+- **Magento dev stacks (MariaDB):** Use `bitnamilegacy/mariadb:10.6` (Magento does not support MariaDB 11). Existing stacks: **Destroy** (with volumes) and create/start again, or `compose down -v` then **Start** after the compose file is upgraded.
+
+- **Dev stack configuration UI:** Each stack card has **Advanced — configuration & files** (collapsed by default) with paths (`platform/dev-stacks/<id>/`, `hosting/traefik/20-dev-stacks.yml`, `config/leco-platform.yaml`) and in-browser edit/view for stack files via `/api/dev-stacks/<id>/config` and `/files`.
+
+- **Dev stack Repair / Reinstall:** **Repair** applies LEco configuration updates (images, edge configs), Traefik routes, `lh-network` connectivity, `compose up -d`, and public URL repair — keeps volumes and manual Advanced edits. **Reinstall** regenerates stack files from the template (reverts edits), wipes volumes, and fully redeploys/reconfigures (fixes bad DB state, e.g. Magento on MariaDB 11). API action `redeploy` remains an alias for `reinstall`.
+
+- **Dev stack cards (Platform):** Full-width two-column layout per stack with **Networking** flow diagram, **Admin & credentials** (open admin, copy magic link, reset for WordPress/Magento), **Quick open** (storefront, Adminer, Redis Commander), and **Data stores** (Docker connection strings + CLI hints).
+
+- **Dev stack frameworks:** New **Application frameworks** preset group — Yii2, CakePHP, Symfony, Laravel, Django, Ruby on Rails, NestJS, FastAPI, Flask, and Express. Each stack bootstraps on first Start (composer/npm/pip), exposes the app on `{stackId}.lh` via Traefik, and includes DB services where applicable.
+
 - **Dev stack image preflight:** Central image registry (`dev_stack_images.py`), auto-rewrite of deprecated Bitnami Magento/MariaDB refs on start, registry checks before `compose up`, and create-time validation so API errors stay JSON (not HTML).
 
 - **Traefik 404 on `localhost.lh`:** Empty `hosting/traefik/20-dev-stacks.yml` no longer writes invalid `http.routers: {}` (Traefik v3 rejected the whole file provider). `traefik.sh heal` normalizes every `hosting/traefik/*.yml`.

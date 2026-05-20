@@ -27,6 +27,17 @@ def test_magento_image_is_legacy_archive():
     assert "bitnami/magento:2" in KNOWN_UNAVAILABLE
 
 
+def test_nginx_compose_config_needs_fix_detects_unescaped_vars():
+    from dev_stack_images import _nginx_compose_config_needs_fix
+
+    assert _nginx_compose_config_needs_fix(
+        {"configs": {"nginx_edge_conf": {"content": "proxy_set_header Host $host;\n"}}}
+    )
+    assert not _nginx_compose_config_needs_fix(
+        {"configs": {"nginx_edge_conf": {"content": "proxy_set_header Host $$host;\n"}}}
+    )
+
+
 def test_upgrade_magento_full_bind_mounts_to_configs():
     compose = {
         "services": {

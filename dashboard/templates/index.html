@@ -609,6 +609,14 @@
                 only routed HTTP services join <code>lh-network</code>. Bind a hosted app with
                 <code>platform.devStackId</code> in <code>leco.yaml</code> (Hosted apps → Dev stack).
               </p>
+              <p>
+                <strong>Where configuration lives:</strong> each stack’s files are under
+                <code>platform/dev-stacks/&lt;id&gt;/</code> (compose, <code>stack.yaml</code>, optional
+                <code>varnish/</code> / <code>nginx/</code>). That is separate from
+                <code>hosting/app-available/</code> (registered hosted apps). HTTP routes are generated in
+                <code>hosting/traefik/20-dev-stacks.yml</code>; the registry row is in
+                <code>config/leco-platform.yaml</code>. Use <strong>Advanced — configuration &amp; files</strong> on each stack card to view paths and edit files.
+              </p>
             </details>
             <div class="platform-stack-form">
               <label class="platform-field">Stack id
@@ -1315,6 +1323,23 @@
     </div>
 
     {% include "_app_modal.html" %}
+
+    <div id="devStackFileOverlay" class="devstack-file-overlay is-hidden" hidden>
+      <div class="devstack-file-dialog" role="dialog" aria-modal="true" aria-labelledby="devStackFileTitle">
+        <header class="devstack-file-dialog__header">
+          <h3 id="devStackFileTitle" class="devstack-file-dialog__title">Edit file</h3>
+          <button type="button" id="devStackFileClose" class="ctrl-act devstack-file-close" aria-label="Close editor">Close</button>
+        </header>
+        <p id="devStackFilePath" class="devstack-file-dialog__path muted small"></p>
+        <p id="devStackFileHint" class="devstack-file-dialog__hint muted small is-hidden"></p>
+        <textarea id="devStackFileEditor" class="devstack-file-editor" spellcheck="false" aria-label="File content"></textarea>
+        <div class="devstack-file-dialog__actions">
+          <button type="button" id="devStackFileSave" class="ctrl-act ctrl-act--deploy">Save</button>
+          <button type="button" id="devStackFileCancel" class="ctrl-act">Cancel</button>
+        </div>
+        <p id="devStackFileStatus" class="devstack-file-dialog__status muted small" role="status" aria-live="polite"></p>
+      </div>
+    </div>
 
     <div id="controlActionOverlay" class="control-action-overlay" hidden>
       <div class="control-action-dialog" role="dialog" aria-modal="true" aria-labelledby="controlActionTitle">
