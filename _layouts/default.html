@@ -32,8 +32,8 @@
           <div class="leco-page-header__actions">
             <a class="leco-btn leco-btn--primary" href="{{ site.github.repository_url }}">View on GitHub</a>
             {% if site.show_downloads %}
-              <a class="leco-btn leco-btn--ghost" href="{{ site.github.zip_url }}">Download .zip</a>
-              <a class="leco-btn leco-btn--ghost" href="{{ site.github.tar_url }}">Download .tar.gz</a>
+              <a class="leco-btn leco-btn--ghost" href="{{ site.github.repository_url }}" target="_blank" rel="noopener noreferrer" title="Download ZIP from the repository Code menu on GitHub">Download .zip</a>
+              <a class="leco-btn leco-btn--ghost" href="{{ site.github.repository_url }}" target="_blank" rel="noopener noreferrer" title="Download tar.gz from the repository Code menu on GitHub">Download .tar.gz</a>
             {% endif %}
           </div>
         {% endif %}
