@@ -39,9 +39,9 @@ github:
 
 plugins:
   - jekyll-seo-tag
-  - jekyll-sitemap
   - jekyll-github-metadata
   - jekyll-relative-links
+  # Sitemap: explicit sitemap.xml + _data/sitemap.yml (includes LLM .txt URLs)
 
 # Do not publish the full monorepo as HTML pages — landing only
 exclude:
