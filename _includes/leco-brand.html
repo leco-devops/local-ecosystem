@@ -1,0 +1,17 @@
+{% assign leco_logo = include.logo | default: '/assets/img/leco-logo.svg' %}
+{% assign leco_mark = include.mark | default: '/assets/img/favicon.svg' %}
+{% assign leco_alt = include.alt | default: 'LEco DevOps' %}
+{% assign leco_size = include.size | default: '48' %}
+<a class="leco-brand{% if include.class %} {{ include.class }}{% endif %}" href="{{ include.href | default: '/' | relative_url }}">
+  <img
+    class="leco-brand__mark"
+    src="{{ leco_mark | relative_url }}"
+    width="{{ leco_size }}"
+    height="{{ leco_size }}"
+    alt=""
+    decoding="async"
+  />
+  <span class="leco-brand__text">
+    <span class="leco-brand__name">LEco</span><span class="leco-brand__suffix"> DevOps</span>
+  </span>
+</a>

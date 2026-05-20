@@ -19,7 +19,10 @@
     {% endif %}
     <header class="leco-page-header" role="banner">
       <div class="leco-page-header__inner">
-        <h1 class="leco-page-header__title">
+        <div class="leco-page-header__brand">
+          {% include leco-brand.html class="leco-brand--header" size="56" %}
+        </div>
+        <h1 class="leco-page-header__title leco-sr-only">
           <a href="{{ '/' | relative_url }}">{{ site.title | default: site.github.repository_name }}</a>
         </h1>
         {% if site.description %}

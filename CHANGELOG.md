@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Brand assets:** LEco logo set under [`assets/brand/`](assets/brand/) (hexagon mark with center dot only—no monogram text, horizontal lockup, round avatar PNG/SVG); favicon and Open Graph image updated; logo in GitHub Pages header/hero/footer, README, and dashboard header.
+
 ### Fixed
 
 - **GitHub Pages FAQ:** Render FAQ and lower page sections via layout includes (not inside `index.md` markdown); fix `<slug>`, `<id>`, `<your-app>` placeholders in `index.md` that broke HTML parsing; use `xml_escape` on FAQ fields.

@@ -3528,7 +3528,7 @@ let _appModalResolve = null;
 const APP_MODAL_HTML = `<div id="appModalOverlay" class="app-modal-overlay" hidden>
   <div class="app-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="appModalTitle">
     <div class="app-modal-brand" aria-hidden="true">
-      <img src="/static/favicon.svg" alt="" width="28" height="28" />
+      <img src="/static/leco-logo-mark.svg" alt="" width="28" height="28" />
       <span>LEco DevOps</span>
     </div>
     <div class="app-modal-inner">

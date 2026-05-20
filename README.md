@@ -1,5 +1,9 @@
 # LEco DevOps Open Project
 
+<p align="center">
+  <img src="assets/brand/leco-logo.svg" width="360" height="72" alt="LEco DevOps" />
+</p>
+
 **One-click deploy for almost any application — no manual rewiring.**  
 LEco reads your repo, converts config, orchestrates Compose & Traefik, and ships on `*.lh`.
 
