@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **README (GitHub Pages):** Brand-style landing with Features, Use cases, and How it fits together sections; technical detail remains in [docs/PROJECT.md](docs/PROJECT.md).
+
 ### Added
 
 - **Platform READMEs:** [platform/README.md](platform/README.md) and [platform/dev-stacks/README.md](platform/dev-stacks/README.md) document dev stack layout (parallel to [hosting/app-available/README.md](hosting/app-available/README.md)).
