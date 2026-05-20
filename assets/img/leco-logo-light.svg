@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 72" role="img" aria-label="LEco DevOps">
+  <g transform="translate(4 4)">
+    <rect width="64" height="64" rx="14" fill="#E1E5F2"/>
+    <path fill="none" stroke="#1F7A8C" stroke-width="2.5" stroke-linejoin="round" d="M32 9l19 11v24L32 55 13 44V20L32 9z"/>
+    <circle cx="32" cy="32" r="10" fill="#022B3A"/>
+  </g>
+  <text x="84" y="44" font-family="Inter, system-ui, sans-serif" font-size="28" font-weight="700" fill="#1F7A8C">LEco</text>
+  <text x="168" y="44" font-family="Inter, system-ui, sans-serif" font-size="28" font-weight="600" fill="#022B3A"> DevOps</text>
+  <text x="84" y="60" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="600" fill="#1F7A8C" letter-spacing="0.08em">LOCAL CLOUD EDGE</text>
+</svg>

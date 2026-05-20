@@ -6,7 +6,7 @@ title: LEco DevOps Open Project
 <div class="leco-hero-panel">
 
 <p class="leco-hero-logo">
-  <img src="{{ '/assets/img/leco-logo.svg' | relative_url }}" width="320" height="64" alt="LEco DevOps" decoding="async" />
+  <img src="{{ '/assets/img/leco-logo-light.svg' | relative_url }}" width="320" height="64" alt="LEco DevOps" decoding="async" />
 </p>
 
 <p class="leco-tagline">

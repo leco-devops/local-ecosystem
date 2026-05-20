@@ -1,4 +1,5 @@
-/* Service hub pages (/hub, /hub/<slug>) */
+/* Service hub pages (/hub, /hub/<slug>) — uses tokens from leco-palette.css */
+
 .hub-shell {
   max-width: 1280px;
 }
@@ -20,13 +21,14 @@
   margin: 0;
   font-size: 1.35rem;
   font-weight: 650;
-  color: #a5f3fc;
+  color: var(--leco-navy);
   letter-spacing: -0.02em;
 }
 
 .hub-page-heading__lede {
   margin: 0 0 6px;
   line-height: 1.5;
+  color: var(--text);
 }
 
 .hub-breadcrumb {
@@ -43,7 +45,7 @@
 }
 
 .hub-back-link {
-  color: #fb923c;
+  color: var(--leco-teal);
   text-decoration: none;
   font-size: 13px;
   margin-right: 12px;
@@ -55,29 +57,32 @@
 }
 
 .hub-back-link:hover {
+  color: var(--leco-navy);
   text-decoration: underline;
 }
 
 .hub-back-link--secondary {
-  color: #94a3b8;
+  color: var(--text-muted);
 }
 
 .hub-meta code {
-  background: #151d2e;
+  background: var(--leco-mist);
   padding: 0.1rem 0.35rem;
   border-radius: 4px;
+  color: var(--text);
 }
 
 .hub-panel {
-  border: 1px solid rgba(100, 116, 139, 0.35);
+  border: 2px solid var(--border-subtle);
   border-radius: 12px;
-  background: rgba(15, 23, 42, 0.5);
+  background: var(--bg-card);
   padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
 }
 
 .hub-panel--ui-access {
-  border-color: rgba(167, 139, 250, 0.45);
-  background: rgba(30, 27, 75, 0.35);
+  border-color: var(--leco-teal);
+  background: var(--bg-card);
   margin-bottom: 18px;
 }
 
@@ -85,26 +90,28 @@
   margin: 0 0 8px;
   font-size: 1.1rem;
   font-weight: 650;
-  color: #c4b5fd;
+  color: var(--text);
 }
 
 .hub-panel__lede {
   margin: 0 0 12px;
   line-height: 1.5;
+  color: var(--text-muted);
 }
 
 .hub-section {
   margin: 0 0 14px;
-  border: 1px solid rgba(100, 116, 139, 0.35);
+  border: 2px solid var(--border-subtle);
   border-radius: 12px;
-  background: rgba(15, 23, 42, 0.5);
+  background: var(--bg-card);
   padding: 12px 14px;
+  box-shadow: var(--shadow-sm);
 }
 
 .hub-section h2 {
   font-size: 14px;
   margin: 0 0 8px;
-  color: #c4b5fd;
+  color: var(--leco-teal);
   font-weight: 600;
 }
 
@@ -112,8 +119,8 @@
   display: grid;
   gap: 0.5rem 1.5rem;
   grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
-  background: #151d2e;
-  border: 1px solid #2d3a52;
+  background: var(--leco-mist);
+  border: 1px solid var(--border-subtle);
   border-radius: 10px;
   padding: 1rem;
 }
@@ -123,7 +130,7 @@
 }
 
 .hub-k {
-  color: #94a3b8;
+  color: var(--text-muted);
   font-size: 0.85rem;
   margin-right: 0.35rem;
 }
@@ -135,7 +142,7 @@
 }
 
 .hub-links a {
-  color: #38bdf8;
+  color: var(--leco-teal);
 }
 
 .hub-list--mono li {
@@ -159,28 +166,29 @@
   align-items: baseline;
   gap: 0.5rem 1rem;
   padding: 0.65rem 0;
-  border-bottom: 1px solid #1e293b;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .hub-index-list a {
-  color: #fb923c;
+  color: var(--leco-teal);
   font-weight: 600;
   text-decoration: none;
 }
 
 .hub-index-list a:hover {
+  color: var(--leco-navy);
   text-decoration: underline;
 }
 
 .hub-index-list code {
   font-size: 0.8rem;
-  color: #94a3b8;
+  color: var(--text-muted);
 }
 
 .hub-index-list--detailed .hub-index-item {
   display: block;
   padding: 0.85rem 0;
-  border-bottom: 1px solid #1e293b;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .hub-index-item__head {
@@ -191,12 +199,13 @@
 }
 
 .hub-index-item__title {
-  color: #fb923c;
+  color: var(--leco-teal);
   font-weight: 600;
   text-decoration: none;
 }
 
 .hub-index-item__title:hover {
+  color: var(--leco-navy);
   text-decoration: underline;
 }
 
@@ -204,14 +213,16 @@
   margin: 0.35rem 0 0;
   line-height: 1.45;
   max-width: 72ch;
+  color: var(--text);
 }
 
 .project-footer__release-link {
-  color: #93c5fd;
+  color: var(--leco-teal);
   text-decoration: none;
 }
 
 .project-footer__release-link:hover {
+  color: var(--leco-navy);
   text-decoration: underline;
 }
 

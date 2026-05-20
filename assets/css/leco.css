@@ -1,31 +1,9 @@
-/* LEco DevOps — GitHub Pages theme aligned with dashboard control panel (dashboard.css) */
+/* LEco DevOps — GitHub Pages (tokens in assets/brand/leco-palette.css via head-custom) */
 
 :root {
-  color-scheme: dark;
-  --leco-navy: #022b3a;
-  --leco-teal: #1f7a8c;
-  --leco-sky: #bfdbf7;
-  --leco-mist: #e1e5f2;
-  --leco-white: #ffffff;
-  --bg-base: var(--leco-navy);
-  --bg-elevated: #033547;
-  --bg-card: var(--leco-teal);
-  --surface-muted: var(--leco-teal);
-  --border-subtle: var(--leco-sky);
-  --text: var(--leco-white);
-  --text-muted: var(--leco-sky);
-  --cyan: var(--leco-sky);
-  --violet: var(--leco-teal);
-  --accent: var(--leco-teal);
-  --accent-strong: var(--leco-navy);
-  --tab-active-bg: var(--leco-teal);
-  --tab-active-border: var(--leco-sky);
-  --link: var(--leco-sky);
-  --emerald: #0d9488;
-  --teal: var(--leco-teal);
   --leco-max: 920px;
   --leco-radius: 14px;
-  --leco-shadow: 0 8px 24px rgba(2, 43, 58, 0.45);
+  --leco-shadow: var(--shadow-md);
 }
 
 /* Hide Cayman default chrome — we use leco layout */
@@ -53,7 +31,7 @@
 }
 
 .leco-site a:hover {
-  color: var(--leco-white);
+  color: var(--leco-navy);
 }
 
 /* Header — matches dashboard h1 / tab accent */
@@ -94,11 +72,11 @@
 }
 
 .leco-brand__name {
-  color: var(--cyan);
+  color: var(--leco-teal);
 }
 
 .leco-brand__suffix {
-  color: var(--text);
+  color: var(--leco-navy);
 }
 
 .leco-brand--header .leco-brand__text {
