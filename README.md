@@ -1,16 +1,8 @@
-<p align="center">
-  <a href="https://techtonic.systems/" title="Techtonic Systems Media And Research LLC">
-    <strong>Techtonic Systems Media And Research LLC</strong>
-  </a>
-  <br />
-  <sub>Open-source software · <a href="https://techtonic.systems/">techtonic.systems</a></sub>
-</p>
-
 <h1 align="center">LEco DevOps Open Project</h1>
 
 <p align="center">
-  <strong>Your local cloud edge on Docker</strong><br />
-  Traefik · TLS · AI · automation · app lifecycle — all on <code>*.lh</code>
+  <strong>Community-driven open source</strong><br />
+  A local cloud edge on Docker — Traefik · TLS · AI · automation · app lifecycle on <code>*.lh</code>
 </p>
 
 <p align="center">
@@ -24,14 +16,14 @@
 <p align="center">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" />
   <img src="https://img.shields.io/badge/open%20source-yes-brightgreen.svg" alt="Open source" />
-  <img src="https://img.shields.io/badge/steward-Techtonic%20Systems%20Media%20And%20Research%20LLC-8b5cf6.svg" alt="Steward: Techtonic Systems Media And Research LLC" />
+  <img src="https://img.shields.io/badge/community--driven-welcome-orange.svg" alt="Community driven" />
 </p>
 
 ---
 
 ## Contribute to this project
 
-**LEco DevOps Open Project** is community-driven open source. Whether you fix a bug, improve docs, add a dev-stack preset, or review a pull request — your help matters.
+This repository belongs to the **community**: anyone can use it, fork it, improve it, and ship changes via pull request. We welcome bugs fixes, docs, dev-stack presets, and reviews.
 
 <p align="center">
   <a href="CONTRIBUTING.md"><strong>Contribution guide</strong></a>
@@ -55,16 +47,17 @@
 |---|---|
 | **Application** | **LEco DevOps** — web UI + `leco-devops` CLI |
 | **License** | [MIT](LICENSE) — use commercially, fork, contribute |
-| **Steward** | [Techtonic Systems Media And Research LLC](https://techtonic.systems/) |
+| **Governance** | Community-owned; see [Open source](docs/OPEN_SOURCE.md) |
 | **Contact** | [leco@techtonic.systems](mailto:leco@techtonic.systems) |
 
 ---
 
 ## Top contributors
 
-| Contributor | Links |
-|-------------|--------|
-| **Rajneesh Maurya** | [GitHub](https://github.com/rmaurya) · [LinkedIn](https://www.linkedin.com/in/rajneeshmaurya/) |
+| Role | Name | Links |
+|------|------|--------|
+| **Manager & moderator** | [Techtonic Systems Media And Research LLC](https://techtonic.systems/) | [Website](https://techtonic.systems/) · [leco@techtonic.systems](mailto:leco@techtonic.systems) |
+| **Contributor** | Rajneesh Maurya | [GitHub](https://github.com/rmaurya) · [LinkedIn](https://www.linkedin.com/in/rajneeshmaurya/) |
 
 ---
 
@@ -105,7 +98,7 @@ Open **http://localhost.lh** or **http://dashboard.lh** for the LEco DevOps dash
 | [Deployment](docs/DEPLOYMENT.md) | Day-2 operations |
 | [Architecture](docs/ARCHITECTURE.md) | How it fits together |
 | [Develop](docs/DEVELOPMENT_PLAYBOOK.md) | Extend services and APIs |
-| [Open source](docs/OPEN_SOURCE.md) | License, stewardship, contributing |
+| [Open source](docs/OPEN_SOURCE.md) | License, governance, contributing |
 
 **Full technical guide:** [docs/PROJECT.md](docs/PROJECT.md)
 
@@ -127,16 +120,10 @@ To publish this landing page: **Repository → Settings → Pages → Build and 
 
 ---
 
-## Stewardship
+## Governance & operational stewardship
 
-**LEco DevOps Open Project** is an **open-source project** managed by **[Techtonic Systems Media And Research LLC](https://techtonic.systems/)**.
+**LEco DevOps Open Project** is **community-driven open source**. Direction, code, and documentation grow through contributors and maintainers in this repository — not through a single vendor product roadmap.
 
-**Contact:** [leco@techtonic.systems](mailto:leco@techtonic.systems)
+**[Techtonic Systems Media And Research LLC](https://techtonic.systems/)** provides **operational stewardship** today: release coordination, infrastructure guidance, and a contact point for the project ([leco@techtonic.systems](mailto:leco@techtonic.systems)). That role supports the community; it does not replace community ownership of the codebase under the [MIT License](LICENSE).
 
-Copyright (c) Techtonic Systems Media And Research LLC and contributors. Licensed under the [MIT License](LICENSE). See [NOTICE](NOTICE.md).
-
-<p align="center">
-  <a href="https://techtonic.systems/"><strong>Techtonic Systems Media And Research LLC</strong></a>
-  <br />
-  <a href="mailto:leco@techtonic.systems">leco@techtonic.systems</a>
-</p>
+Copyright (c) contributors. See [NOTICE](NOTICE.md) and [OPEN_SOURCE.md](docs/OPEN_SOURCE.md).

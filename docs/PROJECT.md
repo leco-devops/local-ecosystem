@@ -18,7 +18,7 @@ You access services by name (**`https://n8n.lh`**, **`https://ai.lh`**, …) ins
 
 ## Project name
 
-**LEco DevOps** is the application name (CLI + web UI). **LEco DevOps Open Project** is the open-source repository and community project, stewarded by [Techtonic Systems Media And Research LLC](https://techtonic.systems/).
+**LEco DevOps** is the application name (CLI + web UI). **LEco DevOps Open Project** is the **community-driven** open-source repository. [Techtonic Systems Media And Research LLC](https://techtonic.systems/) provides operational stewardship; see [OPEN_SOURCE.md](OPEN_SOURCE.md).
 
 ---
 

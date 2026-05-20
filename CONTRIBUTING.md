@@ -1,21 +1,22 @@
 # Contributing to LEco DevOps Open Project
 
-Thanks for contributing to this **open-source** project.
+Thanks for contributing to this **community-driven open-source** project.
 
-> **Maintained by** [Techtonic Systems Media And Research LLC](https://techtonic.systems/) · [MIT License](LICENSE) · [Open source guide](docs/OPEN_SOURCE.md)
+> **[MIT License](LICENSE)** · [Open source governance](docs/OPEN_SOURCE.md) · Operational steward: [Techtonic Systems Media And Research LLC](https://techtonic.systems/)
 
 ## Project scope
 
-- **Project:** LEco DevOps Open Project (this repository and community).
+- **Project:** LEco DevOps Open Project — **community-owned** under MIT; you contribute via issues and pull requests.
 - **Application:** LEco DevOps (the web UI and CLI experience inside this project).
-- **Steward:** [Techtonic Systems Media And Research LLC](https://techtonic.systems/) — open-source maintainer.
+- **Operational steward:** [Techtonic Systems Media And Research LLC](https://techtonic.systems/) — release coordination and project contact (not exclusive ownership).
 - **Contact:** [leco@techtonic.systems](mailto:leco@techtonic.systems)
 
 ## Top contributors
 
-| Contributor | Links |
-|-------------|--------|
-| **Rajneesh Maurya** | [GitHub](https://github.com/rmaurya) · [LinkedIn](https://www.linkedin.com/in/rajneeshmaurya/) |
+| Role | Name | Links |
+|------|------|--------|
+| **Manager & moderator** | [Techtonic Systems Media And Research LLC](https://techtonic.systems/) | [Website](https://techtonic.systems/) · [leco@techtonic.systems](mailto:leco@techtonic.systems) |
+| **Contributor** | Rajneesh Maurya | [GitHub](https://github.com/rmaurya) · [LinkedIn](https://www.linkedin.com/in/rajneeshmaurya/) |
 
 ## How to contribute
 

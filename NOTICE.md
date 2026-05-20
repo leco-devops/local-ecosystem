@@ -8,14 +8,15 @@ This project is **open-source software** released under the **MIT License** (see
 
 ## Stewardship
 
-**Techtonic Systems Media And Research LLC** manages and maintains this open-source project:
+**Techtonic Systems Media And Research LLC** provides operational stewardship for this community-driven open-source project:
 
 - [https://techtonic.systems/](https://techtonic.systems/)
 - [leco@techtonic.systems](mailto:leco@techtonic.systems)
 
 ## Top contributors
 
-- **Rajneesh Maurya** — [GitHub](https://github.com/rmaurya) · [LinkedIn](https://www.linkedin.com/in/rajneeshmaurya/)
+- **Manager & moderator:** [Techtonic Systems Media And Research LLC](https://techtonic.systems/) — [leco@techtonic.systems](mailto:leco@techtonic.systems)
+- **Contributor:** Rajneesh Maurya — [GitHub](https://github.com/rmaurya) · [LinkedIn](https://www.linkedin.com/in/rajneeshmaurya/)
 
 ## Third-party software
 

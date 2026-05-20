@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **README & governance copy:** Project-first landing (no company header); community ownership language; Techtonic Systems Media And Research LLC framed as operational steward only ([OPEN_SOURCE.md](docs/OPEN_SOURCE.md), [CONTRIBUTING.md](CONTRIBUTING.md)).
+
 - **Steward branding:** Use legal name **Techtonic Systems Media And Research LLC** and [https://techtonic.systems/](https://techtonic.systems/) across docs, LICENSE, NOTICE, dashboard footer, and README (GitHub Pages contributor CTA).
 
 - **Contact & contributors:** Project email [leco@techtonic.systems](mailto:leco@techtonic.systems); top contributor credit for Rajneesh Maurya ([GitHub](https://github.com/rmaurya), [LinkedIn](https://www.linkedin.com/in/rajneeshmaurya/)).

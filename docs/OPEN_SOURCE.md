@@ -1,19 +1,27 @@
-# Open source stewardship
+# Open source governance
 
-**LEco DevOps Open Project** is a free and open-source software project. You may use, modify, and distribute it under the terms of the **[MIT License](../LICENSE)**.
+**LEco DevOps Open Project** is **community-driven open source**. You may use, modify, and distribute it under the **[MIT License](../LICENSE)**. The codebase is owned collectively by contributors under that license — not by a single company.
 
-## Maintainer
+## Community ownership
 
-This repository is **managed and maintained** by:
+- **Direction** comes from issues, pull requests, and maintainer consensus in this repository.
+- **Contributions** are MIT-licensed; see [CONTRIBUTING.md](../CONTRIBUTING.md).
+- **Credit** stays in git history and release notes for everyone who ships work.
 
-**[Techtonic Systems Media And Research LLC](https://techtonic.systems/)**
+## Operational stewardship
 
+**[Techtonic Systems Media And Research LLC](https://techtonic.systems/)** currently provides **operational stewardship** (not exclusive ownership):
+
+- Coordinates releases and documentation hygiene
+- Offers a contact channel: [leco@techtonic.systems](mailto:leco@techtonic.systems)
 - Website: [https://techtonic.systems/](https://techtonic.systems/)
-- Email: [leco@techtonic.systems](mailto:leco@techtonic.systems)
-- Project home (this repo): LEco DevOps Open Project
-- Application name: **LEco DevOps** (dashboard + `leco-devops` CLI)
 
-Techtonic Systems Media And Research LLC stewards releases, documentation, and community processes for this open-source codebase. Individual contributors remain credited in git history and release notes.
+The steward supports the community; it does not block forks, competing maintainers, or independent roadmaps allowed by MIT.
+
+| | |
+|---|---|
+| **Project** | LEco DevOps Open Project (this repository) |
+| **Application** | **LEco DevOps** (dashboard + `leco-devops` CLI) |
 
 ## What “open source” means here
 
@@ -22,7 +30,7 @@ Techtonic Systems Media And Research LLC stewards releases, documentation, and c
 | **License** | MIT — see [LICENSE](../LICENSE) |
 | **Contributions** | MIT-licensed; see [CONTRIBUTING.md](../CONTRIBUTING.md) |
 | **Security reports** | Private disclosure; see [SECURITY.md](../SECURITY.md) |
-| **Trademarks** | “LEco DevOps” and project names refer to this OSS effort; third-party marks belong to their owners |
+| **Trademarks** | “LEco DevOps” names refer to this OSS effort; other marks belong to their owners |
 
 ## Key documents
 
@@ -36,16 +44,16 @@ Techtonic Systems Media And Research LLC stewards releases, documentation, and c
 
 ## Top contributors
 
-| Contributor | Links |
-|-------------|--------|
-| **Rajneesh Maurya** | [GitHub](https://github.com/rmaurya) · [LinkedIn](https://www.linkedin.com/in/rajneeshmaurya/) |
+| Role | Name | Links |
+|------|------|--------|
+| **Manager & moderator** | [Techtonic Systems Media And Research LLC](https://techtonic.systems/) | [Website](https://techtonic.systems/) · [leco@techtonic.systems](mailto:leco@techtonic.systems) |
+| **Contributor** | Rajneesh Maurya | [GitHub](https://github.com/rmaurya) · [LinkedIn](https://www.linkedin.com/in/rajneeshmaurya/) |
 
 ## Questions
 
-For product direction, partnerships, or stewardship questions, email **[leco@techtonic.systems](mailto:leco@techtonic.systems)** or visit **[Techtonic Systems Media And Research LLC](https://techtonic.systems/)**.
-
-For code and docs issues, use **GitHub Issues** in this repository.
+- **Code, bugs, features:** GitHub Issues in this repository.
+- **Stewardship, partnerships, security:** [leco@techtonic.systems](mailto:leco@techtonic.systems) or [techtonic.systems](https://techtonic.systems/).
 
 ## Contributors welcome
 
-We welcome **code, documentation, issues, and reviews**. Start with [CONTRIBUTING.md](../CONTRIBUTING.md) and the landing-page contributor links in [README.md](../README.md).
+We welcome **code, documentation, issues, and reviews**. Start with [CONTRIBUTING.md](../CONTRIBUTING.md) and the [README](../README.md) contributor section.
