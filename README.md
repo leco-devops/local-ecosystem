@@ -14,6 +14,14 @@ LEco reads your repo, converts config, orchestrates Compose & Traefik, and ships
 
 **LEco DevOps** is a free, MIT-licensed local cloud edge: point it at an app repo, and it does the heavy lifting — detect existing Docker Compose, Wrangler, and env layout · generate LEco manifests · merge Traefik routes · deploy.
 
+## Vision
+
+We see a future where **any developer, anywhere** runs software the way production does — real hostnames, trusted TLS, shared AI and automation — without months of bespoke wiring or vendor lock-in. **LEco DevOps Open Project** exists so the distance from *“I cloned the repo”* to *“it works like staging”* is measured in **minutes**, shaped by an open community that owns the roadmap and the code.
+
+## Mission
+
+**Deploy first. Configure never — unless you want to.** Our mission is to **orchestrate** the full path: read what you already built, convert it into LEco manifests, wire Traefik and Compose, and ship — one click when possible, full control when you need it. We build **Platform**, isolated dev stacks, and a control panel that feel like one product — free under MIT, governed by contributors, stewarded for the long run.
+
 ## What makes LEco different
 
 > **Our USP: deploy first, configure later.**  

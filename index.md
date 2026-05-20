@@ -32,6 +32,28 @@ title: LEco DevOps Open Project
   <strong>LEco DevOps</strong> is a free, MIT-licensed local cloud edge: point it at an app repo, and it does the heavy lifting — detect existing Docker Compose, Wrangler, and env layout · generate LEco manifests · merge Traefik routes · deploy.
 </p>
 
+<section class="leco-vision-mission" aria-labelledby="vision-mission-heading">
+  <h2 id="vision-mission-heading" class="leco-sr-only">Vision and mission</h2>
+
+  <div class="leco-vision-mission__card leco-vision-mission__card--vision">
+    <span class="leco-vision-mission__label">Vision</span>
+    <h2>Every team deserves a truthful local cloud</h2>
+    <p>
+      We see a future where <strong>any developer, anywhere</strong>, runs software the way production does — real hostnames, trusted TLS, shared AI and automation — without months of bespoke wiring or vendor lock-in.
+      <strong>LEco DevOps Open Project</strong> exists so the distance from <em>“I cloned the repo”</em> to <em>“it works like staging”</em> is measured in <strong>minutes</strong>, shaped by an open community that owns the roadmap and the code.
+    </p>
+  </div>
+
+  <div class="leco-vision-mission__card leco-vision-mission__card--mission">
+    <span class="leco-vision-mission__label">Mission</span>
+    <h2>Deploy first. Configure never — unless you want to.</h2>
+    <p>
+      Our mission is to <strong>orchestrate</strong> the full path: read what you already built, convert it into LEco manifests, wire Traefik and Compose, and ship — one click when possible, full control when you need it.
+      We build <strong>Platform</strong>, isolated dev stacks, and a control panel that feel like one product — free under MIT, governed by contributors, stewarded for the long run so open source stays the default way teams learn, ship, and collaborate.
+    </p>
+  </div>
+</section>
+
 ## What makes LEco different
 
 > **Our USP: deploy first, configure later.**  
@@ -271,5 +293,3 @@ The **official repository** is hosted under [`leco-devops`](https://github.com/l
 ## Governance
 
 **LEco DevOps Open Project** grows through contributors and maintainers. **[Techtonic Systems Media And Research LLC](https://techtonic.systems/)** provides operational stewardship ([leco@techtonic.systems](mailto:leco@techtonic.systems)) — supporting the community under the [MIT License](https://github.com/leco-devops/local-ecosystem/blob/main/LICENSE).
-
-Copyright (c) contributors · [NOTICE](https://github.com/leco-devops/local-ecosystem/blob/main/NOTICE.md) · [OPEN_SOURCE](https://github.com/leco-devops/local-ecosystem/blob/main/docs/OPEN_SOURCE.md)
