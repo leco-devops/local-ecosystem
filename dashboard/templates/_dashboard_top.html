@@ -3,7 +3,10 @@
 {% set nav_hub_active = nav_hub_active|default(false) %}
 <header class="page-header">
   <div class="header-main">
-    <h1>LEco DevOps</h1>
+    <div class="header-brand">
+      <img class="header-brand__mark" src="/static/leco-logo-mark.svg" width="36" height="36" alt="" decoding="async" />
+      <h1>LEco DevOps</h1>
+    </div>
     <div id="summary" class="header-status">Loading…</div>
     <details class="header-more">
       <summary>Deploy &amp; system metrics</summary>

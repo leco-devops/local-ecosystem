@@ -2379,6 +2379,23 @@ button.dev-open-doc:hover {
 }
 
 /* —— Compact header & Overview dashboard —— */
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.header-brand__mark {
+  flex-shrink: 0;
+  border-radius: 10px;
+  box-shadow: 0 2px 12px rgba(34, 211, 238, 0.2);
+}
+
+.header-brand h1 {
+  margin: 0;
+}
+
 .header-main h1 {
   margin-bottom: 10px;
 }

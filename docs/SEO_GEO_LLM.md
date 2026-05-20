@@ -12,6 +12,7 @@ Site: **https://leco-project.us** · Source: [`index.md`](../index.md) + Jekyll 
 | Sitemap | [`sitemap.xml`](../sitemap.xml) built from [`_data/sitemap.yml`](../_data/sitemap.yml) (home + LLM discovery files) |
 | `robots.txt` | [`robots.txt`](../robots.txt) |
 | Social image | [`assets/img/leco-og.svg`](../assets/img/leco-og.svg) |
+| Brand / favicon / avatar | [`assets/brand/`](../assets/brand/) — mark, lockup, round PNG for profiles |
 
 ## GEO (generative engine optimization)
 

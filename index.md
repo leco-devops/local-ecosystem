@@ -5,6 +5,10 @@ title: LEco DevOps Open Project
 
 <div class="leco-hero-panel">
 
+<p class="leco-hero-logo">
+  <img src="{{ '/assets/img/leco-logo.svg' | relative_url }}" width="320" height="64" alt="LEco DevOps" decoding="async" />
+</p>
+
 <p class="leco-tagline">
   <strong>One-click deploy for almost any application — no manual rewiring.</strong><br />
   LEco reads your repo, converts config, orchestrates Compose &amp; Traefik, and ships on <code>*.lh</code>.
