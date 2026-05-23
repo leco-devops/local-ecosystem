@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **File transfer stack:** FTP (`leco-ftp`, alpine-ftp-server) and SFTP (`leco-sftp`, atmoz/sftp) under [`file-transfer/docker-compose.yml`](file-transfer/docker-compose.yml); read-only web file browser at `files.lh` / `ftp-files.lh` / `sftp-files.lh`; dashboard **Control** and **Infrastructure** panels list SFTP, FTP, and browser cards under **Infra add-ons & file transfer**; ecosystem service script [`ecosystem-stack/services/file-transfer.sh`](ecosystem-stack/services/file-transfer.sh); install profile `file-transfer-full`; docs [`docs/FILE_TRANSFER.md`](docs/FILE_TRANSFER.md).
+- **UI access (file transfer):** SFTP, FTP, and read-only file browser in Service hubs → UI access with copy-paste host/port/credentials and Edit / Reset & apply for protocol passwords via `file-transfer/.env`.
+
 ### Changed
 
 - **GitHub Pages:** Remove duplicate logo from hero panel (brand stays in page header only).

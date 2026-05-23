@@ -175,6 +175,90 @@ def reset_vault_to_defaults(slug: str) -> dict[str, str]:
     return defaults
 
 
+def _connection_hint(entry: dict[str, Any], creds: dict[str, str]) -> str:
+    auth_type = entry.get("auth_type") or ""
+    slug = str(entry.get("hub_slug") or entry.get("id") or "").strip()
+    if auth_type == "protocol":
+        user = creds.get("username", "leco")
+        password = creds.get("password", "leco")
+        if slug == "sftp":
+            return f"sftp -P 2222 {user}@localhost"
+        if slug == "ftp":
+            return f"ftp://{user}:{password}@localhost:21"
+    if auth_type == "browse_only":
+        return str(entry.get("connection_hint") or "Read-only · no login")
+    return str(entry.get("connection_hint") or "")
+
+
+def _login_details(entry: dict[str, Any], creds: dict[str, str]) -> dict[str, Any]:
+    """Copy-paste friendly login block for the UI access table."""
+    auth_type = entry.get("auth_type") or "none"
+    slug = str(entry.get("hub_slug") or entry.get("id") or "").strip()
+    login_url = str(entry.get("login_url") or "")
+
+    if auth_type == "protocol":
+        user = creds.get("username", "leco")
+        password = creds.get("password", "leco")
+        if slug == "sftp":
+            host, alt_host, port = "localhost", "sftp.lh", "2222"
+            connection_strings = [
+                f"sftp -P {port} {user}@{host}",
+                f"sftp -P {port} {user}@{alt_host}",
+            ]
+        elif slug == "ftp":
+            host, alt_host, port = "localhost", "ftp.lh", "21"
+            connection_strings = [
+                f"ftp://{user}:{password}@{host}:{port}",
+                f"ftp://{user}:{password}@{alt_host}:{port}",
+            ]
+        else:
+            host, alt_host, port, connection_strings = "", "", "", []
+        return {
+            "kind": "protocol",
+            "summary": f"User: {user} · Password: {password}",
+            "username": user,
+            "password": password,
+            "host": host,
+            "alt_host": alt_host,
+            "port": port,
+            "connection_strings": connection_strings,
+            "footnote": "Override via Edit or file-transfer/.env",
+            "browser_url": login_url,
+        }
+
+    if auth_type == "browse_only":
+        return {
+            "kind": "browse_only",
+            "summary": "Read-only · no login",
+            "browser_url": login_url or "http://files.lh",
+            "browser_urls": [
+                u
+                for u in [
+                    login_url or "http://files.lh",
+                    "http://ftp-files.lh",
+                    "http://sftp-files.lh",
+                ]
+                if u
+            ],
+        }
+
+    user = creds.get("username") or creds.get("email") or creds.get("driver") or ""
+    password = creds.get("password") or creds.get("secretKey") or ""
+    masked_pw = mask_value("password", password) if password else ""
+    summary_parts = []
+    if user:
+        summary_parts.append(f"User: {user}")
+    if password:
+        summary_parts.append(f"Password: {masked_pw}")
+    return {
+        "kind": "web",
+        "login_url": login_url,
+        "username": user,
+        "password": masked_pw,
+        "summary": " · ".join(summary_parts) if summary_parts else "",
+    }
+
+
 def catalog_for_ui() -> dict[str, Any]:
     from ui_credential_reset import _container_running
 
@@ -185,15 +269,20 @@ def catalog_for_ui() -> dict[str, Any]:
             continue
         auth_type = entry.get("auth_type") or "none"
         creds = credentials_for_ui(slug)
+        merged = _merged_credentials(slug)
         container = str(entry.get("container") or "").strip()
+        defaults = entry.get("default_credentials") or {}
         entries.append(
             {
                 "slug": slug,
                 "id": entry.get("id") or slug,
                 "label": entry.get("label") or slug,
                 "login_url": entry.get("login_url") or "",
+                "connection_hint": _connection_hint(entry, merged),
+                "login_details": _login_details(entry, merged),
                 "auth_type": auth_type,
                 "can_auto_login": auth_type in ("form_post", "json_post"),
+                "can_edit": bool(defaults),
                 "can_reset": (entry.get("reset_handler") or "none") != "none",
                 "container": container or None,
                 "container_running": _container_running(container) if container else None,

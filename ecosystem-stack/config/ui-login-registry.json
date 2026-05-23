@@ -120,6 +120,50 @@
       "container": "n8n_postgres",
       "restart_service": "n8n_postgres",
       "compose_stack": "ecosystem-stack"
+    },
+    {
+      "id": "sftp",
+      "hub_slug": "sftp",
+      "label": "SFTP",
+      "login_url": "http://sftp-files.lh",
+      "connection_hint": "sftp -P 2222 leco@localhost",
+      "auth_type": "protocol",
+      "default_credentials": {
+        "username": "leco",
+        "password": "leco"
+      },
+      "reset_handler": "file_transfer_sftp",
+      "container": "leco-sftp",
+      "restart_service": "sftp",
+      "compose_stack": "file-transfer"
+    },
+    {
+      "id": "ftp",
+      "hub_slug": "ftp",
+      "label": "FTP",
+      "login_url": "http://ftp-files.lh",
+      "connection_hint": "ftp://leco:leco@localhost:21",
+      "auth_type": "protocol",
+      "default_credentials": {
+        "username": "leco",
+        "password": "leco"
+      },
+      "reset_handler": "file_transfer_ftp",
+      "container": "leco-ftp",
+      "restart_service": "ftp",
+      "compose_stack": "file-transfer"
+    },
+    {
+      "id": "files",
+      "hub_slug": "files",
+      "label": "File transfer browser",
+      "login_url": "http://files.lh",
+      "connection_hint": "Read-only · no login",
+      "auth_type": "browse_only",
+      "default_credentials": {},
+      "reset_handler": "none",
+      "container": "leco-file-browser",
+      "compose_stack": "file-transfer"
     }
   ]
 }

@@ -32,6 +32,7 @@ Point DNS `*.dev.example.com` (or listed hosts) to the VM public IP. Open ports 
 | `ai-full` | + Ollama, AirLLM, Open WebUI, update-catalog |
 | `ai-cloud` | Same as `ai-full`; installer favors external LLM API keys |
 | `infra-full` | + shared [infra](../infra/docker-compose.yml) |
+| `file-transfer-full` | + [FTP/SFTP file transfer](../file-transfer/docker-compose.yml) |
 | `full` | All ecosystem services |
 
 Profiles are defined in `ecosystem-stack/config/install-profiles.yaml` and written to `config/leco-platform.yaml`.

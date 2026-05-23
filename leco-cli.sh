@@ -50,7 +50,7 @@ ACTIVITY_LOG_DIR="$PROJECT_ROOT/.leco-cli-logs"
 ACTIVITY_LOG_FILE=""
 
 # Ordered service list (matches START_ORDER in ecosystem-stack/core.sh + infra).
-SERVICES_ORDER="traefik postgres ollama airllm webui n8n dashboard cloudflare-local infra"
+SERVICES_ORDER="traefik postgres ollama airllm webui n8n dashboard cloudflare-local infra file-transfer"
 
 # ---------- Activity log (best-effort JSONL) ----------------------
 activity_init() {

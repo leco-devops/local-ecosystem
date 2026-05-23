@@ -188,6 +188,13 @@ DOC_MODULES = [
         "blurb": "Start/stop, backups, bulk actions, stack scripts.",
     },
     {
+        "id": "file-transfer",
+        "title": "FTP and SFTP file transfer",
+        "category": "DevOps",
+        "rel_path": "docs/FILE_TRANSFER.md",
+        "blurb": "Local FTP/SFTP compose stack, credentials, ports, and install profile file-transfer-full.",
+    },
+    {
         "id": "airllm-integration",
         "title": "AirLLM Integration",
         "category": "DevOps",

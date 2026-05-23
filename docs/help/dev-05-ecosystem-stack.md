@@ -24,6 +24,7 @@ Shell orchestration under **`ecosystem-stack/`**.
 | n8n / Postgres | `n8n.sh`, `postgres.sh` | |
 | Cloudflare local | `cloudflare-local.sh` | |
 | Infra add-ons | `infra.sh` | |
+| File transfer (FTP, SFTP) | `file-transfer.sh` | |
 
 ## Network
 

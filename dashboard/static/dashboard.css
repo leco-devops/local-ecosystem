@@ -5726,6 +5726,40 @@ body.help-page {
   gap: 6px;
 }
 
+.ui-access-login {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 420px;
+}
+
+.ui-access-login__summary {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ui-access-login__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.4;
+}
+
+.ui-access-login__mono {
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.ui-access-login__footnote {
+  font-size: 11px;
+}
+
+.ui-access-copy.small-copy {
+  font-size: 10px;
+  padding: 1px 6px;
+}
+
 .hub-ui-access__btns {
   display: flex;
   flex-wrap: wrap;

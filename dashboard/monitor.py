@@ -408,6 +408,59 @@ SERVICE_MAP = [
             {"label": "Service hub", "url": "http://localhost.lh/hub/redis-ui"},
         ],
     },
+    {
+        "service": "SFTP",
+        "container": "leco-sftp",
+        "urls": ["http://localhost.lh/hub/sftp"],
+        "notes": "SFTP file drop · host sftp.lh:2222 (default) · shared volume with FTP",
+        "hub_slug": "sftp",
+        "credentials": [
+            "User: leco · Password: leco (override via file-transfer/.env)",
+        ],
+        "connection_strings": [
+            "sftp -P 2222 leco@localhost",
+            "sftp -P 2222 leco@sftp.lh",
+        ],
+        "management_links": [
+            {"label": "Service hub", "url": "http://localhost.lh/hub/sftp"},
+            {"label": "Read-only file browser", "url": "http://sftp-files.lh"},
+        ],
+    },
+    {
+        "service": "FTP",
+        "container": "leco-ftp",
+        "urls": ["http://localhost.lh/hub/ftp"],
+        "notes": "FTP (alpine-ftp-server) · host ftp.lh:21 · passive ports 21100–21110",
+        "hub_slug": "ftp",
+        "credentials": [
+            "User: leco · Password: leco (override via file-transfer/.env)",
+        ],
+        "connection_strings": [
+            "ftp://leco:leco@ftp.lh:21",
+            "ftp://leco:leco@localhost:21",
+        ],
+        "management_links": [
+            {"label": "Service hub", "url": "http://localhost.lh/hub/ftp"},
+            {"label": "Read-only file browser", "url": "http://ftp-files.lh"},
+        ],
+    },
+    {
+        "service": "File transfer browser",
+        "container": "leco-file-browser",
+        "urls": ["http://files.lh", "http://ftp-files.lh", "http://sftp-files.lh"],
+        "notes": "Read-only web directory listing for the shared FTP/SFTP upload volume",
+        "hub_slug": "files",
+        "insights": [
+            "Uploads via FTP or SFTP appear here automatically (same Docker volume).",
+            "HTTP methods other than GET/HEAD are denied; the volume is mounted read-only in the container.",
+        ],
+        "management_links": [
+            {"label": "Browse files", "url": "http://files.lh"},
+            {"label": "FTP alias", "url": "http://ftp-files.lh"},
+            {"label": "SFTP alias", "url": "http://sftp-files.lh"},
+            {"label": "Service hub", "url": "http://localhost.lh/hub/files"},
+        ],
+    },
 ]
 
 # When Traefik edge probes fail (502, redirect chains to *.lh from inside the dashboard, etc.),
@@ -427,6 +480,9 @@ INTERNAL_PROBE_BY_CONTAINER = {
     "redis": "http://service-dashboard:8090/hub/redis",
     "adminer": "http://adminer:8080/",
     "redis-commander": "http://redis-commander:8081/",
+    "leco-sftp": "http://service-dashboard:8090/hub/sftp",
+    "leco-ftp": "http://service-dashboard:8090/hub/ftp",
+    "leco-file-browser": "http://leco-file-browser:8080/",
 }
 
 ERROR_REGEX = re.compile(r"\b(error|exception|fatal|panic|failed|traceback)\b", re.IGNORECASE)

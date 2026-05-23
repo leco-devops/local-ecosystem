@@ -267,13 +267,113 @@ def _reset_minio(creds: dict[str, str], container: str) -> tuple[bool, str]:
     return False, probe_msg or add_msg or rec_msg
 
 
+FILE_TRANSFER_COMPOSE = "file-transfer/docker-compose.yml"
+FILE_TRANSFER_ENV = os.path.join(PROJECT_ROOT, "file-transfer", ".env")
+FILE_TRANSFER_ENV_EXAMPLE = os.path.join(PROJECT_ROOT, "file-transfer", ".env.example")
+
+
+def _parse_env_lines(text: str) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        out[key.strip()] = val.strip()
+    return out
+
+
+def _format_env_lines(values: dict[str, str]) -> str:
+    return "\n".join(f"{k}={v}" for k, v in sorted(values.items())) + "\n"
+
+
+def _load_file_transfer_env() -> dict[str, str]:
+    path = FILE_TRANSFER_ENV if os.path.isfile(FILE_TRANSFER_ENV) else FILE_TRANSFER_ENV_EXAMPLE
+    if not os.path.isfile(path):
+        return {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            return _parse_env_lines(f.read())
+    except OSError:
+        return {}
+
+
+def _write_file_transfer_env(updates: dict[str, str]) -> tuple[bool, str]:
+    merged = _load_file_transfer_env()
+    merged.update({k: str(v) for k, v in updates.items() if v is not None})
+    os.makedirs(os.path.dirname(FILE_TRANSFER_ENV), exist_ok=True)
+    try:
+        with open(FILE_TRANSFER_ENV, "w", encoding="utf-8") as f:
+            f.write("# Managed by LEco DevOps UI access (local dev)\n")
+            f.write(_format_env_lines(merged))
+        try:
+            os.chmod(FILE_TRANSFER_ENV, 0o600)
+        except OSError:
+            pass
+        return True, FILE_TRANSFER_ENV
+    except OSError as exc:
+        return False, str(exc)
+
+
+def _sftp_users_value(creds: dict[str, str]) -> str:
+    user = creds.get("username", "leco")
+    password = creds.get("password", "leco")
+    return f"{user}:{password}:1000:1000"
+
+
+def _ftp_users_value(creds: dict[str, str]) -> str:
+    user = creds.get("username", "leco")
+    password = creds.get("password", "leco")
+    return f"{user}|{password}|/home/leco"
+
+
+def _apply_file_transfer_sftp(creds: dict[str, str], _container: str = "") -> tuple[bool, str]:
+    ok, msg = _write_file_transfer_env({"SFTP_USERS": _sftp_users_value(creds)})
+    if not ok:
+        return False, msg
+    return _recreate_compose_service(FILE_TRANSFER_COMPOSE, "sftp")
+
+
+def _apply_file_transfer_ftp(creds: dict[str, str], _container: str = "") -> tuple[bool, str]:
+    ok, msg = _write_file_transfer_env({"FTP_USERS": _ftp_users_value(creds)})
+    if not ok:
+        return False, msg
+    return _recreate_compose_service(FILE_TRANSFER_COMPOSE, "ftp")
+
+
 _HANDLERS = {
     "postgres": _reset_postgres,
     "mysql": _reset_mysql,
     "minio": _reset_minio,
     "n8n_volume": _reset_n8n_volume,
     "webui_volume": _reset_webui_volume,
+    "file_transfer_sftp": _apply_file_transfer_sftp,
+    "file_transfer_ftp": _apply_file_transfer_ftp,
 }
+
+
+def apply_saved_credentials(slug: str) -> dict[str, Any]:
+    """Apply vault credentials to a running service without resetting vault to defaults."""
+    from ui_credentials import credentials_for_assist
+
+    entry = get_registry_entry(slug)
+    if not entry:
+        return {"ok": False, "error": f"unknown slug: {slug}"}
+    handler_name = entry.get("reset_handler") or "none"
+    fn = _HANDLERS.get(handler_name)
+    if not fn or handler_name == "none":
+        return {"ok": True, "applied": False, "message": "No apply handler for this service."}
+    creds = credentials_for_assist(slug)
+    container = str(entry.get("container") or "").strip()
+    applied, apply_msg = fn(creds, container)
+    return {
+        "ok": applied,
+        "applied": applied,
+        "message": apply_msg,
+        "error": None if applied else apply_msg,
+    }
 
 
 def apply_reset(slug: str) -> dict[str, Any]:
@@ -304,6 +404,8 @@ def apply_reset(slug: str) -> dict[str, Any]:
         restarted = applied
     elif restart_name and applied:
         restarted, restart_msg = _restart_container(str(restart_name))
+    if handler_name in ("file_transfer_sftp", "file_transfer_ftp"):
+        restarted = applied
     return {
         "ok": applied,
         "slug": slug,

@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 from flask import Flask, Response, abort, jsonify, make_response, redirect, render_template, request, stream_with_context, url_for
 
@@ -32,8 +33,11 @@ from ui_login_assist import (
     try_server_side_login,
 )
 from ui_credentials import (
+    _connection_hint,
+    _login_details,
     build_assist_context,
     catalog_for_ui,
+    credentials_for_assist,
     credentials_for_ui,
     get_registry_entry,
     make_launch_token,
@@ -1533,14 +1537,18 @@ def api_ui_credentials_get(slug: str):
     from ui_credential_reset import _container_running
 
     container = str(entry.get("container") or "").strip()
+    merged = credentials_for_assist(slug)
     return jsonify(
         {
             "ok": True,
             "slug": slug,
             "label": entry.get("label"),
             "login_url": entry.get("login_url"),
+            "connection_hint": _connection_hint(entry, merged),
+            "login_details": _login_details(entry, merged),
             "auth_type": entry.get("auth_type"),
             "can_auto_login": entry.get("auth_type") in ("form_post", "json_post"),
+            "can_edit": bool(entry.get("default_credentials")),
             "can_reset": (entry.get("reset_handler") or "none") != "none",
             "container": container or None,
             "container_running": _container_running(container) if container else None,
@@ -1563,7 +1571,17 @@ def api_ui_credentials_put(slug: str):
         saved = save_credentials(slug, values)
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
-    return jsonify({"ok": True, "slug": slug, "credentials": saved})
+    entry = get_registry_entry(slug) or {}
+    apply_result: dict[str, Any] = {"applied": False}
+    if (entry.get("auth_type") or "") == "protocol":
+        from ui_credential_reset import apply_saved_credentials
+
+        apply_result = apply_saved_credentials(slug)
+    body: dict[str, Any] = {"ok": True, "slug": slug, "credentials": saved, **apply_result}
+    if apply_result.get("applied") is False and apply_result.get("error"):
+        body["ok"] = False
+        return jsonify(body), 500
+    return jsonify(body)
 
 
 @app.post("/api/ui-credentials/<slug>/reset")

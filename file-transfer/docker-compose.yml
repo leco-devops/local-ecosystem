@@ -1,0 +1,72 @@
+# FTP + SFTP file transfer services for local dev.
+# Start: bash ecosystem-stack/services/file-transfer.sh start
+# Network must exist: docker network create lh-network
+
+services:
+  sftp:
+    restart: unless-stopped
+    image: atmoz/sftp:alpine
+    container_name: leco-sftp
+    volumes:
+      - file_transfer_data:/home/leco
+    ports:
+      - "${SFTP_PORT:-2222}:22"
+    command: ${SFTP_USERS:-leco:leco:1000:1000}
+    networks:
+      - lh-network
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 22 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  ftp:
+    restart: unless-stopped
+    image: delfer/alpine-ftp-server:latest
+    container_name: leco-ftp
+    environment:
+      USERS: ${FTP_USERS:-leco|leco|/home/leco}
+      ADDRESS: ${FTP_PUBLICHOST:-ftp.lh}
+      MIN_PORT: ${FTP_PASV_MIN:-21100}
+      MAX_PORT: ${FTP_PASV_MAX:-21110}
+    volumes:
+      - file_transfer_data:/home/leco
+    ports:
+      - "${FTP_PORT:-21}:21"
+      - "${FTP_PASV_MIN:-21100}-${FTP_PASV_MAX:-21110}:${FTP_PASV_MIN:-21100}-${FTP_PASV_MAX:-21110}"
+    networks:
+      - lh-network
+    depends_on:
+      - sftp
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 21 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  file-browser:
+    restart: unless-stopped
+    build:
+      context: ./browser
+    container_name: leco-file-browser
+    volumes:
+      - file_transfer_data:/srv:ro
+    networks:
+      - lh-network
+    depends_on:
+      - ftp
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  lh-network:
+    external: true
+
+volumes:
+  file_transfer_data:

@@ -134,6 +134,7 @@
               <button type="button" class="ctrl-bulk ctrl-bulk--start" data-infra-quickstart="stack-ecosystem-all" data-infra-quickstart-action="start" data-infra-quickstart-label="Start ecosystem stack">Start ecosystem</button>
               <button type="button" class="ctrl-bulk ctrl-bulk--deploy" data-infra-quickstart="stack-cf-all" data-infra-quickstart-action="deploy" data-infra-quickstart-label="Start Cloudflare local">Start Cloudflare local</button>
               <button type="button" class="ctrl-bulk ctrl-bulk--deploy" data-infra-quickstart="stack-infra-all" data-infra-quickstart-action="deploy" data-infra-quickstart-label="Start infra stack">Start infra add-ons</button>
+              <button type="button" class="ctrl-bulk ctrl-bulk--deploy" data-infra-quickstart="stack-file-transfer-all" data-infra-quickstart-action="deploy" data-infra-quickstart-label="Start file transfer stack">Start FTP / SFTP</button>
             </div>
           </div>
           <div class="infra-group__block">
@@ -154,6 +155,19 @@
           <div class="infra-group__block">
             <h4 class="infra-subhead">Service cards</h4>
             <div id="services" class="grid service-grid"></div>
+          </div>
+        </div>
+
+        <div class="infra-group" id="infra-file-transfer">
+          <h3 class="infra-group__title">2b · File transfer (FTP / SFTP)</h3>
+          <p class="infra-group__lead muted small">
+            Shared upload volume with read-only web browser at <a href="http://files.lh">files.lh</a>.
+            Per-service cards also appear in the managed services grid above; Control targets are under
+            <strong>Infra add-ons &amp; file transfer</strong>.
+          </p>
+          <div class="infra-group__block">
+            <h4 class="infra-subhead">Stack status &amp; links</h4>
+            <div id="fileTransferLocal" class="grid-mini"></div>
           </div>
         </div>
 
@@ -485,7 +499,7 @@
       <section id="controlTab" class="tab-content">
         <h2 class="tab-heading">Control</h2>
         <p class="tab-lead muted small">
-          Cards are grouped: <strong>Bulk &amp; orchestration</strong> (full-stack API target), <strong>Ecosystem stack &amp; Traefik</strong>, <strong>Infra add-ons</strong>, and <strong>Cloudflare local</strong>. Use the bulk bars above for quick <strong>Start all / Stop all</strong>. Registered compose apps are under <strong>Hosted apps</strong>. Destructive ops may wipe volumes — read the JSON response.
+          Cards are grouped: <strong>Bulk &amp; orchestration</strong>, <strong>Ecosystem stack &amp; Traefik</strong>, <strong>Infra add-ons &amp; file transfer</strong> (MySQL, FTP, SFTP, …), and <strong>Cloudflare local</strong>. Use the bulk bars above for quick <strong>Start all / Stop all</strong>. Registered compose apps are under <strong>Hosted apps</strong>. Destructive ops may wipe volumes — read the JSON response.
         </p>
 
         <div class="control-token-row" id="controlTokenRow" style="display: none">
@@ -531,6 +545,18 @@
             <button type="button" class="ctrl-bulk ctrl-bulk--start" data-infra-bulk-action="deploy" data-infra-bulk-label="Deploy infra stack">Deploy / up</button>
             <button type="button" class="ctrl-bulk ctrl-bulk--stop" data-infra-bulk-action="stop" data-infra-bulk-label="Stop infra stack">Stop</button>
             <button type="button" class="ctrl-bulk ctrl-bulk--restart" data-infra-bulk-action="restart" data-infra-bulk-label="Restart infra stack">Restart</button>
+          </div>
+        </div>
+
+        <div class="control-bulk-bar control-bulk-bar--infra" id="controlFileTransferBulkBar" aria-label="File transfer compose bulk actions">
+          <div class="control-bulk-bar__head">
+            <strong>File transfer (FTP / SFTP / browser)</strong>
+            <span class="muted small"><code>file-transfer/docker-compose.yml</code> — SFTP (:2222), FTP (:21), read-only browser at <code>files.lh</code>. Same control token.</span>
+          </div>
+          <div class="control-bulk-bar__btns">
+            <button type="button" class="ctrl-bulk ctrl-bulk--start" data-ft-bulk-action="deploy" data-ft-bulk-label="Deploy file transfer stack">Deploy / up</button>
+            <button type="button" class="ctrl-bulk ctrl-bulk--stop" data-ft-bulk-action="stop" data-ft-bulk-label="Stop file transfer stack">Stop</button>
+            <button type="button" class="ctrl-bulk ctrl-bulk--restart" data-ft-bulk-action="restart" data-ft-bulk-label="Restart file transfer stack">Restart</button>
           </div>
         </div>
 

@@ -1,14 +1,15 @@
 {
   "ok": true,
   "backend": "airllm",
-  "generated_at": "2026-05-20T05:49:32Z",
-  "model_count": 19,
-  "new_online_count": 9,
+  "generated_at": "2026-05-23T16:24:59Z",
+  "model_count": 20,
+  "new_online_count": 10,
   "new_online": [
     "Qwen/Qwen2-1.5B-Instruct",
     "Qwen/Qwen2.5-1.5B-Instruct",
     "Qwen/Qwen2.5-14B-Instruct",
     "Qwen/Qwen2.5-3B-Instruct",
+    "Qwen/Qwen2.5-7B-Instruct-AWQ",
     "Qwen/Qwen3-4B-Instruct-2507",
     "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
     "meta-llama/Llama-3.2-1B-Instruct",
@@ -37,7 +38,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 4641934
+      "hf_downloads": 4559521
     },
     {
       "name": "Qwen/Qwen2.5-0.5B-Instruct",
@@ -66,7 +67,7 @@
         "smoke-test"
       ],
       "online_seen": true,
-      "hf_downloads": 4927203
+      "hf_downloads": 4798038
     },
     {
       "name": "Qwen/Qwen2.5-1.5B-Instruct",
@@ -89,7 +90,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 13480118
+      "hf_downloads": 14521153
     },
     {
       "name": "Qwen/Qwen2.5-14B-Instruct",
@@ -112,7 +113,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 2476611
+      "hf_downloads": 2482084
     },
     {
       "name": "Qwen/Qwen2.5-3B-Instruct",
@@ -135,7 +136,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 9116964
+      "hf_downloads": 10556636
     },
     {
       "name": "Qwen/Qwen2.5-72B-Instruct",
@@ -186,7 +187,30 @@
         "default"
       ],
       "online_seen": true,
-      "hf_downloads": 12975576
+      "hf_downloads": 13167875
+    },
+    {
+      "name": "Qwen/Qwen2.5-7B-Instruct-AWQ",
+      "label": "Qwen2.5-7B-Instruct-AWQ",
+      "publisher": "Qwen",
+      "license": "apache-2.0",
+      "parameters": "",
+      "size_disk": "",
+      "niche": [
+        "discovered"
+      ],
+      "specialty": "Trending on HuggingFace; verify AirLLM compatibility before production.",
+      "use_where": [
+        "https://airllm.lh"
+      ],
+      "use_how": "./leco-cli.sh airllm install Qwen/Qwen2.5-7B-Instruct-AWQ",
+      "install_cli": "./leco-cli.sh airllm install Qwen/Qwen2.5-7B-Instruct-AWQ",
+      "source_url": "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-AWQ",
+      "tags": [
+        "discovered"
+      ],
+      "discovered_online": true,
+      "hf_downloads": 2504975
     },
     {
       "name": "Qwen/Qwen2.5-Coder-7B-Instruct",
@@ -210,7 +234,7 @@
         "code"
       ],
       "online_seen": true,
-      "hf_downloads": 2489603
+      "hf_downloads": 2426409
     },
     {
       "name": "Qwen/Qwen3-4B-Instruct-2507",
@@ -233,7 +257,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 6667164
+      "hf_downloads": 6396637
     },
     {
       "name": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
@@ -256,7 +280,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 2656550
+      "hf_downloads": 2470331
     },
     {
       "name": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
@@ -357,7 +381,7 @@
         "gated"
       ],
       "online_seen": true,
-      "hf_downloads": 10785213
+      "hf_downloads": 10669321
     },
     {
       "name": "meta-llama/Llama-3.2-1B-Instruct",
@@ -380,7 +404,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 7743597
+      "hf_downloads": 8119515
     },
     {
       "name": "meta-llama/Llama-3.2-3B-Instruct",
@@ -405,9 +429,7 @@
       "tags": [
         "small",
         "gated"
-      ],
-      "online_seen": true,
-      "hf_downloads": 2400226
+      ]
     },
     {
       "name": "mistralai/Mistral-7B-Instruct-v0.2",
@@ -430,7 +452,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 3274617
+      "hf_downloads": 3222628
     },
     {
       "name": "mistralai/Mistral-7B-Instruct-v0.3",
@@ -475,7 +497,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 2967814
+      "hf_downloads": 3028710
     }
   ]
 }
