@@ -16,6 +16,7 @@ Click **Ollama** or **AirLLM** to scroll directly to the model manager.
 |---|---------|------------------|
 | 1 | Platform health | Docker daemon, disk, aggregate status |
 | 2 | Managed services | Cards per stack service (Traefik, Ollama, AirLLM, …) with CPU/RAM and URL probes |
+| 2b | File transfer | SFTP, FTP, read-only browser (`files.lh`) — [guide](help:file-transfer) |
 | 3 | Utilization & trends | Historical charts |
 | 4 | Cloudflare local | KV/R2/D1 adapter reachability |
 | **5** | **Ollama** | **Model manager** — GGUF models |
@@ -50,6 +51,10 @@ Below the toolbar, a **table** lists installed models with per-row actions (pin,
    ./ecosystem-stack/ecosystem-stack.sh restart dashboard
    ```
 3. Confirm you are on **Infrastructure**, not only **Overview** service cards.
-4. Scroll past sections 1–4 — Ollama is section **5**.
+4. Scroll past sections 1–4 — Ollama is section **5** (file transfer is **2b**, after managed services).
 
-Next: [Ollama guide](help:ollama) · [AirLLM guide](help:airllm)
+## File transfer (section 2b)
+
+When the stack is enabled, **Infrastructure** shows **SFTP**, **FTP**, and **File transfer browser** cards with container status and connection hints. Full credentials and SFTP public-key setup: **Service hubs → UI access** or [FTP & SFTP file transfer](help:file-transfer).
+
+Next: [Ollama guide](help:ollama) · [AirLLM guide](help:airllm) · [File transfer](help:file-transfer)

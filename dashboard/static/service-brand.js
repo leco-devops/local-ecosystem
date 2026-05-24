@@ -32,6 +32,11 @@
     "infra-cache-varnish": "infra",
     "infra-adminer": "infra",
     "infra-redis-commander": "infra",
+    "ai-file-transfer": "file-transfer",
+    "stack-file-transfer-all": "file-transfer",
+    "ft-sftp": "file-transfer",
+    "ft-ftp": "file-transfer",
+    "ft-file-browser": "file-transfer",
   };
 
   const CONTAINER_BRAND = {
@@ -58,6 +63,9 @@
     "cache-varnish": "infra",
     adminer: "infra",
     "redis-commander": "infra",
+    "leco-sftp": "file-transfer",
+    "leco-ftp": "file-transfer",
+    "leco-file-browser": "file-transfer",
   };
 
   const SERVICE_NAME_BRAND = {
@@ -74,6 +82,9 @@
     "MinIO Console": "minio",
     "Workers (Miniflare)": "workers",
     "Browser rendering (local)": "browser",
+    SFTP: "file-transfer",
+    FTP: "file-transfer",
+    "File transfer browser": "file-transfer",
   };
 
   const EMOJI = {
@@ -97,6 +108,7 @@
     ecosystem: "🎛️",
     leco: "📦",
     infra: "🏗️",
+    "file-transfer": "📁",
     default: "📌",
   };
 
@@ -164,6 +176,9 @@
     ),
     infra: svg(
       "M4 6h6v5H4V6zm10 0h6v5h-6V6zM4 13h6v7H4v-7zm10 3h6v4h-6v-4zM4 4h16v1H4V4zm0 12h6v1H4v-1zm10 3h6v1h-6v-1z",
+    ),
+    "file-transfer": svg(
+      "M4 4h8l2 2h6v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm2 6v2h12v-2H6zm0 4v2h8v-2H6z",
     ),
   };
 

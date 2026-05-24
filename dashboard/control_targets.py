@@ -5,6 +5,7 @@ Imported by control.py and docs_catalog.py.
 
 COMPOSE_REL = "cloudflare-local/docker-compose.yml"
 INFRA_COMPOSE_REL = "infra/docker-compose.yml"
+FILE_TRANSFER_COMPOSE_REL = "file-transfer/docker-compose.yml"
 
 # Cloudflare-local: compose service name == container_name in this repo
 CF_TARGETS = [
@@ -31,6 +32,7 @@ AI_TARGETS = [
     {"id": "ai-update-catalog", "label": "Update catalog", "script": "update-catalog", "container": "leco-update-catalog"},
     {"id": "ai-cloudflare-local", "label": "Cloudflare local (compose)", "script": "cloudflare-local", "container": None},
     {"id": "ai-infra", "label": "Infra stack (MySQL, Redis, Mailpit, …)", "script": "infra", "container": None},
+    {"id": "ai-file-transfer", "label": "File transfer (FTP, SFTP)", "script": "file-transfer", "container": None},
 ]
 
 # Infra compose: same pattern as CF — per-service lifecycle in Control + API.
@@ -43,6 +45,8 @@ ECOSYSTEM_SERVICE_REQUIRES: dict[str, tuple[str, ...]] = {
 COMPOSE_SERVICE_REQUIRES: dict[str, tuple[str, ...]] = {
     "cache-varnish": ("cache-nginx",),
     "redis-commander": ("redis",),
+    "ftp": ("sftp",),
+    "file-browser": ("ftp",),
 }
 
 
@@ -94,5 +98,29 @@ INFRA_TARGETS = [
         "compose_service": "redis-commander",
         "container": "redis-commander",
         "compose_project": "infra",
+    },
+]
+
+FILE_TRANSFER_TARGETS = [
+    {
+        "id": "ft-sftp",
+        "label": "SFTP",
+        "compose_service": "sftp",
+        "container": "leco-sftp",
+        "compose_project": "file-transfer",
+    },
+    {
+        "id": "ft-ftp",
+        "label": "FTP",
+        "compose_service": "ftp",
+        "container": "leco-ftp",
+        "compose_project": "file-transfer",
+    },
+    {
+        "id": "ft-file-browser",
+        "label": "File browser (read-only)",
+        "compose_service": "file-browser",
+        "container": "leco-file-browser",
+        "compose_project": "file-transfer",
     },
 ]

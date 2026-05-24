@@ -71,6 +71,14 @@ This repo is a local platform with:
  - `ecosystem-stack/config/llm-catalog-*-seed.json`
  - `ecosystem-stack/services/update-catalog.sh`
  - `dashboard/ecosystem_updates.py`
+ - When changing **file-transfer** (FTP/SFTP/browser) or UI access for protocol credentials, also update:
+ - `file-transfer/docker-compose.yml`, `file-transfer/.env.example`
+ - `ecosystem-stack/services/file-transfer.sh`, `ecosystem-stack/lib/platform_config.py`, `ecosystem-stack/core.sh`
+ - `ecosystem-stack/config/ui-login-registry.json`
+ - `dashboard/control_targets.py`, `dashboard/control.py`, `dashboard/monitor.py`
+ - `dashboard/ui_credentials.py`, `dashboard/ui_credential_reset.py`, `dashboard/static/dashboard.js`
+ - `traefik/dynamic.yml` (browser hosts only)
+ - `docs/FILE_TRANSFER.md`, `docs/help/12-file-transfer.md`, `docs/help/dev-10-file-transfer.md`, `docs/UI_CREDENTIAL_VAULT.md`
  - When changing AirLLM behavior, also update:
      - `dashboard/airllm_models.py`
      - `dashboard/ai_provider.py` (`AirLLMProvider`)

@@ -14,7 +14,7 @@ tls:
 
 # Ecosystem services started by ./ecosystem-stack/ecosystem-stack.sh start
 install_profile: minimal
-enabled_bundles: []        # cloudflare-full | ai-full | infra-full
+enabled_bundles: []        # cloudflare-full | ai-full | infra-full | file-transfer-full
 enabled_services:
   - traefik
   - dashboard

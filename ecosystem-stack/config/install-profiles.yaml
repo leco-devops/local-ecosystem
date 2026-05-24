@@ -45,6 +45,12 @@ profiles:
     bundles:
       - infra-full
 
+  file-transfer-full:
+    description: Minimal + FTP and SFTP file transfer services
+    extends: minimal
+    bundles:
+      - file-transfer-full
+
   full:
     description: All ecosystem services and bundles
     services:
@@ -58,6 +64,7 @@ profiles:
       - update-catalog
       - cloudflare-local
       - infra
+      - file-transfer
 
   custom:
     description: Operator-defined via component catalog / dashboard (no preset services)

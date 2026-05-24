@@ -6,11 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **File transfer stack:** FTP (`leco-ftp`, alpine-ftp-server) and SFTP (`leco-sftp`, atmoz/sftp) under [`file-transfer/docker-compose.yml`](file-transfer/docker-compose.yml); read-only web file browser at `files.lh` / `ftp-files.lh` / `sftp-files.lh`; dashboard **Control** and **Infrastructure** panels list SFTP, FTP, and browser cards under **Infra add-ons & file transfer**; ecosystem service script [`ecosystem-stack/services/file-transfer.sh`](ecosystem-stack/services/file-transfer.sh); install profile `file-transfer-full`; docs [`docs/FILE_TRANSFER.md`](docs/FILE_TRANSFER.md).
+- **UI access (file transfer):** SFTP, FTP, and read-only file browser in Service hubs → UI access with copy-paste host/port/credentials and Edit / Reset & apply for protocol passwords via `file-transfer/.env`.
+- **UI access ports:** Edit SFTP/FTP **Port** in UI access; writes `SFTP_PORT` / `FTP_PORT` to `file-transfer/.env` and recreates the container.
+- **SFTP public-key auth:** Choose password, public key, or both in UI access Edit; dashboard writes `file-transfer/keys/sftp/<user>.pub` and `SFTP_AUTH_MODE`.
+- **File transfer defaults:** SFTP/FTP default password is `leco#localhost-192` (was `leco`).
+- **Docs:** FTP/SFTP architecture and operator/developer manuals (`FILE_TRANSFER.md`, Help `12-file-transfer`, `dev-10-file-transfer`; updates to `ARCHITECTURE.md`, `HLD.md`, `LLD.md`).
+
 ### Changed
 
 - **Brand palette:** Professional **light** UI — mist page background, navy header/footer chrome, bold teal/navy/sky borders on cards/tabs/chips; strict five-color palette, no gradients; shared `leco-palette.css` on Pages and dashboard.
+- **GitHub Pages:** Remove duplicate logo from hero panel (brand stays in page header only).
+- **Platform dev stacks:** Stack files list in Advanced panel uses a two-column grid (fills left-to-right for any file count).
+- **UI:** Remove CSS and SVG gradients across dashboard, GitHub Pages theme, and brand logos; keep existing dark cyan/violet color scheme.
 - **GitHub Pages:** Download .zip / .tar.gz header buttons open the repository on GitHub instead of triggering a direct archive download.
 - **Update catalog:** Track [`ecosystem-stack/config/generated/update-catalog-read-state.json`](ecosystem-stack/config/generated/update-catalog-read-state.json) in git (removed from `.gitignore`).
+
+### Fixed
+
+- **UI access SFTP password apply:** Dashboard recreates SFTP using the host repo path (fixes Docker Desktop “mounts denied” for `/project/file-transfer/keys/sftp`); password-only auth no longer bind-mounts an empty keys directory (fixes `atmoz/sftp` crash loop on Apple Silicon).
 
 ### Added
 

@@ -16,6 +16,8 @@ from control_targets import (
     CF_TARGETS,
     COMPOSE_REL,
     COMPOSE_SERVICE_REQUIRES,
+    FILE_TRANSFER_COMPOSE_REL,
+    FILE_TRANSFER_TARGETS,
     INFRA_COMPOSE_REL,
     INFRA_TARGETS,
     compose_action_services,
@@ -26,6 +28,7 @@ from leco_subprocess import run_leco_app
 PROJECT_ROOT = os.getenv("DASHBOARD_PROJECT_ROOT", "/project")
 COMPOSE_FILE = os.path.join(PROJECT_ROOT, COMPOSE_REL)
 INFRA_COMPOSE_FILE = os.path.join(PROJECT_ROOT, INFRA_COMPOSE_REL)
+FILE_TRANSFER_COMPOSE_FILE = os.path.join(PROJECT_ROOT, FILE_TRANSFER_COMPOSE_REL)
 SERVICES_DIR = os.path.join(PROJECT_ROOT, "ecosystem-stack", "services")
 CONTROL_TOKEN = os.getenv("DASHBOARD_CONTROL_TOKEN", "").strip()
 
@@ -42,9 +45,11 @@ _AI_SCRIPT_FN_ACTIONS = frozenset(
     {"start", "stop", "restart", "remove", "pause", "unpause", "reset"}
 )
 
-_BY_ID = {t["id"]: t for t in CF_TARGETS + AI_TARGETS + INFRA_TARGETS}
+_BY_ID = {t["id"]: t for t in CF_TARGETS + AI_TARGETS + INFRA_TARGETS + FILE_TRANSFER_TARGETS}
+
 _INFRA_BY_COMPOSE = {t["compose_service"]: t for t in INFRA_TARGETS}
 _CF_BY_COMPOSE = {t["compose_service"]: t for t in CF_TARGETS}
+_FILE_TRANSFER_BY_COMPOSE = {t["compose_service"]: t for t in FILE_TRANSFER_TARGETS}
 
 
 def _format_invoked_cmd(cmd: list) -> str:
@@ -156,6 +161,32 @@ def list_targets():
                 "kind": "stack",
                 "status": "compose",
                 "label": "Whole infra/docker-compose.yml — status per service above",
+                "running": None,
+            },
+        }
+    )
+    for t in FILE_TRANSFER_TARGETS:
+        out.append(
+            {
+                "id": t["id"],
+                "label": t["label"],
+                "group": "infra",
+                "container": t["container"],
+                "actions": sorted(ALLOWED_ACTIONS),
+                "runtime": _container_runtime(dc, t.get("container")),
+            }
+        )
+    out.append(
+        {
+            "id": "stack-file-transfer-all",
+            "label": "File transfer — entire compose (FTP, SFTP, browser)",
+            "group": "infra",
+            "container": None,
+            "actions": ["deploy", "stop", "restart", "remove", "reset", "backup"],
+            "runtime": {
+                "kind": "stack",
+                "status": "compose",
+                "label": "Whole file-transfer/docker-compose.yml — SFTP, FTP, read-only browser",
                 "running": None,
             },
         }
@@ -301,6 +332,16 @@ def _infra_compose(args, timeout=600):
     )
 
 
+def _file_transfer_compose(args, timeout=600):
+    if not os.path.isfile(FILE_TRANSFER_COMPOSE_FILE):
+        return 1, f"compose file missing: {FILE_TRANSFER_COMPOSE_FILE}"
+    return _run(
+        ["docker", "compose", "-f", FILE_TRANSFER_COMPOSE_FILE, *args],
+        cwd=os.path.dirname(FILE_TRANSFER_COMPOSE_FILE),
+        timeout=timeout,
+    )
+
+
 def _ai_script(script, action, timeout=600):
     path = os.path.join(SERVICES_DIR, f"{script}.sh")
     if not os.path.isfile(path):
@@ -381,6 +422,9 @@ def run_action(target_id: str, action: str):
     if tid == "stack-infra-all":
         return _stack_infra_all(action)
 
+    if tid == "stack-file-transfer-all":
+        return _stack_file_transfer_all(action)
+
     if tid == "stack-ecosystem-all":
         return _stack_ecosystem_all(action)
 
@@ -401,6 +445,8 @@ def run_action(target_id: str, action: str):
     if "compose_service" in meta:
         if meta.get("compose_project") == "infra":
             return _infra_service_action(meta, action)
+        if meta.get("compose_project") == "file-transfer":
+            return _file_transfer_service_action(meta, action)
         return _cf_service_action(meta, action)
 
     return _ai_service_action(meta, action)
@@ -465,6 +511,27 @@ def _stack_infra_all(action: str):
     if action == "backup":
         return {"ok": False, "error": "no backup defined for infra stack"}
     return {"ok": False, "error": f"action {action} not supported for infra stack"}
+
+
+def _stack_file_transfer_all(action: str):
+    if action == "deploy":
+        code, log = _file_transfer_compose(["up", "-d", "--build"])
+        return {"ok": code == 0, "exit_code": code, "log": log[-8000:]}
+    if action == "stop":
+        code, log = _file_transfer_compose(["stop"])
+        return {"ok": code == 0, "exit_code": code, "log": log[-8000:]}
+    if action == "restart":
+        code, log = _file_transfer_compose(["restart"])
+        return {"ok": code == 0, "exit_code": code, "log": log[-8000:]}
+    if action == "remove":
+        code, log = _file_transfer_compose(["down", "--remove-orphans"])
+        return {"ok": code == 0, "exit_code": code, "log": log[-8000:]}
+    if action == "reset":
+        code, log = _file_transfer_compose(["down", "-v", "--remove-orphans"])
+        return {"ok": code == 0, "exit_code": code, "log": log[-8000:]}
+    if action == "backup":
+        return {"ok": False, "error": "no backup defined for file transfer stack"}
+    return {"ok": False, "error": f"action {action} not supported for file transfer stack"}
 
 
 def _stack_cf_all(action: str):
@@ -867,6 +934,59 @@ def _infra_service_action(meta: dict, action: str):
     return {"ok": False, "error": f"unsupported action {action}"}
 
 
+def _file_transfer_service_action(meta: dict, action: str):
+    svc = meta["compose_service"]
+
+    if action == "deploy":
+        return _compose_start_cascade(
+            svc, _FILE_TRANSFER_BY_COMPOSE, lambda args: _file_transfer_compose(args), build=True
+        )
+    if action == "recreate":
+        code, log = _file_transfer_compose(["up", "-d", "--force-recreate", "--no-deps", svc])
+        return {"ok": code == 0, "exit_code": code, "log": log[-8000:]}
+    if action == "reset":
+        services = compose_action_services(svc, "reset", COMPOSE_SERVICE_REQUIRES)
+        logs: list[str] = []
+        ok = True
+        exit_code = 0
+        for s in services:
+            code1, log1 = _file_transfer_compose(["stop", s])
+            code2, log2 = _file_transfer_compose(["rm", "-sf", s])
+            logs.append(f"{log1}\n{log2}")
+            if code1 != 0 or code2 != 0:
+                ok = False
+                exit_code = code2 or code1
+        code3, log3 = _file_transfer_compose(["up", "-d", svc])
+        logs.append(log3)
+        if code3 != 0:
+            ok = False
+            exit_code = code3
+        log = "\n".join(logs)
+        return {"ok": ok, "exit_code": exit_code, "log": log[-8000:]}
+    if action == "remove":
+        services = compose_action_services(svc, "remove", COMPOSE_SERVICE_REQUIRES)
+        logs = []
+        ok = True
+        exit_code = 0
+        for s in services:
+            code, log = _file_transfer_compose(["rm", "-sf", s])
+            logs.append(f"=== {s}: rm ===\n{log}\n")
+            if code != 0:
+                ok = False
+                exit_code = code
+        return {"ok": ok, "exit_code": exit_code, "log": "".join(logs)[-8000:]}
+    if action == "backup":
+        return {"ok": False, "error": "backup not defined for file transfer services"}
+
+    if action == "start":
+        return _compose_start_cascade(svc, _FILE_TRANSFER_BY_COMPOSE, lambda args: _file_transfer_compose(args))
+
+    if action in {"stop", "restart", "pause", "unpause"}:
+        return _compose_docker_lifecycle_cascade(svc, action, _FILE_TRANSFER_BY_COMPOSE)
+
+    return {"ok": False, "error": f"unsupported action {action}"}
+
+
 def _ai_service_action(meta: dict, action: str):
     script = meta["script"]
     cname = meta.get("container")
@@ -897,6 +1017,33 @@ def _ai_service_action(meta: dict, action: str):
         if action == "backup":
             return {"ok": False, "error": "no backup defined for infra stack"}
         return {"ok": False, "error": f"unsupported action {action} for infra script"}
+
+    if script == "file-transfer":
+        if action == "deploy":
+            code, log = _ai_script("file-transfer", "start")
+            return {"ok": code == 0, "exit_code": code, "log": log[-8000:]}
+        if action == "stop":
+            code, log = _ai_script("file-transfer", "stop")
+            return {"ok": code == 0, "exit_code": code, "log": log[-8000:]}
+        if action == "restart":
+            code, log = _ai_script("file-transfer", "restart")
+            return {"ok": code == 0, "exit_code": code, "log": log[-8000:]}
+        if action == "remove":
+            code, log = _ai_script("file-transfer", "remove")
+            return {"ok": code == 0, "exit_code": code, "log": log[-8000:]}
+        if action == "reset":
+            code, log = _ai_script("file-transfer", "reset")
+            return {"ok": code == 0, "exit_code": code, "log": log[-8000:]}
+        if action in {"start", "pause", "unpause"}:
+            code, log = _ai_script("file-transfer", action)
+            return {"ok": code == 0, "exit_code": code, "log": log[-8000:]}
+        if action == "recreate":
+            code1, log1 = _ai_script("file-transfer", "remove")
+            code2, log2 = _ai_script("file-transfer", "start")
+            return {"ok": code1 == 0 and code2 == 0, "log": (log1 + log2)[-8000:]}
+        if action == "backup":
+            return {"ok": False, "error": "no backup defined for file transfer stack"}
+        return {"ok": False, "error": f"unsupported action {action} for file-transfer script"}
 
     if script == "cloudflare-local":
         if action == "deploy":
@@ -995,6 +1142,18 @@ def _stream_infra_compose(args: list, timeout: int = 600) -> Iterator[dict[str, 
     return (code, log)
 
 
+def _stream_file_transfer_compose(args: list, timeout: int = 600) -> Iterator[dict[str, Any] | Any]:
+    if not os.path.isfile(FILE_TRANSFER_COMPOSE_FILE):
+        yield {"type": "log", "text": f"compose file missing: {FILE_TRANSFER_COMPOSE_FILE}\n"}
+        return (1, "")
+    code, log = yield from _yield_run(
+        ["docker", "compose", "-f", FILE_TRANSFER_COMPOSE_FILE, *args],
+        cwd=os.path.dirname(FILE_TRANSFER_COMPOSE_FILE),
+        timeout=timeout,
+    )
+    return (code, log)
+
+
 def _stream_ai_script(script: str, action: str, timeout: int = 600) -> Iterator[dict[str, Any] | Any]:
     path = os.path.join(SERVICES_DIR, f"{script}.sh")
     if not os.path.isfile(path):
@@ -1034,6 +1193,9 @@ def run_action_streaming(target_id: str, action: str) -> Iterator[dict[str, Any]
     if tid == "stack-infra-all":
         yield from _stream_stack_infra_all_stream(action)
         return
+    if tid == "stack-file-transfer-all":
+        yield from _stream_stack_file_transfer_all_stream(action)
+        return
     if tid == "stack-ecosystem-all":
         yield from _stream_stack_ecosystem_all_stream(action)
         return
@@ -1057,6 +1219,8 @@ def run_action_streaming(target_id: str, action: str) -> Iterator[dict[str, Any]
     if "compose_service" in meta:
         if meta.get("compose_project") == "infra":
             yield from _stream_infra_service_action_stream(meta, action)
+        elif meta.get("compose_project") == "file-transfer":
+            yield from _stream_file_transfer_service_action_stream(meta, action)
         else:
             yield from _stream_cf_service_action_stream(meta, action)
         return
@@ -1120,6 +1284,33 @@ def _stream_stack_infra_all_stream(action: str) -> Iterator[dict[str, Any]]:
         yield _emit_done(False, error="no backup defined for infra stack")
         return
     yield _emit_done(False, error=f"action {action} not supported for infra stack")
+
+
+def _stream_stack_file_transfer_all_stream(action: str) -> Iterator[dict[str, Any]]:
+    if action == "deploy":
+        code, log = yield from _stream_file_transfer_compose(["up", "-d", "--build"])
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "stop":
+        code, log = yield from _stream_file_transfer_compose(["stop"])
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "restart":
+        code, log = yield from _stream_file_transfer_compose(["restart"])
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "remove":
+        code, log = yield from _stream_file_transfer_compose(["down", "--remove-orphans"])
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "reset":
+        code, log = yield from _stream_file_transfer_compose(["down", "-v", "--remove-orphans"])
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "backup":
+        yield _emit_done(False, error="no backup defined for file transfer stack")
+        return
+    yield _emit_done(False, error=f"action {action} not supported for file transfer stack")
 
 
 def _stream_stack_cf_all_stream(action: str) -> Iterator[dict[str, Any]]:
@@ -1246,12 +1437,60 @@ def _stream_infra_service_action_stream(meta: dict, action: str) -> Iterator[dic
     yield _emit_done(False, error=f"unsupported action {action}")
 
 
+def _stream_file_transfer_service_action_stream(meta: dict, action: str) -> Iterator[dict[str, Any]]:
+    svc = meta["compose_service"]
+
+    if action == "deploy":
+        code, log = yield from _stream_file_transfer_compose(["up", "-d", svc])
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "recreate":
+        code, log = yield from _stream_file_transfer_compose(["up", "-d", "--force-recreate", "--no-deps", svc])
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "reset":
+        yield {"type": "log", "text": f"=== compose stop {svc} ===\n"}
+        code1, log1 = yield from _stream_file_transfer_compose(["stop", svc])
+        yield {"type": "log", "text": f"=== compose rm {svc} ===\n"}
+        code2, log2 = yield from _stream_file_transfer_compose(["rm", "-sf", svc])
+        yield {"type": "log", "text": f"=== compose up {svc} ===\n"}
+        code3, log3 = yield from _stream_file_transfer_compose(["up", "-d", svc])
+        log = f"{log1}\n{log2}\n{log3}"
+        yield _emit_done(code1 == 0 and code2 == 0 and code3 == 0, exit_code=code3, log=log[-8000:])
+        return
+    if action == "remove":
+        code, log = yield from _stream_file_transfer_compose(["rm", "-sf", svc])
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "backup":
+        yield _emit_done(False, error="backup not defined for file transfer services")
+        return
+
+    if action == "start":
+        body = _compose_start_cascade(svc, _FILE_TRANSFER_BY_COMPOSE, lambda args: _file_transfer_compose(args))
+        yield {"type": "log", "text": body.get("log", "")}
+        yield _emit_done(body.get("ok", False), exit_code=body.get("exit_code", 1), log=body.get("log", "")[-8000:])
+        return
+
+    if action in {"stop", "restart", "pause", "unpause"}:
+        body = _compose_docker_lifecycle_cascade(svc, action, _FILE_TRANSFER_BY_COMPOSE)
+        yield {"type": "log", "text": body.get("log", "")}
+        yield _emit_done(body.get("ok", False), log=body.get("log", "")[-8000:])
+        return
+
+    yield _emit_done(False, error=f"unsupported action {action}")
+
+
 def _stream_ai_service_action_stream(meta: dict, action: str) -> Iterator[dict[str, Any]]:
     script = meta["script"]
     cname = meta.get("container")
 
     if script == "infra":
         yield from _stream_infra_stack(meta, action)
+        return
+
+    if script == "file-transfer":
+        yield from _stream_file_transfer_stack(meta, action)
         return
 
     if script == "cloudflare-local":
@@ -1354,6 +1593,44 @@ def _stream_infra_stack(_meta: dict, action: str) -> Iterator[dict[str, Any]]:
         yield _emit_done(False, error="no backup defined for infra stack")
         return
     yield _emit_done(False, error=f"unsupported action {action} for infra script")
+
+
+def _stream_file_transfer_stack(_meta: dict, action: str) -> Iterator[dict[str, Any]]:
+    if action == "deploy":
+        code, log = yield from _stream_ai_script("file-transfer", "start")
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "stop":
+        code, log = yield from _stream_ai_script("file-transfer", "stop")
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "restart":
+        code, log = yield from _stream_ai_script("file-transfer", "restart")
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "remove":
+        code, log = yield from _stream_ai_script("file-transfer", "remove")
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "reset":
+        code, log = yield from _stream_ai_script("file-transfer", "reset")
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action in {"start", "pause", "unpause"}:
+        code, log = yield from _stream_ai_script("file-transfer", action)
+        yield _emit_done(code == 0, exit_code=code, log=log[-8000:])
+        return
+    if action == "recreate":
+        yield {"type": "log", "text": "=== remove ===\n"}
+        code1, log1 = yield from _stream_ai_script("file-transfer", "remove")
+        yield {"type": "log", "text": "=== start ===\n"}
+        code2, log2 = yield from _stream_ai_script("file-transfer", "start")
+        yield _emit_done(code1 == 0 and code2 == 0, log=(log1 + log2)[-8000:])
+        return
+    if action == "backup":
+        yield _emit_done(False, error="no backup defined for file transfer stack")
+        return
+    yield _emit_done(False, error=f"unsupported action {action} for file-transfer script")
 
 
 def _stream_cloudflare_local(_meta: dict, action: str) -> Iterator[dict[str, Any]]:

@@ -31,6 +31,10 @@ BUNDLE_META: dict[str, dict[str, str]] = {
         "label": "Shared infra (MySQL, Redis, Mailpit, …)",
         "service": "infra",
     },
+    "file-transfer-full": {
+        "label": "File transfer (FTP + SFTP)",
+        "service": "file-transfer",
+    },
 }
 
 

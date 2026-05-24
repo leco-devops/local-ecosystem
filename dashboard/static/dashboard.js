@@ -3065,6 +3065,89 @@ async function copyUiMagicLink(slug, btn, loginUrlHint) {
   }
 }
 
+function copyUiAccessText(text) {
+  const t = String(text || "").trim();
+  if (!t) return;
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(t).catch(() => {});
+  }
+}
+
+function uiAccessCopyBtn(text, label = "Copy") {
+  if (!text) return "";
+  return `<button type="button" class="small-copy ui-access-copy" data-ui-copy="${escapeAttr(text)}" title="Copy ${escapeAttr(label)}">${escapeHtml(label)}</button>`;
+}
+
+function renderUiAccessLoginCell(row) {
+  const d = row.login_details || {};
+  const kind =
+    d.kind ||
+    (row.auth_type === "protocol" ? "protocol" : row.auth_type === "browse_only" ? "browse_only" : "web");
+
+  if (kind === "protocol") {
+    const authMode = d.auth_mode || "password";
+    const pwCopy =
+      authMode === "key" || !d.password ? "" : uiAccessCopyBtn(d.password, "password");
+    const parts = [
+      `<div class="ui-access-login__summary">${escapeHtml(d.summary || "")} ${uiAccessCopyBtn(d.username, "user")} ${pwCopy}</div>`,
+    ];
+    if (authMode !== "password") {
+      parts.push(
+        `<div class="ui-access-login__row muted small">Auth mode <code>${escapeHtml(authMode)}</code></div>`,
+      );
+    }
+    if (d.public_key && authMode !== "password") {
+      parts.push(
+        `<div class="ui-access-login__row"><code class="ui-access-login__mono">${escapeHtml(d.public_key)}</code> ${uiAccessCopyBtn(d.public_key, "public key")}</div>`,
+      );
+    }
+    if (d.host && d.port) {
+      parts.push(
+        `<div class="ui-access-login__row muted small">Host <code>${escapeHtml(d.host)}</code> · Port <code>${escapeHtml(String(d.port))}</code>${d.alt_host ? ` · Alt <code>${escapeHtml(d.alt_host)}</code>` : ""} ${uiAccessCopyBtn(String(d.port), "port")} ${uiAccessCopyBtn(`${d.host}:${d.port}`, "host:port")}</div>`,
+      );
+    }
+    for (const cs of d.connection_strings || []) {
+      parts.push(
+        `<div class="ui-access-login__row"><code class="ui-access-login__mono">${escapeHtml(cs)}</code> ${uiAccessCopyBtn(cs, "connection")}</div>`,
+      );
+    }
+    if (d.browser_url) {
+      parts.push(
+        `<div class="ui-access-login__row muted small"><a href="${escapeAttr(d.browser_url)}"${externalNavigationAttrs(d.browser_url)}>File browser</a> <code class="small">${escapeHtml(d.browser_url)}</code> ${uiAccessCopyBtn(d.browser_url, "URL")}</div>`,
+      );
+    }
+    if (d.footnote) {
+      parts.push(`<div class="ui-access-login__footnote muted small">${escapeHtml(d.footnote)}</div>`);
+    }
+    return `<div class="ui-access-login">${parts.join("")}</div>`;
+  }
+
+  if (kind === "browse_only") {
+    const urls = d.browser_urls || (d.browser_url ? [d.browser_url] : []);
+    return `<div class="ui-access-login">
+      <div class="ui-access-login__summary muted small">${escapeHtml(d.summary || "Read-only · no login")}</div>
+      ${urls
+        .map(
+          (u) =>
+            `<div class="ui-access-login__row"><a href="${escapeAttr(u)}"${externalNavigationAttrs(u)}>${escapeHtml(u)}</a> ${uiAccessCopyBtn(u, "URL")}</div>`,
+        )
+        .join("")}
+    </div>`;
+  }
+
+  const cred = row.credentials?.values || {};
+  const user = d.username || cred.username || cred.email || cred.driver || "—";
+  const pw = d.password || cred.password || cred.secretKey || "";
+  const url = d.login_url || row.login_url || "";
+  const summary =
+    d.summary ||
+    `User: ${user}${pw ? ` · Password: ${pw}` : ""}`;
+  return `<div class="ui-access-login">
+    <div class="ui-access-login__row"><code class="small">${escapeHtml(url)}</code> ${uiAccessCopyBtn(url, "URL")}</div>
+    <div class="ui-access-login__summary muted small">${escapeHtml(summary)}</div>
+  </div>`;
+}
+
 function uiAccessActionButtons(row) {
   const btns = [];
   if (row.can_auto_login) {
@@ -3078,7 +3161,9 @@ function uiAccessActionButtons(row) {
   btns.push(
     `<a class="ollama-act ollama-act--safe" href="${escapeAttr(row.login_url)}"${externalNavigationAttrs(row.login_url)}>Open manual</a>`,
   );
-  btns.push(`<button type="button" class="ollama-act ollama-act--safe" data-ui-edit="${escapeAttr(row.slug)}">Edit</button>`);
+  if (row.can_edit) {
+    btns.push(`<button type="button" class="ollama-act ollama-act--safe" data-ui-edit="${escapeAttr(row.slug)}">Edit</button>`);
+  }
   if (row.can_reset) {
     btns.push(
       `<button type="button" class="ollama-act ollama-act--caution" data-ui-reset="${escapeAttr(row.slug)}">Reset &amp; apply</button>`,
@@ -3116,6 +3201,9 @@ function bindUiAccessButtons(root, rows) {
       if (row) resetUiCredentials(slug, row.label);
     });
   });
+  root.querySelectorAll("[data-ui-copy]").forEach((btn) => {
+    btn.addEventListener("click", () => copyUiAccessText(btn.getAttribute("data-ui-copy")));
+  });
   applyExternalLinkAttrs(root);
 }
 
@@ -3123,7 +3211,7 @@ function renderOverviewUiAccess(catalog) {
   const el = document.getElementById("overviewUiAccess");
   if (!el) return;
   const rows = catalog?.services || [];
-  const actionable = rows.filter((r) => r.can_auto_login || r.can_reset);
+  const actionable = rows.filter((r) => r.can_auto_login || r.can_reset || r.can_edit || r.auth_type === "browse_only");
   if (!actionable.length) {
     el.innerHTML = "<p class='muted small'>No UI logins in registry.</p>";
     return;
@@ -3165,6 +3253,54 @@ async function resetUiCredentials(slug, label) {
   loadUiAccessPanel();
 }
 
+function sftpCredentialFields(values = {}) {
+  const authMode = values.auth_mode || "password";
+  return [
+    {
+      key: "auth_mode",
+      label: "Authentication",
+      type: "select",
+      value: authMode,
+      alwaysSend: true,
+      options: [
+        { value: "password", label: "Password only" },
+        { value: "key", label: "Public key only" },
+        { value: "both", label: "Password + public key" },
+      ],
+    },
+    { key: "username", label: "Username", value: values.username || "leco", alwaysSend: true },
+    { key: "port", label: "Port", value: values.port || "2222", alwaysSend: true },
+    {
+      key: "password",
+      label: "Password",
+      secret: true,
+      value: values.password || "",
+      showWhen: ["password", "both"],
+    },
+    {
+      key: "public_key",
+      label: "OpenSSH public key",
+      type: "textarea",
+      value: values.public_key || "",
+      showWhen: ["key", "both"],
+      placeholder: "ssh-ed25519 AAAA... comment",
+    },
+  ];
+}
+
+function ftpCredentialFields(values = {}) {
+  return [
+    { key: "username", label: "Username", value: values.username || "leco", alwaysSend: true },
+    { key: "port", label: "Port", value: values.port || "21", alwaysSend: true },
+    {
+      key: "password",
+      label: "Password",
+      secret: true,
+      value: values.password || "",
+    },
+  ];
+}
+
 async function promptEditUiCredentials(slug, label, credMeta) {
   const values = credMeta?.values || {};
   const keys = Object.keys(values);
@@ -3172,12 +3308,38 @@ async function promptEditUiCredentials(slug, label, credMeta) {
     await showAppAlert("No editable fields for this service.", "Edit credentials");
     return;
   }
-  const fields = keys.map((k) => ({
-    key: k,
-    label: k,
-    value: values[k] || "",
-    secret: /password|secret/i.test(k),
-  }));
+  let fields;
+  if (slug === "sftp" || slug === "ftp") {
+    const res = await fetch(`/api/ui-credentials/${encodeURIComponent(slug)}`);
+    const row = await res.json();
+    if (!row.ok) {
+      await showAppAlert(row.error || `Could not load ${label} credentials.`, "Edit credentials");
+      return;
+    }
+    const ld = row.login_details || {};
+    if (slug === "sftp") {
+      fields = sftpCredentialFields({
+        auth_mode: ld.auth_mode || values.auth_mode || "password",
+        username: ld.username || values.username || "leco",
+        port: ld.port || values.port || "2222",
+        password: "",
+        public_key: ld.public_key || values.public_key || "",
+      });
+    } else {
+      fields = ftpCredentialFields({
+        username: ld.username || values.username || "leco",
+        port: ld.port || values.port || "21",
+        password: "",
+      });
+    }
+  } else {
+    fields = keys.map((k) => ({
+      key: k,
+      label: k,
+      value: values[k] || "",
+      secret: /password|secret/i.test(k),
+    }));
+  }
   const next = await showAppCredentialsForm({
     title: "Edit credentials",
     serviceLabel: label,
@@ -3191,7 +3353,14 @@ async function promptEditUiCredentials(slug, label, credMeta) {
       body: JSON.stringify({ token: controlToken(), values: next }),
     });
     const data = await res.json();
-    if (!data.ok) await showAppAlert(data.error || "Save failed", "Edit credentials");
+    if (!data.ok) {
+      await showAppAlert(data.error || data.message || "Save failed", "Edit credentials");
+    } else {
+      const msgParts = [`${label}: credentials saved.`];
+      if (data.applied) msgParts.push(data.message || "Applied to running service.");
+      else if (data.message) msgParts.push(data.message);
+      await showAppAlert(msgParts.join(" "), "Edit credentials");
+    }
     loadUiAccessPanel();
   } catch (e) {
     await showAppAlert(String(e), "Edit credentials");
@@ -3213,7 +3382,7 @@ async function loadUiAccessPanel() {
     }
     const tokenBanner =
       data.token_required && !controlToken()
-        ? `<div class="ui-access-banner ui-access-banner--warn">Control token required for auto-login and reset. Set it on the <a href="/?tab=controlTab">Control</a> tab, click Save, then try again.</div>`
+        ? `<div class="ui-access-banner ui-access-banner--warn">Control token required for auto-login, edit, and reset. Set it on the <a href="/?tab=controlTab">Control</a> tab, click Save, then try again.</div>`
         : `<div class="ui-access-banner muted small">Magic links expire in ~60s. Local dev only — not for production.</div>`;
     el.innerHTML = `${tokenBanner}
       <table class="ui-access-table">
@@ -3229,11 +3398,9 @@ async function loadUiAccessPanel() {
                   : row.container && row.container_running === true
                     ? '<span class="pill ok">running</span>'
                     : "";
-              const user =
-                cred.values?.username || cred.values?.email || cred.values?.driver || "—";
               return `<tr>
                 <td><strong>${escapeHtml(row.label)}</strong><br><code class="muted small">${escapeHtml(row.slug)}</code></td>
-                <td><code class="small">${escapeHtml(row.login_url)}</code><br><span class="muted small">${escapeHtml(String(user))}</span></td>
+                <td>${renderUiAccessLoginCell(row)}</td>
                 <td><span class="pill ${status === "custom" ? "warn" : "ok"}">${escapeHtml(status)}</span> ${containerPill}</td>
                 <td class="ui-access-actions">${uiAccessActionButtons(row)}</td>
               </tr>`;
@@ -3284,6 +3451,7 @@ function renderInfrastructurePanel(data, cf, opts = {}) {
   renderSystemStatus(data.system_status);
   renderDockerOverview(data.docker_overview);
   renderCloudflareLocal(cf, data.services || []);
+  renderFileTransferLocal(data.services || []);
   if (!opts.skipTrendCharts) {
     updateCharts(data);
   }
@@ -3291,6 +3459,48 @@ function renderInfrastructurePanel(data, cf, opts = {}) {
   renderContainers(data);
   loadOllamaModelsPanel();
   loadOllamaBackupSelect();
+}
+
+function renderFileTransferLocal(services) {
+  const el = document.getElementById("fileTransferLocal");
+  if (!el) return;
+  const FT_CONTAINERS = new Set(["leco-sftp", "leco-ftp", "leco-file-browser"]);
+  const rows = (services || []).filter((s) => FT_CONTAINERS.has(s.container));
+  const badge = (running, status) => {
+    const ok = running || (status || "").toLowerCase() === "running";
+    return `<span class="pill ${ok ? "ok" : "bad"}">${escapeHtml(status || (ok ? "running" : "down"))}</span>`;
+  };
+  const find = (name) => rows.find((s) => s.container === name);
+  const sftp = find("leco-sftp");
+  const ftp = find("leco-ftp");
+  const browser = find("leco-file-browser");
+  el.innerHTML = `
+    <div class="cf-local-card">
+      <strong>Start stack</strong>
+      <p class="muted small" style="margin:0 0 8px">Starts <code>file-transfer/docker-compose.yml</code> (SFTP, FTP, read-only browser).</p>
+      <button type="button" class="ctrl-bulk ctrl-bulk--deploy" data-infra-quickstart="stack-file-transfer-all" data-infra-quickstart-action="deploy" data-infra-quickstart-label="Start file transfer stack">Start FTP / SFTP stack</button>
+    </div>
+    <div class="cf-local-card">
+      <strong>SFTP</strong>
+      <div class="row"><span>Container</span><code>leco-sftp</code></div>
+      <div class="row"><span>Status</span>${badge(!!sftp?.container_info?.status && sftp.container_info.status === "running", sftp?.container_info?.status || "missing")}</div>
+      <div class="row"><span>Connect</span><code>sftp -P 2222 leco@localhost</code></div>
+      <div class="row"><span>Hub</span><a href="/hub/sftp">/hub/sftp</a></div>
+    </div>
+    <div class="cf-local-card">
+      <strong>FTP</strong>
+      <div class="row"><span>Container</span><code>leco-ftp</code></div>
+      <div class="row"><span>Status</span>${badge(!!ftp?.container_info?.status && ftp.container_info.status === "running", ftp?.container_info?.status || "missing")}</div>
+      <div class="row"><span>Connect</span><code>ftp://leco:leco%23localhost-192@localhost:21</code></div>
+      <div class="row"><span>Hub</span><a href="/hub/ftp">/hub/ftp</a></div>
+    </div>
+    <div class="cf-local-card">
+      <strong>Read-only browser</strong>
+      <div class="row"><span>Container</span><code>leco-file-browser</code></div>
+      <div class="row"><span>Status</span>${badge(!!browser?.container_info?.status && browser.container_info.status === "running", browser?.container_info?.status || "missing")}</div>
+      <div class="row"><span>Browse</span><a href="http://files.lh"${externalNavigationAttrs("http://files.lh")}>files.lh</a> · <a href="http://ftp-files.lh"${externalNavigationAttrs("http://ftp-files.lh")}>ftp-files.lh</a> · <a href="http://sftp-files.lh"${externalNavigationAttrs("http://sftp-files.lh")}>sftp-files.lh</a></div>
+    </div>
+  `;
 }
 
 function ollamaApiHeaders(jsonBody = false) {
@@ -3716,24 +3926,62 @@ function showAppCredentialsForm({ title = "Edit credentials", serviceLabel = "",
   const lead = serviceLabel
     ? `<p class="app-modal-message__lead muted small">${escapeHtml(serviceLabel)} — leave secrets blank to keep current values.</p>`
     : `<p class="app-modal-message__lead muted small">Leave secrets blank to keep current values.</p>`;
-  msgEl.innerHTML =
-    lead +
-    fields
-      .map((f) => {
-        const isSecret = !!f.secret;
-        const val = String(f.value || "");
-        const showVal = isSecret && val.includes("•") ? "" : val;
-        return `<label class="app-modal-field">
-      <span class="app-modal-field-label">${escapeHtml(f.label || f.key)}</span>
-      <input class="app-modal-input" type="${isSecret ? "password" : "text"}" data-field-key="${escapeAttr(f.key)}" value="${escapeAttr(showVal)}" autocomplete="off" placeholder="${isSecret ? "Leave blank to keep" : ""}" />
+
+  const renderField = (f) => {
+    const type = f.type || "text";
+    const isSecret = !!f.secret;
+    const val = String(f.value || "");
+    const showVal = isSecret && val.includes("•") ? "" : val;
+    const showWhenAttr = f.showWhen?.length ? ` data-show-when="${escapeAttr(JSON.stringify(f.showWhen))}"` : "";
+    const label = escapeHtml(f.label || f.key);
+  if (type === "select") {
+      const options = (f.options || [])
+        .map(
+          (o) =>
+            `<option value="${escapeAttr(o.value)}"${String(o.value) === String(f.value || "") ? " selected" : ""}>${escapeHtml(o.label || o.value)}</option>`,
+        )
+        .join("");
+      return `<label class="app-modal-field app-modal-field--wrap"${showWhenAttr}>
+      <span class="app-modal-field-label">${label}</span>
+      <select class="app-modal-input" data-field-key="${escapeAttr(f.key)}" data-always-send="true">${options}</select>
     </label>`;
-      })
-      .join("");
+    }
+    if (type === "textarea") {
+      return `<label class="app-modal-field app-modal-field--wrap"${showWhenAttr}>
+      <span class="app-modal-field-label">${label}</span>
+      <textarea class="app-modal-input app-modal-input--textarea" rows="4" data-field-key="${escapeAttr(f.key)}" autocomplete="off" placeholder="${escapeAttr(f.placeholder || "")}">${escapeHtml(showVal)}</textarea>
+    </label>`;
+    }
+    return `<label class="app-modal-field app-modal-field--wrap"${showWhenAttr}>
+      <span class="app-modal-field-label">${label}</span>
+      <input class="app-modal-input" type="${isSecret ? "password" : "text"}" data-field-key="${escapeAttr(f.key)}" value="${escapeAttr(showVal)}" autocomplete="off" placeholder="${isSecret ? "Leave blank to keep" : escapeAttr(f.placeholder || "")}" />
+    </label>`;
+  };
+
+  msgEl.innerHTML = lead + fields.map(renderField).join("");
   overlay.dataset.mode = "prompt";
   cancel.classList.remove("is-hidden");
   cancel.textContent = "Cancel";
   primary.textContent = "Save";
   _appModalSetPrimaryVariant(primary, "primary");
+
+  const updateConditionalFields = () => {
+    const authMode =
+      msgEl.querySelector('[data-field-key="auth_mode"]')?.value ||
+      fields.find((f) => f.key === "auth_mode")?.value ||
+      "password";
+    msgEl.querySelectorAll("[data-show-when]").forEach((wrap) => {
+      try {
+        const when = JSON.parse(wrap.getAttribute("data-show-when") || "[]");
+        wrap.hidden = when.length > 0 && !when.includes(authMode);
+      } catch {
+        wrap.hidden = false;
+      }
+    });
+  };
+  msgEl.querySelector('[data-field-key="auth_mode"]')?.addEventListener("change", updateConditionalFields);
+  updateConditionalFields();
+
   const inputs = [...msgEl.querySelectorAll("[data-field-key]")];
   return new Promise((resolve) => {
     _appModalResolve = (ok) => {
@@ -3743,8 +3991,15 @@ function showAppCredentialsForm({ title = "Edit credentials", serviceLabel = "",
       }
       const next = {};
       inputs.forEach((inp) => {
+        const wrap = inp.closest("[data-show-when]");
+        if (wrap?.hidden) return;
+        const key = inp.getAttribute("data-field-key");
         const v = inp.value.trim();
-        if (v) next[inp.getAttribute("data-field-key")] = v;
+        if (inp.dataset.alwaysSend === "true" || inp.tagName === "SELECT") {
+          next[key] = v;
+          return;
+        }
+        if (v) next[key] = v;
       });
       resolve(next);
     };
@@ -5432,7 +5687,7 @@ const CONTROL_GROUP_META = {
   },
   "ecosystem-stack": {
     title: "Ecosystem stack & Traefik",
-    lead: "Edge proxy, apps, Ollama, n8n, Postgres, and LEco DevOps (this UI).",
+    lead: "Edge proxy, apps, Ollama, n8n, Postgres, file transfer stack script, and LEco DevOps (this UI).",
     sectionClass: "",
   },
   "cloudflare-local": {
@@ -5441,8 +5696,8 @@ const CONTROL_GROUP_META = {
     sectionClass: " control-target-group--cf",
   },
   infra: {
-    title: "Infra add-ons",
-    lead: "MySQL, Redis, Mailpit, Adminer, Redis Commander, Telegram gateway, and cache lab — from infra/docker-compose.yml.",
+    title: "Infra add-ons & file transfer",
+    lead: "MySQL, Redis, Mailpit, Adminer, cache lab (infra/docker-compose.yml) plus FTP, SFTP, and read-only file browser (file-transfer/docker-compose.yml).",
     sectionClass: "",
   },
 };
@@ -10459,6 +10714,31 @@ function initControlInfraBulkBar() {
   });
 }
 
+function initControlFileTransferBulkBar() {
+  const bar = document.getElementById("controlFileTransferBulkBar");
+  if (!bar || bar.dataset.wired === "1") return;
+  bar.dataset.wired = "1";
+  const FT_STACK = "stack-file-transfer-all";
+  bar.querySelectorAll("[data-ft-bulk-action]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const action = btn.getAttribute("data-ft-bulk-action");
+      const lbl = btn.getAttribute("data-ft-bulk-label") || action;
+      if (!action) return;
+      const destructive = action === "stop" || action === "restart" || action === "deploy";
+      if (destructive) {
+        const ok = await showAppConfirm({
+          title: lbl,
+          message:
+            "Runs docker compose for file-transfer/docker-compose.yml (SFTP, FTP, read-only browser). Can take a minute.",
+          confirmText: "Continue",
+        });
+        if (!ok) return;
+      }
+      runControlAction(FT_STACK, action, lbl);
+    });
+  });
+}
+
 function initInfraQuickstartBar() {
   if (document.body.dataset.infraQuickstartWired === "1") return;
   document.body.dataset.infraQuickstartWired = "1";
@@ -10508,6 +10788,7 @@ function initControlBulkBar() {
     });
   }
   initControlInfraBulkBar();
+  initControlFileTransferBulkBar();
 }
 
 async function bootstrapHubChrome() {
@@ -12322,7 +12603,7 @@ function renderDevStackConfigHtml(cfg) {
   const notes = (cfg.notes || []).map((n) => `<li class="muted small">${escapeHtml(n)}</li>`).join("");
   return `<ul class="devstack-config-paths">${pathRows.join("")}</ul>
     ${related ? `<p class="muted small"><strong>Hosting / platform (shared)</strong></p><ul class="devstack-config-files">${related}</ul>` : ""}
-    ${files ? `<p class="muted small"><strong>Stack files</strong> (under <code>${escapeHtml(cfg.stack_dir || "")}</code>)</p><div class="devstack-config-files">${files}</div>` : ""}
+    ${files ? `<p class="muted small"><strong>Stack files</strong> (under <code>${escapeHtml(cfg.stack_dir || "")}</code>)</p><div class="devstack-config-files devstack-config-files--grid">${files}</div>` : ""}
     ${notes ? `<ul class="devstack-access__notes">${notes}</ul>` : ""}`;
 }
 

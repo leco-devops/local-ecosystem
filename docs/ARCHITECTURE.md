@@ -36,6 +36,7 @@ flowchart TD
   Hosted["hosting/app-available"]
   CfLocal["cloudflare-local compose"]
   Infra["infra compose"]
+  FileTransfer["file-transfer compose"]
 
   Browser --> Traefik
   Traefik --> Dash
@@ -49,6 +50,8 @@ flowchart TD
   AiStack --> Dash
   AiStack --> CfLocal
   AiStack --> Infra
+  AiStack --> FileTransfer
+  ClientFTP["FTP/SFTP clients"] --> FileTransfer
 ```
 
 ## Code ownership map
@@ -59,7 +62,8 @@ flowchart TD
 - `tools/deploy-cli/`: LEco CLI package and manifest tooling.
 - `hosting/`: hosted-app materialization area and templates.
 - `cloudflare-local/`: adapter compose stack and adapter implementations.
-- `infra/`: optional infra add-on compose stack.
+- `infra/`: optional infra add-on compose stack (MySQL, Redis, Adminer, …).
+- `file-transfer/`: optional FTP, SFTP, and read-only file browser compose stack.
 - `traefik/`: static Traefik config and canonical **`dynamic.yml`**; runtime file-provider payloads live under **`hosting/traefik/`** (see **DEPLOYMENT.md** §7, **SETUP.md**).
 - `config/`: runtime configuration — `leco-registry.yaml` (app registry), `ai-providers.yaml` (AI provider settings, gitignored).
 - `docs/`: operator, developer, and architecture documentation.
@@ -80,4 +84,5 @@ flowchart TD
 2. [`LLD.md`](LLD.md) for module-level responsibilities.
 3. [`AI_ONBOARDING_PLAN.md`](AI_ONBOARDING_PLAN.md) for hybrid AI provider design and pipeline.
 4. [`LECO_TOOLING.md`](LECO_TOOLING.md) for CLI + dashboard integration.
-5. [`../AGENTS.md`](../AGENTS.md) for automation guardrails.
+5. [`FILE_TRANSFER.md`](FILE_TRANSFER.md) for FTP/SFTP/browser local file drop.
+6. [`../AGENTS.md`](../AGENTS.md) for automation guardrails.

@@ -217,6 +217,7 @@ Open **http://localhost.lh** or **http://dashboard.lh** for the LEco DevOps dash
 |-------|-----|
 | [Setup](docs/SETUP.md) | First machine install |
 | [Deployment](docs/DEPLOYMENT.md) | Day-2 operations |
+| [FTP & SFTP file transfer](docs/FILE_TRANSFER.md) | Local file drop, UI access credentials, public-key SFTP |
 | [Platform tab](docs/help/03-platform-tab.md) | Dev stacks and cloud platform UI |
 | [Architecture](docs/ARCHITECTURE.md) | System design |
 | [PROJECT.md](docs/PROJECT.md) | Full technical guide |
