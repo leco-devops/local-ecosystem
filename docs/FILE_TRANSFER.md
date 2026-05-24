@@ -2,6 +2,43 @@
 
 Local FTP and SFTP services for dev workflows (shared upload volume, default credentials for localhost only).
 
+**Reading map:** Operator walkthrough → [`docs/help/12-file-transfer.md`](help/12-file-transfer.md) · Developer wiring → [`docs/help/dev-10-file-transfer.md`](help/dev-10-file-transfer.md) · Architecture → [ARCHITECTURE.md](ARCHITECTURE.md), [HLD.md](HLD.md), [LLD.md](LLD.md).
+
+## Architecture (summary)
+
+The file-transfer stack is an optional **infra add-on** compose project (`file-transfer/`), orchestrated like `infra/` and `cloudflare-local/`:
+
+| Container | Image | Host exposure | Shared storage |
+|-----------|-------|---------------|----------------|
+| `leco-sftp` | `atmoz/sftp:alpine` | TCP **2222** → container 22 | `file_transfer_data:/home/leco` |
+| `leco-ftp` | `delfer/alpine-ftp-server` | TCP **21**, PASV **21100–21110** | same volume |
+| `leco-file-browser` | nginx autoindex (built) | HTTP via Traefik `files.lh` | same volume (read-only mount) |
+
+```mermaid
+flowchart TB
+  subgraph edge [Edge HTTP only]
+    T[Traefik]
+    FB[leco-file-browser]
+  end
+  subgraph protocols [Direct TCP]
+    SFTP[leco-sftp :2222]
+    FTP[leco-ftp :21]
+  end
+  V[(file_transfer_data)]
+  Dash[LEco DevOps dashboard]
+
+  T --> FB
+  FB -->|ro| V
+  SFTP --> V
+  FTP --> V
+  Dash -->|UI access Edit/Reset| Env[file-transfer/.env]
+  Dash -->|public keys| Keys[keys/sftp/*.pub]
+  Env --> SFTP
+  Keys --> SFTP
+```
+
+Credentials and SFTP keys are managed through **Service hubs → UI access** (`ui-login-registry.json` slugs `sftp`, `ftp`, `files`). See [UI_CREDENTIAL_VAULT.md](UI_CREDENTIAL_VAULT.md).
+
 ## Start / stop
 
 ```bash
@@ -30,8 +67,8 @@ LECO_INSTALL_PROFILE=file-transfer-full ./ecosystem-stack/install-foundation.sh
 
 | Protocol | Host | Port | User | Password |
 |----------|------|------|------|----------|
-| SFTP | `localhost` or `sftp.lh` | **2222** (avoids macOS SSH on :22) | `leco` | `leco` |
-| FTP | `ftp.lh` or `localhost` | **21** | `leco` | `leco` |
+| SFTP | `localhost` or `sftp.lh` | **2222** (avoids macOS SSH on :22) | `leco` | `leco#localhost-192` (or public key) |
+| FTP | `ftp.lh` or `localhost` | **21** | `leco` | `leco#localhost-192` |
 
 FTP passive mode uses ports **21100–21110** (published on the host). Set `FTP_PUBLICHOST=ftp.lh` (default) so clients receive correct PASV addresses.
 
@@ -47,16 +84,31 @@ cp file-transfer/.env.example file-transfer/.env
 ./ecosystem-stack/services/file-transfer.sh restart
 ```
 
-`SFTP_USERS` follows [atmoz/sftp](https://github.com/atmoz/sftp) format: `user:pass:uid:gid`.
+`SFTP_USERS` follows [atmoz/sftp](https://github.com/atmoz/sftp) format: `user:pass:uid:gid`. For **public-key-only** auth, use an empty password segment (`leco::1000:1000`) and place an OpenSSH public key in `file-transfer/keys/sftp/<user>.pub` (mounted into the container at `/home/<user>/.ssh/keys/`).
+
+### SFTP authentication modes
+
+Manage from **Service hubs → UI access → SFTP → Edit**:
+
+| Mode | Description |
+|------|-------------|
+| **Password only** | Default `leco` / `leco#localhost-192` |
+| **Public key only** | Empty password in `SFTP_USERS`; requires `file-transfer/keys/sftp/leco.pub` |
+| **Password + public key** | Both password login and mounted public key accepted |
+
+The dashboard writes `SFTP_AUTH_MODE`, `SFTP_USER`, `SFTP_USERS`, and the `.pub` file, then recreates `leco-sftp`.
 
 ## Client examples
 
 ```bash
-# SFTP
+# SFTP (password)
 sftp -P 2222 leco@localhost
 
+# SFTP (public key)
+sftp -P 2222 -i ~/.ssh/id_ed25519 leco@localhost
+
 # FTP (curl)
-curl -u leco:leco ftp://localhost:21/ --ftp-pasv
+curl -u 'leco:leco#localhost-192' ftp://localhost:21/ --ftp-pasv
 ```
 
 Service hubs (credentials + connection strings): **http://localhost.lh/hub/sftp** and **http://localhost.lh/hub/ftp**.

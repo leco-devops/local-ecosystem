@@ -15,7 +15,7 @@ Or use the menu:
 
 ## What starts (order)
 
-Traefik → Postgres → Ollama → **AirLLM** → Open WebUI → n8n → **service-dashboard** → cloudflare-local → infra compose.
+Traefik → Postgres → Ollama → **AirLLM** → Open WebUI → n8n → **service-dashboard** → cloudflare-local → infra compose → **file-transfer** (when enabled in platform config or full profile).
 
 AirLLM is **not** optional in the default order but **must build on first start** (~150 MB CPU torch + deps). First build can take several minutes.
 

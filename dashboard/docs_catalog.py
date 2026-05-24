@@ -136,7 +136,7 @@ DOC_MODULES = [
         "title": "UI credential vault (local dev)",
         "category": "Operations",
         "rel_path": "docs/UI_CREDENTIAL_VAULT.md",
-        "blurb": "Store UI logins, signed-in assist links, and reset/apply for MinIO, Adminer, and registry services.",
+        "blurb": "Store UI logins, signed-in assist links, and reset/apply for MinIO, Adminer, SFTP/FTP, and registry services.",
     },
     {
         "id": "project-changelog",
@@ -192,7 +192,7 @@ DOC_MODULES = [
         "title": "FTP and SFTP file transfer",
         "category": "DevOps",
         "rel_path": "docs/FILE_TRANSFER.md",
-        "blurb": "Local FTP/SFTP compose stack, credentials, ports, and install profile file-transfer-full.",
+        "blurb": "Local FTP/SFTP compose stack, SFTP public-key auth, UI access credentials, Traefik browser, and install profile file-transfer-full.",
     },
     {
         "id": "airllm-integration",

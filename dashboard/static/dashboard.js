@@ -3085,12 +3085,25 @@ function renderUiAccessLoginCell(row) {
     (row.auth_type === "protocol" ? "protocol" : row.auth_type === "browse_only" ? "browse_only" : "web");
 
   if (kind === "protocol") {
+    const authMode = d.auth_mode || "password";
+    const pwCopy =
+      authMode === "key" || !d.password ? "" : uiAccessCopyBtn(d.password, "password");
     const parts = [
-      `<div class="ui-access-login__summary">${escapeHtml(d.summary || "")} ${uiAccessCopyBtn(d.username, "user")} ${uiAccessCopyBtn(d.password, "password")}</div>`,
+      `<div class="ui-access-login__summary">${escapeHtml(d.summary || "")} ${uiAccessCopyBtn(d.username, "user")} ${pwCopy}</div>`,
     ];
+    if (authMode !== "password") {
+      parts.push(
+        `<div class="ui-access-login__row muted small">Auth mode <code>${escapeHtml(authMode)}</code></div>`,
+      );
+    }
+    if (d.public_key && authMode !== "password") {
+      parts.push(
+        `<div class="ui-access-login__row"><code class="ui-access-login__mono">${escapeHtml(d.public_key)}</code> ${uiAccessCopyBtn(d.public_key, "public key")}</div>`,
+      );
+    }
     if (d.host && d.port) {
       parts.push(
-        `<div class="ui-access-login__row muted small">Host <code>${escapeHtml(d.host)}</code> · Port <code>${escapeHtml(String(d.port))}</code>${d.alt_host ? ` · Alt <code>${escapeHtml(d.alt_host)}</code>` : ""} ${uiAccessCopyBtn(`${d.host}:${d.port}`, "host:port")}</div>`,
+        `<div class="ui-access-login__row muted small">Host <code>${escapeHtml(d.host)}</code> · Port <code>${escapeHtml(String(d.port))}</code>${d.alt_host ? ` · Alt <code>${escapeHtml(d.alt_host)}</code>` : ""} ${uiAccessCopyBtn(String(d.port), "port")} ${uiAccessCopyBtn(`${d.host}:${d.port}`, "host:port")}</div>`,
       );
     }
     for (const cs of d.connection_strings || []) {
@@ -3240,6 +3253,54 @@ async function resetUiCredentials(slug, label) {
   loadUiAccessPanel();
 }
 
+function sftpCredentialFields(values = {}) {
+  const authMode = values.auth_mode || "password";
+  return [
+    {
+      key: "auth_mode",
+      label: "Authentication",
+      type: "select",
+      value: authMode,
+      alwaysSend: true,
+      options: [
+        { value: "password", label: "Password only" },
+        { value: "key", label: "Public key only" },
+        { value: "both", label: "Password + public key" },
+      ],
+    },
+    { key: "username", label: "Username", value: values.username || "leco", alwaysSend: true },
+    { key: "port", label: "Port", value: values.port || "2222", alwaysSend: true },
+    {
+      key: "password",
+      label: "Password",
+      secret: true,
+      value: values.password || "",
+      showWhen: ["password", "both"],
+    },
+    {
+      key: "public_key",
+      label: "OpenSSH public key",
+      type: "textarea",
+      value: values.public_key || "",
+      showWhen: ["key", "both"],
+      placeholder: "ssh-ed25519 AAAA... comment",
+    },
+  ];
+}
+
+function ftpCredentialFields(values = {}) {
+  return [
+    { key: "username", label: "Username", value: values.username || "leco", alwaysSend: true },
+    { key: "port", label: "Port", value: values.port || "21", alwaysSend: true },
+    {
+      key: "password",
+      label: "Password",
+      secret: true,
+      value: values.password || "",
+    },
+  ];
+}
+
 async function promptEditUiCredentials(slug, label, credMeta) {
   const values = credMeta?.values || {};
   const keys = Object.keys(values);
@@ -3247,12 +3308,38 @@ async function promptEditUiCredentials(slug, label, credMeta) {
     await showAppAlert("No editable fields for this service.", "Edit credentials");
     return;
   }
-  const fields = keys.map((k) => ({
-    key: k,
-    label: k,
-    value: values[k] || "",
-    secret: /password|secret/i.test(k),
-  }));
+  let fields;
+  if (slug === "sftp" || slug === "ftp") {
+    const res = await fetch(`/api/ui-credentials/${encodeURIComponent(slug)}`);
+    const row = await res.json();
+    if (!row.ok) {
+      await showAppAlert(row.error || `Could not load ${label} credentials.`, "Edit credentials");
+      return;
+    }
+    const ld = row.login_details || {};
+    if (slug === "sftp") {
+      fields = sftpCredentialFields({
+        auth_mode: ld.auth_mode || values.auth_mode || "password",
+        username: ld.username || values.username || "leco",
+        port: ld.port || values.port || "2222",
+        password: "",
+        public_key: ld.public_key || values.public_key || "",
+      });
+    } else {
+      fields = ftpCredentialFields({
+        username: ld.username || values.username || "leco",
+        port: ld.port || values.port || "21",
+        password: "",
+      });
+    }
+  } else {
+    fields = keys.map((k) => ({
+      key: k,
+      label: k,
+      value: values[k] || "",
+      secret: /password|secret/i.test(k),
+    }));
+  }
   const next = await showAppCredentialsForm({
     title: "Edit credentials",
     serviceLabel: label,
@@ -3404,7 +3491,7 @@ function renderFileTransferLocal(services) {
       <strong>FTP</strong>
       <div class="row"><span>Container</span><code>leco-ftp</code></div>
       <div class="row"><span>Status</span>${badge(!!ftp?.container_info?.status && ftp.container_info.status === "running", ftp?.container_info?.status || "missing")}</div>
-      <div class="row"><span>Connect</span><code>ftp://leco:leco@localhost:21</code></div>
+      <div class="row"><span>Connect</span><code>ftp://leco:leco%23localhost-192@localhost:21</code></div>
       <div class="row"><span>Hub</span><a href="/hub/ftp">/hub/ftp</a></div>
     </div>
     <div class="cf-local-card">
@@ -3839,24 +3926,62 @@ function showAppCredentialsForm({ title = "Edit credentials", serviceLabel = "",
   const lead = serviceLabel
     ? `<p class="app-modal-message__lead muted small">${escapeHtml(serviceLabel)} — leave secrets blank to keep current values.</p>`
     : `<p class="app-modal-message__lead muted small">Leave secrets blank to keep current values.</p>`;
-  msgEl.innerHTML =
-    lead +
-    fields
-      .map((f) => {
-        const isSecret = !!f.secret;
-        const val = String(f.value || "");
-        const showVal = isSecret && val.includes("•") ? "" : val;
-        return `<label class="app-modal-field">
-      <span class="app-modal-field-label">${escapeHtml(f.label || f.key)}</span>
-      <input class="app-modal-input" type="${isSecret ? "password" : "text"}" data-field-key="${escapeAttr(f.key)}" value="${escapeAttr(showVal)}" autocomplete="off" placeholder="${isSecret ? "Leave blank to keep" : ""}" />
+
+  const renderField = (f) => {
+    const type = f.type || "text";
+    const isSecret = !!f.secret;
+    const val = String(f.value || "");
+    const showVal = isSecret && val.includes("•") ? "" : val;
+    const showWhenAttr = f.showWhen?.length ? ` data-show-when="${escapeAttr(JSON.stringify(f.showWhen))}"` : "";
+    const label = escapeHtml(f.label || f.key);
+  if (type === "select") {
+      const options = (f.options || [])
+        .map(
+          (o) =>
+            `<option value="${escapeAttr(o.value)}"${String(o.value) === String(f.value || "") ? " selected" : ""}>${escapeHtml(o.label || o.value)}</option>`,
+        )
+        .join("");
+      return `<label class="app-modal-field app-modal-field--wrap"${showWhenAttr}>
+      <span class="app-modal-field-label">${label}</span>
+      <select class="app-modal-input" data-field-key="${escapeAttr(f.key)}" data-always-send="true">${options}</select>
     </label>`;
-      })
-      .join("");
+    }
+    if (type === "textarea") {
+      return `<label class="app-modal-field app-modal-field--wrap"${showWhenAttr}>
+      <span class="app-modal-field-label">${label}</span>
+      <textarea class="app-modal-input app-modal-input--textarea" rows="4" data-field-key="${escapeAttr(f.key)}" autocomplete="off" placeholder="${escapeAttr(f.placeholder || "")}">${escapeHtml(showVal)}</textarea>
+    </label>`;
+    }
+    return `<label class="app-modal-field app-modal-field--wrap"${showWhenAttr}>
+      <span class="app-modal-field-label">${label}</span>
+      <input class="app-modal-input" type="${isSecret ? "password" : "text"}" data-field-key="${escapeAttr(f.key)}" value="${escapeAttr(showVal)}" autocomplete="off" placeholder="${isSecret ? "Leave blank to keep" : escapeAttr(f.placeholder || "")}" />
+    </label>`;
+  };
+
+  msgEl.innerHTML = lead + fields.map(renderField).join("");
   overlay.dataset.mode = "prompt";
   cancel.classList.remove("is-hidden");
   cancel.textContent = "Cancel";
   primary.textContent = "Save";
   _appModalSetPrimaryVariant(primary, "primary");
+
+  const updateConditionalFields = () => {
+    const authMode =
+      msgEl.querySelector('[data-field-key="auth_mode"]')?.value ||
+      fields.find((f) => f.key === "auth_mode")?.value ||
+      "password";
+    msgEl.querySelectorAll("[data-show-when]").forEach((wrap) => {
+      try {
+        const when = JSON.parse(wrap.getAttribute("data-show-when") || "[]");
+        wrap.hidden = when.length > 0 && !when.includes(authMode);
+      } catch {
+        wrap.hidden = false;
+      }
+    });
+  };
+  msgEl.querySelector('[data-field-key="auth_mode"]')?.addEventListener("change", updateConditionalFields);
+  updateConditionalFields();
+
   const inputs = [...msgEl.querySelectorAll("[data-field-key]")];
   return new Promise((resolve) => {
     _appModalResolve = (ok) => {
@@ -3866,8 +3991,15 @@ function showAppCredentialsForm({ title = "Edit credentials", serviceLabel = "",
       }
       const next = {};
       inputs.forEach((inp) => {
+        const wrap = inp.closest("[data-show-when]");
+        if (wrap?.hidden) return;
+        const key = inp.getAttribute("data-field-key");
         const v = inp.value.trim();
-        if (v) next[inp.getAttribute("data-field-key")] = v;
+        if (inp.dataset.alwaysSend === "true" || inp.tagName === "SELECT") {
+          next[key] = v;
+          return;
+        }
+        if (v) next[key] = v;
       });
       resolve(next);
     };

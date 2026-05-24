@@ -5726,6 +5726,17 @@ body.help-page {
   gap: 6px;
 }
 
+.app-modal-input--textarea {
+  min-height: 96px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+}
+
+.app-modal-field--wrap[hidden] {
+  display: none;
+}
+
 .ui-access-login {
   display: flex;
   flex-direction: column;

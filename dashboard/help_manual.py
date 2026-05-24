@@ -47,6 +47,7 @@ HELP_TREE: list[dict] = [
             {"id": "dash-platform", "title": "Platform tab & dev stacks", "file": "03-platform-tab.md"},
             {"id": "dash-control", "title": "Control tab (start/stop)", "file": "03-control.md"},
             {"id": "dash-infra", "title": "Infrastructure tab", "file": "03-infrastructure.md"},
+            {"id": "file-transfer", "title": "FTP & SFTP file transfer", "file": "12-file-transfer.md"},
         ],
     },
     {
@@ -107,6 +108,7 @@ HELP_TREE: list[dict] = [
             {"id": "dev-registration-flow", "title": "Registration data flow", "file": "dev-03-registration-flow.md"},
             {"id": "dev-traefik", "title": "Traefik & routing code", "file": "dev-04-traefik.md"},
             {"id": "dev-ecosystem-stack", "title": "Ecosystem stack", "file": "dev-05-ecosystem-stack.md"},
+            {"id": "dev-file-transfer", "title": "File transfer stack", "file": "dev-10-file-transfer.md"},
             {"id": "dev-extending", "title": "Extending LEco", "file": "dev-06-extending.md"},
             {"id": "dev-debugging", "title": "Debugging & validation", "file": "dev-07-debugging.md"},
             {"id": "dev-hosted-app-services", "title": "Attached services (API)", "file": "dev-08-hosted-app-services.md"},

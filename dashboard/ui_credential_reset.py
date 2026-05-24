@@ -9,11 +9,27 @@ import shlex
 import subprocess
 from typing import Any
 
-from ui_credentials import get_registry_entry, reset_vault_to_defaults
+from ui_credentials import (
+    DEFAULT_FILE_TRANSFER_PASSWORD,
+    DEFAULT_FTP_PORT,
+    DEFAULT_SFTP_PORT,
+    get_registry_entry,
+    reset_vault_to_defaults,
+    _normalize_port,
+)
 from ui_provision import provision_after_reset
 
 PROJECT_ROOT = os.getenv("DASHBOARD_PROJECT_ROOT", "/project")
 SERVICES_DIR = os.path.join(PROJECT_ROOT, "ecosystem-stack", "services")
+
+
+def _host_project_root() -> str:
+    """Host filesystem path for docker compose bind mounts (dashboard runs in Docker with /project)."""
+    for key in ("LECO_PROJECT_ROOT_HOST", "DASHBOARD_PROJECT_ROOT_HOST", "DASHBOARD_DOCKER_BIND_ROOT"):
+        val = (os.getenv(key) or "").strip()
+        if val and os.path.isdir(val):
+            return val
+    return PROJECT_ROOT
 
 
 def _run(cmd: list[str], timeout: int = 60) -> tuple[bool, str]:
@@ -48,14 +64,29 @@ def _restart_container(name: str | None) -> tuple[bool, str]:
     return ok, msg or ("restarted" if ok else "restart failed")
 
 
-def _recreate_compose_service(compose_rel: str, service: str) -> tuple[bool, str]:
-    compose = os.path.join(PROJECT_ROOT, compose_rel)
+def _recreate_compose_service(
+    compose_rel: str,
+    service: str,
+    *,
+    env_rel: str | None = None,
+    compose_extra: list[str] | None = None,
+) -> tuple[bool, str]:
+    root = _host_project_root()
+    compose = os.path.join(root, compose_rel)
     if not os.path.isfile(compose):
         return False, f"compose file missing: {compose}"
-    return _run(
-        ["docker", "compose", "-f", compose, "up", "-d", "--force-recreate", "--no-deps", service],
-        timeout=180,
-    )
+    compose_dir = os.path.dirname(compose)
+    cmd = ["docker", "compose", "-f", compose, "--project-directory", compose_dir]
+    for extra_rel in compose_extra or []:
+        extra = os.path.join(root, extra_rel)
+        if os.path.isfile(extra):
+            cmd.extend(["-f", extra])
+    if env_rel:
+        env_path = os.path.join(root, env_rel)
+        if os.path.isfile(env_path):
+            cmd.extend(["--env-file", env_path])
+    cmd.extend(["up", "-d", "--force-recreate", "--no-deps", service])
+    return _run(cmd, timeout=180)
 
 
 def _start_service_script(script: str) -> tuple[bool, str]:
@@ -268,8 +299,124 @@ def _reset_minio(creds: dict[str, str], container: str) -> tuple[bool, str]:
 
 
 FILE_TRANSFER_COMPOSE = "file-transfer/docker-compose.yml"
+FILE_TRANSFER_SFTP_KEYS_COMPOSE = "file-transfer/docker-compose.sftp-keys.yml"
+FILE_TRANSFER_VOLUME = "file-transfer_file_transfer_data"
 FILE_TRANSFER_ENV = os.path.join(PROJECT_ROOT, "file-transfer", ".env")
 FILE_TRANSFER_ENV_EXAMPLE = os.path.join(PROJECT_ROOT, "file-transfer", ".env.example")
+
+
+def _sftp_keys_dir() -> str:
+    return os.path.join(_host_project_root(), "file-transfer", "keys", "sftp")
+
+
+def _ensure_file_transfer_keys_dir() -> None:
+    os.makedirs(_sftp_keys_dir(), exist_ok=True)
+
+
+def _sftp_pub_keys_present(username: str | None = None) -> bool:
+    keys_dir = _sftp_keys_dir()
+    if not os.path.isdir(keys_dir):
+        return False
+    user = str(username or "leco").strip() or "leco"
+    if os.path.isfile(os.path.join(keys_dir, f"{user}.pub")):
+        return True
+    for name in os.listdir(keys_dir):
+        if name.endswith(".pub") and os.path.isfile(os.path.join(keys_dir, name)):
+            return True
+    return False
+
+
+def _sftp_compose_extra(creds: dict[str, str] | None = None) -> list[str]:
+    auth_mode = _normalize_sftp_auth_mode((creds or {}).get("auth_mode"))
+    user = (creds or {}).get("username", "leco")
+    if auth_mode in ("key", "both") and _sftp_pub_keys_present(user):
+        return [FILE_TRANSFER_SFTP_KEYS_COMPOSE]
+    return []
+
+
+def _prepare_sftp_data_volume(creds: dict[str, str]) -> tuple[bool, str]:
+    auth_mode = _normalize_sftp_auth_mode(creds.get("auth_mode"))
+    if auth_mode in ("key", "both") and _sftp_pub_keys_present(creds.get("username")):
+        return True, "key auth volume ok"
+    ok, msg = _run(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "-v",
+            f"{FILE_TRANSFER_VOLUME}:/home/leco",
+            "alpine",
+            "sh",
+            "-c",
+            "rm -rf /home/leco/.ssh",
+        ],
+        timeout=60,
+    )
+    return ok, msg or "cleared stale .ssh from SFTP data volume"
+
+
+def _normalize_sftp_auth_mode(value: str | None) -> str:
+    mode = str(value or "password").strip().lower()
+    return mode if mode in ("password", "key", "both") else "password"
+
+
+def _read_sftp_public_key(username: str) -> str:
+    user = str(username or "leco").strip() or "leco"
+    path = os.path.join(_sftp_keys_dir(), f"{user}.pub")
+    if not os.path.isfile(path):
+        return ""
+    try:
+        return open(path, encoding="utf-8").read().strip()
+    except OSError:
+        return ""
+
+
+def _validate_openssh_public_key(value: str) -> tuple[bool, str]:
+    key = " ".join(str(value or "").split())
+    if not key:
+        return False, "public_key is required for key-based SFTP auth"
+    if not key.startswith(("ssh-rsa ", "ssh-ed25519 ", "ecdsa-", "ssh-dss ")):
+        return False, "public_key must be an OpenSSH public key (ssh-ed25519, ssh-rsa, …)"
+    return True, key
+
+
+def _write_sftp_public_key(creds: dict[str, str]) -> tuple[bool, str]:
+    user = creds.get("username", "leco")
+    auth_mode = _normalize_sftp_auth_mode(creds.get("auth_mode"))
+    key_path = os.path.join(_sftp_keys_dir(), f"{user}.pub")
+    os.makedirs(_sftp_keys_dir(), exist_ok=True)
+
+    if auth_mode in ("key", "both"):
+        ok, key_or_msg = _validate_openssh_public_key(creds.get("public_key", ""))
+        if not ok:
+            existing = _read_sftp_public_key(user)
+            if existing:
+                key_or_msg = existing
+            else:
+                return False, key_or_msg
+        try:
+            with open(key_path, "w", encoding="utf-8") as f:
+                f.write(str(key_or_msg).strip() + "\n")
+            os.chmod(key_path, 0o644)
+            return True, key_path
+        except OSError as exc:
+            return False, str(exc)
+
+    if os.path.isfile(key_path):
+        try:
+            os.remove(key_path)
+        except OSError as exc:
+            return False, str(exc)
+    return True, "password auth (no public key file)"
+
+
+def _remove_sftp_public_key(username: str) -> None:
+    path = os.path.join(_sftp_keys_dir(), f"{str(username or 'leco').strip() or 'leco'}.pub")
+    if os.path.isfile(path):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
 
 def _parse_env_lines(text: str) -> dict[str, str]:
@@ -319,28 +466,85 @@ def _write_file_transfer_env(updates: dict[str, str]) -> tuple[bool, str]:
 
 def _sftp_users_value(creds: dict[str, str]) -> str:
     user = creds.get("username", "leco")
-    password = creds.get("password", "leco")
+    auth_mode = _normalize_sftp_auth_mode(creds.get("auth_mode"))
+    password = creds.get("password", DEFAULT_FILE_TRANSFER_PASSWORD)
+    if auth_mode == "key":
+        password = ""
     return f"{user}:{password}:1000:1000"
+
+
+def _sftp_env_updates(creds: dict[str, str]) -> dict[str, str]:
+    user = creds.get("username", "leco")
+    auth_mode = _normalize_sftp_auth_mode(creds.get("auth_mode"))
+    port = _normalize_port(creds.get("port"), DEFAULT_SFTP_PORT)
+    return {
+        "SFTP_USER": user,
+        "SFTP_AUTH_MODE": auth_mode,
+        "SFTP_PORT": port,
+        "SFTP_USERS": _sftp_users_value(creds),
+    }
+
+
+def _ftp_env_updates(creds: dict[str, str]) -> dict[str, str]:
+    port = _normalize_port(creds.get("port"), DEFAULT_FTP_PORT)
+    return {
+        "FTP_USERS": _ftp_users_value(creds),
+        "FTP_PORT": port,
+    }
+
+
+def _apply_file_transfer_sftp(creds: dict[str, str], _container: str = "") -> tuple[bool, str]:
+    auth_mode = _normalize_sftp_auth_mode(creds.get("auth_mode"))
+    if auth_mode in ("key", "both"):
+        ok, key_or_msg = _validate_openssh_public_key(creds.get("public_key", ""))
+        if not ok and not _read_sftp_public_key(creds.get("username", "leco")):
+            return False, key_or_msg
+    try:
+        updates = _sftp_env_updates(creds)
+    except ValueError as exc:
+        return False, str(exc)
+    ok, msg = _write_file_transfer_env(updates)
+    if not ok:
+        return False, msg
+    ok, key_msg = _write_sftp_public_key(creds)
+    if not ok:
+        return False, key_msg
+    _ensure_file_transfer_keys_dir()
+    _prepare_sftp_data_volume(creds)
+    recreated, rec_msg = _recreate_compose_service(
+        FILE_TRANSFER_COMPOSE,
+        "sftp",
+        env_rel="file-transfer/.env",
+        compose_extra=_sftp_compose_extra(creds),
+    )
+    if recreated:
+        return True, f"SFTP recreated ({auth_mode} auth, port {updates['SFTP_PORT']}). {key_msg}"
+    return False, rec_msg
 
 
 def _ftp_users_value(creds: dict[str, str]) -> str:
     user = creds.get("username", "leco")
-    password = creds.get("password", "leco")
+    password = creds.get("password", DEFAULT_FILE_TRANSFER_PASSWORD)
     return f"{user}|{password}|/home/leco"
 
 
-def _apply_file_transfer_sftp(creds: dict[str, str], _container: str = "") -> tuple[bool, str]:
-    ok, msg = _write_file_transfer_env({"SFTP_USERS": _sftp_users_value(creds)})
-    if not ok:
-        return False, msg
-    return _recreate_compose_service(FILE_TRANSFER_COMPOSE, "sftp")
-
-
 def _apply_file_transfer_ftp(creds: dict[str, str], _container: str = "") -> tuple[bool, str]:
-    ok, msg = _write_file_transfer_env({"FTP_USERS": _ftp_users_value(creds)})
+    try:
+        updates = _ftp_env_updates(creds)
+    except ValueError as exc:
+        return False, str(exc)
+    ok, msg = _write_file_transfer_env(updates)
     if not ok:
         return False, msg
-    return _recreate_compose_service(FILE_TRANSFER_COMPOSE, "ftp")
+    _ensure_file_transfer_keys_dir()
+    recreated, rec_msg = _recreate_compose_service(
+        FILE_TRANSFER_COMPOSE,
+        "ftp",
+        env_rel="file-transfer/.env",
+    )
+    if recreated:
+        return True, f"FTP recreated on port {updates['FTP_PORT']}."
+    return False, rec_msg
 
 
 _HANDLERS = {

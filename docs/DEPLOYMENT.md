@@ -49,7 +49,7 @@ Most **`ecosystem-stack/services/*.sh`** scripts support:
 
 **Cloudflare-local (`cloudflare-local.sh`):** wraps **`docker compose`**; see script for **`recreate`**, **`backup`**, etc.
 
-**File transfer (`file-transfer.sh`):** FTP + SFTP compose stack; see **[FILE_TRANSFER.md](FILE_TRANSFER.md)** for ports, credentials, and **`file-transfer-full`** install profile.
+**File transfer (`file-transfer.sh`):** FTP + SFTP compose stack with read-only browser at `files.lh`; credentials via **Service hubs → UI access** (password and SFTP public-key modes). See **[FILE_TRANSFER.md](FILE_TRANSFER.md)**; operator help **[docs/help/12-file-transfer.md](help/12-file-transfer.md)**; developer **[docs/help/dev-10-file-transfer.md](help/dev-10-file-transfer.md)**. Install profile **`file-transfer-full`**.
 
 Full Cloudflare ↔ LEco service mapping: **[CF_LECO_SERVICE_MAP.md](CF_LECO_SERVICE_MAP.md)**.
 

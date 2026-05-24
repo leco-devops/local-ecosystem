@@ -1,6 +1,6 @@
 # Ollama open-source LLM catalog (auto-generated)
 
-_Generated **2026-05-23T16:24:59Z**. Full live table: API `/api/llm-catalog/ollama` or Help topic below._
+_Generated **2026-05-24T10:26:06Z**. Full live table: API `/api/llm-catalog/ollama` or Help topic below._
 
 ## Curated + discovered models
 

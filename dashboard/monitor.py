@@ -415,7 +415,7 @@ SERVICE_MAP = [
         "notes": "SFTP file drop · host sftp.lh:2222 (default) · shared volume with FTP",
         "hub_slug": "sftp",
         "credentials": [
-            "User: leco · Password: leco (override via file-transfer/.env)",
+            "User: leco · Password: leco#localhost-192 · Auth: password (or public key via UI access Edit)",
         ],
         "connection_strings": [
             "sftp -P 2222 leco@localhost",
@@ -433,11 +433,11 @@ SERVICE_MAP = [
         "notes": "FTP (alpine-ftp-server) · host ftp.lh:21 · passive ports 21100–21110",
         "hub_slug": "ftp",
         "credentials": [
-            "User: leco · Password: leco (override via file-transfer/.env)",
+            "User: leco · Password: leco#localhost-192 (override via file-transfer/.env)",
         ],
         "connection_strings": [
-            "ftp://leco:leco@ftp.lh:21",
-            "ftp://leco:leco@localhost:21",
+            "ftp://leco:leco%23localhost-192@ftp.lh:21",
+            "ftp://leco:leco%23localhost-192@localhost:21",
         ],
         "management_links": [
             {"label": "Service hub", "url": "http://localhost.lh/hub/ftp"},

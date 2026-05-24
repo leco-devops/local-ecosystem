@@ -19,6 +19,17 @@
 
 Bulk stop/restart **skips** `traefik` and `postgres` by default so routing and n8n DB stay up. Override with env `ECOSYSTEM_BULK_PLATFORM_SKIP`.
 
+## File transfer (FTP / SFTP)
+
+Under **Infra add-ons & file transfer**:
+
+| Target | Effect |
+|--------|--------|
+| **File transfer (FTP, SFTP)** | Whole `file-transfer/docker-compose.yml` |
+| **SFTP** / **FTP** / **File transfer browser** | Individual compose services |
+
+Credentials and SFTP public keys: **Service hubs → UI access** ([guide](help:file-transfer)).
+
 ## AirLLM / Ollama from Control
 
 You can start/stop **`airllm`** and **`ollama`** here, but **model install/load** belongs in **Infrastructure → Model manager** or `leco-cli.sh ollama|airllm …`.

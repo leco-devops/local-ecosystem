@@ -5,6 +5,7 @@
 | Topic | Help link |
 |-------|-----------|
 | Onboarding new apps | [Onboarding overview](help:onboarding-overview) |
+| FTP / SFTP file drop | [FTP & SFTP file transfer](help:file-transfer) |
 | Hosting layout | [Hosting layout](help:hosting-layout) |
 | Override upstream without forking | [Hosting overrides](help:hosting-overrides) |
 | Deploy / rebuild / offload | [Deploy & rebuild](help:deploy-rebuild) |
@@ -42,6 +43,9 @@ Open **Docs** (`/?tab=docsTab`) for canonical technical references:
 | `docs/DEPLOY_CLI.md` | CLI/YAML field reference |
 | `docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md` | 502, lh-network, probes |
 | `hosting/README.md` | Writable hosting, wsp:, zip |
+| `docs/FILE_TRANSFER.md` | FTP/SFTP/browser stack |
+| `docs/help/12-file-transfer.md` | FTP/SFTP operator help |
+| `docs/help/dev-10-file-transfer.md` | File transfer developer guide |
 | `docs/DEPLOYMENT.md` | Stack deployment |
 | `docs/help/03-platform-tab.md` | Platform tab & dev stacks (Help manual) |
 | `docs/DEV_STACK_ISOLATION.md` | Dev stack architecture & APIs |

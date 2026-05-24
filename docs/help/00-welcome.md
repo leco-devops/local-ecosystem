@@ -29,7 +29,7 @@ flowchart LR
 | **Updates & LLM catalogs** | Auto-checked stack versions + Ollama/AirLLM model tables |
 | **Requirements** | Docker, disk, RAM, macOS vs Linux notes |
 | **Installation** | Stack, CLI, DNS (`*.lh`) |
-| **Daily operations** | Dashboard tabs, **Platform** (dev stacks), Control, Infrastructure |
+| **Daily operations** | Dashboard tabs, **Platform** (dev stacks), Control, Infrastructure, **FTP/SFTP** |
 | **Local AI** | Ollama + AirLLM model managers (UI + CLI) |
 | **Hosting & onboarding** | New apps, `wsp:` materialize, overrides, deploy/rebuild |
 | **LEco CLI** | `leco-devops`, register, offload, hooks |
@@ -42,7 +42,8 @@ flowchart LR
 - **Overview** — live CPU/RAM charts and service health.
 - **Infrastructure** — scroll to **5 · Ollama** and **6 · AirLLM** for the **Model manager** panels (Popular dropdown, Install / Load / Unload / Remove, **Show CLI**).
 - **Platform** — dev stack builder (WordPress, Magento, frameworks), **Repair** / **Reinstall**, isolated databases per team — [Platform tab guide](help:dash-platform).
-- **Control** — start/stop/restart ecosystem services (needs optional control token).
+- **Control** — start/stop/restart ecosystem services (needs optional control token); includes **FTP/SFTP** under Infra add-ons.
+- **Service hubs → UI access** — credentials for MinIO, Adminer, n8n, **SFTP/FTP** ([guide](help:file-transfer)).
 - **Hosted apps** — register, deploy, logs; wizard under **Register application**; optional **dev stack binding**.
 - **Help** (this page) — `https://localhost.lh/help` — includes **Hosting & onboarding** and **Developer's guide**.
 - **Docs** — deep technical markdown (architecture, blueprint, runbooks).

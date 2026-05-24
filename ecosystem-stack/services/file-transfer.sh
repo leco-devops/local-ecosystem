@@ -10,19 +10,49 @@ fi
 
 NAME="file-transfer"
 COMPOSE_FILE="$PROJECT_ROOT/file-transfer/docker-compose.yml"
+SFTP_KEYS_COMPOSE="$PROJECT_ROOT/file-transfer/docker-compose.sftp-keys.yml"
 ENV_FILE="$PROJECT_ROOT/file-transfer/.env"
+SFTP_DATA_VOLUME="file-transfer_file_transfer_data"
+
+_sftp_pub_keys_present() {
+  local keys_dir="$PROJECT_ROOT/file-transfer/keys/sftp"
+  [ -d "$keys_dir" ] || return 1
+  compgen -G "$keys_dir/*.pub" >/dev/null 2>&1
+}
+
+_sftp_auth_mode() {
+  if [ -f "$ENV_FILE" ]; then
+    grep -E '^SFTP_AUTH_MODE=' "$ENV_FILE" | tail -1 | cut -d= -f2-
+  else
+    echo "password"
+  fi
+}
+
+_prepare_sftp_data_volume() {
+  local mode
+  mode="$(_sftp_auth_mode)"
+  if { [ "$mode" = "key" ] || [ "$mode" = "both" ]; } && _sftp_pub_keys_present; then
+    return 0
+  fi
+  docker run --rm -v "${SFTP_DATA_VOLUME}:/home/leco" alpine sh -c 'rm -rf /home/leco/.ssh' >/dev/null 2>&1 || true
+}
 
 _compose() {
   local args=("$@")
+  local files=(-f "$COMPOSE_FILE")
+  if _sftp_pub_keys_present; then
+    files+=(-f "$SFTP_KEYS_COMPOSE")
+  fi
   if [ -f "$ENV_FILE" ]; then
-    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "${args[@]}"
+    docker compose --env-file "$ENV_FILE" --project-directory "$PROJECT_ROOT/file-transfer" "${files[@]}" "${args[@]}"
   else
-    docker compose -f "$COMPOSE_FILE" "${args[@]}"
+    docker compose --project-directory "$PROJECT_ROOT/file-transfer" "${files[@]}" "${args[@]}"
   fi
 }
 
 start() {
   docker network inspect lh-network >/dev/null 2>&1 || docker network create lh-network >/dev/null
+  _prepare_sftp_data_volume
   _compose up -d --build
 }
 
@@ -65,6 +95,7 @@ reset() {
 
 recreate() {
   docker network inspect lh-network >/dev/null 2>&1 || docker network create lh-network >/dev/null
+  _prepare_sftp_data_volume
   local svc="${1:-}"
   if [ -z "$svc" ]; then
     _compose up -d --force-recreate

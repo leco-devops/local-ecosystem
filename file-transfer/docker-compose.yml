@@ -8,10 +8,11 @@ services:
     image: atmoz/sftp:alpine
     container_name: leco-sftp
     volumes:
-      - file_transfer_data:/home/leco
+      - file_transfer_data:/home/${SFTP_USER:-leco}
+      # Public keys bind-mount is in docker-compose.sftp-keys.yml (only when *.pub exists).
     ports:
       - "${SFTP_PORT:-2222}:22"
-    command: ${SFTP_USERS:-leco:leco:1000:1000}
+    command: ${SFTP_USERS:-leco:leco#localhost-192:1000:1000}
     networks:
       - lh-network
     healthcheck:
@@ -26,7 +27,7 @@ services:
     image: delfer/alpine-ftp-server:latest
     container_name: leco-ftp
     environment:
-      USERS: ${FTP_USERS:-leco|leco|/home/leco}
+      USERS: ${FTP_USERS:-leco|leco#localhost-192|/home/leco}
       ADDRESS: ${FTP_PUBLICHOST:-ftp.lh}
       MIN_PORT: ${FTP_PASV_MIN:-21100}
       MAX_PORT: ${FTP_PASV_MAX:-21110}

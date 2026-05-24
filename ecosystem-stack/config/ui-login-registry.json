@@ -130,7 +130,10 @@
       "auth_type": "protocol",
       "default_credentials": {
         "username": "leco",
-        "password": "leco"
+        "password": "leco#localhost-192",
+        "port": "2222",
+        "auth_mode": "password",
+        "public_key": ""
       },
       "reset_handler": "file_transfer_sftp",
       "container": "leco-sftp",
@@ -142,11 +145,12 @@
       "hub_slug": "ftp",
       "label": "FTP",
       "login_url": "http://ftp-files.lh",
-      "connection_hint": "ftp://leco:leco@localhost:21",
+      "connection_hint": "ftp://leco:leco%23localhost-192@localhost:21",
       "auth_type": "protocol",
       "default_credentials": {
         "username": "leco",
-        "password": "leco"
+        "password": "leco#localhost-192",
+        "port": "21"
       },
       "reset_handler": "file_transfer_ftp",
       "container": "leco-ftp",

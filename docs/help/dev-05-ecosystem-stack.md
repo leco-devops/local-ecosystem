@@ -24,7 +24,7 @@ Shell orchestration under **`ecosystem-stack/`**.
 | n8n / Postgres | `n8n.sh`, `postgres.sh` | |
 | Cloudflare local | `cloudflare-local.sh` | |
 | Infra add-ons | `infra.sh` | |
-| File transfer (FTP, SFTP) | `file-transfer.sh` | |
+| File transfer (FTP, SFTP) | `file-transfer.sh` | Shared volume; UI access for creds — [dev guide](help:dev-file-transfer) |
 
 ## Network
 
@@ -48,6 +48,13 @@ Hosted app compose must attach to same network (hosting overlay).
 - Dashboard: `airllm_models.py`, `ai_provider.AirLLMProvider`
 
 See user help [AirLLM](help:airllm) and `docs/AIRLLM_INTEGRATION.md`.
+
+## File transfer-specific
+
+- Compose: `file-transfer/docker-compose.yml` (SFTP, FTP, read-only browser)
+- Traefik: HTTP only for `files.lh` / `ftp-files.lh` / `sftp-files.lh`
+- Dashboard: `control_targets.FILE_TRANSFER_TARGETS`, `ui_credentials` / `ui_credential_reset` for **UI access**
+- Operator help: [FTP & SFTP](help:file-transfer) · Developer: [File transfer stack](help:dev-file-transfer) · `docs/FILE_TRANSFER.md`
 
 ## Dashboard deploy
 

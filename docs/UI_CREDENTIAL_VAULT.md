@@ -28,7 +28,7 @@ Only services with a **real login control panel** or **protocol credentials mana
 | `minio` | MinIO console | Server login + cookie on `minio-console.lh` | `mc` admin user + restart |
 | `mysql` | Adminer → MySQL | Form POST on `adminer.lh` | `ALTER USER` + restart |
 | `postgres` | Adminer → PostgreSQL | Form POST on `adminer.lh` | `ALTER USER` + restart |
-| `sftp` | SFTP (`localhost:2222`) | — | Write `SFTP_USERS` in `file-transfer/.env` + recreate `leco-sftp` |
+| `sftp` | SFTP (`localhost:2222`) | — | Write `SFTP_USERS` / `SFTP_AUTH_MODE` + public key in `file-transfer/keys/sftp/` + recreate `leco-sftp` |
 | `ftp` | FTP (`localhost:21`) | — | Write `FTP_USERS` in `file-transfer/.env` + recreate `leco-ftp` |
 | `files` | Read-only browser (`files.lh`) | — | No credentials (browse-only) |
 
@@ -39,7 +39,7 @@ Only services with a **real login control panel** or **protocol credentials mana
 
 **Auto-login** opens `/assist/login/<slug>?token=…` on the **service hostname** (e.g. `http://n8n.lh/assist/...`) so cookies and storage apply to the correct origin. Traefik routes `/assist` on `n8n.lh`, `ai.lh`, `minio-console.lh`, and `adminer.lh` to the dashboard.
 
-**SFTP / FTP** have no web sign-in. The UI access table shows connection strings (host port, username) and links to the read-only file browser mirrors (`sftp-files.lh`, `ftp-files.lh`, `files.lh`). **Edit** saves to the vault and immediately writes `file-transfer/.env` and recreates the protocol container. **Reset & apply** restores compose defaults (`leco` / `leco`) the same way.
+**SFTP / FTP** have no web sign-in. The UI access table shows connection strings (host port, username, password or public key) and links to the read-only file browser mirrors (`sftp-files.lh`, `ftp-files.lh`, `files.lh`). **Edit** on SFTP lets you choose **password**, **public key**, or **both**; saves to the vault, writes `file-transfer/.env` and `file-transfer/keys/sftp/<user>.pub`, and recreates the SFTP container. **Reset & apply** restores compose defaults (`leco` / `leco#localhost-192`, password-only).
 
 ## Reset behavior
 
