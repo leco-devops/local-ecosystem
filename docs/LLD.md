@@ -10,7 +10,7 @@ This Low-Level Design (LLD) maps concrete modules, APIs, and responsibilities.
 | ----- | ----- |
 | `dashboard/app.py` | Flask entrypoint and API routing (`/api/*`, docs, hosted and LEco endpoints) |
 | `dashboard/control.py` | Control action validation/execution; stack and hosted action orchestration |
-| `dashboard/control_targets.py` | Static target inventory for ecosystem stack, Cloudflare-local, infra |
+| `dashboard/control_targets.py` | Static target inventory for ecosystem stack, Cloudflare-local, infra, **file-transfer** |
 | `dashboard/leco_subprocess.py` | Runs LEco CLI commands from dashboard runtime |
 | `dashboard/leco_registration.py` | Register/stream register flow wrappers |
 | `dashboard/leco_detect.py` | App scanning and YAML generation helpers |
@@ -23,6 +23,9 @@ This Low-Level Design (LLD) maps concrete modules, APIs, and responsibilities.
 | `dashboard/hosted_offboard.py` | Offboard helper around unregister flow |
 | `dashboard/docs_catalog.py` | Whitelisted docs surfaced in in-app Docs tab |
 | `dashboard/monitor.py` | Service map, metrics aggregation, probes, and overview payloads |
+| `dashboard/ui_credentials.py` | UI access vault merge, `login_details`, SFTP auth modes |
+| `dashboard/ui_credential_reset.py` | Apply vault to running services (incl. `file-transfer/.env`, SFTP keys) |
+| `dashboard/service_hub.py` | Per-service hub pages (`hub_slug` from `SERVICE_MAP`) |
 
 ### AI-assisted onboarding modules
 
@@ -81,6 +84,16 @@ This Low-Level Design (LLD) maps concrete modules, APIs, and responsibilities.
 - `POST /api/leco/ai-analyze/stream` — NDJSON streaming pipeline (collect → analyze → generate)
 - `POST /api/leco/ai-analyze/write` — write generated files to app directory (control token)
 
+### UI access (local dev credentials)
+
+- `GET /api/ui-credentials/catalog`
+- `GET /api/ui-credentials/<slug>`
+- `PUT /api/ui-credentials/<slug>` — save + apply for SFTP/FTP (`protocol` auth)
+- `POST /api/ui-credentials/<slug>/reset`
+- `POST /api/ui-credentials/<slug>/launch-token` — web UIs with sign-in only
+
+Registry: `ecosystem-stack/config/ui-login-registry.json`. File-transfer slugs: **`sftp`**, **`ftp`**, **`files`**.
+
 ### Docs
 
 - `GET /api/docs/catalog`
@@ -91,7 +104,8 @@ This Low-Level Design (LLD) maps concrete modules, APIs, and responsibilities.
 - Registry: `config/leco-registry.yaml` (runtime) and `config/leco-registry.example.yaml`.
 - AI providers: `config/ai-providers.yaml` (runtime, gitignored — API keys, provider selection, model defaults).
 - Hosted materialization root: `hosting/app-available/<slug>/`.
-- Traefik dynamic routes: `traefik/dynamic.yml`.
+- Traefik dynamic routes: `traefik/dynamic.yml` (includes `files.lh` / `ftp-files.lh` / `sftp-files.lh` → file browser).
+- File transfer runtime: `file-transfer/.env` (gitignored), `file-transfer/keys/sftp/*.pub` (gitignored).
 - App manifests:
   - Bridge: `leco.app.yaml`
   - Profile: `leco.yaml` (or referenced local profile variant)

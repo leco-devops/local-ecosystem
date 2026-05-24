@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "generated_at": "2026-05-20T05:49:32Z",
+  "generated_at": "2026-05-24T10:26:06Z",
   "services": [
     {
       "id": "traefik",
@@ -337,5 +337,5 @@
     }
   ],
   "ollama_new_count": 39,
-  "airllm_catalog_count": 19
+  "airllm_catalog_count": 20
 }

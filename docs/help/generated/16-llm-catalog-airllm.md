@@ -1,6 +1,6 @@
 # AirLLM / HuggingFace open-source LLM catalog (auto-generated)
 
-_Generated **2026-05-20T05:49:32Z**. API `/api/llm-catalog/airllm`._
+_Generated **2026-05-24T10:26:06Z**. API `/api/llm-catalog/airllm`._
 
 ## Curated + trending HF instruct models
 
@@ -13,6 +13,7 @@ _Generated **2026-05-20T05:49:32Z**. API `/api/llm-catalog/airllm`._
 | `Qwen/Qwen2.5-3B-Instruct` 🆕 | Qwen | discovered |  | https://airllm.lh | `./leco-cli.sh airllm install Qwen/Qwen2.5-3B-Instruct` |
 | `Qwen/Qwen2.5-72B-Instruct` | Alibaba (Qwen team) | large, frontier-open | ~145 GB | https://airllm.lh; Workstation / server | `./leco-cli.sh airllm install Qwen/Qwen2.5-72B-Instruct` |
 | `Qwen/Qwen2.5-7B-Instruct` | Alibaba (Qwen team) | general, default | ~15 GB | https://airllm.lh; https://ai.lh (if pointed at airllm backend) | `./leco-cli.sh airllm install Qwen/Qwen2.5-7B-Instruct` |
+| `Qwen/Qwen2.5-7B-Instruct-AWQ` 🆕 | Qwen | discovered |  | https://airllm.lh | `./leco-cli.sh airllm install Qwen/Qwen2.5-7B-Instruct-AWQ` |
 | `Qwen/Qwen2.5-Coder-7B-Instruct` | Alibaba (Qwen team) | code | ~15 GB | https://airllm.lh | `./leco-cli.sh airllm install Qwen/Qwen2.5-Coder-7B-Instruct` |
 | `Qwen/Qwen3-4B-Instruct-2507` 🆕 | Qwen | discovered |  | https://airllm.lh | `./leco-cli.sh airllm install Qwen/Qwen3-4B-Instruct-2507` |
 | `TinyLlama/TinyLlama-1.1B-Chat-v1.0` 🆕 | TinyLlama | discovered |  | https://airllm.lh | `./leco-cli.sh airllm install TinyLlama/TinyLlama-1.1B-Chat-v1.0` |

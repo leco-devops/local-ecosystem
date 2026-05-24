@@ -277,6 +277,17 @@ http:
       entryPoints:
       - websecure
       tls: true
+    files-http:
+      rule: Host(`files.lh`) || Host(`ftp-files.lh`) || Host(`sftp-files.lh`)
+      service: file-transfer-browser-service
+      entryPoints:
+      - web
+    files-https:
+      rule: Host(`files.lh`) || Host(`ftp-files.lh`) || Host(`sftp-files.lh`)
+      service: file-transfer-browser-service
+      entryPoints:
+      - websecure
+      tls: true
 
     # ========================
     # CRAWLERVISION (external compose on lh-network; cv-frontend / cv-backend)
@@ -386,6 +397,10 @@ http:
       loadBalancer:
         servers:
         - url: http://redis-commander:8081
+    file-transfer-browser-service:
+      loadBalancer:
+        servers:
+        - url: http://leco-file-browser:8080
     crawlervision-frontend-service:
       loadBalancer:
         servers:

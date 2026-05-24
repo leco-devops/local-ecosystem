@@ -1,0 +1,5 @@
+# Merged only when file-transfer/keys/sftp/*.pub exists (key or both auth).
+services:
+  sftp:
+    volumes:
+      - ./keys/sftp:/home/${SFTP_USER:-leco}/.ssh/keys:ro

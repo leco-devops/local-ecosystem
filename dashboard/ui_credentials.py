@@ -15,6 +15,7 @@ import os
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import yaml
 
@@ -27,6 +28,20 @@ REGISTRY_FILE = PROJECT_ROOT / "ecosystem-stack" / "config" / "ui-login-registry
 
 LAUNCH_TOKEN_TTL_SEC = 60
 _MASK = "••••••••"
+DEFAULT_FILE_TRANSFER_PASSWORD = "leco#localhost-192"
+DEFAULT_SFTP_PORT = "2222"
+DEFAULT_FTP_PORT = "21"
+
+
+def _normalize_port(value: str | None, default: str) -> str:
+    raw = str(value or default).strip() or default
+    try:
+        n = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"invalid port: {value}") from exc
+    if not 1 <= n <= 65535:
+        raise ValueError(f"port must be 1–65535, got {value}")
+    return str(n)
 
 
 def _secret() -> str:
@@ -90,6 +105,38 @@ def save_vault(data: dict[str, Any]) -> None:
         pass
 
 
+def _enrich_sftp_credentials(merged: dict[str, str]) -> dict[str, str]:
+    from ui_credential_reset import _load_file_transfer_env, _normalize_sftp_auth_mode, _read_sftp_public_key
+
+    user = merged.get("username", "leco")
+    if not merged.get("auth_mode"):
+        env = _load_file_transfer_env()
+        merged["auth_mode"] = _normalize_sftp_auth_mode(env.get("SFTP_AUTH_MODE"))
+    else:
+        merged["auth_mode"] = _normalize_sftp_auth_mode(merged.get("auth_mode"))
+    if not merged.get("public_key"):
+        disk_key = _read_sftp_public_key(user)
+        if disk_key:
+            merged["public_key"] = disk_key
+    if not merged.get("port"):
+        env = _load_file_transfer_env()
+        merged["port"] = _normalize_port(env.get("SFTP_PORT"), DEFAULT_SFTP_PORT)
+    else:
+        merged["port"] = _normalize_port(merged.get("port"), DEFAULT_SFTP_PORT)
+    return merged
+
+
+def _enrich_ftp_credentials(merged: dict[str, str]) -> dict[str, str]:
+    from ui_credential_reset import _load_file_transfer_env
+
+    if not merged.get("port"):
+        env = _load_file_transfer_env()
+        merged["port"] = _normalize_port(env.get("FTP_PORT"), DEFAULT_FTP_PORT)
+    else:
+        merged["port"] = _normalize_port(merged.get("port"), DEFAULT_FTP_PORT)
+    return merged
+
+
 def _merged_credentials(slug: str) -> dict[str, str]:
     entry = get_registry_entry(slug)
     if not entry:
@@ -101,7 +148,12 @@ def _merged_credentials(slug: str) -> dict[str, str]:
         for k, v in stored.items():
             if v is not None and str(v) != "":
                 defaults[k] = str(v)
-    return {k: str(v) for k, v in defaults.items()}
+    merged = {k: str(v) for k, v in defaults.items()}
+    if slug == "sftp":
+        merged = _enrich_sftp_credentials(merged)
+    elif slug == "ftp":
+        merged = _enrich_ftp_credentials(merged)
+    return merged
 
 
 def _is_secret_key(key: str) -> bool:
@@ -148,16 +200,35 @@ def save_credentials(slug: str, data: dict[str, Any]) -> dict[str, Any]:
         services = {}
         vault["services"] = services
     current = dict(services.get(slug) or {})
+    auth_mode = str(data.get("auth_mode") or current.get("auth_mode") or "password").lower()
     for k, v in data.items():
         if v is None:
             continue
-        s = str(v)
+        s = str(v).strip()
+        if k == "auth_mode":
+            current["auth_mode"] = _normalize_save_auth_mode(s)
+            continue
+        if k == "public_key":
+            if s:
+                current["public_key"] = s
+            elif auth_mode == "password":
+                current.pop("public_key", None)
+            continue
+        if k == "port":
+            current["port"] = _normalize_port(s, DEFAULT_SFTP_PORT if slug == "sftp" else DEFAULT_FTP_PORT)
+            continue
         if _is_secret_key(k) and (_MASK in s or s == _MASK):
             continue
-        current[k] = s
+        if s:
+            current[k] = s
     services[slug] = current
     save_vault(vault)
     return credentials_for_ui(slug)
+
+
+def _normalize_save_auth_mode(value: str) -> str:
+    mode = str(value or "password").strip().lower()
+    return mode if mode in ("password", "key", "both") else "password"
 
 
 def reset_vault_to_defaults(slug: str) -> dict[str, str]:
@@ -175,6 +246,119 @@ def reset_vault_to_defaults(slug: str) -> dict[str, str]:
     return defaults
 
 
+def _connection_hint(entry: dict[str, Any], creds: dict[str, str]) -> str:
+    auth_type = entry.get("auth_type") or ""
+    slug = str(entry.get("hub_slug") or entry.get("id") or "").strip()
+    if auth_type == "protocol":
+        user = creds.get("username", "leco")
+        password = creds.get("password", DEFAULT_FILE_TRANSFER_PASSWORD)
+        port = creds.get("port", DEFAULT_SFTP_PORT if slug == "sftp" else DEFAULT_FTP_PORT)
+        if slug == "sftp":
+            auth_mode = str(creds.get("auth_mode") or "password").lower()
+            if auth_mode == "key":
+                return f"sftp -P {port} -i ~/.ssh/id_ed25519 {user}@localhost"
+            return f"sftp -P {port} {user}@localhost"
+        if slug == "ftp":
+            return f"ftp://{user}:{quote(password, safe='')}@localhost:{port}"
+    if auth_type == "browse_only":
+        return str(entry.get("connection_hint") or "Read-only · no login")
+    return str(entry.get("connection_hint") or "")
+
+
+def _login_details(entry: dict[str, Any], creds: dict[str, str]) -> dict[str, Any]:
+    """Copy-paste friendly login block for the UI access table."""
+    auth_type = entry.get("auth_type") or "none"
+    slug = str(entry.get("hub_slug") or entry.get("id") or "").strip()
+    login_url = str(entry.get("login_url") or "")
+
+    if auth_type == "protocol":
+        user = creds.get("username", "leco")
+        password = creds.get("password", DEFAULT_FILE_TRANSFER_PASSWORD)
+        auth_mode = str(creds.get("auth_mode") or "password").lower()
+        public_key = str(creds.get("public_key") or "").strip()
+        if slug == "sftp":
+            host, alt_host = "localhost", "sftp.lh"
+            port = creds.get("port", DEFAULT_SFTP_PORT)
+            if auth_mode == "key":
+                summary = f"User: {user} · Auth: public key"
+                connection_strings = [
+                    f"sftp -P {port} -i ~/.ssh/id_ed25519 {user}@{host}",
+                    f"sftp -P {port} -i ~/.ssh/id_ed25519 {user}@{alt_host}",
+                ]
+                password = ""
+            elif auth_mode == "both":
+                summary = f"User: {user} · Password: {password} · Auth: password + public key"
+                connection_strings = [
+                    f"sftp -P {port} {user}@{host}",
+                    f"sftp -P {port} -i ~/.ssh/id_ed25519 {user}@{host}",
+                    f"sftp -P {port} -i ~/.ssh/id_ed25519 {user}@{alt_host}",
+                ]
+            else:
+                summary = f"User: {user} · Password: {password}"
+                connection_strings = [
+                    f"sftp -P {port} {user}@{host}",
+                    f"sftp -P {port} {user}@{alt_host}",
+                ]
+        elif slug == "ftp":
+            auth_mode = "password"
+            host, alt_host = "localhost", "ftp.lh"
+            port = creds.get("port", DEFAULT_FTP_PORT)
+            connection_strings = [
+                f"ftp://{user}:{quote(password, safe='')}@{host}:{port}",
+                f"ftp://{user}:{quote(password, safe='')}@{alt_host}:{port}",
+            ]
+            summary = f"User: {user} · Password: {password}"
+        else:
+            host, alt_host, port, connection_strings = "", "", "", []
+            summary = f"User: {user} · Password: {password}"
+        return {
+            "kind": "protocol",
+            "summary": summary,
+            "username": user,
+            "password": password,
+            "auth_mode": auth_mode,
+            "public_key": public_key,
+            "host": host,
+            "alt_host": alt_host,
+            "port": port,
+            "connection_strings": connection_strings,
+            "footnote": "Override via Edit or file-transfer/.env",
+            "browser_url": login_url,
+        }
+
+    if auth_type == "browse_only":
+        return {
+            "kind": "browse_only",
+            "summary": "Read-only · no login",
+            "browser_url": login_url or "http://files.lh",
+            "browser_urls": [
+                u
+                for u in [
+                    login_url or "http://files.lh",
+                    "http://ftp-files.lh",
+                    "http://sftp-files.lh",
+                ]
+                if u
+            ],
+        }
+
+    user = creds.get("username") or creds.get("email") or creds.get("driver") or ""
+    password = creds.get("password") or creds.get("secretKey") or ""
+    masked_pw = mask_value("password", password) if password else ""
+    summary_parts = []
+    if user:
+        summary_parts.append(f"User: {user}")
+    if password:
+        summary_parts.append(f"Password: {masked_pw}")
+    return {
+        "kind": "web",
+        "login_url": login_url,
+        "username": user,
+        "password": masked_pw,
+        "summary": " · ".join(summary_parts) if summary_parts else "",
+    }
+
+
 def catalog_for_ui() -> dict[str, Any]:
     from ui_credential_reset import _container_running
 
@@ -185,15 +369,20 @@ def catalog_for_ui() -> dict[str, Any]:
             continue
         auth_type = entry.get("auth_type") or "none"
         creds = credentials_for_ui(slug)
+        merged = _merged_credentials(slug)
         container = str(entry.get("container") or "").strip()
+        defaults = entry.get("default_credentials") or {}
         entries.append(
             {
                 "slug": slug,
                 "id": entry.get("id") or slug,
                 "label": entry.get("label") or slug,
                 "login_url": entry.get("login_url") or "",
+                "connection_hint": _connection_hint(entry, merged),
+                "login_details": _login_details(entry, merged),
                 "auth_type": auth_type,
                 "can_auto_login": auth_type in ("form_post", "json_post"),
+                "can_edit": bool(defaults),
                 "can_reset": (entry.get("reset_handler") or "none") != "none",
                 "container": container or None,
                 "container_running": _container_running(container) if container else None,

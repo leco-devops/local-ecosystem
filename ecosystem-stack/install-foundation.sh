@@ -357,7 +357,7 @@ parse_args() {
         ;;
       -h|--help)
         echo "Usage: install-foundation.sh [--mode local|cloud] [--profile NAME] [--domain DOMAIN] [--tls MODE] [--non-interactive] [--no-start]"
-        echo "Profiles: minimal, platform, cloudflare-full, ai-full, ai-cloud, infra-full, full, custom"
+        echo "Profiles: minimal, platform, cloudflare-full, ai-full, ai-cloud, infra-full, file-transfer-full, full, custom"
         exit 0
         ;;
       *)

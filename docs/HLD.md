@@ -21,6 +21,7 @@ This High-Level Design (HLD) defines major components, boundaries, and data/cont
 | LEco Toolchain | Manifest detection, register/unregister, deploy flows | `tools/deploy-cli/leco_app/` |
 | Hosting materialization | Writable hosted app layout and symlink strategy | `hosting/`, `dashboard/hosting_layout.py` |
 | Resource adapters | Optional local Cloudflare-style services | `cloudflare-local/` |
+| File transfer | Local FTP/SFTP + read-only browser on shared volume | `file-transfer/`, `ecosystem-stack/services/file-transfer.sh` |
 
 ## 3) High-level flow
 
@@ -92,6 +93,13 @@ flowchart LR
   LLM -->|structured JSON| Gen
   Gen -->|deterministic configs| Disk
 ```
+
+### E. File transfer (FTP / SFTP / browser)
+
+- Operator starts **`file-transfer`** from Control tab or `ecosystem-stack/services/file-transfer.sh`.
+- SFTP and FTP write to shared volume **`file_transfer_data`**; browser serves read-only HTTP on `files.lh` via Traefik.
+- Credentials: **Service hubs → UI access** — vault + `file-transfer/.env` + optional `keys/sftp/*.pub`; dashboard recreates protocol containers on Edit/Reset.
+- Not exposed as HTTP login UIs; no auto-login magic links (protocol auth only).
 
 ## 5) Non-functional goals
 

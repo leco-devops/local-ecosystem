@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from control_targets import AI_TARGETS, CF_TARGETS, INFRA_TARGETS
+from control_targets import AI_TARGETS, CF_TARGETS, FILE_TRANSFER_TARGETS, INFRA_TARGETS
 
 VALID_POLICIES = frozenset({"start", "stop", "offloaded"})
 
@@ -33,6 +33,9 @@ def _all_target_ids() -> set[str]:
         ids.add(t["id"])
     for t in INFRA_TARGETS:
         ids.add(t["id"])
+    for t in FILE_TRANSFER_TARGETS:
+        ids.add(t["id"])
+    ids.add("stack-file-transfer-all")
     return ids
 
 
@@ -108,7 +111,7 @@ def policy_for_container(container_name: str) -> str:
     name = (container_name or "").strip()
     if not name:
         return "start"
-    for t in (*AI_TARGETS, *CF_TARGETS, *INFRA_TARGETS):
+    for t in (*AI_TARGETS, *CF_TARGETS, *INFRA_TARGETS, *FILE_TRANSFER_TARGETS):
         if (t.get("container") or "").strip() == name:
             return policy_for(str(t.get("id") or ""))
     return "start"

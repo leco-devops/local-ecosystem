@@ -31,6 +31,7 @@ START_ORDER = [
     "update-catalog",
     "cloudflare-local",
     "infra",
+    "file-transfer",
 ]
 
 BUNDLE_TO_SERVICE = {
@@ -38,6 +39,7 @@ BUNDLE_TO_SERVICE = {
     "cloudflare-full": ["cloudflare-local"],
     "ai-full": ["ollama", "airllm", "webui", "update-catalog"],
     "infra-full": ["infra"],
+    "file-transfer-full": ["file-transfer"],
 }
 
 
