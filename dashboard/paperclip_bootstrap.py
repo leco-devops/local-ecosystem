@@ -10,6 +10,7 @@ from typing import Any, Iterator
 CONTAINER = "paperclip"
 DATA_DIR = "/paperclip"
 APP_DIR = "/app"
+CONTAINER_USER = "node"
 CONFIG_PATH = f"{DATA_DIR}/instances/default/config.json"
 DEFAULT_BASE_URL = os.environ.get("PAPERCLIP_PUBLIC_URL", "http://paperclip.lh")
 
@@ -50,6 +51,35 @@ def parse_invite_url(text: str) -> str | None:
     return m.group(0).rstrip(".,)|]")
 
 
+def _docker_exec_argv(inner: str) -> list[str]:
+    return ["docker", "exec", "-u", CONTAINER_USER, CONTAINER, "sh", "-c", inner]
+
+
+def fix_data_permissions_argv(*, running_container: bool = False) -> list[str]:
+    if running_container:
+        return [
+            "docker",
+            "exec",
+            "-u",
+            "root",
+            CONTAINER,
+            "sh",
+            "-c",
+            "chown -R node:node /paperclip/instances 2>/dev/null || true",
+        ]
+    return [
+        "docker",
+        "run",
+        "--rm",
+        "-v",
+        "paperclip_data:/paperclip",
+        "alpine",
+        "sh",
+        "-c",
+        "chown -R 1000:1000 /paperclip/instances 2>/dev/null || true",
+    ]
+
+
 def bootstrap_ceo_argv(*, base_url: str | None = None, force: bool = False) -> list[str]:
     url = (base_url or DEFAULT_BASE_URL).strip()
     force_flag = " --force" if force else ""
@@ -59,7 +89,7 @@ def bootstrap_ceo_argv(*, base_url: str | None = None, force: bool = False) -> l
         f"-d {shlex.quote(DATA_DIR)} "
         f"--base-url {shlex.quote(url)}{force_flag}"
     )
-    return ["docker", "exec", CONTAINER, "sh", "-c", inner]
+    return _docker_exec_argv(inner)
 
 
 def onboard_quick_argv() -> list[str]:
@@ -67,7 +97,7 @@ def onboard_quick_argv() -> list[str]:
         f"cd {shlex.quote(APP_DIR)} && "
         f"pnpm paperclipai onboard -d {shlex.quote(DATA_DIR)} -y --bind lan"
     )
-    return ["docker", "exec", CONTAINER, "sh", "-c", inner]
+    return _docker_exec_argv(inner)
 
 
 def bootstrap_ceo_status() -> dict[str, Any]:
@@ -128,6 +158,21 @@ def bootstrap_ceo_streaming(
                 log="\n".join(logs)[-12000:],
             )
             return
+        yield {"type": "log", "text": "\nFixing /paperclip ownership for node user…\n"}
+        _perm_code, perm_log = yield from _yield_run(
+            fix_data_permissions_argv(running_container=True),
+            timeout=120,
+        )
+        if perm_log:
+            logs.append(perm_log)
+        if _perm_code != 0:
+            yield _emit_done(
+                False,
+                exit_code=_perm_code,
+                error="Could not fix /paperclip permissions after onboard",
+                log="\n".join(logs)[-12000:],
+            )
+            return
         yield {"type": "log", "text": "\nOnboard complete. Creating bootstrap CEO invite…\n\n"}
 
     yield {"type": "log", "text": "Creating bootstrap CEO invite (one-time admin URL)…\n\n"}
@@ -141,6 +186,7 @@ def bootstrap_ceo_streaming(
     invite = parse_invite_url(combined)
 
     if invite:
+        yield from _yield_run(fix_data_permissions_argv(running_container=True), timeout=120)
         yield _emit_done(True, exit_code=0, log=combined[-12000:], invite_url=invite)
         return
 

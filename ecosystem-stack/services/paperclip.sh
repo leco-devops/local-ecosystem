@@ -3,12 +3,28 @@
 NAME="paperclip"
 VOLUME="paperclip_data"
 IMAGE="${PAPERCLIP_IMAGE:-ghcr.io/paperclipai/paperclip:latest}"
-BETTER_AUTH_SECRET="${PAPERCLIP_BETTER_AUTH_SECRET:-leco-paperclip-local-dev-secret}"
+BETTER_AUTH_SECRET="${PAPERCLIP_BETTER_AUTH_SECRET:-leco-paperclip-local-dev-better-auth-secret-32}"
 
 if [ -z "${PROJECT_ROOT:-}" ]; then
   PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 fi
 POSTGRES_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/paperclip-postgres.sh"
+
+_fix_data_permissions() {
+  # `docker exec` defaults to root; onboard/bootstrap can create root-owned files under
+  # /paperclip/instances while the server runs as node (uid 1000) and crashes on .env.
+  if ! docker volume inspect "$VOLUME" >/dev/null 2>&1; then
+    return 0
+  fi
+  if docker inspect -f '{{.State.Running}}' "$NAME" 2>/dev/null | grep -q true; then
+    docker exec -u root "$NAME" sh -c 'chown -R node:node /paperclip/instances 2>/dev/null || true'
+    return 0
+  fi
+  # Paperclip image always runs as node; use alpine for offline volume chown.
+  docker run --rm \
+    -v "$VOLUME:/paperclip" \
+    alpine sh -c 'chown -R 1000:1000 /paperclip/instances 2>/dev/null || true'
+}
 
 _ensure_postgres_running() {
   if docker inspect -f '{{.State.Running}}' paperclip_postgres 2>/dev/null | grep -q true; then
@@ -41,6 +57,8 @@ start() {
     echo "⚠️ Resetting Paperclip data volume…"
     docker volume rm "$VOLUME" 2>/dev/null
   fi
+
+  _fix_data_permissions
 
   docker run -d \
     --name "$NAME" \
@@ -75,7 +93,8 @@ bootstrap_ceo() {
     return 1
   fi
   echo "🔐 Creating Paperclip bootstrap CEO invite…"
-  docker exec -i "$NAME" sh -c "cd /app && pnpm paperclipai auth bootstrap-ceo -d /paperclip --base-url '${base_url}'${force_flag}"
+  docker exec -u node -i "$NAME" sh -c "cd /app && pnpm paperclipai auth bootstrap-ceo -d /paperclip --base-url '${base_url}'${force_flag}"
+  _fix_data_permissions
 }
 
 stop() {

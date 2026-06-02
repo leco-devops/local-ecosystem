@@ -27,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **Paperclip crash loop (EACCES on `.env`):** Bootstrap/onboard `docker exec` ran as root and left root-owned files under `/paperclip/instances`; server runs as `node` and could not read `.env`. Exec now uses `-u node`; start/bootstrap heal ownership on `/paperclip/instances` (alpine sidecar offline, `exec -u root` when running).
 - **Traefik stack routes:** `traefik.sh ensure-hosting-files` always refreshes `hosting/traefik/01-stack-core.yml` from `traefik/dynamic.yml` so new platform hosts (e.g. `paperclip.lh`) appear after heal without a manual file delete.
 - **File transfer Control tab:** Dashboard file-transfer compose commands use the host repo path (`DASHBOARD_PROJECT_ROOT_HOST`) so Docker Desktop can bind-mount `file-transfer/keys/sftp` (fixes “mounts denied” for `/project/file-transfer/keys/sftp`).
 
