@@ -10,7 +10,7 @@ tls:
   acme_email: ""         # required for acme
   cert_file: ""          # static mode: path under PROJECT_ROOT
   key_file: ""
-  cloudflare_notes: ""   # operator notes for orange-cloud / tunnel
+  cloudflare_notes: ""   # operator notes — see docs/CLOUDFLARE_SSL_INSTALL.md when tls.mode is cloudflare
 
 # Ecosystem services started by ./ecosystem-stack/ecosystem-stack.sh start
 install_profile: minimal

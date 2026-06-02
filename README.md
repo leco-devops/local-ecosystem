@@ -55,7 +55,7 @@ The **Platform** tab is a first-class capability — not just settings. It is ho
 
 Presets and versions live in **`ecosystem-stack/config/dev-stack-presets.yaml`** and **`component-catalog.yaml`**. Generated stacks land under **`platform/dev-stacks/<id>/`** with Traefik routes in **`hosting/traefik/20-dev-stacks.yml`**.
 
-→ [Platform tab guide](docs/help/03-platform-tab.md) · [Dev stack isolation](docs/DEV_STACK_ISOLATION.md) · [Cloud VM deployment](docs/CLOUD_VM_DEPLOYMENT.md)
+→ [Platform tab guide](docs/help/03-platform-tab.md) · [Dev stack isolation](docs/DEV_STACK_ISOLATION.md) · [Cloud VM deployment](docs/CLOUD_VM_DEPLOYMENT.md) · [Cloudflare SSL install](docs/CLOUDFLARE_SSL_INSTALL.md)
 
 ## Features
 
@@ -148,6 +148,8 @@ Start **cloudflare-local** to exercise R2, KV, D1, and Workers-style endpoints o
 ### Preproduction on a cloud VM
 
 Use **Platform** profiles and `cloud-install.sh` on a VM with your domain, TLS mode, and optional external LLM providers — closer to staging than laptop-only compose.
+
+→ [Cloudflare DNS & SSL install](docs/CLOUDFLARE_SSL_INSTALL.md) · [Cloud VM deployment](docs/CLOUD_VM_DEPLOYMENT.md)
 
 **Ideal for:** small teams without Kubernetes, demos, and partner sandboxes.
 

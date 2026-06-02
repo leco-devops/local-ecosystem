@@ -230,6 +230,13 @@ DOC_MODULES = [
         "blurb": "Install profiles, custom domain/TLS, dev stack builder, Repair/Reinstall, Platform tab, ai-cloud external LLM keys.",
     },
     {
+        "id": "cloudflare-ssl-install",
+        "title": "Cloud install — Cloudflare DNS & SSL",
+        "category": "DevOps",
+        "rel_path": "docs/CLOUDFLARE_SSL_INSTALL.md",
+        "blurb": "VM install with proxied wildcard DNS, Cloudflare edge TLS (Flexible), platform config, Traefik routes, Paperclip public URL.",
+    },
+    {
         "id": "help-platform-tab",
         "title": "Help — Platform tab & dev stacks",
         "category": "DevOps",
@@ -256,6 +263,13 @@ DOC_MODULES = [
         "category": "DevOps",
         "rel_path": "docs/help/12-cloud-vm-deployment.md",
         "blurb": "Operator guide: profiles, platform settings, dev stacks, hosted apps on a cloud VM.",
+    },
+    {
+        "id": "help-cloudflare-ssl-install",
+        "title": "Help — Cloudflare DNS & SSL install",
+        "category": "DevOps",
+        "rel_path": "docs/help/19-cloudflare-ssl-install.md",
+        "blurb": "Quick checklist: Cloudflare proxied DNS, Flexible SSL, cloud-install.sh, Traefik route apply.",
     },
     {
         "id": "dev-platform-cloud",

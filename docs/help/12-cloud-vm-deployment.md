@@ -2,6 +2,8 @@
 
 Use this guide when LEco DevOps runs on a **Linux cloud VM** (development or preproduction) instead of a local Mac/Windows workstation with `*.lh`.
 
+**Cloudflare edge SSL (no Let's Encrypt on Traefik):** [Cloudflare DNS & SSL install](help:cloudflare-ssl-install) · [CLOUDFLARE_SSL_INSTALL.md](../CLOUDFLARE_SSL_INSTALL.md).
+
 ## Install profiles
 
 Run the cloud installer or foundation script with a profile:

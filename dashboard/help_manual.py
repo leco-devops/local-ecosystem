@@ -37,6 +37,7 @@ HELP_TREE: list[dict] = [
             {"id": "install-stack", "title": "Ecosystem stack (first-time)", "file": "02-install-stack.md"},
             {"id": "install-cli", "title": "LEco CLI (leco-devops)", "file": "02-install-cli.md"},
             {"id": "install-dns", "title": "DNS (*.lh) and certificates", "file": "02-install-dns.md"},
+            {"id": "cloudflare-ssl-install", "title": "Cloud VM — Cloudflare DNS & SSL", "file": "19-cloudflare-ssl-install.md"},
         ],
     },
     {

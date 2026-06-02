@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Docs:** Cloud VM install with Cloudflare-managed SSL — [`docs/CLOUDFLARE_SSL_INSTALL.md`](docs/CLOUDFLARE_SSL_INSTALL.md) and Help [`docs/help/19-cloudflare-ssl-install.md`](docs/help/19-cloudflare-ssl-install.md) (proxied wildcard DNS, `tls.mode: cloudflare`, Traefik route apply, Paperclip public URL).
 - **Paperclip AI:** Agent orchestration stack service at `https://paperclip.lh` — `ecosystem-stack/services/paperclip.sh` + dedicated `paperclip_postgres`; Traefik routes; dashboard Infrastructure/Control cards; UI Access entry; install profiles `ai-full` and `full`; help guide [`docs/help/06-paperclip.md`](docs/help/06-paperclip.md).
 - **Paperclip bootstrap CEO:** Interactive first-admin invite from dashboard (`Infrastructure → Paperclip`), `leco-cli.sh paperclip bootstrap-ceo`, `leco-devops platform paperclip-bootstrap-ceo`, and `ecosystem-stack.sh paperclip-bootstrap-ceo`.
 - **File transfer stack:** FTP (`leco-ftp`, alpine-ftp-server) and SFTP (`leco-sftp`, atmoz/sftp) under [`file-transfer/docker-compose.yml`](file-transfer/docker-compose.yml); read-only web file browser at `files.lh` / `ftp-files.lh` / `sftp-files.lh`; dashboard **Control** and **Infrastructure** panels list SFTP, FTP, and browser cards under **Infra add-ons & file transfer**; ecosystem service script [`ecosystem-stack/services/file-transfer.sh`](ecosystem-stack/services/file-transfer.sh); install profile `file-transfer-full`; docs [`docs/FILE_TRANSFER.md`](docs/FILE_TRANSFER.md).

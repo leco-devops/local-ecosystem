@@ -4,6 +4,8 @@ Deploy **LEco DevOps** on a Linux cloud VM (development or preproduction) with s
 
 Requirements: [SRS_CLOUD_VM_PLATFORM.md](SRS_CLOUD_VM_PLATFORM.md).
 
+**Cloudflare-managed SSL (proxied DNS, no Let's Encrypt on Traefik):** see [CLOUDFLARE_SSL_INSTALL.md](CLOUDFLARE_SSL_INSTALL.md).
+
 ## Quick start
 
 ```bash
@@ -55,7 +57,7 @@ Enforced by `ecosystem-stack/core.sh` — `start` without a service name only st
 | `mkcert` | Local `*.lh` (default) |
 | `acme` | Let’s Encrypt via Traefik (`traefik/traefik-static-acme.yaml`) |
 | `static` | Operator-provided PEM paths in platform config |
-| `cloudflare` | Orange-cloud or Tunnel; see platform notes in config |
+| `cloudflare` | Orange-cloud or Tunnel; see [CLOUDFLARE_SSL_INSTALL.md](CLOUDFLARE_SSL_INSTALL.md) |
 
 Apply domain routes: dashboard **Platform** tab → **Apply Traefik routes**, or:
 
@@ -87,6 +89,8 @@ Copy `config/ai-providers.yaml.example` → `config/ai-providers.yaml` and set O
 
 ## Related
 
+- [CLOUDFLARE_SSL_INSTALL.md](CLOUDFLARE_SSL_INSTALL.md) — Cloudflare DNS + edge SSL install walkthrough
 - [SETUP.md](SETUP.md) — local workstation
 - [help/12-cloud-vm-deployment.md](help/12-cloud-vm-deployment.md)
+- [help/19-cloudflare-ssl-install.md](help/19-cloudflare-ssl-install.md)
 - [help/dev-09-platform-cloud.md](help/dev-09-platform-cloud.md)
