@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "generated_at": "2026-05-24T10:26:06Z",
+  "generated_at": "2026-06-02T11:56:36Z",
   "services": [
     {
       "id": "traefik",
@@ -66,9 +66,9 @@
       ],
       "source": "docker_hub",
       "latest": {
-        "tag": "0.9.5",
-        "updated": "2026-05-10T18:14:07Z",
-        "full": "ghcr.io/open-webui/open-webui:0.9.5"
+        "tag": "0.9.6",
+        "updated": "2026-06-01T21:57:03Z",
+        "full": "ghcr.io/open-webui/open-webui:0.9.6"
       }
     },
     {
@@ -86,6 +86,42 @@
         "tag": "0.1.2",
         "updated": "2019-06-23T15:34:57.369403Z",
         "full": "n8nio/n8n:0.1.2"
+      }
+    },
+    {
+      "id": "paperclip",
+      "label": "Paperclip",
+      "container": "paperclip",
+      "running_image": null,
+      "status": "not_running",
+      "upgrade_help": "deploy-rebuild",
+      "upgrade_steps": [
+        "./ecosystem-stack/ecosystem-stack.sh restart paperclip",
+        "Data persists in Docker volumes paperclip_data and paperclip_postgres_data"
+      ],
+      "source": "docker_hub",
+      "latest": {
+        "tag": "2026.529.0",
+        "updated": "2026-05-30T14:31:41Z",
+        "full": "ghcr.io/paperclipai/paperclip:2026.529.0"
+      }
+    },
+    {
+      "id": "paperclip-postgres",
+      "label": "PostgreSQL (Paperclip)",
+      "container": "paperclip_postgres",
+      "running_image": null,
+      "status": "not_running",
+      "upgrade_help": "deploy-rebuild",
+      "upgrade_steps": [
+        "Back up Paperclip data before major Postgres upgrades",
+        "./ecosystem-stack/ecosystem-stack.sh restart paperclip-postgres"
+      ],
+      "source": "docker_hub",
+      "latest": {
+        "tag": "9.1.17",
+        "updated": "2015-06-04T22:35:58Z",
+        "full": "postgres:9.1.17"
       }
     },
     {
@@ -309,6 +345,13 @@
     },
     {
       "type": "ollama_model",
+      "name": "minimax-m3",
+      "message": "New or trending on Ollama library: minimax-m3",
+      "install": "./leco-cli.sh ollama install minimax-m3",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
       "name": "ministral-3:14b",
       "message": "New or trending on Ollama library: ministral-3:14b",
       "install": "./leco-cli.sh ollama install ministral-3:14b",
@@ -327,15 +370,8 @@
       "message": "New or trending on Ollama library: ministral-3:8b",
       "install": "./leco-cli.sh ollama install ministral-3:8b",
       "help": "ollama"
-    },
-    {
-      "type": "ollama_model",
-      "name": "mistral-large-3:675b",
-      "message": "New or trending on Ollama library: mistral-large-3:675b",
-      "install": "./leco-cli.sh ollama install mistral-large-3:675b",
-      "help": "ollama"
     }
   ],
-  "ollama_new_count": 39,
+  "ollama_new_count": 40,
   "airllm_catalog_count": 20
 }

@@ -23,6 +23,7 @@ print_usage() {
   echo "./ecosystem-stack.sh repair-network"
   echo "./ecosystem-stack.sh ollama-pull-models   # pull pinned models into running ollama"
   echo "./ecosystem-stack.sh airllm-pull-models   # pull pinned models into AirLLM shim"
+  echo "./ecosystem-stack.sh paperclip-bootstrap-ceo [--force]  # first admin invite URL"
   echo "./ecosystem-stack.sh heal traefik         # repair hosting/traefik/* + restart Traefik if running"
 }
 
@@ -232,6 +233,10 @@ case "$ACTION" in
   airllm-pull-models)
     source "$BASE_DIR/ecosystem-stack/services/airllm.sh"
     pull_pinned_models
+    ;;
+  paperclip-bootstrap-ceo)
+    source "$BASE_DIR/ecosystem-stack/services/paperclip.sh"
+    bootstrap_ceo "${SERVICE:-}"
     ;;
   reset)
     if [ -z "$SERVICE" ]; then

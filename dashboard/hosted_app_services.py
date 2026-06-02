@@ -33,6 +33,7 @@ _ECO_SERVICE_ALIASES: dict[str, str] = {
     "db": "mysql",
     "database": "mysql",
     "n8n_postgres": "postgres",
+    "paperclip_postgres": "paperclip-postgres",
     "postgres": "postgres",
     "postgresql": "postgres",
     "redis": "redis",

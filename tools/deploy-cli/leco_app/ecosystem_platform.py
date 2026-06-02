@@ -218,3 +218,43 @@ def tail_dev_stack_logs(stack_id: str, *, follow: bool = False, tail: int = 100)
 
 def emit_json(data: Any) -> None:
     print(json.dumps(data, indent=2, default=str))
+
+
+def paperclip_bootstrap_ceo_dict(
+    _er: Path,
+    *,
+    force: bool = False,
+    auto_onboard: bool = True,
+    base_url: str | None = None,
+    stream: bool = False,
+    echo: Echo | None = None,
+) -> dict[str, Any]:
+    if stream:
+        from paperclip_bootstrap import bootstrap_ceo_streaming
+
+        out = echo or print
+        result: dict[str, Any] = {"ok": False, "error": "no events"}
+        for ev in bootstrap_ceo_streaming(
+            auto_onboard=auto_onboard,
+            base_url=base_url,
+            force=force,
+        ):
+            if ev.get("type") == "log":
+                text = str(ev.get("text") or "")
+                if text:
+                    out(text, end="" if text.endswith("\n") else "\n")
+            elif ev.get("type") == "done":
+                result = ev.get("result") if isinstance(ev.get("result"), dict) else {}
+        return result
+
+    from paperclip_bootstrap import bootstrap_ceo_streaming
+
+    result: dict[str, Any] = {"ok": False, "error": "no events"}
+    for ev in bootstrap_ceo_streaming(
+        auto_onboard=auto_onboard,
+        base_url=base_url,
+        force=force,
+    ):
+        if ev.get("type") == "done":
+            result = ev.get("result") if isinstance(ev.get("result"), dict) else {}
+    return result

@@ -46,6 +46,19 @@ http:
         - websecure
       tls: true
 
+    paperclip-http:
+      rule: "Host(`paperclip.lh`)"
+      service: paperclip-service
+      entryPoints:
+        - web
+
+    paperclip-https:
+      rule: "Host(`paperclip.lh`)"
+      service: paperclip-service
+      entryPoints:
+        - websecure
+      tls: true
+
     n8n-assist-http:
       rule: "Host(`n8n.lh`) && PathPrefix(`/assist`)"
       service: dashboard-service
@@ -325,6 +338,11 @@ http:
       loadBalancer:
         servers:
           - url: "http://n8n:5678"
+
+    paperclip-service:
+      loadBalancer:
+        servers:
+          - url: "http://paperclip:3100"
 
     ollama-service:
       loadBalancer:

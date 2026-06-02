@@ -29,6 +29,8 @@ profiles:
       - airllm
       - webui
       - update-catalog
+      - paperclip-postgres
+      - paperclip
     ai:
       default_provider: ollama
 
@@ -60,6 +62,8 @@ profiles:
       - airllm
       - webui
       - n8n
+      - paperclip-postgres
+      - paperclip
       - dashboard
       - update-catalog
       - cloudflare-local

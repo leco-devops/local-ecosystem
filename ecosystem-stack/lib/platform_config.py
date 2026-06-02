@@ -27,6 +27,8 @@ START_ORDER = [
     "airllm",
     "webui",
     "n8n",
+    "paperclip-postgres",
+    "paperclip",
     "dashboard",
     "update-catalog",
     "cloudflare-local",
@@ -37,7 +39,7 @@ START_ORDER = [
 BUNDLE_TO_SERVICE = {
     "edge": ["traefik", "dashboard"],
     "cloudflare-full": ["cloudflare-local"],
-    "ai-full": ["ollama", "airllm", "webui", "update-catalog"],
+    "ai-full": ["ollama", "airllm", "webui", "update-catalog", "paperclip-postgres", "paperclip"],
     "infra-full": ["infra"],
     "file-transfer-full": ["file-transfer"],
 }

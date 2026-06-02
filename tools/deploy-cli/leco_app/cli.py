@@ -1922,6 +1922,45 @@ def cmd_platform_service(
         raise typer.Exit(1)
 
 
+@platform_cmd.command("paperclip-bootstrap-ceo")
+def cmd_platform_paperclip_bootstrap_ceo(
+    ecosystem_root: EcosystemRootOption = None,
+    force: Annotated[bool, typer.Option("--force", help="Create invite even if admin exists")] = False,
+    no_auto_onboard: Annotated[
+        bool,
+        typer.Option("--no-auto-onboard", help="Skip non-interactive onboard when config is missing"),
+    ] = False,
+    base_url: Annotated[
+        Optional[str],
+        typer.Option("--base-url", help="Public URL for invite link (default: PAPERCLIP_PUBLIC_URL or http://paperclip.lh)"),
+    ] = None,
+    as_json: Annotated[bool, typer.Option("--json", help="Emit JSON result")] = False,
+) -> None:
+    """Create a Paperclip bootstrap CEO invite URL (first admin) inside the running container."""
+    er = _cli_ecosystem_root(ecosystem_root)
+    result = eplat.paperclip_bootstrap_ceo_dict(
+        er,
+        force=force,
+        auto_onboard=not no_auto_onboard,
+        base_url=base_url,
+        stream=not as_json,
+        echo=typer.echo,
+    )
+    if as_json:
+        eplat.emit_json(result)
+    else:
+        log = result.get("log")
+        if log:
+            typer.echo(str(log))
+        invite = result.get("invite_url")
+        if invite:
+            typer.secho(f"\nInvite URL: {invite}", fg=typer.colors.GREEN)
+        elif result.get("ok") is False:
+            typer.secho(result.get("error") or "bootstrap-ceo failed", fg=typer.colors.RED, err=True)
+    if result.get("ok") is False:
+        raise typer.Exit(1)
+
+
 @platform_cmd.command("traefik-apply")
 def cmd_platform_traefik_apply(
     ecosystem_root: EcosystemRootOption = None,

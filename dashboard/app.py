@@ -25,6 +25,7 @@ from ecosystem_updates import (
     save_schedule,
 )
 from help_manual import get_help_content, get_help_tree, search_help
+from paperclip_bootstrap import bootstrap_ceo_status, bootstrap_ceo_streaming
 from popular_models import load_airllm_catalog, load_ollama_catalog
 from service_hub import get_hub_detail, list_hub_slugs
 from ui_login_assist import (
@@ -1354,6 +1355,50 @@ def api_ollama_popular():
 @app.get("/api/airllm/popular")
 def api_airllm_popular():
     return jsonify(load_airllm_catalog())
+
+
+@app.get("/api/paperclip/bootstrap-ceo/status")
+def api_paperclip_bootstrap_status():
+    return jsonify(bootstrap_ceo_status())
+
+
+@app.post("/api/paperclip/bootstrap-ceo/stream")
+def api_paperclip_bootstrap_stream():
+    """NDJSON stream: runs onboard (if needed) + bootstrap-ceo; final result may include invite_url."""
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    auto_onboard = data.get("auto_onboard", True) is not False
+    force = bool(data.get("force"))
+    base_url = (data.get("base_url") or "").strip() or None
+
+    @stream_with_context
+    def ndjson():
+        try:
+            for ev in bootstrap_ceo_streaming(
+                auto_onboard=auto_onboard,
+                base_url=base_url,
+                force=force,
+            ):
+                yield json.dumps(ev, ensure_ascii=False) + "\n"
+        except GeneratorExit:
+            raise
+        except Exception as exc:
+            yield json.dumps(
+                {"type": "done", "result": {"ok": False, "error": str(exc)}},
+                ensure_ascii=False,
+            ) + "\n"
+
+    return Response(
+        ndjson(),
+        mimetype="text/plain; charset=utf-8",
+        headers={
+            "Cache-Control": "no-store, no-transform",
+            "X-Accel-Buffering": "no",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @app.get("/api/help/tree")

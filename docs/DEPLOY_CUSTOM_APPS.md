@@ -31,6 +31,7 @@ Use this table to see **what already exists**, **which hostname** to use, and **
 |---------------------|----------------------|-----------|-----------------|-------------|
 | `ai.lh` | `http://open-webui:8080` | `open-webui` | 8080 | `ecosystem-stack/services/webui.sh` |
 | `n8n.lh` | `http://n8n:5678` | `n8n` | 5678 | `ecosystem-stack/services/n8n.sh` |
+| `paperclip.lh` | `http://paperclip:3100` | `paperclip` | 3100 | `ecosystem-stack/services/paperclip.sh` |
 | `ollama.lh` | `http://ollama:11434` | `ollama` | 11434 | `ecosystem-stack/services/ollama.sh` |
 | `localhost.lh` | `http://service-dashboard:8090` | `service-dashboard` | 8090 | `ecosystem-stack/services/dashboard.sh` |
 | `traefik.lh` | Traefik API (`api@internal`) | `traefik` | API on 8080 (published) | `ecosystem-stack/services/traefik.sh` |
@@ -68,6 +69,7 @@ Use this table to see **what already exists**, **which hostname** to use, and **
 **Databases (two different Postgres instances)**
 
 - **n8n Postgres:** container `n8n_postgres`, user `postgres` / password `password`, DB `n8n`, host **`n8n_postgres:5432`** from other containers on `lh-network`. Host port **5432** is published for local tools.
+- **Paperclip Postgres:** container `paperclip_postgres`, user `paperclip` / password `paperclip`, DB `paperclip`, host **`paperclip_postgres:5432`** on `lh-network` (not published to host by default).
 - **Infra MySQL:** container `mysql`, defaults `root` / `localdev`, DB `localdev`, host **`mysql:3306`** on `lh-network`. Host port **3306** published.
 
 **Redis / Valkey**

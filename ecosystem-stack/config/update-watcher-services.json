@@ -56,6 +56,29 @@
       ]
     },
     {
+      "id": "paperclip",
+      "label": "Paperclip",
+      "container": "paperclip",
+      "image_repo": "ghcr.io/paperclipai/paperclip",
+      "upgrade_help": "deploy-rebuild",
+      "upgrade_steps": [
+        "./ecosystem-stack/ecosystem-stack.sh restart paperclip",
+        "Data persists in Docker volumes paperclip_data and paperclip_postgres_data"
+      ]
+    },
+    {
+      "id": "paperclip-postgres",
+      "label": "PostgreSQL (Paperclip)",
+      "container": "paperclip_postgres",
+      "image_repo": "postgres",
+      "tag_filter": "17",
+      "upgrade_help": "deploy-rebuild",
+      "upgrade_steps": [
+        "Back up Paperclip data before major Postgres upgrades",
+        "./ecosystem-stack/ecosystem-stack.sh restart paperclip-postgres"
+      ]
+    },
+    {
       "id": "postgres",
       "label": "PostgreSQL (n8n)",
       "container": "n8n_postgres",

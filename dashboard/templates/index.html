@@ -311,8 +311,34 @@
           </div>
         </div>
 
+        <div class="infra-group" id="infra-paperclip">
+          <h3 class="infra-group__title">7 · Paperclip (agent orchestration)</h3>
+          <p class="infra-group__lead muted small">
+            First-run admin for <a href="https://paperclip.lh" target="_blank" rel="noopener">paperclip.lh</a> —
+            creates a one-time CEO invite URL inside the <code>paperclip</code> container.
+            Runs from <code>/app</code> with data under <code>/paperclip</code> (same as the upstream CLI).
+          </p>
+          <div class="infra-group__block">
+            <h4 class="infra-subhead">First admin (bootstrap CEO)</h4>
+            <p class="muted small" id="paperclipBootstrapSummary">Loading…</p>
+            <div class="ollama-models-toolbar">
+              <button type="button" id="paperclipBootstrapCeoBtn" class="ollama-act ollama-act--ops">Bootstrap CEO invite</button>
+              <label class="ollama-pull-field">
+                <input type="checkbox" id="paperclipBootstrapForce" aria-label="Force new invite" />
+                <span class="muted">Force new invite</span>
+              </label>
+              <button type="button" id="paperclipOpenUiBtn" class="ollama-act ollama-act--safe">Open paperclip.lh</button>
+            </div>
+            <p class="muted small">
+              CLI: <code>./leco-cli.sh paperclip bootstrap-ceo</code> ·
+              <code>leco-devops platform paperclip-bootstrap-ceo -E .</code> ·
+              <code>./ecosystem-stack/ecosystem-stack.sh paperclip-bootstrap-ceo</code>
+            </p>
+          </div>
+        </div>
+
         <div class="infra-group" id="infra-ai">
-          <h3 class="infra-group__title">7 · AI-assisted onboarding</h3>
+          <h3 class="infra-group__title">8 · AI-assisted onboarding</h3>
           <div id="aiCloudBanner" class="ai-cloud-banner is-hidden" role="note">
             <strong>Cloud VM (ai-cloud profile):</strong> External LLM APIs are the recommended path.
             Set OpenAI, Anthropic, or Google keys below. Ollama and AirLLM remain available but may be stopped on

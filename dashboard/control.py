@@ -11,6 +11,8 @@ from typing import Any
 import docker
 import requests
 
+from file_transfer_compose import compose_argv as _file_transfer_compose_argv
+from project_paths import host_project_root
 from control_targets import (
     AI_TARGETS,
     CF_TARGETS,
@@ -333,13 +335,11 @@ def _infra_compose(args, timeout=600):
 
 
 def _file_transfer_compose(args, timeout=600):
-    if not os.path.isfile(FILE_TRANSFER_COMPOSE_FILE):
-        return 1, f"compose file missing: {FILE_TRANSFER_COMPOSE_FILE}"
-    return _run(
-        ["docker", "compose", "-f", FILE_TRANSFER_COMPOSE_FILE, *args],
-        cwd=os.path.dirname(FILE_TRANSFER_COMPOSE_FILE),
-        timeout=timeout,
-    )
+    try:
+        cmd, cwd = _file_transfer_compose_argv(*args)
+    except FileNotFoundError as exc:
+        return 1, str(exc)
+    return _run(cmd, cwd=cwd, timeout=timeout)
 
 
 def _ai_script(script, action, timeout=600):
@@ -350,10 +350,10 @@ def _ai_script(script, action, timeout=600):
         return 1, f"action not invokable as service function: {action}"
     # Service scripts define bash functions; ecosystem-stack/core.sh uses `source` + call.
     # A bare `bash script.sh stop` only defines functions and exits 0 without running them.
-    root_q = shlex.quote(PROJECT_ROOT)
+    root_q = shlex.quote(host_project_root())
     path_q = shlex.quote(path)
     src = f"export PROJECT_ROOT={root_q} && source {path_q} && {action}"
-    return _run(["/bin/bash", "-c", src], cwd=PROJECT_ROOT, timeout=timeout)
+    return _run(["/bin/bash", "-c", src], cwd=host_project_root(), timeout=timeout)
 
 
 def _docker_client():
@@ -1143,14 +1143,12 @@ def _stream_infra_compose(args: list, timeout: int = 600) -> Iterator[dict[str, 
 
 
 def _stream_file_transfer_compose(args: list, timeout: int = 600) -> Iterator[dict[str, Any] | Any]:
-    if not os.path.isfile(FILE_TRANSFER_COMPOSE_FILE):
-        yield {"type": "log", "text": f"compose file missing: {FILE_TRANSFER_COMPOSE_FILE}\n"}
+    try:
+        cmd, cwd = _file_transfer_compose_argv(*args)
+    except FileNotFoundError as exc:
+        yield {"type": "log", "text": f"{exc}\n"}
         return (1, "")
-    code, log = yield from _yield_run(
-        ["docker", "compose", "-f", FILE_TRANSFER_COMPOSE_FILE, *args],
-        cwd=os.path.dirname(FILE_TRANSFER_COMPOSE_FILE),
-        timeout=timeout,
-    )
+    code, log = yield from _yield_run(cmd, cwd=cwd, timeout=timeout)
     return (code, log)
 
 
@@ -1162,10 +1160,10 @@ def _stream_ai_script(script: str, action: str, timeout: int = 600) -> Iterator[
     if action not in _AI_SCRIPT_FN_ACTIONS:
         yield {"type": "log", "text": f"action not invokable as service function: {action}\n"}
         return (1, "")
-    root_q = shlex.quote(PROJECT_ROOT)
+    root_q = shlex.quote(host_project_root())
     path_q = shlex.quote(path)
     src = f"export PROJECT_ROOT={root_q} && source {path_q} && {action}"
-    code, log = yield from _yield_run(["/bin/bash", "-c", src], cwd=PROJECT_ROOT, timeout=timeout)
+    code, log = yield from _yield_run(["/bin/bash", "-c", src], cwd=host_project_root(), timeout=timeout)
     return (code, log)
 
 

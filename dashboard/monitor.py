@@ -66,6 +66,26 @@ SERVICE_MAP = [
         ],
     },
     {
+        "service": "Paperclip",
+        "container": "paperclip",
+        "urls": ["http://paperclip.lh"],
+        "notes": "AI agent orchestration — org charts, goals, budgets, and governance for multi-agent teams",
+        "hub_slug": "paperclip",
+        "credentials": [
+            "Authenticated mode: create a board account on first visit at http://paperclip.lh.",
+            "Database: paperclip / paperclip @ paperclip_postgres:5432 (see Paperclip Postgres hub).",
+        ],
+        "insights": [
+            "Connects to Cursor, Claude Code, Codex, OpenClaw, and HTTP agents via heartbeats.",
+            "Image: ghcr.io/paperclipai/paperclip (override with PAPERCLIP_IMAGE).",
+        ],
+        "management_links": [
+            {"label": "Open Paperclip", "url": "http://paperclip.lh"},
+            {"label": "Service hub", "url": "http://localhost.lh/hub/paperclip"},
+            {"label": "Upstream docs", "url": "https://github.com/paperclipai/paperclip"},
+        ],
+    },
+    {
         "service": "Ollama",
         "container": "ollama",
         "urls": ["http://ollama.lh"],
@@ -98,6 +118,26 @@ SERVICE_MAP = [
         ],
         "management_links": [
             {"label": "Hub · LEco DevOps", "url": "http://localhost.lh/hub/dashboard"},
+        ],
+    },
+    {
+        "service": "PostgreSQL (Paperclip)",
+        "container": "paperclip_postgres",
+        "urls": ["http://localhost.lh/hub/paperclip-postgres"],
+        "notes": "Paperclip database · Docker service paperclip_postgres on lh-network",
+        "hub_slug": "paperclip-postgres",
+        "credentials": [
+            "User paperclip · password paperclip · database paperclip (from ecosystem-stack/services/paperclip-postgres.sh defaults).",
+        ],
+        "connection_strings": [
+            "postgresql://paperclip:paperclip@paperclip_postgres:5432/paperclip",
+            "psql -h paperclip_postgres -p 5432 -U paperclip -d paperclip  # from a container on lh-network",
+        ],
+        "database_guis": [
+            {"label": "Adminer (pick PostgreSQL)", "url": "http://adminer.lh"},
+        ],
+        "management_links": [
+            {"label": "Service hub", "url": "http://localhost.lh/hub/paperclip-postgres"},
         ],
     },
     {
@@ -467,6 +507,8 @@ SERVICE_MAP = [
 # verify the app container on lh-network directly.
 INTERNAL_PROBE_BY_CONTAINER = {
     "n8n": "http://n8n:5678/",
+    "paperclip": "http://paperclip:3100/",
+    "paperclip_postgres": "http://service-dashboard:8090/hub/paperclip-postgres",
     "open-webui": "http://open-webui:8080/",
     "ollama": "http://ollama:11434/",
     "traefik": "http://traefik:8080/api/version",

@@ -24,6 +24,19 @@
       "compose_stack": "ecosystem-stack"
     },
     {
+      "id": "paperclip",
+      "hub_slug": "paperclip",
+      "label": "Paperclip",
+      "login_url": "http://paperclip.lh",
+      "connection_hint": "Create a board account on first visit (authenticated mode)",
+      "auth_type": "browse_only",
+      "default_credentials": {},
+      "reset_handler": "none",
+      "container": "paperclip",
+      "restart_service": "paperclip",
+      "compose_stack": "ecosystem-stack"
+    },
+    {
       "id": "webui",
       "hub_slug": "webui",
       "label": "Open WebUI",

@@ -96,6 +96,7 @@ Presets and versions live in **`ecosystem-stack/config/dev-stack-presets.yaml`**
 | **Open WebUI** | Chat UI at `https://ai.lh` wired to your local models |
 | **AirLLM** | Ollama-compatible API for very large models on modest VRAM (layer streaming) |
 | **n8n** | Workflow automation on `https://n8n.lh` beside the rest of the stack |
+| **Paperclip** | Multi-agent orchestration on `https://paperclip.lh` — org charts, goals, budgets, and governance |
 | **AI-assisted onboarding** | Dashboard flows to help scaffold and configure apps with provider abstraction |
 
 ### Cloud-shaped development (optional)
@@ -134,7 +135,7 @@ Materialize multiple LEco-hosted apps from separate Git repos. Each slot has its
 
 ### AI product development offline
 
-Run **Ollama**, **Open WebUI**, and **AirLLM** on the same `lh-network` as your app. Prototype RAG, agents, and automation (n8n) without cloud API keys for every iteration.
+Run **Ollama**, **Open WebUI**, **AirLLM**, and **Paperclip** on the same `lh-network` as your app. Prototype RAG, agents, and automation (n8n) without cloud API keys for every iteration.
 
 **Ideal for:** AI engineers, hackathons, air-gapped or cost-sensitive experimentation.
 

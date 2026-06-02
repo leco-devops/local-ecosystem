@@ -19,17 +19,15 @@ from ui_credentials import (
 )
 from ui_provision import provision_after_reset
 
+from file_transfer_compose import compose_argv as _file_transfer_compose_argv
+from project_paths import host_project_root
+
 PROJECT_ROOT = os.getenv("DASHBOARD_PROJECT_ROOT", "/project")
 SERVICES_DIR = os.path.join(PROJECT_ROOT, "ecosystem-stack", "services")
 
 
 def _host_project_root() -> str:
-    """Host filesystem path for docker compose bind mounts (dashboard runs in Docker with /project)."""
-    for key in ("LECO_PROJECT_ROOT_HOST", "DASHBOARD_PROJECT_ROOT_HOST", "DASHBOARD_DOCKER_BIND_ROOT"):
-        val = (os.getenv(key) or "").strip()
-        if val and os.path.isdir(val):
-            return val
-    return PROJECT_ROOT
+    return host_project_root()
 
 
 def _run(cmd: list[str], timeout: int = 60) -> tuple[bool, str]:
@@ -71,6 +69,18 @@ def _recreate_compose_service(
     env_rel: str | None = None,
     compose_extra: list[str] | None = None,
 ) -> tuple[bool, str]:
+    if compose_rel == "file-transfer/docker-compose.yml" and service == "sftp":
+        try:
+            cmd, _cwd = _file_transfer_compose_argv(
+                "up",
+                "-d",
+                "--force-recreate",
+                "--no-deps",
+                service,
+            )
+            return _run(cmd, timeout=180)
+        except FileNotFoundError as exc:
+            return False, str(exc)
     root = _host_project_root()
     compose = os.path.join(root, compose_rel)
     if not os.path.isfile(compose):
@@ -94,7 +104,7 @@ def _start_service_script(script: str) -> tuple[bool, str]:
     path = os.path.join(SERVICES_DIR, f"{script}.sh")
     if not os.path.isfile(path):
         return False, f"service script missing: {path}"
-    root_q = shlex.quote(PROJECT_ROOT)
+    root_q = shlex.quote(host_project_root())
     path_q = shlex.quote(path)
     cmd = f"export PROJECT_ROOT={root_q} && source {path_q} && start"
     return _run(["/bin/bash", "-c", cmd], timeout=300)

@@ -63,11 +63,15 @@ ensure_hosting_files() {
     return 1
   fi
   rm -f "$HOSTING_TRAEFIK_DIR/00-core.yml" 2>/dev/null
-  rm -f "$CORE_DYNAMIC_COPY" 2>/dev/null
+  # Always refresh stack routes from traefik/dynamic.yml (git) so new hosts like paperclip.lh appear after heal/start.
   if [ -f "$DOCKER_BIND/config/leco-platform.yaml" ] && [ -f "$DOCKER_BIND/scripts/render-platform-traefik.py" ]; then
-    python3 "$DOCKER_BIND/scripts/render-platform-traefik.py" --write 2>/dev/null || true
-  fi
-  if [ ! -f "$CORE_DYNAMIC_COPY" ]; then
+    if ! python3 "$DOCKER_BIND/scripts/render-platform-traefik.py" --write 2>/dev/null; then
+      cp "$CORE_DYNAMIC" "$CORE_DYNAMIC_COPY" || {
+        echo "❌ Could not copy stack core to $CORE_DYNAMIC_COPY"
+        return 1
+      }
+    fi
+  else
     cp "$CORE_DYNAMIC" "$CORE_DYNAMIC_COPY" || {
       echo "❌ Could not copy stack core to $CORE_DYNAMIC_COPY"
       return 1

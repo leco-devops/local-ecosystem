@@ -7,7 +7,7 @@ Local hostnames use the **`.lh`** TLD (e.g. `localhost.lh`, `ollama.lh`, `airllm
 Add lines (or use your project's install script if provided):
 
 ```text
-127.0.0.1 localhost.lh dashboard.lh traefik.lh ollama.lh airllm.lh ai.lh n8n.lh
+127.0.0.1 localhost.lh dashboard.lh traefik.lh ollama.lh airllm.lh ai.lh n8n.lh paperclip.lh
 ```
 
 Traefik terminates TLS with certs from the repo `certs/` directory (self-signed). Browsers will warn once — proceed for local dev.

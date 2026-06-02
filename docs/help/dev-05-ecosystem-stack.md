@@ -22,6 +22,7 @@ Shell orchestration under **`ecosystem-stack/`**.
 | AirLLM | `airllm.sh` | Custom Dockerfile in `ecosystem-stack/airllm/` |
 | Open WebUI | `webui.sh` | |
 | n8n / Postgres | `n8n.sh`, `postgres.sh` | |
+| Paperclip / Postgres | `paperclip.sh`, `paperclip-postgres.sh` | AI agent orchestration |
 | Cloudflare local | `cloudflare-local.sh` | |
 | Infra add-ons | `infra.sh` | |
 | File transfer (FTP, SFTP) | `file-transfer.sh` | Shared volume; UI access for creds — [dev guide](help:dev-file-transfer) |

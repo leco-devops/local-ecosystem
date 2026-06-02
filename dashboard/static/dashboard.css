@@ -2885,6 +2885,20 @@ button.dev-open-doc:hover {
   --svc-border: rgba(251, 113, 133, 0.55);
 }
 
+.control-card[data-brand="paperclip"],
+.service-grid > .card[data-brand="paperclip"] {
+  --svc-accent: #f59e0b;
+  --svc-accent-soft: rgba(245, 158, 11, 0.14);
+  --svc-border: rgba(245, 158, 11, 0.55);
+}
+
+.control-card[data-brand="paperclip-postgres"],
+.service-grid > .card[data-brand="paperclip-postgres"] {
+  --svc-accent: #60a5fa;
+  --svc-accent-soft: rgba(96, 165, 250, 0.14);
+  --svc-border: rgba(96, 165, 250, 0.55);
+}
+
 .control-card[data-brand="ollama"],
 .service-grid > .card[data-brand="ollama"] {
   --svc-accent: #38bdf8;

@@ -1,19 +1,19 @@
 {
   "ok": true,
   "backend": "airllm",
-  "generated_at": "2026-05-24T10:26:06Z",
+  "generated_at": "2026-06-02T11:56:36Z",
   "model_count": 20,
   "new_online_count": 10,
   "new_online": [
     "Qwen/Qwen2-1.5B-Instruct",
     "Qwen/Qwen2.5-1.5B-Instruct",
-    "Qwen/Qwen2.5-14B-Instruct",
     "Qwen/Qwen2.5-3B-Instruct",
     "Qwen/Qwen2.5-7B-Instruct-AWQ",
+    "Qwen/Qwen2.5-Coder-14B-Instruct",
     "Qwen/Qwen3-4B-Instruct-2507",
-    "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
     "meta-llama/Llama-3.2-1B-Instruct",
     "mistralai/Mistral-7B-Instruct-v0.2",
+    "moonshotai/Kimi-K2-Instruct-0905",
     "unsloth/Qwen3-Coder-Next-GGUF"
   ],
   "models": [
@@ -38,7 +38,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 4471329
+      "hf_downloads": 4309997
     },
     {
       "name": "Qwen/Qwen2.5-0.5B-Instruct",
@@ -67,7 +67,7 @@
         "smoke-test"
       ],
       "online_seen": true,
-      "hf_downloads": 4715981
+      "hf_downloads": 4233715
     },
     {
       "name": "Qwen/Qwen2.5-1.5B-Instruct",
@@ -90,30 +90,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 14583430
-    },
-    {
-      "name": "Qwen/Qwen2.5-14B-Instruct",
-      "label": "Qwen2.5-14B-Instruct",
-      "publisher": "Qwen",
-      "license": "apache-2.0",
-      "parameters": "",
-      "size_disk": "",
-      "niche": [
-        "discovered"
-      ],
-      "specialty": "Trending on HuggingFace; verify AirLLM compatibility before production.",
-      "use_where": [
-        "https://airllm.lh"
-      ],
-      "use_how": "./leco-cli.sh airllm install Qwen/Qwen2.5-14B-Instruct",
-      "install_cli": "./leco-cli.sh airllm install Qwen/Qwen2.5-14B-Instruct",
-      "source_url": "https://huggingface.co/Qwen/Qwen2.5-14B-Instruct",
-      "tags": [
-        "discovered"
-      ],
-      "discovered_online": true,
-      "hf_downloads": 2448610
+      "hf_downloads": 15143953
     },
     {
       "name": "Qwen/Qwen2.5-3B-Instruct",
@@ -136,7 +113,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 11085922
+      "hf_downloads": 13833000
     },
     {
       "name": "Qwen/Qwen2.5-72B-Instruct",
@@ -187,7 +164,7 @@
         "default"
       ],
       "online_seen": true,
-      "hf_downloads": 13549304
+      "hf_downloads": 12583587
     },
     {
       "name": "Qwen/Qwen2.5-7B-Instruct-AWQ",
@@ -210,7 +187,30 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 2529960
+      "hf_downloads": 2795484
+    },
+    {
+      "name": "Qwen/Qwen2.5-Coder-14B-Instruct",
+      "label": "Qwen2.5-Coder-14B-Instruct",
+      "publisher": "Qwen",
+      "license": "apache-2.0",
+      "parameters": "",
+      "size_disk": "",
+      "niche": [
+        "discovered"
+      ],
+      "specialty": "Trending on HuggingFace; verify AirLLM compatibility before production.",
+      "use_where": [
+        "https://airllm.lh"
+      ],
+      "use_how": "./leco-cli.sh airllm install Qwen/Qwen2.5-Coder-14B-Instruct",
+      "install_cli": "./leco-cli.sh airllm install Qwen/Qwen2.5-Coder-14B-Instruct",
+      "source_url": "https://huggingface.co/Qwen/Qwen2.5-Coder-14B-Instruct",
+      "tags": [
+        "discovered"
+      ],
+      "discovered_online": true,
+      "hf_downloads": 2572953
     },
     {
       "name": "Qwen/Qwen2.5-Coder-7B-Instruct",
@@ -232,9 +232,7 @@
       "ollama_alternative": "qwen2.5-coder:7b",
       "tags": [
         "code"
-      ],
-      "online_seen": true,
-      "hf_downloads": 2414788
+      ]
     },
     {
       "name": "Qwen/Qwen3-4B-Instruct-2507",
@@ -257,30 +255,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 6381504
-    },
-    {
-      "name": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-      "label": "TinyLlama-1.1B-Chat-v1.0",
-      "publisher": "TinyLlama",
-      "license": "apache-2.0",
-      "parameters": "",
-      "size_disk": "",
-      "niche": [
-        "discovered"
-      ],
-      "specialty": "Trending on HuggingFace; verify AirLLM compatibility before production.",
-      "use_where": [
-        "https://airllm.lh"
-      ],
-      "use_how": "./leco-cli.sh airllm install TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-      "install_cli": "./leco-cli.sh airllm install TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-      "source_url": "https://huggingface.co/TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-      "tags": [
-        "discovered"
-      ],
-      "discovered_online": true,
-      "hf_downloads": 2406052
+      "hf_downloads": 5328911
     },
     {
       "name": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
@@ -381,7 +356,7 @@
         "gated"
       ],
       "online_seen": true,
-      "hf_downloads": 10578535
+      "hf_downloads": 10730022
     },
     {
       "name": "meta-llama/Llama-3.2-1B-Instruct",
@@ -404,7 +379,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 8056945
+      "hf_downloads": 8177201
     },
     {
       "name": "meta-llama/Llama-3.2-3B-Instruct",
@@ -452,7 +427,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 3187965
+      "hf_downloads": 2729316
     },
     {
       "name": "mistralai/Mistral-7B-Instruct-v0.3",
@@ -477,6 +452,29 @@
       ]
     },
     {
+      "name": "moonshotai/Kimi-K2-Instruct-0905",
+      "label": "Kimi-K2-Instruct-0905",
+      "publisher": "moonshotai",
+      "license": "other",
+      "parameters": "",
+      "size_disk": "",
+      "niche": [
+        "discovered"
+      ],
+      "specialty": "Trending on HuggingFace; verify AirLLM compatibility before production.",
+      "use_where": [
+        "https://airllm.lh"
+      ],
+      "use_how": "./leco-cli.sh airllm install moonshotai/Kimi-K2-Instruct-0905",
+      "install_cli": "./leco-cli.sh airllm install moonshotai/Kimi-K2-Instruct-0905",
+      "source_url": "https://huggingface.co/moonshotai/Kimi-K2-Instruct-0905",
+      "tags": [
+        "discovered"
+      ],
+      "discovered_online": true,
+      "hf_downloads": 2393031
+    },
+    {
       "name": "unsloth/Qwen3-Coder-Next-GGUF",
       "label": "Qwen3-Coder-Next-GGUF",
       "publisher": "unsloth",
@@ -497,7 +495,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 3028944
+      "hf_downloads": 3071255
     }
   ]
 }

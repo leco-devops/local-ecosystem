@@ -102,17 +102,18 @@ show_menu() {
     echo -e "    ${GREEN}6)${NC}  ☁️  Cloudflare-local (KV/R2/D1/Workers adapters)"
     echo -e "    ${GREEN}7)${NC}  🦙 Ollama models"
     echo -e "    ${GREEN}8)${NC}  🤖 AirLLM (large HF models on macOS host)"
+    echo -e "    ${GREEN}9)${NC}  📎 Paperclip (agent orchestration)"
     echo ""
     echo -e "  ${WHITE}Hosted applications${NC}"
-    echo -e "    ${GREEN}9)${NC}  📦 Hosted apps (leco-devops)"
+    echo -e "    ${GREEN}10)${NC} 📦 Hosted apps (leco-devops)"
     echo ""
     echo -e "  ${WHITE}Helpers${NC}"
-    echo -e "    ${GREEN}10)${NC} 🔗 Open service URLs (browser)"
-    echo -e "    ${GREEN}11)${NC} 🩺 Diagnostics / repair (network, Traefik)"
+    echo -e "    ${GREEN}11)${NC} 🔗 Open service URLs (browser)"
+    echo -e "    ${GREEN}12)${NC} 🩺 Diagnostics / repair (network, Traefik)"
     echo ""
     echo -e "  ${WHITE}Reference${NC}"
-    echo -e "    ${GREEN}12)${NC} ❓ Help (detailed)"
-    echo -e "    ${GREEN}13)${NC} 🗂️  Menu tree"
+    echo -e "    ${GREEN}13)${NC} ❓ Help (detailed)"
+    echo -e "    ${GREEN}14)${NC} 🗂️  Menu tree"
     echo ""
     echo -e "    ${RED}0)${NC}  Exit"
     echo ""
@@ -869,6 +870,43 @@ menu_airllm() {
     done
 }
 
+# ---------- Paperclip sub-menu --------------------------------------
+menu_paperclip() {
+    while true; do
+        show_header
+        echo -e "${BLUE}═══ 📎 PAPERCLIP (Agent orchestration) ═══${NC}"
+        echo -e "${DIM}Container: paperclip · URL: https://paperclip.lh${NC}"
+        echo -e "${DIM}Database: paperclip_postgres${NC}"
+        echo ""
+        echo -e "    ${GREEN}1)${NC} Bootstrap CEO (first admin invite URL)"
+        echo -e "    ${GREEN}2)${NC} Bootstrap CEO — force new invite"
+        echo -e "    ${GREEN}3)${NC} Start (paperclip + postgres)"
+        echo -e "    ${GREEN}4)${NC} Stop"
+        echo -e "    ${GREEN}5)${NC} Restart"
+        echo -e "    ${GREEN}6)${NC} Status"
+        echo -e "    ${GREEN}7)${NC} Logs"
+        echo -e "    ${GREEN}8)${NC} Open https://paperclip.lh"
+        echo -e "    ${GREEN}9)${NC} Open dashboard Paperclip panel"
+        echo ""
+        echo -e "    ${YELLOW}0)${NC} Back"
+        echo ""
+        read -r -p "$(echo -e ${CYAN}Choose option${NC} [0-9]: )" ch
+        case "$ch" in
+            1)  _svc paperclip bootstrap-ceo; press_any_key ;;
+            2)  _svc paperclip bootstrap-ceo --force; press_any_key ;;
+            3)  _svc paperclip-postgres start; _svc paperclip start; press_any_key ;;
+            4)  _svc paperclip stop; press_any_key ;;
+            5)  _svc paperclip restart; press_any_key ;;
+            6)  _svc paperclip status; press_any_key ;;
+            7)  _svc paperclip logs ;;
+            8)  open_url "https://paperclip.lh" ;;
+            9)  open_url "http://localhost:${DASHBOARD_HOST_PORT}/?tab=infrastructureTab#infra-paperclip" ;;
+            0)  return 0 ;;
+            *)  echo -e "${RED}Invalid option${NC}"; press_any_key ;;
+        esac
+    done
+}
+
 # ---------- Hosted apps (leco-devops) --------------------------------
 _registry_slugs() {
     [ -f "$REGISTRY_FILE" ] || return 0
@@ -1373,18 +1411,20 @@ LEco CLI — menu tree
    └─ pull pinned | status | list models | logs | restart | open ai.lh
 8) AirLLM (Docker container)
    └─ build | start/stop/restart | status | logs | pull pinned HF | list | open airllm.lh | remove/reset
-9) Hosted apps (leco-devops)
+9) Paperclip
+   └─ bootstrap-ceo [--force] | start/stop/restart | status | logs | open paperclip.lh
+10) Hosted apps (leco-devops)
    ├─ List registered apps
    ├─ Per-app actions
    │   └─ status | deploy | stop | logs | down | offload | re-register | provision | fragment | unregister
    ├─ Onboard a new app from path
    ├─ Print Traefik fragment for an app
    └─ Open Hosted apps page in dashboard
-10) Open service URLs
-11) Diagnostics / repair
+11) Open service URLs
+12) Diagnostics / repair
    └─ report | repair (network + Traefik) | repair network only | heal Traefik only
-12) Help (detailed)
-13) Menu tree
+13) Help (detailed)
+14) Menu tree
 0) Exit
 TXT
 }
@@ -1396,7 +1436,7 @@ main() {
     while true; do
         show_header
         show_menu
-        read -r -p "$(echo -e ${CYAN}Select option${NC} [0-13]: )" choice
+        read -r -p "$(echo -e ${CYAN}Select option${NC} [0-14]: )" choice
         case "$choice" in
             0)  activity_log "session_end" "info"; exit 0 ;;
             1)  activity_log "status" "info"; status_snapshot; press_any_key ;;
@@ -1407,11 +1447,12 @@ main() {
             6)  activity_log "cf-local" "info"; menu_cf_local ;;
             7)  activity_log "ollama" "info"; menu_ollama ;;
             8)  activity_log "airllm" "info"; menu_airllm ;;
-            9)  activity_log "apps" "info"; menu_apps ;;
-            10) activity_log "urls" "info"; menu_urls ;;
-            11) activity_log "diagnose" "info"; menu_diagnostics ;;
-            12) reference_help_detailed ;;
-            13) reference_menu_tree ;;
+            9)  activity_log "paperclip" "info"; menu_paperclip ;;
+            10) activity_log "apps" "info"; menu_apps ;;
+            11) activity_log "urls" "info"; menu_urls ;;
+            12) activity_log "diagnose" "info"; menu_diagnostics ;;
+            13) reference_help_detailed ;;
+            14) reference_menu_tree ;;
             *)  echo -e "${RED}Invalid option${NC}"; press_any_key ;;
         esac
     done
@@ -1591,6 +1632,27 @@ if [ -n "${1:-}" ]; then
                     ;;
                 *)
                     echo "Usage: $0 airllm <build|start|stop|restart|status|logs|pull|list|remove|reset|open|pinned|popular|install <name>|load <name>|unload <name>|remove-model <name>|show-cmd [name]>"
+                    exit 1
+                    ;;
+            esac
+            ;;
+        paperclip|pc)
+            sub="${1:-status}"; shift || true
+            case "$sub" in
+                bootstrap-ceo|bootstrap)
+                    _svc paperclip bootstrap-ceo "$@"
+                    ;;
+                start)
+                    _svc paperclip-postgres start
+                    _svc paperclip start
+                    ;;
+                stop)    _svc paperclip stop ;;
+                restart) _svc paperclip restart ;;
+                status)  _svc paperclip status ;;
+                logs)    _svc paperclip logs ;;
+                open)    open_url "https://paperclip.lh" ;;
+                *)
+                    echo "Usage: $0 paperclip <bootstrap-ceo [--force]|start|stop|restart|status|logs|open>"
                     exit 1
                     ;;
             esac

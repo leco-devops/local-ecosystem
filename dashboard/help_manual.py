@@ -51,6 +51,13 @@ HELP_TREE: list[dict] = [
         ],
     },
     {
+        "id": "agents",
+        "title": "AI agents & automation",
+        "children": [
+            {"id": "paperclip", "title": "Paperclip (agent orchestration)", "file": "06-paperclip.md"},
+        ],
+    },
+    {
         "id": "llm",
         "title": "Local AI (Ollama & AirLLM)",
         "children": [

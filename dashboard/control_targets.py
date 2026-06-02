@@ -27,6 +27,8 @@ AI_TARGETS = [
     {"id": "ai-ollama", "label": "Ollama", "script": "ollama", "container": "ollama"},
     {"id": "ai-airllm", "label": "AirLLM (large HF models)", "script": "airllm", "container": "airllm"},
     {"id": "ai-n8n", "label": "n8n", "script": "n8n", "container": "n8n"},
+    {"id": "ai-paperclip", "label": "Paperclip", "script": "paperclip", "container": "paperclip"},
+    {"id": "ai-paperclip-postgres", "label": "PostgreSQL (Paperclip)", "script": "paperclip-postgres", "container": "paperclip_postgres", "reset_volume": "paperclip_postgres_data"},
     {"id": "ai-postgres", "label": "PostgreSQL (n8n)", "script": "postgres", "container": "n8n_postgres", "reset_volume": "n8n_postgres_data"},
     {"id": "ai-dashboard", "label": "LEco DevOps", "script": "dashboard", "container": "service-dashboard"},
     {"id": "ai-update-catalog", "label": "Update catalog", "script": "update-catalog", "container": "leco-update-catalog"},
@@ -39,6 +41,7 @@ AI_TARGETS = [
 # Ecosystem service scripts: dependents are stopped before the dependency on stop/remove.
 ECOSYSTEM_SERVICE_REQUIRES: dict[str, tuple[str, ...]] = {
     "n8n": ("postgres",),
+    "paperclip": ("paperclip-postgres",),
 }
 
 # Infra compose services (per-service Control targets).

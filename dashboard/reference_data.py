@@ -52,6 +52,12 @@ REFERENCE_CATEGORIES = [
                 "urls": ["http://n8n.lh"],
                 "notes": "Workflow automation.",
             },
+            {
+                "id": "paperclip",
+                "label": "Paperclip",
+                "urls": ["http://paperclip.lh"],
+                "notes": "AI agent orchestration — org charts, goals, budgets, and multi-agent coordination.",
+            },
         ],
     },
     {

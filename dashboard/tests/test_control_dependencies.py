@@ -21,6 +21,16 @@ def test_stop_postgres_stops_n8n_first():
     assert order == ["n8n", "postgres"]
 
 
+def test_stop_paperclip_stops_paperclip_postgres_order():
+    order = compose_action_services("paperclip", "stop", {"paperclip": ("paperclip-postgres",)})
+    assert order == ["paperclip", "paperclip-postgres"]
+
+
+def test_stop_paperclip_postgres_stops_paperclip_first():
+    order = compose_action_services("paperclip-postgres", "stop", {"paperclip": ("paperclip-postgres",)})
+    assert order == ["paperclip", "paperclip-postgres"]
+
+
 def test_start_varnish_starts_nginx_first():
     order = compose_action_services("cache-varnish", "start", COMPOSE_SERVICE_REQUIRES)
     assert order == ["cache-nginx", "cache-varnish"]

@@ -1,6 +1,6 @@
 # Ollama open-source LLM catalog (auto-generated)
 
-_Generated **2026-05-24T10:26:06Z**. Full live table: API `/api/llm-catalog/ollama` or Help topic below._
+_Generated **2026-06-02T11:56:36Z**. Full live table: API `/api/llm-catalog/ollama` or Help topic below._
 
 ## Curated + discovered models
 
@@ -46,6 +46,7 @@ _Generated **2026-05-24T10:26:06Z**. Full live table: API `/api/llm-catalog/olla
 | `minimax-m2.1` 🆕 | Minimax | discovered | ~214.2 GB | https://ollama.lh; https://ai.lh | `./leco-cli.sh ollama install minimax-m2.1` |
 | `minimax-m2.5` 🆕 | Minimax | discovered | ~214.2 GB | https://ollama.lh; https://ai.lh | `./leco-cli.sh ollama install minimax-m2.5` |
 | `minimax-m2.7` 🆕 | Minimax | discovered | ~447.8 GB | https://ollama.lh; https://ai.lh | `./leco-cli.sh ollama install minimax-m2.7` |
+| `minimax-m3` 🆕 | Minimax | discovered |  | https://ollama.lh; https://ai.lh | `./leco-cli.sh ollama install minimax-m3` |
 | `ministral-3:14b` 🆕 | Ministral | discovered | ~14.6 GB | https://ollama.lh; https://ai.lh | `./leco-cli.sh ollama install ministral-3:14b` |
 | `ministral-3:3b` 🆕 | Ministral | discovered | ~4.3 GB | https://ollama.lh; https://ai.lh | `./leco-cli.sh ollama install ministral-3:3b` |
 | `ministral-3:8b` 🆕 | Ministral | discovered | ~9.7 GB | https://ollama.lh; https://ai.lh | `./leco-cli.sh ollama install ministral-3:8b` |

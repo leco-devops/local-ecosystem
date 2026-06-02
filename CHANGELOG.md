@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Paperclip AI:** Agent orchestration stack service at `https://paperclip.lh` — `ecosystem-stack/services/paperclip.sh` + dedicated `paperclip_postgres`; Traefik routes; dashboard Infrastructure/Control cards; UI Access entry; install profiles `ai-full` and `full`; help guide [`docs/help/06-paperclip.md`](docs/help/06-paperclip.md).
+- **Paperclip bootstrap CEO:** Interactive first-admin invite from dashboard (`Infrastructure → Paperclip`), `leco-cli.sh paperclip bootstrap-ceo`, `leco-devops platform paperclip-bootstrap-ceo`, and `ecosystem-stack.sh paperclip-bootstrap-ceo`.
 - **File transfer stack:** FTP (`leco-ftp`, alpine-ftp-server) and SFTP (`leco-sftp`, atmoz/sftp) under [`file-transfer/docker-compose.yml`](file-transfer/docker-compose.yml); read-only web file browser at `files.lh` / `ftp-files.lh` / `sftp-files.lh`; dashboard **Control** and **Infrastructure** panels list SFTP, FTP, and browser cards under **Infra add-ons & file transfer**; ecosystem service script [`ecosystem-stack/services/file-transfer.sh`](ecosystem-stack/services/file-transfer.sh); install profile `file-transfer-full`; docs [`docs/FILE_TRANSFER.md`](docs/FILE_TRANSFER.md).
 - **UI access (file transfer):** SFTP, FTP, and read-only file browser in Service hubs → UI access with copy-paste host/port/credentials and Edit / Reset & apply for protocol passwords via `file-transfer/.env`.
 - **UI access ports:** Edit SFTP/FTP **Port** in UI access; writes `SFTP_PORT` / `FTP_PORT` to `file-transfer/.env` and recreates the container.
@@ -25,7 +27,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
-- **UI access SFTP password apply:** Dashboard recreates SFTP using the host repo path (fixes Docker Desktop “mounts denied” for `/project/file-transfer/keys/sftp`); password-only auth no longer bind-mounts an empty keys directory (fixes `atmoz/sftp` crash loop on Apple Silicon).
+- **Traefik stack routes:** `traefik.sh ensure-hosting-files` always refreshes `hosting/traefik/01-stack-core.yml` from `traefik/dynamic.yml` so new platform hosts (e.g. `paperclip.lh`) appear after heal without a manual file delete.
+- **File transfer Control tab:** Dashboard file-transfer compose commands use the host repo path (`DASHBOARD_PROJECT_ROOT_HOST`) so Docker Desktop can bind-mount `file-transfer/keys/sftp` (fixes “mounts denied” for `/project/file-transfer/keys/sftp`).
 
 ### Added
 

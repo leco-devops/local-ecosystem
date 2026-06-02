@@ -4778,10 +4778,13 @@ function activateTab(tabId, opts = {}) {
   }
 }
 
-/** Scroll to #infra-ollama / #infra-airllm when opening Infrastructure with a hash. */
+/** Scroll to #infra-ollama / #infra-airllm / #infra-paperclip when opening Infrastructure. */
 function scrollInfraHashAnchor(hashOverride) {
   const raw = hashOverride ?? window.location.hash ?? "";
-  const hash = String(raw).replace(/^#/, "");
+  let hash = String(raw).replace(/^#/, "");
+  if (!hash && new URLSearchParams(window.location.search || "").get("paperclip") === "1") {
+    hash = "infra-paperclip";
+  }
   if (!hash || !hash.startsWith("infra-")) return;
   requestAnimationFrame(() => {
     const el = document.getElementById(hash);
@@ -5687,7 +5690,7 @@ const CONTROL_GROUP_META = {
   },
   "ecosystem-stack": {
     title: "Ecosystem stack & Traefik",
-    lead: "Edge proxy, apps, Ollama, n8n, Postgres, file transfer stack script, and LEco DevOps (this UI).",
+    lead: "Edge proxy, apps, Ollama, n8n, Paperclip, Postgres, file transfer stack script, and LEco DevOps (this UI).",
     sectionClass: "",
   },
   "cloudflare-local": {
@@ -10266,6 +10269,17 @@ function updateCharts(data) {
 }
 
 /** Ollama service card: table of installed / running models from overview `ollama_llm`. */
+function formatPaperclipBootstrapBlock(s) {
+  if (!s || s.container !== "paperclip") return "";
+  const run = s.container_info?.running === true;
+  const dis = run ? "" : " disabled";
+  return `<div class="svc-card__extras svc-card__extras--llm">
+    <div class="svc-card__extras-title">First admin (bootstrap CEO)</div>
+    <p class="muted small">Creates a one-time invite URL for the first board admin. Opens a live log overlay.</p>
+    <button type="button" class="ollama-act ollama-act--ops paperclip-bootstrap-inline"${dis}>Bootstrap CEO invite</button>
+  </div>`;
+}
+
 function formatOllamaLlmBlock(ollama, s) {
   if (!s || s.container !== "ollama") return "";
   if (!ollama) {
@@ -10498,6 +10512,7 @@ function renderServices(data) {
         ${mgmtBlock}
         ${formatOllamaLlmBlock(ollamaLlm, s)}
         ${formatAirLlmBlock(airllmLlm, s)}
+        ${formatPaperclipBootstrapBlock(s)}
         <div class="row"><span>Container</span><code>${s.container}</code></div>
         <div class="row"><span>Networks</span><code>${(s.container_info.networks || []).join(", ") || "-"}</code></div>
         <div class="row"><span>CPU</span><span>${m.cpu_percent || 0}%</span></div>
@@ -11566,6 +11581,72 @@ function airllmActionWrap(act, label, apiModel, canonical, variant, { disabled, 
   )}" data-airllm-model="${escapeAttr(apiModel)}" data-airllm-canonical="${escapeAttr(canonical || "")}"${dis}${tit}>${escapeHtml(label)}</button>${dot}</span>`;
 }
 
+async function runPaperclipBootstrapCeo(force) {
+  if (dashboardTokenRequired() && !controlToken()) {
+    alert("Control token required — set it in Control tab first.");
+    return { ok: false, error: "unauthorized" };
+  }
+  const outcome = await runDashboardStreamOverlay({
+    title: "Bootstrap CEO · Paperclip",
+    url: "/api/paperclip/bootstrap-ceo/stream",
+    body: { token: controlToken(), force: !!force, auto_onboard: true },
+    actionVerb: "bootstrap-ceo",
+  });
+  const invite = outcome?.result?.invite_url;
+  if (outcome.ok && invite) {
+    const summaryEl = document.getElementById("controlActionSummary");
+    if (summaryEl) {
+      summaryEl.innerHTML = `Invite ready — <a href="${escapeAttr(invite)}" target="_blank" rel="noopener">Open admin invite</a> (also copied to log below)`;
+    }
+    try {
+      await navigator.clipboard.writeText(invite);
+    } catch {
+      /* ignore */
+    }
+  }
+  loadPaperclipBootstrapStatus().catch(() => {});
+  return outcome;
+}
+
+async function loadPaperclipBootstrapStatus() {
+  const sum = document.getElementById("paperclipBootstrapSummary");
+  if (!sum) return;
+  try {
+    const res = await fetch("/api/paperclip/bootstrap-ceo/status");
+    const data = await res.json();
+    if (!data.ok) {
+      sum.textContent = data.error || "Status unavailable";
+      return;
+    }
+    const parts = [];
+    parts.push(data.running ? "Container running" : "Container stopped");
+    parts.push(data.config_exists ? "config present" : "no config yet (onboard runs automatically)");
+    if (data.base_url) parts.push(`base ${data.base_url}`);
+    sum.textContent = parts.join(" · ");
+    const btn = document.getElementById("paperclipBootstrapCeoBtn");
+    if (btn) btn.disabled = !data.running;
+  } catch (e) {
+    sum.textContent = String(e.message || e);
+  }
+}
+
+function initPaperclipBootstrapPanel() {
+  loadPaperclipBootstrapStatus();
+  document.getElementById("paperclipBootstrapCeoBtn")?.addEventListener("click", async () => {
+    const force = !!document.getElementById("paperclipBootstrapForce")?.checked;
+    await runPaperclipBootstrapCeo(force);
+  });
+  document.getElementById("paperclipOpenUiBtn")?.addEventListener("click", () => {
+    window.open("https://paperclip.lh", "_blank", "noopener");
+  });
+  document.getElementById("services")?.addEventListener("click", (e) => {
+    const btn = e.target?.closest?.(".paperclip-bootstrap-inline");
+    if (!btn || btn.disabled) return;
+    e.preventDefault();
+    runPaperclipBootstrapCeo(false);
+  });
+}
+
 async function loadAirllmModelsPanel() {
   const panel = document.getElementById("airllmModelsPanel");
   const sum = document.getElementById("airllmModelsSummary");
@@ -11853,6 +11934,7 @@ const originalInitOllamaModelsPanel = initOllamaModelsPanel;
 initOllamaModelsPanel = function() {
   originalInitOllamaModelsPanel();
   initAirllmModelsPanel();
+  initPaperclipBootstrapPanel();
   loadAirllmModelsPanel();
   loadAirllmBackupSelect();
 };

@@ -7,6 +7,8 @@
     {"target_id": "ai-airllm", "policy": "stop", "updated_at": ""},
     {"target_id": "ai-open-webui", "policy": "start", "updated_at": ""},
     {"target_id": "ai-n8n", "policy": "start", "updated_at": ""},
+    {"target_id": "ai-paperclip", "policy": "stop", "updated_at": ""},
+    {"target_id": "ai-paperclip-postgres", "policy": "stop", "updated_at": ""},
     {"target_id": "ai-dashboard", "policy": "start", "updated_at": ""},
     {"target_id": "ai-update-catalog", "policy": "start", "updated_at": ""},
     {"target_id": "ai-cloudflare-local", "policy": "start", "updated_at": ""},

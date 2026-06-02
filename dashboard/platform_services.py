@@ -24,7 +24,7 @@ BUNDLE_META: dict[str, dict[str, str]] = {
         "service": "cloudflare-local",
     },
     "ai-full": {
-        "label": "AI / LLM plane (Ollama, AirLLM, WebUI, update-catalog)",
+        "label": "AI / LLM plane (Ollama, AirLLM, WebUI, Paperclip, update-catalog)",
         "service": "ai-full",
     },
     "infra-full": {

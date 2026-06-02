@@ -4,7 +4,7 @@ Traefik uses a **file provider** watching **`hosting/traefik/`**. Two files matt
 
 | File | Source | Contents |
 |------|--------|----------|
-| `01-stack-core.yml` | Copied from `traefik/dynamic.yml` on Traefik start | Platform routes: `localhost.lh`, `ollama.lh`, `airllm.lh`, `n8n.lh`, CF adapters, … |
+| `01-stack-core.yml` | Copied from `traefik/dynamic.yml` on Traefik start | Platform routes: `localhost.lh`, `ollama.lh`, `airllm.lh`, `n8n.lh`, `paperclip.lh`, CF adapters, … |
 | `dynamic.yml` | Merged by `leco-devops` / dashboard | Per-app routers from `routing.entries` |
 
 **Do not** symlink `01-stack-core.yml` — Traefik fsnotify needs a real file copy (`ecosystem-stack/services/traefik.sh` `ensure_hosting_files`).
