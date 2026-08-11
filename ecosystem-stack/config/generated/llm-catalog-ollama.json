@@ -1,40 +1,28 @@
 {
   "ok": true,
   "backend": "ollama",
-  "generated_at": "2026-06-02T11:56:36Z",
-  "model_count": 54,
-  "new_online_count": 40,
+  "generated_at": "2026-08-02T05:33:18Z",
+  "model_count": 32,
+  "new_online_count": 18,
   "new_online": [
-    "cogito-2.1:671b",
-    "deepseek-v3.1:671b",
-    "deepseek-v3.2",
     "deepseek-v4-flash",
+    "deepseek-v4-flash:0731",
     "deepseek-v4-pro",
-    "devstral-2:123b",
-    "devstral-small-2:24b",
-    "gemini-3-flash-preview",
-    "gemma3:12b",
-    "gemma3:27b",
-    "gemma3:4b",
     "gemma4:31b",
-    "glm-4.6",
-    "glm-4.7",
-    "glm-5",
     "glm-5.1",
+    "glm-5.2",
     "gpt-oss:120b",
     "gpt-oss:20b",
-    "kimi-k2-thinking",
-    "kimi-k2.5",
     "kimi-k2.6",
-    "kimi-k2:1t",
-    "minimax-m2",
-    "minimax-m2.1",
-    "minimax-m2.5",
+    "kimi-k2.7-code",
+    "kimi-k3",
     "minimax-m2.7",
     "minimax-m3",
-    "ministral-3:14b",
-    "ministral-3:3b",
-    "ministral-3:8b"
+    "mistral-large-3:675b",
+    "nemotron-3-nano:30b",
+    "nemotron-3-super",
+    "nemotron-3-ultra",
+    "qwen3.5:397b"
   ],
   "models": [
     {
@@ -381,78 +369,6 @@
       ]
     },
     {
-      "name": "cogito-2.1:671b",
-      "label": "cogito-2.1:671b",
-      "publisher": "Cogito",
-      "license": "See ollama.com/library",
-      "parameters": "671b",
-      "size_disk": "~641.3 GB",
-      "niche": [
-        "discovered"
-      ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
-      "use_where": [
-        "https://ollama.lh",
-        "https://ai.lh"
-      ],
-      "use_how": "./leco-cli.sh ollama install cogito-2.1:671b",
-      "install_cli": "./leco-cli.sh ollama install cogito-2.1:671b",
-      "source_url": "https://ollama.com/library/cogito-2.1",
-      "tags": [
-        "discovered"
-      ],
-      "discovered_online": true,
-      "modified_at": "2025-11-19T00:00:00Z"
-    },
-    {
-      "name": "deepseek-v3.1:671b",
-      "label": "deepseek-v3.1:671b",
-      "publisher": "DeepSeek",
-      "license": "See ollama.com/library",
-      "parameters": "671b",
-      "size_disk": "~641.3 GB",
-      "niche": [
-        "discovered"
-      ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
-      "use_where": [
-        "https://ollama.lh",
-        "https://ai.lh"
-      ],
-      "use_how": "./leco-cli.sh ollama install deepseek-v3.1:671b",
-      "install_cli": "./leco-cli.sh ollama install deepseek-v3.1:671b",
-      "source_url": "https://ollama.com/library/deepseek-v3.1",
-      "tags": [
-        "discovered"
-      ],
-      "discovered_online": true,
-      "modified_at": "2025-11-20T00:00:00Z"
-    },
-    {
-      "name": "deepseek-v3.2",
-      "label": "deepseek-v3.2",
-      "publisher": "DeepSeek",
-      "license": "See ollama.com/library",
-      "parameters": "",
-      "size_disk": "~641.3 GB",
-      "niche": [
-        "discovered"
-      ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
-      "use_where": [
-        "https://ollama.lh",
-        "https://ai.lh"
-      ],
-      "use_how": "./leco-cli.sh ollama install deepseek-v3.2",
-      "install_cli": "./leco-cli.sh ollama install deepseek-v3.2",
-      "source_url": "https://ollama.com/library/deepseek-v3.2",
-      "tags": [
-        "discovered"
-      ],
-      "discovered_online": true,
-      "modified_at": "2025-12-02T00:00:00Z"
-    },
-    {
       "name": "deepseek-v4-flash",
       "label": "deepseek-v4-flash",
       "publisher": "DeepSeek",
@@ -462,7 +378,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
@@ -477,6 +393,30 @@
       "modified_at": "2026-04-24T00:00:00Z"
     },
     {
+      "name": "deepseek-v4-flash:0731",
+      "label": "deepseek-v4-flash:0731",
+      "publisher": "DeepSeek",
+      "license": "See ollama.com/library",
+      "parameters": "0731",
+      "size_disk": "~155.4 GB",
+      "niche": [
+        "discovered"
+      ],
+      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
+      "use_where": [
+        "https://ollama.lh",
+        "https://ai.lh"
+      ],
+      "use_how": "./leco-cli.sh ollama install deepseek-v4-flash:0731",
+      "install_cli": "./leco-cli.sh ollama install deepseek-v4-flash:0731",
+      "source_url": "https://ollama.com/library/deepseek-v4-flash",
+      "tags": [
+        "discovered"
+      ],
+      "discovered_online": true,
+      "modified_at": "2026-07-31T08:00:00-07:00"
+    },
+    {
       "name": "deepseek-v4-pro",
       "label": "deepseek-v4-pro",
       "publisher": "DeepSeek",
@@ -486,7 +426,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
@@ -501,150 +441,6 @@
       "modified_at": "2026-04-24T00:00:00Z"
     },
     {
-      "name": "devstral-2:123b",
-      "label": "devstral-2:123b",
-      "publisher": "Devstral",
-      "license": "See ollama.com/library",
-      "parameters": "123b",
-      "size_disk": "~119.4 GB",
-      "niche": [
-        "discovered"
-      ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
-      "use_where": [
-        "https://ollama.lh",
-        "https://ai.lh"
-      ],
-      "use_how": "./leco-cli.sh ollama install devstral-2:123b",
-      "install_cli": "./leco-cli.sh ollama install devstral-2:123b",
-      "source_url": "https://ollama.com/library/devstral-2",
-      "tags": [
-        "discovered"
-      ],
-      "discovered_online": true,
-      "modified_at": "2025-12-08T00:00:00Z"
-    },
-    {
-      "name": "devstral-small-2:24b",
-      "label": "devstral-small-2:24b",
-      "publisher": "Devstral",
-      "license": "See ollama.com/library",
-      "parameters": "24b",
-      "size_disk": "~48.1 GB",
-      "niche": [
-        "discovered"
-      ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
-      "use_where": [
-        "https://ollama.lh",
-        "https://ai.lh"
-      ],
-      "use_how": "./leco-cli.sh ollama install devstral-small-2:24b",
-      "install_cli": "./leco-cli.sh ollama install devstral-small-2:24b",
-      "source_url": "https://ollama.com/library/devstral-small-2",
-      "tags": [
-        "discovered"
-      ],
-      "discovered_online": true,
-      "modified_at": "2025-12-09T00:00:00Z"
-    },
-    {
-      "name": "gemini-3-flash-preview",
-      "label": "gemini-3-flash-preview",
-      "publisher": "Gemini",
-      "license": "See ollama.com/library",
-      "parameters": "",
-      "size_disk": "",
-      "niche": [
-        "discovered"
-      ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
-      "use_where": [
-        "https://ollama.lh",
-        "https://ai.lh"
-      ],
-      "use_how": "./leco-cli.sh ollama install gemini-3-flash-preview",
-      "install_cli": "./leco-cli.sh ollama install gemini-3-flash-preview",
-      "source_url": "https://ollama.com/library/gemini-3-flash-preview",
-      "tags": [
-        "discovered"
-      ],
-      "discovered_online": true,
-      "modified_at": "2025-12-17T00:00:00Z"
-    },
-    {
-      "name": "gemma3:12b",
-      "label": "gemma3:12b",
-      "publisher": "Gemma3",
-      "license": "See ollama.com/library",
-      "parameters": "12b",
-      "size_disk": "~22.4 GB",
-      "niche": [
-        "discovered"
-      ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
-      "use_where": [
-        "https://ollama.lh",
-        "https://ai.lh"
-      ],
-      "use_how": "./leco-cli.sh ollama install gemma3:12b",
-      "install_cli": "./leco-cli.sh ollama install gemma3:12b",
-      "source_url": "https://ollama.com/library/gemma3",
-      "tags": [
-        "discovered"
-      ],
-      "discovered_online": true,
-      "modified_at": "2025-03-12T00:00:00Z"
-    },
-    {
-      "name": "gemma3:27b",
-      "label": "gemma3:27b",
-      "publisher": "Gemma3",
-      "license": "See ollama.com/library",
-      "parameters": "27b",
-      "size_disk": "~51.2 GB",
-      "niche": [
-        "discovered"
-      ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
-      "use_where": [
-        "https://ollama.lh",
-        "https://ai.lh"
-      ],
-      "use_how": "./leco-cli.sh ollama install gemma3:27b",
-      "install_cli": "./leco-cli.sh ollama install gemma3:27b",
-      "source_url": "https://ollama.com/library/gemma3",
-      "tags": [
-        "discovered"
-      ],
-      "discovered_online": true,
-      "modified_at": "2025-03-12T00:00:00Z"
-    },
-    {
-      "name": "gemma3:4b",
-      "label": "gemma3:4b",
-      "publisher": "Gemma3",
-      "license": "See ollama.com/library",
-      "parameters": "4b",
-      "size_disk": "~8.0 GB",
-      "niche": [
-        "discovered"
-      ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
-      "use_where": [
-        "https://ollama.lh",
-        "https://ai.lh"
-      ],
-      "use_how": "./leco-cli.sh ollama install gemma3:4b",
-      "install_cli": "./leco-cli.sh ollama install gemma3:4b",
-      "source_url": "https://ollama.com/library/gemma3",
-      "tags": [
-        "discovered"
-      ],
-      "discovered_online": true,
-      "modified_at": "2025-03-12T00:00:00Z"
-    },
-    {
       "name": "gemma4:31b",
       "label": "gemma4:31b",
       "publisher": "Gemma4",
@@ -654,7 +450,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
@@ -669,78 +465,6 @@
       "modified_at": "2026-04-02T09:00:00-08:00"
     },
     {
-      "name": "glm-4.6",
-      "label": "glm-4.6",
-      "publisher": "Glm",
-      "license": "See ollama.com/library",
-      "parameters": "",
-      "size_disk": "~648.3 GB",
-      "niche": [
-        "discovered"
-      ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
-      "use_where": [
-        "https://ollama.lh",
-        "https://ai.lh"
-      ],
-      "use_how": "./leco-cli.sh ollama install glm-4.6",
-      "install_cli": "./leco-cli.sh ollama install glm-4.6",
-      "source_url": "https://ollama.com/library/glm-4.6",
-      "tags": [
-        "discovered"
-      ],
-      "discovered_online": true,
-      "modified_at": "2025-09-29T00:00:00Z"
-    },
-    {
-      "name": "glm-4.7",
-      "label": "glm-4.7",
-      "publisher": "Glm",
-      "license": "See ollama.com/library",
-      "parameters": "",
-      "size_disk": "~648.3 GB",
-      "niche": [
-        "discovered"
-      ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
-      "use_where": [
-        "https://ollama.lh",
-        "https://ai.lh"
-      ],
-      "use_how": "./leco-cli.sh ollama install glm-4.7",
-      "install_cli": "./leco-cli.sh ollama install glm-4.7",
-      "source_url": "https://ollama.com/library/glm-4.7",
-      "tags": [
-        "discovered"
-      ],
-      "discovered_online": true,
-      "modified_at": "2025-12-22T00:00:00Z"
-    },
-    {
-      "name": "glm-5",
-      "label": "glm-5",
-      "publisher": "Glm",
-      "license": "See ollama.com/library",
-      "parameters": "",
-      "size_disk": "~704.2 GB",
-      "niche": [
-        "discovered"
-      ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
-      "use_where": [
-        "https://ollama.lh",
-        "https://ai.lh"
-      ],
-      "use_how": "./leco-cli.sh ollama install glm-5",
-      "install_cli": "./leco-cli.sh ollama install glm-5",
-      "source_url": "https://ollama.com/library/glm-5",
-      "tags": [
-        "discovered"
-      ],
-      "discovered_online": true,
-      "modified_at": "2026-02-11T00:00:00Z"
-    },
-    {
       "name": "glm-5.1",
       "label": "glm-5.1",
       "publisher": "Glm",
@@ -750,7 +474,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
@@ -762,7 +486,31 @@
         "discovered"
       ],
       "discovered_online": true,
-      "modified_at": "2026-04-07T08:00:00-08:00"
+      "modified_at": "2026-04-07T08:00:00-07:00"
+    },
+    {
+      "name": "glm-5.2",
+      "label": "glm-5.2",
+      "publisher": "Glm",
+      "license": "See ollama.com/library",
+      "parameters": "",
+      "size_disk": "",
+      "niche": [
+        "discovered"
+      ],
+      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
+      "use_where": [
+        "https://ollama.lh",
+        "https://ai.lh"
+      ],
+      "use_how": "./leco-cli.sh ollama install glm-5.2",
+      "install_cli": "./leco-cli.sh ollama install glm-5.2",
+      "source_url": "https://ollama.com/library/glm-5.2",
+      "tags": [
+        "discovered"
+      ],
+      "discovered_online": true,
+      "modified_at": "2026-06-16T08:00:00-07:00"
     },
     {
       "name": "gpt-oss:120b",
@@ -774,7 +522,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
@@ -798,7 +546,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
@@ -813,54 +561,6 @@
       "modified_at": "2025-08-05T00:00:00Z"
     },
     {
-      "name": "kimi-k2-thinking",
-      "label": "kimi-k2-thinking",
-      "publisher": "Kimi",
-      "license": "See ollama.com/library",
-      "parameters": "",
-      "size_disk": "~1.0 TB",
-      "niche": [
-        "discovered"
-      ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
-      "use_where": [
-        "https://ollama.lh",
-        "https://ai.lh"
-      ],
-      "use_how": "./leco-cli.sh ollama install kimi-k2-thinking",
-      "install_cli": "./leco-cli.sh ollama install kimi-k2-thinking",
-      "source_url": "https://ollama.com/library/kimi-k2-thinking",
-      "tags": [
-        "discovered"
-      ],
-      "discovered_online": true,
-      "modified_at": "2025-11-06T00:00:00Z"
-    },
-    {
-      "name": "kimi-k2.5",
-      "label": "kimi-k2.5",
-      "publisher": "Kimi",
-      "license": "See ollama.com/library",
-      "parameters": "",
-      "size_disk": "~1.0 TB",
-      "niche": [
-        "discovered"
-      ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
-      "use_where": [
-        "https://ollama.lh",
-        "https://ai.lh"
-      ],
-      "use_how": "./leco-cli.sh ollama install kimi-k2.5",
-      "install_cli": "./leco-cli.sh ollama install kimi-k2.5",
-      "source_url": "https://ollama.com/library/kimi-k2.5",
-      "tags": [
-        "discovered"
-      ],
-      "discovered_online": true,
-      "modified_at": "2026-01-26T00:00:00Z"
-    },
-    {
       "name": "kimi-k2.6",
       "label": "kimi-k2.6",
       "publisher": "Kimi",
@@ -870,7 +570,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
@@ -885,100 +585,52 @@
       "modified_at": "2026-03-31T00:00:00Z"
     },
     {
-      "name": "kimi-k2:1t",
-      "label": "kimi-k2:1t",
+      "name": "kimi-k2.7-code",
+      "label": "kimi-k2.7-code",
       "publisher": "Kimi",
       "license": "See ollama.com/library",
-      "parameters": "1t",
-      "size_disk": "~1.0 TB",
+      "parameters": "",
+      "size_disk": "~554.3 GB",
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
       ],
-      "use_how": "./leco-cli.sh ollama install kimi-k2:1t",
-      "install_cli": "./leco-cli.sh ollama install kimi-k2:1t",
-      "source_url": "https://ollama.com/library/kimi-k2",
+      "use_how": "./leco-cli.sh ollama install kimi-k2.7-code",
+      "install_cli": "./leco-cli.sh ollama install kimi-k2.7-code",
+      "source_url": "https://ollama.com/library/kimi-k2.7-code",
       "tags": [
         "discovered"
       ],
       "discovered_online": true,
-      "modified_at": "2025-09-05T00:00:00Z"
+      "modified_at": "2026-06-12T00:00:00Z"
     },
     {
-      "name": "minimax-m2",
-      "label": "minimax-m2",
-      "publisher": "Minimax",
+      "name": "kimi-k3",
+      "label": "kimi-k3",
+      "publisher": "Kimi",
       "license": "See ollama.com/library",
       "parameters": "",
-      "size_disk": "~214.2 GB",
+      "size_disk": "~1.4 TB",
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
       ],
-      "use_how": "./leco-cli.sh ollama install minimax-m2",
-      "install_cli": "./leco-cli.sh ollama install minimax-m2",
-      "source_url": "https://ollama.com/library/minimax-m2",
+      "use_how": "./leco-cli.sh ollama install kimi-k3",
+      "install_cli": "./leco-cli.sh ollama install kimi-k3",
+      "source_url": "https://ollama.com/library/kimi-k3",
       "tags": [
         "discovered"
       ],
       "discovered_online": true,
-      "modified_at": "2025-10-27T00:00:00Z"
-    },
-    {
-      "name": "minimax-m2.1",
-      "label": "minimax-m2.1",
-      "publisher": "Minimax",
-      "license": "See ollama.com/library",
-      "parameters": "",
-      "size_disk": "~214.2 GB",
-      "niche": [
-        "discovered"
-      ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
-      "use_where": [
-        "https://ollama.lh",
-        "https://ai.lh"
-      ],
-      "use_how": "./leco-cli.sh ollama install minimax-m2.1",
-      "install_cli": "./leco-cli.sh ollama install minimax-m2.1",
-      "source_url": "https://ollama.com/library/minimax-m2.1",
-      "tags": [
-        "discovered"
-      ],
-      "discovered_online": true,
-      "modified_at": "2025-12-20T00:00:00Z"
-    },
-    {
-      "name": "minimax-m2.5",
-      "label": "minimax-m2.5",
-      "publisher": "Minimax",
-      "license": "See ollama.com/library",
-      "parameters": "",
-      "size_disk": "~214.2 GB",
-      "niche": [
-        "discovered"
-      ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
-      "use_where": [
-        "https://ollama.lh",
-        "https://ai.lh"
-      ],
-      "use_how": "./leco-cli.sh ollama install minimax-m2.5",
-      "install_cli": "./leco-cli.sh ollama install minimax-m2.5",
-      "source_url": "https://ollama.com/library/minimax-m2.5",
-      "tags": [
-        "discovered"
-      ],
-      "discovered_online": true,
-      "modified_at": "2026-02-12T00:00:00Z"
+      "modified_at": "2026-07-27T08:00:00-07:00"
     },
     {
       "name": "minimax-m2.7",
@@ -990,7 +642,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
@@ -1014,7 +666,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
@@ -1029,78 +681,6 @@
       "modified_at": "2026-06-01T00:00:00Z"
     },
     {
-      "name": "ministral-3:14b",
-      "label": "ministral-3:14b",
-      "publisher": "Ministral",
-      "license": "See ollama.com/library",
-      "parameters": "14b",
-      "size_disk": "~14.6 GB",
-      "niche": [
-        "discovered"
-      ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
-      "use_where": [
-        "https://ollama.lh",
-        "https://ai.lh"
-      ],
-      "use_how": "./leco-cli.sh ollama install ministral-3:14b",
-      "install_cli": "./leco-cli.sh ollama install ministral-3:14b",
-      "source_url": "https://ollama.com/library/ministral-3",
-      "tags": [
-        "discovered"
-      ],
-      "discovered_online": true,
-      "modified_at": "2025-12-02T00:00:00Z"
-    },
-    {
-      "name": "ministral-3:3b",
-      "label": "ministral-3:3b",
-      "publisher": "Ministral",
-      "license": "See ollama.com/library",
-      "parameters": "3b",
-      "size_disk": "~4.3 GB",
-      "niche": [
-        "discovered"
-      ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
-      "use_where": [
-        "https://ollama.lh",
-        "https://ai.lh"
-      ],
-      "use_how": "./leco-cli.sh ollama install ministral-3:3b",
-      "install_cli": "./leco-cli.sh ollama install ministral-3:3b",
-      "source_url": "https://ollama.com/library/ministral-3",
-      "tags": [
-        "discovered"
-      ],
-      "discovered_online": true,
-      "modified_at": "2025-12-02T00:00:00Z"
-    },
-    {
-      "name": "ministral-3:8b",
-      "label": "ministral-3:8b",
-      "publisher": "Ministral",
-      "license": "See ollama.com/library",
-      "parameters": "8b",
-      "size_disk": "~9.7 GB",
-      "niche": [
-        "discovered"
-      ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
-      "use_where": [
-        "https://ollama.lh",
-        "https://ai.lh"
-      ],
-      "use_how": "./leco-cli.sh ollama install ministral-3:8b",
-      "install_cli": "./leco-cli.sh ollama install ministral-3:8b",
-      "source_url": "https://ollama.com/library/ministral-3",
-      "tags": [
-        "discovered"
-      ],
-      "discovered_online": true,
-      "modified_at": "2025-12-02T00:00:00Z"
-    },
-    {
       "name": "mistral-large-3:675b",
       "label": "mistral-large-3:675b",
       "publisher": "Mistral AI",
@@ -1110,7 +690,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
@@ -1134,7 +714,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
@@ -1158,7 +738,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
@@ -1173,124 +753,28 @@
       "modified_at": "2026-03-11T00:00:00Z"
     },
     {
-      "name": "qwen3-coder-next",
-      "label": "qwen3-coder-next",
-      "publisher": "Qwen3",
+      "name": "nemotron-3-ultra",
+      "label": "nemotron-3-ultra",
+      "publisher": "Nemotron",
       "license": "See ollama.com/library",
       "parameters": "",
-      "size_disk": "~76.2 GB",
+      "size_disk": "",
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
       ],
-      "use_how": "./leco-cli.sh ollama install qwen3-coder-next",
-      "install_cli": "./leco-cli.sh ollama install qwen3-coder-next",
-      "source_url": "https://ollama.com/library/qwen3-coder-next",
+      "use_how": "./leco-cli.sh ollama install nemotron-3-ultra",
+      "install_cli": "./leco-cli.sh ollama install nemotron-3-ultra",
+      "source_url": "https://ollama.com/library/nemotron-3-ultra",
       "tags": [
         "discovered"
       ],
       "discovered_online": true,
-      "modified_at": "2025-02-04T00:00:00Z"
-    },
-    {
-      "name": "qwen3-coder:480b",
-      "label": "qwen3-coder:480b",
-      "publisher": "Qwen3",
-      "license": "See ollama.com/library",
-      "parameters": "480b",
-      "size_disk": "~475.4 GB",
-      "niche": [
-        "discovered"
-      ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
-      "use_where": [
-        "https://ollama.lh",
-        "https://ai.lh"
-      ],
-      "use_how": "./leco-cli.sh ollama install qwen3-coder:480b",
-      "install_cli": "./leco-cli.sh ollama install qwen3-coder:480b",
-      "source_url": "https://ollama.com/library/qwen3-coder",
-      "tags": [
-        "discovered"
-      ],
-      "discovered_online": true,
-      "modified_at": "2025-07-22T00:00:00Z"
-    },
-    {
-      "name": "qwen3-next:80b",
-      "label": "qwen3-next:80b",
-      "publisher": "Qwen3",
-      "license": "See ollama.com/library",
-      "parameters": "80b",
-      "size_disk": "~76.2 GB",
-      "niche": [
-        "discovered"
-      ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
-      "use_where": [
-        "https://ollama.lh",
-        "https://ai.lh"
-      ],
-      "use_how": "./leco-cli.sh ollama install qwen3-next:80b",
-      "install_cli": "./leco-cli.sh ollama install qwen3-next:80b",
-      "source_url": "https://ollama.com/library/qwen3-next",
-      "tags": [
-        "discovered"
-      ],
-      "discovered_online": true,
-      "modified_at": "2025-09-10T00:00:00Z"
-    },
-    {
-      "name": "qwen3-vl:235b",
-      "label": "qwen3-vl:235b",
-      "publisher": "Qwen3",
-      "license": "See ollama.com/library",
-      "parameters": "235b",
-      "size_disk": "~437.7 GB",
-      "niche": [
-        "discovered"
-      ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
-      "use_where": [
-        "https://ollama.lh",
-        "https://ai.lh"
-      ],
-      "use_how": "./leco-cli.sh ollama install qwen3-vl:235b",
-      "install_cli": "./leco-cli.sh ollama install qwen3-vl:235b",
-      "source_url": "https://ollama.com/library/qwen3-vl",
-      "tags": [
-        "discovered"
-      ],
-      "discovered_online": true,
-      "modified_at": "2025-09-22T00:00:00Z"
-    },
-    {
-      "name": "qwen3-vl:235b-instruct",
-      "label": "qwen3-vl:235b-instruct",
-      "publisher": "Qwen3",
-      "license": "See ollama.com/library",
-      "parameters": "235b-instruct",
-      "size_disk": "~437.7 GB",
-      "niche": [
-        "discovered"
-      ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
-      "use_where": [
-        "https://ollama.lh",
-        "https://ai.lh"
-      ],
-      "use_how": "./leco-cli.sh ollama install qwen3-vl:235b-instruct",
-      "install_cli": "./leco-cli.sh ollama install qwen3-vl:235b-instruct",
-      "source_url": "https://ollama.com/library/qwen3-vl",
-      "tags": [
-        "discovered"
-      ],
-      "discovered_online": true,
-      "modified_at": "2025-09-22T00:00:00Z"
+      "modified_at": "2026-06-04T00:00:00Z"
     },
     {
       "name": "qwen3.5:397b",
@@ -1302,7 +786,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
@@ -1315,30 +799,6 @@
       ],
       "discovered_online": true,
       "modified_at": "2026-02-16T00:00:00Z"
-    },
-    {
-      "name": "rnj-1:8b",
-      "label": "rnj-1:8b",
-      "publisher": "Rnj",
-      "license": "See ollama.com/library",
-      "parameters": "8b",
-      "size_disk": "~14.9 GB",
-      "niche": [
-        "discovered"
-      ],
-      "specialty": "Listed on Ollama library (discovered 2026-06-02).",
-      "use_where": [
-        "https://ollama.lh",
-        "https://ai.lh"
-      ],
-      "use_how": "./leco-cli.sh ollama install rnj-1:8b",
-      "install_cli": "./leco-cli.sh ollama install rnj-1:8b",
-      "source_url": "https://ollama.com/library/rnj-1",
-      "tags": [
-        "discovered"
-      ],
-      "discovered_online": true,
-      "modified_at": "2025-12-09T00:00:00Z"
     }
   ]
 }
