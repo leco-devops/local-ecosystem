@@ -156,10 +156,7 @@ servers and your preferences:
   "mcpServers": {
     "leco-devops": {
       "command": "/absolute/path/to/local-ecosystem/tools/mcp-server/.venv/bin/leco-mcp",
-      "args": ["stdio"],
-      "env": {
-        "LECO_MCP_DASHBOARD_URL": "http://localhost:8090"
-      }
+      "args": ["stdio"]
     }
   }
 }
@@ -283,8 +280,7 @@ Generic stdio block, portable to any of them:
   "mcpServers": {
     "leco-devops": {
       "command": "/absolute/path/to/tools/mcp-server/.venv/bin/leco-mcp",
-      "args": ["stdio"],
-      "env": { "LECO_MCP_DASHBOARD_URL": "http://localhost:8090" }
+      "args": ["stdio"]
     }
   }
 }

@@ -1,7 +1,7 @@
 {
   "name": "leco",
   "displayName": "LEco DevOps",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Operate the LEco DevOps local platform from Claude Code: 65 MCP tools over the dashboard API, a `/leco:*` command set covering stack lifecycle, hosted apps, Traefik routing on *.lh, dev stacks and local LLM runtimes, an always-available operations skill, and a read-only diagnostician.",
   "author": {
     "name": "Techtonic Systems Media And Research LLC",

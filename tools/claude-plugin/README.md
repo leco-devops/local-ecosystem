@@ -129,7 +129,8 @@ Environment variables read by the server (full reference: [`docs/MCP_SERVER.md`]
 
 | Variable | Default | Effect |
 |----------|---------|--------|
-| `LECO_MCP_DASHBOARD_URL` | `http://localhost:8090` | Dashboard base URL. `http://dashboard.lh` also works |
+| `LECO_MCP_DASHBOARD_URL` | auto-discovered | Dashboard base URL. Unset, the server tries the routed hostname (`http://localhost.lh`, then `http://dashboard.lh`) before the published host port `http://localhost:8090` |
+| `LECO_MCP_BASE_DOMAIN` | from `config/leco-platform.yaml` | Domain the routed candidates are built from — `.lh` locally, `base_domain` in cloud mode |
 | `LECO_MCP_CONTROL_TOKEN` | — | Matches the dashboard's `DASHBOARD_CONTROL_TOKEN`. Without it, control actions return 401 when the dashboard enforces a token |
 | `LECO_MCP_ALLOW_DESTRUCTIVE` | `0` | Required, in addition to `confirm=true`, for `remove` / `reset` / `destroy` / `reinstall` / offboard / route-strip / model delete / credential reset |
 | `LECO_MCP_ALLOW_CREDENTIALS` | `0` | Required for the UI credential-vault tools, which return plaintext local-dev secrets |

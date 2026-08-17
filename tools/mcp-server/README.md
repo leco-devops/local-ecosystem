@@ -62,7 +62,8 @@ For a shared HTTP endpoint (remote agents, other machines), run it as a stack se
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `LECO_MCP_DASHBOARD_URL` | auto-discovered | Dashboard base URL. Tries `localhost:8090`, `dashboard.lh`, then the in-network name |
+| `LECO_MCP_DASHBOARD_URL` | auto-discovered | Dashboard base URL. Tries the routed hostname (`localhost.lh`, then `dashboard.lh`), then the published host port `localhost:8090`, then the in-network name |
+| `LECO_MCP_BASE_DOMAIN` | from `config/leco-platform.yaml` | Domain the routed candidates are built from — `.lh` locally, `base_domain` in cloud mode |
 | `LECO_MCP_CONTROL_TOKEN` | — | Control token; also read from `DASHBOARD_CONTROL_TOKEN`. Required only if the dashboard enforces one |
 | `LECO_MCP_ALLOW_DESTRUCTIVE` | `0` | Enables `remove` / `reset` / `destroy` / offboard tools |
 | `LECO_MCP_ALLOW_CREDENTIALS` | `0` | Enables the UI credential vault tools |
