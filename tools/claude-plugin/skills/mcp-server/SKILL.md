@@ -18,6 +18,7 @@ Read the result against the symptom:
 | Symptom | Meaning |
 |---------|---------|
 | Every tool fails with "dashboard unreachable" | The dashboard container is down. Start `ai-dashboard` — see `/leco:up`. The MCP server is fine |
+| `dashboard_url` is `http://localhost:8090` | The routed hostname is tried first, so falling through to the published host port means **Traefik is not answering** even though the dashboard is up. The tools work; `*.lh` routing does not — see `/leco:routes` |
 | Control actions return **401** | `LECO_MCP_CONTROL_TOKEN` is unset or does not match the dashboard's `DASHBOARD_CONTROL_TOKEN`. Read tools keep working |
 | `Blocked destructive action` | Working as designed. Report it — see the gates below |
 | Credential tools missing entirely | `LECO_MCP_ALLOW_CREDENTIALS` is `0` |
@@ -94,7 +95,9 @@ launcher printed an install hint" is a resolution failure, not a crash.
 
 | Variable | Default | Effect |
 |----------|---------|--------|
-| `LECO_MCP_DASHBOARD_URL` | `http://localhost:8090` | Dashboard base URL; `http://dashboard.lh` also works |
+| `LECO_MCP_DASHBOARD_URL` | auto-discovered | Pins the dashboard base URL. Left unset, candidates are tried in order: the routed hostname (`http://localhost.lh`, then the `http://dashboard.lh` alias, then their https forms), the published host port `http://localhost:8090`, then `http://service-dashboard:8090` |
+| `LECO_MCP_BASE_DOMAIN` | from `config/leco-platform.yaml` | Domain the routed candidates are built from. Local installs are always `.lh`; cloud mode uses `dashboard.<base_domain>` |
+| `DASHBOARD_HOST_PORT` | `8090` | Host port the dashboard is published on; the `localhost:<port>` fallback follows it |
 | `LECO_MCP_CONTROL_TOKEN` | — | Must match the dashboard's `DASHBOARD_CONTROL_TOKEN` |
 | `LECO_MCP_ALLOW_DESTRUCTIVE` | `0` | Required, **in addition to** `confirm=true`, for anything that deletes |
 | `LECO_MCP_ALLOW_CREDENTIALS` | `0` | Required for the UI credential-vault tools |

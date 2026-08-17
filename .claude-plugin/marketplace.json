@@ -11,7 +11,7 @@
       "source": "./tools/claude-plugin",
       "description": "Operate the LEco DevOps local platform: MCP tools over the dashboard API, the /leco:* command set, an operations skill, and a read-only diagnostician subagent.",
       "displayName": "LEco DevOps",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "license": "MIT",
       "homepage": "https://leco-project.us",
       "repository": "https://github.com/leco-devops/local-ecosystem",

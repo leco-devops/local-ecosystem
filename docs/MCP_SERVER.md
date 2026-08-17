@@ -84,7 +84,9 @@ Runs as a stack service (`leco-mcp` container, host port `8099`, Traefik router 
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `LECO_MCP_DASHBOARD_URL` | auto-discovered | Dashboard base URL. Candidates tried in order: `localhost:8090`, `dashboard.lh` (http/https), `localhost.lh`, `service-dashboard:8090` |
+| `LECO_MCP_DASHBOARD_URL` | auto-discovered | Dashboard base URL. Candidates tried in order: the routed hostname (`localhost.lh`, then the `dashboard.lh` alias, http before https), the published host port `localhost:8090`, then `service-dashboard:8090` |
+| `LECO_MCP_BASE_DOMAIN` | from `config/leco-platform.yaml` | Overrides the domain the routed candidates are built from. Cloud mode uses `dashboard.<base_domain>`; local mode is always `.lh` |
+| `DASHBOARD_HOST_PORT` | `8090` | Host port the dashboard is published on; the `localhost:<port>` fallback follows it |
 | `LECO_MCP_CONTROL_TOKEN` | — | Control token; also read from `DASHBOARD_CONTROL_TOKEN`. Needed only when the dashboard enforces one |
 | `LECO_MCP_ALLOW_DESTRUCTIVE` | `0` | Enables `remove` / `reset` / `destroy` / `reinstall` / offboard / route-strip / model-delete |
 | `LECO_MCP_ALLOW_CREDENTIALS` | `0` | Enables the UI credential vault tools |
@@ -95,7 +97,9 @@ Runs as a stack service (`leco-mcp` container, host port `8099`, Traefik router 
 | `LECO_MCP_HTTP_HOST` / `_PORT` / `_PATH` | `127.0.0.1` / `8099` / `/mcp` | HTTP transport bind |
 | `LECO_MCP_LOG_LEVEL` | `INFO` | Server log level |
 
-The base URL is **discovered, not assumed**: the first candidate that answers `GET /api/version` wins and is cached. An explicit `LECO_MCP_DASHBOARD_URL` is tried first but the defaults remain as fallbacks, so a stale value in a shell profile cannot brick every tool.
+The base URL is **discovered, not assumed**: the first candidate that answers `GET /api/version` wins and is cached. An explicit `LECO_MCP_DASHBOARD_URL` is tried first but the discovered candidates remain as fallbacks, so a stale value in a shell profile cannot brick every tool.
+
+The routed hostname is tried before the published host port, so the address the tools report back is one a person can actually open, and it matches the domain the rest of the platform routes on — `.lh` locally, `base_domain` in cloud mode. `http://localhost:8090` is kept immediately behind it rather than dropped, because Traefik being down is precisely when these tools are most needed; when `leco_server_info` reports the host port as the resolved `dashboard_url`, that fallback has fired and `*.lh` routing is broken even though the dashboard itself is healthy.
 
 ---
 
