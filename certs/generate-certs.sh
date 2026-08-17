@@ -33,6 +33,48 @@ set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CERT_DIR="$PROJECT_ROOT/certs"
+
+# Cross-platform primitives — notably compat_cert_covers_host, which papers over macOS
+# shipping LibreSSL (no -checkhost) instead of OpenSSL.
+#
+# Sourced only if present: this script is sometimes run from a copy outside a full
+# checkout, and a missing helper library must not stop it from reporting a configuration
+# refusal. The fallback below keeps hostname verification correct in that case.
+# shellcheck source=/dev/null
+[ -f "$PROJECT_ROOT/ecosystem-stack/lib/compat.sh" ] && . "$PROJECT_ROOT/ecosystem-stack/lib/compat.sh"
+
+if ! command -v compat_cert_covers_host >/dev/null 2>&1 \
+   && ! type compat_cert_covers_host >/dev/null 2>&1; then
+  # Standalone fallback. Parses the SAN list rather than using `openssl -checkhost`,
+  # because that flag does not exist in LibreSSL — which is what stock macOS ships, and
+  # where the bare -checkhost call reported every hostname as uncovered.
+  compat_cert_covers_host() {
+    openssl x509 -in "$1" -noout -text 2>/dev/null \
+      | awk -v want="$2" '
+          /Subject Alternative Name/ { grab = 1; next }
+          grab {
+            n = split($0, parts, ",")
+            for (i = 1; i <= n; i++) {
+              entry = parts[i]
+              sub(/^[ \t]*DNS:/, "", entry)
+              gsub(/[ \t]/, "", entry)
+              if (entry == "") continue
+              if (entry == want) { found = 1; exit }
+              if (substr(entry, 1, 2) == "*.") {
+                suffix = substr(entry, 2)
+                wl = length(want); sl = length(suffix)
+                if (wl > sl && substr(want, wl - sl + 1) == suffix) {
+                  stem = substr(want, 1, wl - sl)
+                  if (index(stem, ".") == 0) { found = 1; exit }
+                }
+              }
+            }
+            grab = 0
+          }
+          END { exit(found ? 0 : 1) }
+        '
+  }
+fi
 # Filenames are unchanged from the old wildcard cert so Traefik's tls.certificates block and
 # the container mounts keep working without edits.
 CERT_FILE="$CERT_DIR/wildcard.lh.pem"
@@ -327,7 +369,13 @@ for host in "${HOSTS[@]}"; do
   # Wildcard entries cannot be checked directly; check a sample child instead.
   probe="$host"
   case "$host" in \*.*) probe="probe.${host#*.}" ;; esac
-  if openssl x509 -in "$CERT_FILE" -noout -checkhost "$probe" >/dev/null 2>&1; then
+  # compat_cert_covers_host, not `openssl -checkhost`: stock macOS ships LibreSSL, which
+  # has no -checkhost flag at all. The bare call therefore failed for *every* hostname on
+  # a Mac without Homebrew's OpenSSL, and this loop reported a perfectly valid mkcert
+  # certificate as covering nothing — then exited 1 telling the operator not to restart
+  # Traefik. The compat wrapper prefers real OpenSSL and falls back to parsing the SAN
+  # list when only LibreSSL is present.
+  if compat_cert_covers_host "$CERT_FILE" "$probe"; then
     printf '   ✅ %s\n' "$probe"
   else
     printf '   ❌ %s\n' "$probe"

@@ -93,6 +93,18 @@ EOF
   do_unload
   if ! launchctl bootstrap "$DOMAIN" "$PLIST_PATH" 2>/dev/null; then
     if ! launchctl load -w "$PLIST_PATH" 2>/dev/null; then
+      # The gui/<uid> domain only exists while someone is logged in at the console. On a
+      # headless Mac (SSH only, no auto-login) there is no Aqua session to bootstrap into,
+      # so both calls above fail and host CPU temperature silently never appears in the
+      # dashboard. Say so precisely rather than suggesting a log out/in that cannot happen.
+      if ! launchctl print "$DOMAIN" >/dev/null 2>&1; then
+        echo "❌ No GUI session for domain '$DOMAIN' — this looks like a headless Mac." >&2
+        echo "   A LaunchAgent cannot load without a console login. Options:" >&2
+        echo "     • enable automatic login so a GUI session exists at boot, or" >&2
+        echo "     • run the writer from a LaunchDaemon in the 'system' domain, or" >&2
+        echo "     • accept no host CPU temperature (everything else still works)." >&2
+        return 1
+      fi
       echo "❌ launchctl bootstrap/load failed (try: log out/in, or check Console)." >&2
       return 1
     fi

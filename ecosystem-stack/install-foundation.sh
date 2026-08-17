@@ -59,6 +59,22 @@ install_with_brew() {
   fi
 }
 
+# Install by canonical name on whatever package manager this host actually has.
+# compat_pkg_install maps the canonical name to the local spelling (docker -> docker.io on
+# Debian, docker on Fedora/Arch; pyyaml -> python3-yaml / python3-pyyaml / python-yaml).
+install_with_pkg() {
+  if [ -z "$(compat_pkg_manager)" ]; then
+    if compat_is_darwin; then
+      err "Homebrew is not installed. Install Homebrew first: https://brew.sh"
+    else
+      err "No supported package manager found (tried apt/dnf/yum/pacman/zypper/apk)."
+    fi
+    return 1
+  fi
+  compat_pkg_install "$@"
+}
+
+# Retained for callers that predate install_with_pkg; Debian/Ubuntu only.
 install_with_apt() {
   local pkg_list=("$@")
   if ! has_cmd apt-get; then
@@ -67,6 +83,50 @@ install_with_apt() {
   fi
   sudo apt-get update
   sudo apt-get install -y "${pkg_list[@]}"
+}
+
+# PyYAML is a hard runtime dependency (ecosystem-stack/requirements.txt), not an optional
+# extra: ecosystem-stack/lib/platform_config.py imports it, and without it the platform
+# config silently reads as empty. That makes the stack start every service instead of the
+# configured subset, and makes tls.mode read as "mkcert" whatever the operator set — so a
+# cloud host quietly serves the insecure Traefik API instead of using ACME. Both failures
+# are invisible, which is exactly why this is installed rather than left to the user.
+ensure_python_libs() {
+  if python3 -c "import yaml" >/dev/null 2>&1; then
+    ok "PyYAML is available to python3"
+    return 0
+  fi
+
+  info "PyYAML is missing — required to read config/leco-platform.yaml."
+
+  # Prefer the distro package: it installs into the same interpreter the scripts call and
+  # does not fight PEP 668.
+  local pkg
+  pkg="$(compat_pkg_name pyyaml)"
+  if [ -n "$pkg" ]; then
+    install_with_pkg pyyaml || true
+    if python3 -c "import yaml" >/dev/null 2>&1; then
+      ok "PyYAML installed ($pkg)"
+      return 0
+    fi
+  fi
+
+  # No distro package (notably Homebrew, which has no PyYAML formula). Use pip against the
+  # interpreter the scripts actually use. A Homebrew or distro Python refuses this under
+  # PEP 668, so retry with the documented override — this is one pure-Python library, and
+  # the alternative is a platform that silently misreads its own configuration.
+  if python3 -m pip install "PyYAML>=6.0" >/dev/null 2>&1 \
+     || python3 -m pip install --break-system-packages "PyYAML>=6.0" >/dev/null 2>&1; then
+    if python3 -c "import yaml" >/dev/null 2>&1; then
+      ok "PyYAML installed via pip"
+      return 0
+    fi
+  fi
+
+  err "Could not install PyYAML for $(command -v python3)."
+  warn "Install it manually, then re-run: python3 -m pip install --break-system-packages 'PyYAML>=6.0'"
+  warn "Until then the stack starts ALL services and reports tls.mode as 'mkcert' regardless of configuration."
+  return 1
 }
 
 ensure_cert_files() {
@@ -118,37 +178,23 @@ ensure_dependency() {
     return 1
   fi
 
-  case "$OS_NAME" in
-    Darwin)
-      case "$cmd" in
-        docker)
-          install_with_brew docker 1
-          ;;
-        mkcert|dnsmasq|jq|curl|python3|git)
-          install_with_brew "$cmd" 0
-          ;;
-        *)
-          err "No auto-install mapping for $name on macOS."
-          return 1
-          ;;
-      esac
+  # One dispatch for every platform. compat_pkg_install resolves the package manager and
+  # the local package name, so Fedora/RHEL (dnf), Arch (pacman), SUSE (zypper) and Alpine
+  # (apk) work the same way Debian and macOS already did — previously they fell through to
+  # "Unsupported OS" even though the docs advertised them.
+  case "$cmd" in
+    docker)
+      if compat_is_darwin; then
+        install_with_brew docker 1
+      else
+        install_with_pkg docker compose
+      fi
       ;;
-    Linux)
-      case "$cmd" in
-        docker)
-          install_with_apt docker.io docker-compose-plugin
-          ;;
-        mkcert|dnsmasq|jq|curl|python3|git)
-          install_with_apt "$cmd"
-          ;;
-        *)
-          err "No auto-install mapping for $name on Linux."
-          return 1
-          ;;
-      esac
+    mkcert|dnsmasq|jq|curl|python3|git|openssl)
+      install_with_pkg "$cmd"
       ;;
     *)
-      err "Unsupported OS for auto-install: $OS_NAME"
+      err "No auto-install mapping for $name on $(compat_os)/$(compat_pkg_manager)."
       return 1
       ;;
   esac
@@ -379,6 +425,9 @@ main() {
   ensure_dependency "Git" git 1 || true
   ensure_dependency "curl" curl 1 || true
   ensure_dependency "Python 3" python3 1 || true
+  # Immediately after python3: the interpreter alone is not enough, and every later step
+  # that reads config/leco-platform.yaml depends on this.
+  ensure_python_libs || true
   ensure_dependency "Docker" docker 1 || true
   check_docker_ready || true
   check_compose_plugin || warn "Compose plugin check failed."
