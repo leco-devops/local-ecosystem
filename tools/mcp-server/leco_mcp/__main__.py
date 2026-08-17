@@ -7,6 +7,7 @@ import asyncio
 import json
 import sys
 
+from . import wiring as client_wiring
 from .activity import ActivityLog
 from .client import LecoClient
 from .config import Settings
@@ -53,6 +54,13 @@ def _doctor(settings: Settings) -> int:
     report["tools"] = sorted(t.name for t in tools)
     report["tool_count"] = len(tools)
 
+    # Client-side wiring is invisible from the dashboard but accounts for "the tools are
+    # duplicated" and "my edits to a skill did nothing" — both are filesystem facts.
+    try:
+        report["client_wiring"] = client_wiring.inspect(settings.project_root).as_dict()
+    except Exception as exc:  # noqa: BLE001 - a wiring probe must never fail doctor
+        report["client_wiring"] = {"error": str(exc)}
+
     dashboard = report["dashboard"]
     if dashboard.get("reachable") and dashboard.get("control_token_required_by_dashboard") and not settings.has_token:
         report["warning"] = (
@@ -75,9 +83,15 @@ def main(argv: list[str] | None = None) -> int:
         "mode",
         nargs="?",
         default="stdio",
-        choices=("stdio", "http", "doctor"),
+        choices=("stdio", "http", "doctor", "repair"),
         help="stdio (default) for local clients such as Claude Code; http for a shared "
-        "streamable-HTTP endpoint; doctor to print a connectivity report and exit.",
+        "streamable-HTTP endpoint; doctor to print a connectivity report and exit; "
+        "repair to fix client wiring (duplicate registrations, a stale plugin cache).",
+    )
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="repair mode: carry the fixes out. Without it, repair is a dry run.",
     )
     parser.add_argument("--host", default=None, help="HTTP bind host (default 127.0.0.1)")
     parser.add_argument("--port", type=int, default=None, help="HTTP port (default 8099)")
@@ -89,6 +103,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.mode == "doctor":
         return _doctor(settings)
+
+    if args.mode == "repair":
+        result = client_wiring.repair(settings.project_root, apply=args.apply)
+        print(json.dumps(result, indent=2))
+        if not args.apply:
+            # A dry run reports; it does not judge. Non-zero only if work is outstanding.
+            return 1 if result["actions"] else 0
+        return 0 if all(a.get("applied") for a in result["actions"]) else 1
 
     server = build_server(settings)
 

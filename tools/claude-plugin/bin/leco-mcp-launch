@@ -6,7 +6,7 @@
 #
 # Resolution order:
 #   1. $LECO_MCP_BIN                    explicit override (absolute path to an executable)
-#   2. leco-mcp on PATH                 normal `pip install leco-mcp` / `pip install -e tools/mcp-server`
+#   2. leco-mcp on PATH                 `pipx install ./tools/mcp-server` (PEP 668 blocks plain pip)
 #   3. python -c "import leco_mcp"      package installed, console script not on PATH
 #   4. the repository source tree       plugin checkout, $LECO_ECOSYSTEM_ROOT, or $CLAUDE_PROJECT_DIR
 #
@@ -71,12 +71,20 @@ done
 if [ -n "$found_source" ]; then
 	die \
 		"LEco DevOps MCP server: found the source at $found_source but its dependencies are missing." \
-		"Install it:  pip install -e \"$found_source\"" \
-		"Then verify: leco-mcp doctor"
+		"Install it:   pipx install \"$found_source\"" \
+		"No pipx yet:  brew install pipx (macOS) | sudo apt|dnf install pipx (Linux) | py -m pip install --user pipx (Windows)" \
+		"              then: pipx ensurepath, and open a new shell" \
+		"Or a venv:    python3 -m venv \"$found_source/.venv\" && \"$found_source/.venv/bin/pip\" install -e \"$found_source\"" \
+		"              then: export LECO_MCP_BIN=\"$found_source/.venv/bin/leco-mcp\"" \
+		"Then verify:  leco-mcp doctor" \
+		"Note: plain 'pip install -e' is refused by Homebrew and distro Pythons under PEP 668."
 fi
 
 die \
 	"LEco DevOps MCP server: 'leco-mcp' is not installed and no source tree was found." \
-	"From the local-ecosystem repository root:  pip install -e tools/mcp-server" \
+	"From the local-ecosystem repository root:  pipx install ./tools/mcp-server" \
+	"No pipx yet:  brew install pipx (macOS) | sudo apt|dnf install pipx (Linux) | py -m pip install --user pipx (Windows)" \
+	"              then: pipx ensurepath, and open a new shell" \
 	"Then verify:                               leco-mcp doctor" \
-	"Or set LECO_MCP_BIN to an existing leco-mcp executable."
+	"Or set LECO_MCP_BIN to an existing leco-mcp executable." \
+	"Note: plain 'pip install -e' is refused by Homebrew and distro Pythons under PEP 668."

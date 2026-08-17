@@ -28,11 +28,35 @@ Read the result against the symptom:
 This is an install problem, not a platform failure. Say that first, then work the ladder:
 
 ```bash
-pip install -e tools/mcp-server      # or: pipx install ./tools/mcp-server
+pipx install ./tools/mcp-server      # or: uv tool install ./tools/mcp-server
 leco-mcp doctor                      # resolved URL, token, gates, full tool list; non-zero exit if unreachable
 ```
 
-`leco-mcp doctor` is the authoritative diagnosis — run it before concluding anything.
+`leco-mcp doctor` is the authoritative diagnosis — run it before concluding anything. But it is the
+same binary that is missing, so `command not found: leco-mcp` **is** the diagnosis: nothing is
+installed. Run the launcher by hand to see why — it prints the reason and exits 0, which is why the
+client only reports `CONNECTION_CLOSED`:
+
+```bash
+tools/claude-plugin/bin/leco-mcp-launch stdio </dev/null
+```
+
+**Do not suggest `pip install -e tools/mcp-server`.** A Homebrew or distro Python refuses it under
+PEP 668 (`externally-managed-environment`), and a stale `leco_mcp.egg-info/` is evidence someone
+already tried. Two working routes:
+
+| Route | Commands |
+|---|---|
+| pipx — puts `leco-mcp` on `PATH`, no config edits | `pipx install ./tools/mcp-server` |
+| venv — no new tooling, needs an env var | `python3 -m venv tools/mcp-server/.venv && tools/mcp-server/.venv/bin/pip install -e tools/mcp-server`, then set `LECO_MCP_BIN` to `tools/mcp-server/.venv/bin/leco-mcp` |
+
+pipx does not ship with Python. Install it first — `brew install pipx` (macOS), `sudo apt install
+pipx` / `sudo dnf install pipx` / `sudo pacman -S python-pipx` (Linux), `py -m pip install --user
+pipx` (Windows; under WSL2 use the Linux form) — then `pipx ensurepath` and a **new shell**, since
+`~/.local/bin` must be on `PATH`.
+
+Which route to take is the user's call: pipx installs a package via Homebrew, and the venv route
+means editing `.mcp.json` or `.claude/settings.local.json`. Ask before doing either.
 
 Registering it with Claude Code, either way:
 
