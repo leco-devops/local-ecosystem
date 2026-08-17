@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "generated_at": "2026-08-17T02:47:13Z",
+  "generated_at": "2026-08-17T10:07:22Z",
   "services": [
     {
       "id": "traefik",
@@ -14,7 +14,11 @@
         "./ecosystem-stack/ecosystem-stack.sh heal traefik"
       ],
       "source": "docker_hub",
-      "latest": null
+      "latest": {
+        "tag": "v1.0.0",
+        "updated": "2016-07-06T14:39:02.186778Z",
+        "full": "traefik:v1.0.0"
+      }
     },
     {
       "id": "ollama",

@@ -115,9 +115,9 @@ mongodump --uri="mongodb://localhost:27017" --archive \
   | mongorestore --uri="mongodb://127.0.0.1:<host-port>" --archive --drop
 ```
 
-Or place dumps under `data/mongo/` and use **Hosted apps → Import data** — see [Seed data import](../../docs/help/13-hosted-app-data-import.md).
+Or place dumps under `data/mongo/` and use **Hosted apps → Import data** — see [Seed data import](../../../docs/help/13-hosted-app-data-import.md).
 
-See [docs/help/09-503-varnish-backend.md](../../docs/help/09-503-varnish-backend.md).
+See [docs/help/09-503-varnish-backend.md](../../../docs/help/09-503-varnish-backend.md).
 
 ### Staging (offload)
 
