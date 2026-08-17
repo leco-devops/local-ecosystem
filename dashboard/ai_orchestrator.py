@@ -23,6 +23,7 @@ from ai_file_collector import CollectedContext, collect_app_context
 from ai_prompts import SYSTEM_PROMPT, build_analysis_prompt
 from ai_provider import AIProvider, AnalysisResult, StreamChunk, create_provider
 from ai_template_generator import generate_from_analysis
+from datetime import datetime
 
 
 # ---------------------------------------------------------------------------
@@ -187,6 +188,26 @@ def run_onboarding(
 # Streaming pipeline (NDJSON events for the dashboard)
 # ---------------------------------------------------------------------------
 
+def _count_services(analysis: dict[str, Any]) -> int:
+    """How many services the analysis actually describes.
+
+    ``len(analysis.get("services", []))`` reported **0 while one service object was present**
+    and four files were being written — and that number is what an operator uses to decide
+    whether to trust the run. Models return this key as a list, as a mapping keyed by service
+    name, or omit it while describing the process elsewhere, so the shape is checked rather
+    than assumed.
+    """
+    services = analysis.get("services")
+    if isinstance(services, list):
+        return len([s for s in services if s])
+    if isinstance(services, dict):
+        return len(services)
+    # Some responses describe a single process inline instead of as a collection.
+    if any(analysis.get(k) for k in ("entry_script", "listening_port", "start_command")):
+        return 1
+    return 0
+
+
 def stream_onboarding(
     app_path: str,
     slug: str,
@@ -331,7 +352,7 @@ def stream_onboarding(
         text="Analysis extracted successfully",
         data={
             "app_name": analysis.get("app_name", slug),
-            "services": len(analysis.get("services", [])),
+            "services": _count_services(analysis),
             "data_stores": analysis.get("data_stores", []),
             "cache_layer": analysis.get("cache_layer"),
         },
@@ -383,22 +404,84 @@ def write_generated_files(
     target_dir: str | Path,
     *,
     dry_run: bool = False,
+    overwrite: bool = False,
 ) -> list[dict[str, str]]:
     """Write generated config files into target_dir.
 
-    Returns a list of dicts with keys: path, action ("created" | "overwritten" | "dry_run").
-    Creates subdirectories (e.g. conf/varnish/) as needed.
+    Returns a list of dicts with keys: path, name, action, and — when an existing file was
+    replaced — ``backup`` naming the copy that was kept.
+
+    ``action`` is one of ``created``, ``overwritten``, ``unchanged``, ``skipped_exists`` or
+    ``dry_run``.
+
+    **Existing files are never silently replaced.** This function used to compute the word
+    "overwritten" and then write anyway, with no backup, no diff and no confirmation. That
+    destroyed a hand-authored, deployed and verified configuration for a hosted app — and
+    because ``hosting/app-available/*/`` is gitignored, there was nothing to restore from.
+    A generator that can delete a working deployment is dangerous even when its analysis is
+    perfect, so the default is now to refuse and report; ``overwrite=True`` replaces the file
+    but always keeps a timestamped backup first.
     """
     root = Path(target_dir).resolve()
     results: list[dict[str, str]] = []
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
 
     for fname, content in generated.items():
         fp = root / fname
-        action = "dry_run"
-        if not dry_run:
-            fp.parent.mkdir(parents=True, exist_ok=True)
-            action = "overwritten" if fp.exists() else "created"
+        entry: dict[str, str] = {"path": str(fp), "name": fname, "action": "dry_run"}
+
+        if dry_run:
+            entry["action"] = "dry_run"
+            if fp.exists():
+                entry["would_replace"] = "yes"
+            results.append(entry)
+            continue
+
+        fp.parent.mkdir(parents=True, exist_ok=True)
+
+        if not fp.exists():
             fp.write_text(content, encoding="utf-8")
-        results.append({"path": str(fp), "name": fname, "action": action})
+            entry["action"] = "created"
+            results.append(entry)
+            continue
+
+        try:
+            existing = fp.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            existing = None
+
+        # Rewriting identical bytes is not a change worth reporting or backing up.
+        if existing == content:
+            entry["action"] = "unchanged"
+            results.append(entry)
+            continue
+
+        if not overwrite:
+            # The caller has to ask for this explicitly, having been shown that the file
+            # exists. Silence here is what cost someone a working deployment.
+            entry["action"] = "skipped_exists"
+            entry["reason"] = (
+                f"{fname} already exists and differs. Nothing was written. Re-run with "
+                "overwrite enabled to replace it; a timestamped backup is kept either way."
+            )
+            results.append(entry)
+            continue
+
+        backup = fp.with_name(f"{fp.name}.bak-{stamp}")
+        try:
+            backup.write_text(existing if existing is not None else fp.read_bytes().decode("utf-8", "replace"),
+                              encoding="utf-8")
+            entry["backup"] = str(backup)
+        except OSError as exc:
+            # If the backup cannot be written, do not proceed — losing the original is the
+            # exact failure this guard exists to prevent.
+            entry["action"] = "failed"
+            entry["reason"] = f"could not write backup {backup.name}: {exc}. {fname} was left untouched."
+            results.append(entry)
+            continue
+
+        fp.write_text(content, encoding="utf-8")
+        entry["action"] = "overwritten"
+        results.append(entry)
 
     return results

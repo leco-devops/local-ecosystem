@@ -9,7 +9,10 @@ config files only.
 
 from __future__ import annotations
 
+import fnmatch
+import json
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -110,7 +113,7 @@ PRIORITY_TIERS: list[dict[str, Any]] = [
         "tier": 4,
         "names": [
             "README.md", "readme.md",
-            "wrangler.toml", "wrangler.json",
+            "wrangler.toml", "wrangler.json", "wrangler.jsonc",
             "tsconfig.json", "next.config.js", "next.config.mjs",
             "vite.config.js", "vite.config.ts",
             "pyproject.toml", "requirements.txt",
@@ -132,13 +135,23 @@ def _detect_scripts_from_package_json(app_root: Path) -> list[str]:
         data = json.loads(pj.read_text(encoding="utf-8", errors="replace"))
         scripts = data.get("scripts", {})
         extra = []
-        for key, cmd in scripts.items():
-            if key in ("start", "dev", "worker", "cron", "queue", "serve"):
-                # Extract the JS file from "node server.js" or "node src/worker.js"
-                parts = cmd.split()
-                for p in parts:
-                    if p.endswith(".js") or p.endswith(".ts"):
-                        extra.append(p)
+        # Any script whose command starts with a known runtime, rather than a six-word
+        # allowlist of script *names*: a monorepo names scripts for its domain ("control",
+        # "mesh", "edge"), and those were invisible. The model judges relevance better than
+        # a fixed list does.
+        runtimes = ("node", "bun", "deno", "tsx", "ts-node", "python", "python3", "nodemon")
+        for _key, cmd in scripts.items():
+            parts = cmd.split()
+            if not parts:
+                continue
+            head = parts[0].rsplit("/", 1)[-1]
+            if head not in runtimes and not any(p.rsplit("/", 1)[-1] in runtimes for p in parts[:2]):
+                continue
+            for p in parts:
+                # .mjs is the modern default and "dev.mjs".endswith(".js") is False, so every
+                # entry script in an ESM project used to be skipped.
+                if p.endswith((".js", ".ts", ".mjs", ".cjs", ".mts", ".cts", ".py")):
+                    extra.append(p)
         return extra
     except Exception:
         return []
@@ -159,6 +172,107 @@ def _read_file_truncated(path: Path, max_lines: int) -> tuple[str, int, bool]:
     return truncated, original, True
 
 
+# ---------------------------------------------------------------------------
+# Discovery below the root
+# ---------------------------------------------------------------------------
+
+_INFRA_GLOBS = (
+    "docker-compose*.y*ml", "compose*.y*ml",
+    "wrangler.toml", "wrangler.json", "wrangler.jsonc",
+)
+
+# Directories that never hold the answer and are expensive to walk.
+_DISCOVER_PRUNE = {
+    ".git", "node_modules", "dist", "build", "coverage", ".next", ".nuxt",
+    "vendor", "__pycache__", ".venv", "venv", ".wrangler", ".turbo", "target",
+}
+
+
+def _discover_infra_files(root: Path, *, max_depth: int = 3, limit: int = 24) -> list[str]:
+    """Relative paths to compose and wrangler configs anywhere near the root.
+
+    The collector previously only ever looked at ``root / name`` plus a hardcoded ``conf/``,
+    so a monorepo keeping its compose at ``infra/docker/docker-compose.yml`` and its Workers
+    under ``workers/*/wrangler.jsonc`` presented as having neither. The model then reported
+    ``compose_files: []`` and ``has_wrangler: false`` for a repository that is nothing but
+    Workers, and a working compose was ignored in favour of a generated one.
+    """
+    found: list[str] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        rel_dir = Path(dirpath).relative_to(root)
+        if len(rel_dir.parts) >= max_depth:
+            dirnames[:] = []
+        dirnames[:] = [d for d in dirnames if d not in _DISCOVER_PRUNE and not d.startswith(".")]
+        for pattern in _INFRA_GLOBS:
+            for name in fnmatch.filter(filenames, pattern):
+                rel = str((rel_dir / name)) if str(rel_dir) != "." else name
+                if rel not in found:
+                    found.append(rel)
+                if len(found) >= limit:
+                    return found
+    return found
+
+
+def _paths_from_script_commands(root: Path) -> list[str]:
+    """Config paths named inside package.json scripts.
+
+    ``"dev:docker": "docker compose -f infra/docker/docker-compose.yml up --build"`` names the
+    real compose file. The collector already read package.json and did not follow it.
+    """
+    pkg = root / "package.json"
+    if not pkg.is_file():
+        return []
+    try:
+        scripts = json.loads(pkg.read_text(encoding="utf-8")).get("scripts") or {}
+    except (OSError, ValueError):
+        return []
+    out: list[str] = []
+    for cmd in scripts.values():
+        if not isinstance(cmd, str):
+            continue
+        for tok in cmd.split():
+            tok = tok.strip("\"'")
+            if tok.endswith((".yml", ".yaml", ".toml", ".json", ".jsonc")) and "/" in tok:
+                if (root / tok).is_file() and tok not in out:
+                    out.append(tok)
+    return out
+
+
+def _local_imports_of(root: Path, rel_paths: list[str], *, limit: int = 8) -> list[str]:
+    """One hop of relative imports out of already-selected entry scripts.
+
+    The ports for every worker in one real project live in ``infra/dev/topology.mjs``, which
+    nothing references by name in package.json — it is imported by the dev entry script. With
+    it invisible the model said, in its own trace, "we'll set 3000 arbitrarily". One hop is
+    enough to reach data like that without walking the whole tree.
+    """
+    out: list[str] = []
+    for rel in rel_paths:
+        fp = root / rel
+        if not fp.is_file() or fp.suffix not in (".mjs", ".js", ".ts", ".cjs", ".mts"):
+            continue
+        try:
+            text = fp.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for m in re.finditer(r"""(?:from|import)\s+['"](\.[^'"]+)['"]""", text):
+            target = (fp.parent / m.group(1)).resolve()
+            candidates = [target] if target.suffix else [
+                target.with_suffix(ext) for ext in (".mjs", ".js", ".ts")
+            ]
+            for cand in candidates:
+                try:
+                    rel_c = str(cand.relative_to(root))
+                except ValueError:
+                    continue
+                if cand.is_file() and rel_c not in out and rel_c not in rel_paths:
+                    out.append(rel_c)
+                    break
+            if len(out) >= limit:
+                return out
+    return out
+
+
 def collect_app_context(app_root: str | Path, token_budget: int = 12_000) -> CollectedContext:
     """Collect source files from app_root within a token budget.
 
@@ -170,11 +284,30 @@ def collect_app_context(app_root: str | Path, token_budget: int = 12_000) -> Col
         return CollectedContext(app_root=str(root), budget=token_budget)
 
     ctx = CollectedContext(app_root=str(root), budget=token_budget)
+    _INFRA_READ_FULL: set[str] = set()
     tokens_used = 0
     collected_names: set[str] = set()
+    # Dedup on filesystem identity (st_dev, st_ino), not the candidate string and not
+    # resolve() — APFS and NTFS are case-insensitive, so "README.md" and "readme.md"
+    # are one file with two spellings, and resolve() returns whichever spelling it was
+    # handed. Both passed is_file() and both were sent, once costing 41% of the whole
+    # token budget on a single duplicated file.
+    collected_paths: set[str] = set()
 
     # Detect extra entry scripts from package.json
     extra_scripts = _detect_scripts_from_package_json(root)
+    # Everything below the root that the fixed candidate list cannot see.
+    extra_scripts += [p for p in _paths_from_script_commands(root) if p not in extra_scripts]
+    _discovered_infra = _discover_infra_files(root)
+    _INFRA_READ_FULL.update(_discovered_infra)
+    extra_scripts += [p for p in _discovered_infra if p not in extra_scripts]
+    _imports = _local_imports_of(root, list(extra_scripts))
+    _INFRA_READ_FULL.update(_imports)
+    extra_scripts += [p for p in _imports if p not in extra_scripts]
+    # Files discovered below the root are read further than a general source file. They are
+    # small, and they are *data* — a compose file or a port table truncated halfway answers
+    # the question wrongly rather than partially. Truncating topology.mjs at 100 lines left
+    # 3 of 10 worker ports visible, which is how a port gets invented.
 
     for tier_def in PRIORITY_TIERS:
         tier = tier_def["tier"]
@@ -203,8 +336,19 @@ def collect_app_context(app_root: str | Path, token_budget: int = 12_000) -> Col
                 continue
             if name in collected_names:
                 continue
+            try:
+                st = fp.stat()
+                real = f"{st.st_dev}:{st.st_ino}"
+            except OSError:
+                real = str(fp.resolve()) if fp.exists() else str(fp)
+            if real in collected_paths:
+                continue
 
-            content, orig_lines, truncated = _read_file_truncated(fp, max_lines)
+            # Discovered infra/config data gets a wider window than ordinary source.
+            lines_for_file = max_lines
+            if name in _INFRA_READ_FULL or name.endswith((".yml", ".yaml", ".toml", ".jsonc")):
+                lines_for_file = max(max_lines, 400)
+            content, orig_lines, truncated = _read_file_truncated(fp, lines_for_file)
             if not content.strip():
                 continue
 
@@ -222,6 +366,7 @@ def collect_app_context(app_root: str | Path, token_budget: int = 12_000) -> Col
             )
             ctx.files.append(cf)
             collected_names.add(name)
+            collected_paths.add(real)
             tokens_used += est
 
         if tokens_used >= token_budget:

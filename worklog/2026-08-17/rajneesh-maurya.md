@@ -6,8 +6,8 @@ _Written by `atlas worklog`. Measured from git and the corpus; no prompt text, a
 
 | | |
 |---|---|
-| Commits | 3 |
-| Lines | +32,134 / −2,817 |
+| Commits | 4 |
+| Lines | +32,139 / −2,820 |
 | Desks | local-ecosystem |
 | Rework rate | 43.3% — a file re-touched within 3 days |
 | Reverts | 0 |
@@ -22,6 +22,7 @@ _None named. Work that names no item is work the plan cannot see._
 - `d0de707` feat: MCP server, CI/CD, Git onboarding, and real-domain support
 - `3afafa2` feat(ai): link each provider preset to its official website
 - `ccf1b43` docs: adopt project-atlas and add the documentation index
+- `2b1317d` docs: record the day's worklog
 
 ---
 

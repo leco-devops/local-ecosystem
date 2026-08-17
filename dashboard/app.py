@@ -1675,7 +1675,9 @@ def api_leco_ai_analyze_write():
         target = str(staging)
 
     try:
-        written = write_generated_files(files, target, dry_run=dry_run)
+        # Explicit opt-in: without it an existing file is reported, not replaced.
+        overwrite = bool(data.get("overwrite"))
+        written = write_generated_files(files, target, dry_run=dry_run, overwrite=overwrite)
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 
