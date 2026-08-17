@@ -38,26 +38,70 @@
 <nav class="tabs" aria-label="Primary navigation">
   {% if link_tabs %}
     <a class="tab-btn tab-btn--link" href="/?tab=overviewTab">Overview</a>
-    <a class="tab-btn tab-btn--link" href="/?tab=referenceTab">Reference</a>
-    <a class="tab-btn tab-btn--link" href="/?tab=infrastructureTab">Infrastructure</a>
-    <a class="tab-btn tab-btn--link" href="/?tab=metricsTab">Metrics</a>
-    <a class="tab-btn tab-btn--link" href="/?tab=controlTab">Control</a>
-    <a class="tab-btn tab-btn--link" href="/?tab=platformTab">Platform</a>
-    <a class="tab-btn tab-btn--link" href="/?tab=hostedAppsTab">Hosted apps</a>
-    <a class="tab-btn tab-btn--link" href="/?tab=routesTab">Routes</a>
-    <a class="tab-btn tab-btn--link" href="/?tab=logsTab">Logs</a>
+    <div class="tab-group" data-tab-group="deploy" data-group-tabs="hostedAppsTab cicdTab routesTab">
+      <button type="button" class="tab-btn tab-group__toggle" aria-expanded="false" aria-haspopup="true">Deploy<span class="tab-group__caret" aria-hidden="true">▾</span></button>
+      <div class="tab-group__menu" role="menu">
+        <a class="tab-btn tab-btn--link" href="/?tab=hostedAppsTab">Hosted apps</a>
+        <a class="tab-btn tab-btn--link" href="/?tab=cicdTab">CI/CD</a>
+        <a class="tab-btn tab-btn--link" href="/?tab=routesTab">Routes</a>
+      </div>
+    </div>
+    <div class="tab-group" data-tab-group="operate" data-group-tabs="controlTab infrastructureTab">
+      <button type="button" class="tab-btn tab-group__toggle" aria-expanded="false" aria-haspopup="true">Operate<span class="tab-group__caret" aria-hidden="true">▾</span></button>
+      <div class="tab-group__menu" role="menu">
+        <a class="tab-btn tab-btn--link" href="/?tab=controlTab">Control</a>
+        <a class="tab-btn tab-btn--link" href="/?tab=infrastructureTab">Infrastructure</a>
+      </div>
+    </div>
+    <div class="tab-group" data-tab-group="insight" data-group-tabs="metricsTab logsTab referenceTab">
+      <button type="button" class="tab-btn tab-group__toggle" aria-expanded="false" aria-haspopup="true">Insight<span class="tab-group__caret" aria-hidden="true">▾</span></button>
+      <div class="tab-group__menu" role="menu">
+        <a class="tab-btn tab-btn--link" href="/?tab=metricsTab">Metrics</a>
+        <a class="tab-btn tab-btn--link" href="/?tab=logsTab">Logs</a>
+        <a class="tab-btn tab-btn--link" href="/?tab=referenceTab">Reference</a>
+      </div>
+    </div>
+    <div class="tab-group" data-tab-group="platform" data-group-tabs="platformTab mcpTab">
+      <button type="button" class="tab-btn tab-group__toggle" aria-expanded="false" aria-haspopup="true">Platform<span class="tab-group__caret" aria-hidden="true">▾</span></button>
+      <div class="tab-group__menu" role="menu">
+        <a class="tab-btn tab-btn--link" href="/?tab=platformTab">Platform</a>
+        <a class="tab-btn tab-btn--link" href="/?tab=mcpTab">MCP</a>
+      </div>
+    </div>
     <a class="tab-btn tab-btn--link" href="/help">Help</a>
     <a class="tab-btn tab-btn--link{% if nav_hub_active %} active{% endif %}" href="/hub">Service hubs</a>
   {% else %}
     <button type="button" class="tab-btn active" data-tab="overviewTab">Overview</button>
-    <button type="button" class="tab-btn" data-tab="referenceTab">Reference</button>
-    <button type="button" class="tab-btn" data-tab="infrastructureTab">Infrastructure</button>
-    <button type="button" class="tab-btn" data-tab="metricsTab">Metrics</button>
-    <button type="button" class="tab-btn" data-tab="controlTab">Control</button>
-    <button type="button" class="tab-btn" data-tab="platformTab">Platform</button>
-    <button type="button" class="tab-btn" data-tab="hostedAppsTab">Hosted apps</button>
-    <button type="button" class="tab-btn" data-tab="routesTab">Routes</button>
-    <button type="button" class="tab-btn" data-tab="logsTab">Logs</button>
+    <div class="tab-group" data-tab-group="deploy" data-group-tabs="hostedAppsTab cicdTab routesTab">
+      <button type="button" class="tab-btn tab-group__toggle" aria-expanded="false" aria-haspopup="true">Deploy<span class="tab-group__caret" aria-hidden="true">▾</span></button>
+      <div class="tab-group__menu" role="menu">
+        <button type="button" class="tab-btn" data-tab="hostedAppsTab">Hosted apps</button>
+        <button type="button" class="tab-btn" data-tab="cicdTab">CI/CD</button>
+        <button type="button" class="tab-btn" data-tab="routesTab">Routes</button>
+      </div>
+    </div>
+    <div class="tab-group" data-tab-group="operate" data-group-tabs="controlTab infrastructureTab">
+      <button type="button" class="tab-btn tab-group__toggle" aria-expanded="false" aria-haspopup="true">Operate<span class="tab-group__caret" aria-hidden="true">▾</span></button>
+      <div class="tab-group__menu" role="menu">
+        <button type="button" class="tab-btn" data-tab="controlTab">Control</button>
+        <button type="button" class="tab-btn" data-tab="infrastructureTab">Infrastructure</button>
+      </div>
+    </div>
+    <div class="tab-group" data-tab-group="insight" data-group-tabs="metricsTab logsTab referenceTab">
+      <button type="button" class="tab-btn tab-group__toggle" aria-expanded="false" aria-haspopup="true">Insight<span class="tab-group__caret" aria-hidden="true">▾</span></button>
+      <div class="tab-group__menu" role="menu">
+        <button type="button" class="tab-btn" data-tab="metricsTab">Metrics</button>
+        <button type="button" class="tab-btn" data-tab="logsTab">Logs</button>
+        <button type="button" class="tab-btn" data-tab="referenceTab">Reference</button>
+      </div>
+    </div>
+    <div class="tab-group" data-tab-group="platform" data-group-tabs="platformTab mcpTab">
+      <button type="button" class="tab-btn tab-group__toggle" aria-expanded="false" aria-haspopup="true">Platform<span class="tab-group__caret" aria-hidden="true">▾</span></button>
+      <div class="tab-group__menu" role="menu">
+        <button type="button" class="tab-btn" data-tab="platformTab">Platform</button>
+        <button type="button" class="tab-btn" data-tab="mcpTab">MCP</button>
+      </div>
+    </div>
     <a class="tab-btn tab-btn--link" href="/help">Help</a>
     <a class="tab-btn tab-btn--link" href="/hub">Service hubs</a>
   {% endif %}

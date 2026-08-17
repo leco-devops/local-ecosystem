@@ -8,6 +8,18 @@ global:
   checkNewVersion: false
 
 api:
+  # LOCAL ONLY. `insecure: true` serves the Traefik API and dashboard on :8080 with no
+  # authentication, and ecosystem-stack/services/traefik.sh publishes that port on 0.0.0.0.
+  # On a workstation that is a convenience; on a public VM `GET :8080/api/rawdata` returns the
+  # whole routing table, every backend address and the TLS configuration to anyone who asks.
+  #
+  # This file is supposed to be the .lh-only config — traefik-static-acme.yaml (insecure: false)
+  # is the one a cloud install should get. Today it does not: _traefik_tls_mode() in
+  # ecosystem-stack/services/traefik.sh reads tls.mode inside a quoted heredoc (<<'PY'), so
+  # "$DOCKER_BIND" is never expanded, the import fails, and the function always answers
+  # "mkcert" — which selects THIS file even when leco-platform.yaml says tls.mode: acme.
+  # Until that is fixed, any server running the stack is exposing :8080. Fix the heredoc, or
+  # drop `-p 8080:8080` from traefik.sh, before putting this on a public address.
   insecure: true
 
 providers:

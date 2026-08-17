@@ -31,6 +31,7 @@ AI_TARGETS = [
     {"id": "ai-paperclip-postgres", "label": "PostgreSQL (Paperclip)", "script": "paperclip-postgres", "container": "paperclip_postgres", "reset_volume": "paperclip_postgres_data"},
     {"id": "ai-postgres", "label": "PostgreSQL (n8n)", "script": "postgres", "container": "n8n_postgres", "reset_volume": "n8n_postgres_data"},
     {"id": "ai-dashboard", "label": "LEco DevOps", "script": "dashboard", "container": "service-dashboard"},
+    {"id": "ai-mcp", "label": "MCP server (AI agents)", "script": "mcp", "container": "leco-mcp"},
     {"id": "ai-update-catalog", "label": "Update catalog", "script": "update-catalog", "container": "leco-update-catalog"},
     {"id": "ai-cloudflare-local", "label": "Cloudflare local (compose)", "script": "cloudflare-local", "container": None},
     {"id": "ai-infra", "label": "Infra stack (MySQL, Redis, Mailpit, …)", "script": "infra", "container": None},
@@ -42,6 +43,9 @@ AI_TARGETS = [
 ECOSYSTEM_SERVICE_REQUIRES: dict[str, tuple[str, ...]] = {
     "n8n": ("postgres",),
     "paperclip": ("paperclip-postgres",),
+    # The MCP server is a thin proxy over the dashboard API — it has nothing to serve
+    # without it, so the dashboard starts first and stops last.
+    "mcp": ("dashboard",),
 }
 
 # Infra compose services (per-service Control targets).

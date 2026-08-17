@@ -8,7 +8,24 @@ config/leco-registry.yaml
 
 # AI provider config — contains API keys, never commit
 config/ai-providers.yaml
+
+# Timestamped backups of the secret files above — the exact-path rules do not
+# match a .bak-<stamp> suffix, so name them explicitly.
+config/*.bak-*
+config/*.bak
+config/*.orig
+config/*~
 config/ui-credentials.yaml
+
+# CI/CD pipelines — contains webhook secrets (HMAC needs the raw value), never commit
+config/cicd-pipelines.yaml
+
+# Git credentials for onboarding-from-Git (tokens / SSH keys), never commit
+config/git-credentials.yaml
+
+# Repositories cloned by the register wizard when the workspace parent is not
+# mounted read-write (dashboard/git_source.py) — never repo content
+hosting/app-sources/
 
 # File transfer runtime secrets and SFTP public keys (local dev)
 file-transfer/.env
@@ -23,6 +40,15 @@ hosting/app-available/*/
 certs/*.pem
 certs/*.key
 certs/*-key.pem
+# Timestamped backups from certs/generate-certs.sh (the .bak-<stamp> suffix escapes *.pem)
+certs/*.bak-*
+
+# MCP activity telemetry — per-machine runtime log, appended on every tool call.
+# The catalog JSON beside it is shared state and stays tracked; this is not.
+ecosystem-stack/config/generated/mcp-activity.jsonl
+
+# Per-machine service start policies (the .example.json is the tracked template).
+ecosystem-stack/config/service-default-policies.json
 
 # Writable runtime Traefik dynamic fragment
 hosting/traefik/dynamic.yml
@@ -48,5 +74,15 @@ platform/dev-stacks/*
 
 # leco-cli wrapper logs (per-run JSONL emitted by tools/leco-cli.sh)
 .leco-cli-logs/
+
+# CI/CD run history (per-machine runtime state: deploy logs, commit SHAs, timings)
+ecosystem-stack/config/generated/cicd-runs.jsonl
+ecosystem-stack/config/generated/cicd-runs.jsonl.tmp
+
+# RAG index over the repo's own docs (rebuilt on demand by dashboard/ai_corpus.py,
+# ~1 MB, always derivable from the tracked markdown — never committed)
+ecosystem-stack/config/generated/ai-rag-index.json
+ecosystem-stack/config/generated/ai-rag-embeddings.json
+ecosystem-stack/config/generated/ai-rag-*.tmp
 
 /Backup

@@ -10,7 +10,8 @@ LEco DevOps Open Project (application: **LEco DevOps**) is the canonical name. O
 - **Platform tab:** dev stack builder (WordPress, Magento, Laravel, LAMP/MEAN, custom components), cloud/local settings, ecosystem bundles
 - **Hosted apps:** third-party repos under `hosting/app-available/<slug>/` without polluting upstream trees
 - **Edge:** Traefik, mkcert TLS, `*.lh` DNS, split API + UI routes
-- **AI:** Ollama, Open WebUI, AirLLM, n8n
+- **AI:** Ollama, Open WebUI, AirLLM, n8n, Paperclip agent orchestration
+- **MCP server:** AI agents (Claude Code and any MCP client) deploy apps, onboard repos, control infrastructure, and monitor the stack — 60 tools over stdio or streamable HTTP, with destructive actions double-gated
 - **Optional:** Cloudflare-local (R2, KV, D1, Workers-style on `*.lh`), cloud VM profiles
 
 ## USP
@@ -19,6 +20,8 @@ Deploy first, configure later. Read → Convert → Orchestrate → Deploy. No m
 
 ## Key links
 
+- [START HERE](https://github.com/leco-devops/local-ecosystem/blob/main/START_HERE.md): route map for AI agents — install, deploy, operate, MCP, Skill
+- [MCP server](https://github.com/leco-devops/local-ecosystem/blob/main/docs/MCP_SERVER.md): agent access — tools, transports, safety gates
 - [Project site](https://leco-project.us): landing, vision, mission, FAQ
 - [Extended LLM guide](https://leco-project.us/llms-full.txt): full link map
 - [FAQ](https://leco-project.us/#faq): common questions

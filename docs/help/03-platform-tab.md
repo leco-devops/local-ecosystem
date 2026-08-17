@@ -2,20 +2,48 @@
 
 The **Platform** tab manages **cloud/local deployment settings**, **ecosystem service bundles**, and **isolated dev stacks** — separate Docker Compose projects for databases, CMS demos, and framework sandboxes.
 
-Open **`https://localhost.lh/?tab=platformTab`** (or click **Platform** in the top nav when visible).
-
-> On a **cloud VM**, set `deployment_mode: cloud` and `base_domain` in `config/leco-platform.yaml`. See [Cloud VM deployment](help:cloud-vm-deployment).
+Open **Platform ▾ → Platform** in the top nav, or **`https://localhost.lh/?tab=platformTab`**. (The **MCP** tab shares the same nav group — see [MCP server](help:mcp-server).)
 
 ## What you can do here
 
 | Area | Purpose |
 |------|---------|
-| **Platform settings** | Edit `config/leco-platform.yaml` — domain, TLS mode, enabled services |
+| **Platform settings** | Edit `config/leco-platform.yaml` — deployment mode, base domain, TLS mode, enabled services |
 | **Ecosystem bundles** | Start/stop groups of stack services (Traefik, Postgres, AI, CF-local, …) |
 | **Dev stack builder** | Create isolated stacks from presets or custom components |
 | **Your dev stacks** | Operate each stack: networking diagram, credentials, lifecycle actions |
 
 Destructive actions require the same **control token** as the **Control** tab when `DASHBOARD_CONTROL_TOKEN` is set.
+
+---
+
+## Deployment mode, base domain, and TLS
+
+Three keys at the top of `config/leco-platform.yaml` decide what hostnames the whole platform serves and who issues its certificates. A default laptop install looks like this:
+
+```yaml
+deployment_mode: local
+base_domain: lh
+tls:
+  mode: mkcert
+```
+
+| Key | Values | Effect |
+|-----|--------|--------|
+| `deployment_mode` | `local` · `cloud` | `local` assumes loopback DNS and a single operator. `cloud` assumes a real VM with public DNS. |
+| `base_domain` | `lh` (default) or a domain you own | Every generated hostname becomes `<name>.<base_domain>` — dev stacks, hosted apps, and stack services alike. |
+| `tls.mode` | `mkcert` · `acme` · `cloudflare` · `static` | Who issues certificates. |
+
+| TLS mode | Who issues the certificate | Use when |
+|----------|----------------------------|----------|
+| **`mkcert`** | A CA that exists only in **this machine's** trust store | Local `.lh` development. Nobody else's browser will trust it. |
+| **`acme`** | Let's Encrypt, via Traefik (HTTP-01 on the `web` entrypoint) | A cloud VM whose hostnames resolve publicly and whose TCP 80 is reachable |
+| **`cloudflare`** | Cloudflare, at its edge; the origin uses an Origin Certificate or a Tunnel | Behind Cloudflare — see [Cloud VM — Cloudflare DNS & SSL](help:cloudflare-ssl-install) |
+| **`static`** | You do; operator-supplied PEM files are the source of truth | You already have certificates from somewhere else |
+
+> **Before you point a real domain at this machine, read [PRODUCTION_HARDENING.md](/?tab=docsTab&doc=production-hardening).** The defaults that make a laptop pleasant — an unauthenticated control API, the Traefik dashboard in `insecure` mode, every published port bound to `0.0.0.0`, local-dev credentials — are not defaults you want on a public address. That document lists each one and how to close it.
+
+Changing `base_domain` or `tls.mode` is not enough on its own: DNS has to point at the VM, and Traefik has to be restarted so it reloads its certificate configuration.
 
 ---
 
@@ -100,19 +128,34 @@ platform:
 
 On register/deploy, LEco can inject stack connection env and attach the app compose project to the stack network. In the dashboard **Hosted apps** tab, use **Dev stack binding** when offered.
 
-See [Dev stack isolation](../DEV_STACK_ISOLATION.md) and [Hosted apps](help:hosted-apps).
+See [DEV_STACK_ISOLATION.md](/?tab=docsTab&doc=dev-stack-isolation) and [Hosted apps](help:hosted-apps).
 
 ---
 
 ## Cloud VM notes
 
-| Local (`*.lh`) | Cloud (`base_domain`) |
+| Local (`deployment_mode: local`, `base_domain: lh`) | Cloud (`deployment_mode: cloud`, real `base_domain`) |
 |----------------|------------------------|
 | `http://wordpress.lh` | `https://wordpress.dev.example.com` |
-| mkcert TLS | ACME / static / Cloudflare TLS modes |
-| Platform tab still manages dev stacks the same way | DNS must point `*.<base_domain>` to the VM |
+| `tls.mode: mkcert`, trusted only on this machine | `tls.mode: acme`, `cloudflare`, or `static` |
+| Loopback `/etc/hosts` or dnsmasq | DNS must point `*.<base_domain>` at the VM |
+| Control API may be open | Control API **must** be token-gated first |
+| Platform tab manages dev stacks the same way | Platform tab manages dev stacks the same way |
 
-Install: [Cloud VM deployment](help:cloud-vm-deployment) · Operator doc: [CLOUD_VM_DEPLOYMENT.md](../CLOUD_VM_DEPLOYMENT.md).
+Install: [Cloud VM deployment](help:cloud-vm-deployment) · Operator docs: [CLOUD_VM_DEPLOYMENT.md](/?tab=docsTab&doc=cloud-vm-deployment) · [PRODUCTION_HARDENING.md](/?tab=docsTab&doc=production-hardening).
+
+### Local certificates (`tls.mode: mkcert`)
+
+Generate the `.lh` certificate with the repo script, not by hand:
+
+```bash
+./certs/generate-certs.sh
+./ecosystem-stack/ecosystem-stack.sh restart traefik
+```
+
+It discovers every `*.lh` hostname Traefik and the registry actually serve and writes one certificate with an explicit SAN per hostname. **Do not run `mkcert "*.lh"`** — a wildcard directly below a top-level domain is rejected by every TLS client and matches nothing, not even `dashboard.lh`. If a browser still says *Not secure* on a `.lh` host, see [Common issues](help:ts-common).
+
+The script refuses to run when `tls.mode` is `acme`, `cloudflare`, or `static`, and explains who issues certificates in that mode instead — mkcert output would be worthless there.
 
 ---
 
@@ -128,7 +171,7 @@ leco-devops dev-stack repair magento-full
 leco-devops dev-stack reinstall magento-full -y
 ```
 
-See [LEco CLI](help:cli-basics) and [Deploy CLI](../../DEPLOY_CLI.md).
+See [LEco CLI](help:cli-basics) and [DEPLOY_CLI.md](/?tab=docsTab&doc=devops-deploy-cli).
 
 ## Related
 

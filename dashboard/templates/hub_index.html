@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Service hubs — LEco DevOps</title>
     {% include "_head_icons.html" %}
-    <link rel="stylesheet" href="/static/dashboard.css?v=20260530" />
+    <link rel="stylesheet" href="/static/dashboard.css?v=20260544" />
     <link rel="stylesheet" href="/static/service_hub.css" />
   </head>
   <body>
@@ -42,6 +42,142 @@
         </div>
       </section>
 
+      <section class="hub-panel hub-panel--ai" id="hub-ai-providers">
+        <h2 class="hub-panel__title">AI providers (LLM access)</h2>
+        <p class="hub-panel__lede muted small">
+          Connect an <strong>external AI provider</strong> — Anthropic (Claude API), Google (Gemini API), OpenAI,
+          Eden AI, or an aggregator such as OpenRouter, Groq, Together, Mistral or DeepSeek — plus self-hosted
+          gateways (LiteLLM, vLLM, LM Studio) and the local Ollama / AirLLM services.
+          On connect LEco DevOps <strong>discovers the provider's real model catalogue</strong> so you pick a model
+          rather than typing one from memory. The chosen provider drives AI-assisted onboarding on the
+          <a href="/?tab=hostedAppsTab">Hosted apps</a> tab and other AI-assisted LEco tasks.
+          Credentials are stored server-side only in <code>config/ai-providers.yaml</code> (gitignored, mode 0600) and are
+          never returned to the browser in full. Saving requires the control token on the
+          <a href="/?tab=controlTab">Control</a> tab when <code>DASHBOARD_CONTROL_TOKEN</code> is set.
+        </p>
+
+        <div class="ai-cfg-panel" id="aiConfigPanel">
+          <div class="ai-cfg-panel__summary" id="aiCfgSummary">
+            <span class="ai-status-card__dot" id="aiStatusDot" aria-hidden="true"></span>
+            <span class="ai-status-card__text">
+              <span class="ai-status-card__provider" id="aiStatusProvider">Loading…</span>
+              <span class="ai-status-card__meta muted small" id="aiStatusMeta"></span>
+            </span>
+            <span class="ai-privacy-badge" id="aiStatusPrivacy" hidden></span>
+          </div>
+
+          <div class="ai-cfg__body">
+            <aside class="ai-cfg__side">
+              <h4 class="ai-cfg__side-title">1 · Provider</h4>
+              <p class="ai-cfg__side-hint muted small">Pick the LLM service. Named products resolve their own endpoint — you never type a base URL from memory.</p>
+              <div class="ai-cfg__providers" id="aiCfgProviderList" role="radiogroup" aria-label="AI provider"></div>
+            </aside>
+
+            <section class="ai-cfg__main">
+              <div class="ai-cfg__privacy" id="aiCfgPrivacy" role="note">
+                <span class="ai-privacy-badge" id="aiCfgPrivacyBadge"></span>
+                <span class="ai-cfg__privacy-text" id="aiCfgPrivacyText"></span>
+              </div>
+
+              <div class="ai-cfg__fields">
+                <label class="ai-cfg__field is-hidden" id="aiCfgPresetRow">
+                  <span class="ai-cfg__label">Service</span>
+                  <span class="ai-cfg__inline">
+                    <select id="aiCfgPreset" aria-label="Provider preset"></select>
+                    <a href="#" id="aiCfgPresetDocs" class="ai-cfg__docs" target="_blank" rel="noopener noreferrer" hidden>API docs ↗</a>
+                  </span>
+                  <span class="ai-cfg__hint muted small" id="aiCfgPresetNote"></span>
+                </label>
+
+                <label class="ai-cfg__field is-hidden" id="aiCfgUrlRow">
+                  <span class="ai-cfg__label">Base URL</span>
+                  <input type="text" id="aiCfgUrl" autocomplete="off" spellcheck="false" placeholder="https://openrouter.ai/api/v1" />
+                  <span class="ai-cfg__hint muted small">Must serve <code>GET {base}/models</code> and <code>POST {base}/chat/completions</code>.</span>
+                </label>
+
+                <label class="ai-cfg__field is-hidden" id="aiCfgKeyRow">
+                  <span class="ai-cfg__label">API key</span>
+                  <span class="ai-cfg__inline">
+                    <input type="password" id="aiCfgKey" autocomplete="off" spellcheck="false" placeholder="Paste key — stored server-side only" />
+                    <button type="button" id="aiCfgKeyClear" class="ctrl-act ctrl-act--caution ai-cfg__mini" hidden>Remove stored key</button>
+                  </span>
+                  <span class="ai-cfg__hint muted small" id="aiCfgKeyState"></span>
+                </label>
+
+                <div class="ai-cfg__field is-hidden" id="aiCfgHybridRow">
+                  <span class="ai-cfg__label">Hybrid pair</span>
+                  <span class="ai-cfg__inline">
+                    <select id="aiCfgHybridLocal" aria-label="Local summarizer">
+                      <option value="ollama">Ollama (local)</option>
+                      <option value="airllm">AirLLM (local)</option>
+                      <option value="openai-compatible">OpenAI-compatible local</option>
+                    </select>
+                    <span class="ai-cfg__arrow" aria-hidden="true">→</span>
+                    <select id="aiCfgHybridCloud" aria-label="Cloud analyzer">
+                      <option value="openai">OpenAI</option>
+                      <option value="anthropic">Anthropic (Claude API)</option>
+                      <option value="google">Google (Gemini API)</option>
+                      <option value="openai-compatible">Aggregator / OpenAI-compatible</option>
+                    </select>
+                  </span>
+                  <span class="ai-cfg__inline">
+                    <input type="text" id="aiCfgHybridCloudModel" autocomplete="off" spellcheck="false" placeholder="Cloud model id, e.g. gpt-4o-mini" aria-label="Cloud model" />
+                  </span>
+                  <span class="ai-cfg__hint muted small">
+                    The local model summarizes your source; only that summary reaches the cloud model.
+                    The cloud side uses the key stored above. Pick the <strong>local</strong> model in the model list.
+                  </span>
+                </div>
+
+                <label class="ai-cfg__field is-hidden" id="aiCfgTimeoutRow">
+                  <span class="ai-cfg__label">Request timeout (seconds)</span>
+                  <input type="number" id="aiCfgTimeout" min="10" max="900" step="10" value="180" autocomplete="off" />
+                  <span class="ai-cfg__hint muted small">Local models on CPU may need 300–600 s. Cloud APIs typically need 60–180 s.</span>
+                </label>
+              </div>
+
+              <div class="ai-cfg__connect">
+                <button type="button" id="aiCfgTest" class="ctrl-act ctrl-act--ops">Connect &amp; list models</button>
+                <span class="ai-cfg__result" id="aiCfgResult" aria-live="polite"></span>
+              </div>
+
+              <div class="ai-cfg__models" id="aiCfgModelsBlock">
+                <div class="ai-cfg__models-head">
+                  <span class="ai-cfg__label">2 · Model</span>
+                  <span class="ai-cfg__models-meta muted small" id="aiCfgModelsMeta">Not discovered yet</span>
+                </div>
+                <div class="ai-cfg__models-tools">
+                  <input type="search" id="aiCfgModelSearch" class="ai-cfg__search" placeholder="Search by model id, vendor or description…" autocomplete="off" aria-label="Search models" />
+                  <label class="ai-cfg__sort">
+                    <span class="muted small">Sort</span>
+                    <select id="aiCfgModelSort" aria-label="Sort models">
+                      <option value="tier">Capability tier</option>
+                      <option value="name">Name</option>
+                      <option value="context">Context window</option>
+                      <option value="price">Cost (low → high)</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="ai-cfg__model-list" id="aiCfgModelList" role="listbox" aria-label="Available models"></div>
+                <p class="ai-cfg__tier-note muted small" id="aiCfgTierNote"></p>
+                <label class="ai-cfg__field ai-cfg__field--manual">
+                  <span class="ai-cfg__label">Selected model id</span>
+                  <input type="text" id="aiCfgModelManual" autocomplete="off" spellcheck="false" placeholder="e.g. qwen2.5-coder — type one if discovery is unavailable" />
+                </label>
+              </div>
+            </section>
+          </div>
+
+          <footer class="ai-cfg__foot">
+            <p class="ai-cfg__storage muted small" id="aiCfgStorage"></p>
+            <div class="ai-cfg__actions">
+              <span class="ai-cfg__status" id="aiCfgStatus" aria-live="polite"></span>
+              <button type="button" id="aiCfgSave" class="ctrl-act ctrl-act--ops">Save configuration</button>
+            </div>
+          </footer>
+        </div>
+      </section>
+
       <section class="hub-panel">
         <ul class="hub-index-list hub-index-list--detailed">
           {% for h in hubs %}
@@ -63,6 +199,6 @@
     </div>
     {% include "_app_modal.html" %}
     <script type="application/json" id="dashboard-boot-config">{{ dashboard_boot | tojson }}</script>
-    <script src="/static/dashboard.js?v=20260533"></script>
+    <script src="/static/dashboard.js?v=20260544"></script>
   </body>
 </html>

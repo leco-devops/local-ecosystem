@@ -1,7 +1,14 @@
-"""Map wrangler.toml → LocalCfResourcePlan (adapter only; no file writes)."""
+"""Map a wrangler config → LocalCfResourcePlan (adapter only; no file writes).
+
+Handles TOML, JSON and JSONC. Cloudflare's current default is ``wrangler.jsonc``; parsing
+only TOML meant registering a JSONC project crashed here with ``TOMLDecodeError`` *after*
+the registry entry had already been written, leaving the app half-registered.
+"""
 
 from __future__ import annotations
 
+import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -91,9 +98,64 @@ def _kv_cf_id(row: dict[str, Any]) -> str | None:
     return None
 
 
-def parse_wrangler_cf_resources(wrangler_path: Path, wrangler_env: str | None) -> LocalCfResourcePlan:
+def _strip_jsonc(text: str) -> str:
+    """Remove ``//`` and ``/* */`` comments and trailing commas, preserving string literals.
+
+    A regex over the whole document would corrupt any ``//`` inside a string (a URL, for
+    instance), so this scans character by character and only treats delimiters as such when
+    outside a string.
+    """
+    out: list[str] = []
+    i, n = 0, len(text)
+    in_str = False
+    quote = ""
+    while i < n:
+        ch = text[i]
+        if in_str:
+            out.append(ch)
+            if ch == "\\" and i + 1 < n:
+                out.append(text[i + 1])
+                i += 2
+                continue
+            if ch == quote:
+                in_str = False
+            i += 1
+            continue
+        if ch in ('"', "'"):
+            in_str, quote = True, ch
+            out.append(ch)
+            i += 1
+            continue
+        if ch == "/" and i + 1 < n and text[i + 1] == "/":
+            while i < n and text[i] != "\n":
+                i += 1
+            continue
+        if ch == "/" and i + 1 < n and text[i + 1] == "*":
+            i += 2
+            while i + 1 < n and not (text[i] == "*" and text[i + 1] == "/"):
+                i += 1
+            i += 2
+            continue
+        out.append(ch)
+        i += 1
+    return re.sub(r",(\s*[}\]])", r"\1", "".join(out))
+
+
+def load_wrangler_config(wrangler_path: Path) -> dict[str, Any]:
+    """Parse a wrangler config of any supported format into a plain dict."""
     raw = wrangler_path.read_text(encoding="utf-8")
-    data = tomllib.loads(raw)
+    suffix = wrangler_path.suffix.lower()
+    if suffix in (".json", ".jsonc"):
+        try:
+            return json.loads(raw if suffix == ".json" else _strip_jsonc(raw))
+        except json.JSONDecodeError:
+            # A .json file may still carry comments in the wild; try the tolerant path.
+            return json.loads(_strip_jsonc(raw))
+    return tomllib.loads(raw)
+
+
+def parse_wrangler_cf_resources(wrangler_path: Path, wrangler_env: str | None) -> LocalCfResourcePlan:
+    data = load_wrangler_config(wrangler_path)
     env_section: dict[str, Any] | None = None
     if wrangler_env:
         env_root = data.get("env")

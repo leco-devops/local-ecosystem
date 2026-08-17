@@ -1,0 +1,123 @@
+"""Server assembly, config resolution, and end-to-end tool dispatch against a fake API."""
+
+import json
+
+import pytest
+
+from leco_mcp.client import LecoApiError, LecoClient
+from leco_mcp.config import DEFAULT_BASE_URLS, Settings
+from leco_mcp.server import build_server
+
+
+# ------------------------------------------------------------------ configuration
+
+
+def test_settings_defaults_when_env_is_empty(monkeypatch):
+    for key in list(dict(**{k: v for k, v in __import__("os").environ.items()})):
+        if key.startswith("LECO_MCP_") or key == "DASHBOARD_CONTROL_TOKEN":
+            monkeypatch.delenv(key, raising=False)
+    s = Settings.from_env()
+    assert s.base_urls == DEFAULT_BASE_URLS
+    assert s.allow_destructive is False
+    assert s.allow_credentials is False
+    assert s.has_token is False
+
+
+def test_explicit_dashboard_url_wins_but_defaults_remain_as_fallback(monkeypatch):
+    monkeypatch.setenv("LECO_MCP_DASHBOARD_URL", "http://box.local:9000/")
+    s = Settings.from_env()
+    assert s.base_urls[0] == "http://box.local:9000"
+    # Fallbacks are kept so a stale profile value cannot brick every tool.
+    assert "http://localhost:8090" in s.base_urls
+
+
+def test_control_token_accepts_the_dashboard_env_name(monkeypatch):
+    monkeypatch.delenv("LECO_MCP_CONTROL_TOKEN", raising=False)
+    monkeypatch.setenv("DASHBOARD_CONTROL_TOKEN", "secret")
+    assert Settings.from_env().control_token == "secret"
+
+
+def test_flags_parse_truthy_spellings(monkeypatch):
+    for value in ("1", "true", "TRUE", "yes", "on"):
+        monkeypatch.setenv("LECO_MCP_ALLOW_DESTRUCTIVE", value)
+        assert Settings.from_env().allow_destructive is True
+    for value in ("0", "false", "no", ""):
+        monkeypatch.setenv("LECO_MCP_ALLOW_DESTRUCTIVE", value)
+        assert Settings.from_env().allow_destructive is False
+
+
+def test_describe_never_leaks_the_token():
+    s = Settings(control_token="super-secret")
+    blob = json.dumps(s.describe())
+    assert "super-secret" not in blob
+    assert '"control_token_configured": true' in blob
+
+
+# -------------------------------------------------------------------- assembly
+
+
+def test_server_registers_every_tool_family():
+    server = build_server(Settings())
+    names = {t.name for t in server._tool_manager.list_tools()}  # noqa: SLF001
+    for expected in (
+        "leco_server_info",
+        "leco_status",
+        "leco_control",
+        "leco_control_targets",
+        "leco_apps",
+        "leco_app_control",
+        "leco_onboard",
+        "leco_register",
+        "leco_detect",
+        "leco_dev_stack_action",
+        "leco_platform_traefik_apply",
+        "leco_route_merge_fragment",
+        "leco_llm_models",
+        "leco_docs",
+        "leco_ui_credentials",
+    ):
+        assert expected in names, f"missing tool {expected}"
+    assert all(n.startswith("leco_") for n in names)
+
+
+def test_tools_declare_read_only_hints_correctly():
+    server = build_server(Settings())
+    by_name = {t.name: t for t in server._tool_manager.list_tools()}  # noqa: SLF001
+    assert by_name["leco_status"].annotations.read_only_hint is True
+    assert by_name["leco_control"].annotations.read_only_hint is False
+    assert by_name["leco_control"].annotations.destructive_hint is True
+
+
+def test_every_tool_has_a_description():
+    server = build_server(Settings())
+    for tool in server._tool_manager.list_tools():  # noqa: SLF001
+        assert tool.description and len(tool.description) > 40, tool.name
+
+
+def test_prompts_are_registered():
+    server = build_server(Settings())
+    names = {p.name for p in server._prompt_manager.list_prompts()}  # noqa: SLF001
+    assert {"onboard_app", "diagnose_stack", "bring_up_stack"} <= names
+
+
+# ---------------------------------------------------------------------- client
+
+
+@pytest.mark.anyio
+async def test_unreachable_dashboard_reports_every_candidate():
+    settings = Settings(base_urls=("http://127.0.0.1:1",), read_timeout=1.0)
+    client = LecoClient(settings)
+    try:
+        with pytest.raises(LecoApiError) as exc:
+            await client.base_url()
+        message = str(exc.value)
+        assert "not reachable" in message
+        assert "http://127.0.0.1:1" in message
+        assert "ecosystem-stack.sh" in message
+    finally:
+        await client.aclose()
+
+
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"

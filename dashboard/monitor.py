@@ -121,6 +121,20 @@ SERVICE_MAP = [
         ],
     },
     {
+        "service": "MCP server",
+        "container": "leco-mcp",
+        "urls": ["http://mcp.lh/mcp"],
+        "notes": "Model Context Protocol endpoint — lets AI agents drive deployment, onboarding, and control",
+        "hub_slug": "mcp",
+        "insights": [
+            "Serves the streamable HTTP transport at /mcp; local Claude Code uses the stdio transport instead (no container needed).",
+            "Destructive tools stay disabled unless the service is started with LECO_MCP_ALLOW_DESTRUCTIVE=1.",
+        ],
+        "management_links": [
+            {"label": "MCP endpoint", "url": "http://mcp.lh/mcp"},
+        ],
+    },
+    {
         "service": "PostgreSQL (Paperclip)",
         "container": "paperclip_postgres",
         "urls": ["http://localhost.lh/hub/paperclip-postgres"],
@@ -513,6 +527,9 @@ INTERNAL_PROBE_BY_CONTAINER = {
     "ollama": "http://ollama:11434/",
     "traefik": "http://traefik:8080/api/version",
     "service-dashboard": "http://service-dashboard:8090/",
+    # MCP rejects a bare GET without the MCP headers, but answering at all proves the
+    # transport is live — the probe only needs a non-5xx response.
+    "leco-mcp": "http://leco-mcp:8099/mcp",
     "browser-rendering-local": "http://browser-rendering-local:8085/health",
     "mailpit": "http://mailpit:8025/",
     "telegram-gateway": "http://telegram-gateway:8091/health",

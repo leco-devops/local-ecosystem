@@ -84,7 +84,7 @@ leco-devops platform bind billing -f hosting/app-available/myapp/leco.app.yaml
 
 Implementation: `tools/deploy-cli/leco_app/ecosystem_platform.py` imports dashboard modules after `bootstrap_dashboard()`.
 
-Operator help: [Platform tab & dev stacks](help:dash-platform) · [Deploy CLI](../../DEPLOY_CLI.md).
+Operator help: [Platform tab & dev stacks](help:dash-platform) · [Deploy CLI](/?tab=docsTab&doc=devops-deploy-cli).
 
 ## Tests
 

@@ -57,6 +57,52 @@ def public_hostname(service: str, slug: str = "") -> str:
     return f"{service}.{dom}"
 
 
+def tls_mode() -> str:
+    """``mkcert`` | ``acme`` | ``static`` | ``cloudflare`` from ``config/leco-platform.yaml``."""
+    cfg = load_platform_config()
+    tls = cfg.get("tls") if isinstance(cfg.get("tls"), dict) else {}
+    return str(tls.get("mode") or "mkcert").strip().lower() or "mkcert"
+
+
+_ACME_STATIC_FILE = _PROJECT_ROOT / "traefik" / "traefik-static-acme.yaml"
+_FALLBACK_ACME_RESOLVER = "lecoacme"
+
+
+def acme_resolver_name() -> str:
+    """
+    Name of the certificate resolver declared in ``traefik/traefik-static-acme.yaml``.
+
+    Read from the file rather than hardcoded so a router can never reference a resolver that
+    does not exist — Traefik answers such a router with its self-signed default certificate and
+    logs nothing an operator would connect to a TLS warning in the browser.
+    """
+    try:
+        import yaml
+
+        raw = yaml.safe_load(_ACME_STATIC_FILE.read_text(encoding="utf-8")) or {}
+        resolvers = raw.get("certificatesResolvers") if isinstance(raw, dict) else None
+        if isinstance(resolvers, dict):
+            for name in resolvers:
+                if str(name).strip():
+                    return str(name).strip()
+    except Exception:
+        pass
+    return _FALLBACK_ACME_RESOLVER
+
+
+def router_tls_config() -> Any:
+    """
+    Value for a Traefik router's ``tls`` key under the current platform config.
+
+    ``True`` locally (Traefik picks the mkcert bundle from the file provider); with
+    ``tls.mode: acme`` a ``{"certResolver": …}`` mapping, without which no certificate is ever
+    requested for that router.
+    """
+    if deployment_mode() == "cloud" and tls_mode() == "acme":
+        return {"certResolver": acme_resolver_name()}
+    return True
+
+
 def load_component_catalog() -> dict[str, Any]:
     return _pc.load_component_catalog()
 

@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "leco-mcp"
+version = "0.1.0"
+description = "LEco DevOps MCP server — Model Context Protocol access to deployment, onboarding, infrastructure control, and monitoring (local-ecosystem)"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  {name = "Techtonic Systems Media And Research LLC"},
+]
+license = "MIT"
+keywords = ["mcp", "leco", "devops", "docker", "traefik", "claude"]
+dependencies = [
+  "mcp>=2.0.0",
+  "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+http = [
+  "uvicorn>=0.30",
+]
+dev = [
+  "pytest>=8.0",
+]
+
+[project.urls]
+Homepage = "https://leco-project.us"
+Repository = "https://github.com/leco-devops/local-ecosystem"
+
+[project.scripts]
+leco-mcp = "leco_mcp.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["leco_mcp*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

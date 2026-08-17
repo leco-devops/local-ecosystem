@@ -100,6 +100,172 @@ sequenceDiagram
   end
 ```
 
+## Onboarding from a Git repository
+
+Git is a **source adapter**, not a second pipeline: once the clone lands, the wizard continues exactly as it does for a local folder. Full behaviour: [Git onboarding & CI/CD](help:git-cicd).
+
+```mermaid
+sequenceDiagram
+  participant UI as Dashboard UI
+  participant API as Flask app.py
+  participant Git as git_source
+  participant Rem as Remote repository
+  participant Root as Clone root
+  participant Det as leco_detect
+  participant Mat as leco_materialize
+  participant CLI as leco-devops
+  participant Tr as hosting/traefik/dynamic.yml
+
+  UI->>API: POST /api/leco/git/inspect
+  API->>Git: validate URL, resolve credential
+  Note over Git: http, file, git and ext transports refused<br/>URLs containing a credential refused
+  Git->>Rem: ls-remote via GIT_ASKPASS or GIT_SSH_COMMAND
+  Rem-->>UI: branches and tags, no clone yet
+  UI->>API: POST /api/leco/git/clone/stream
+  API->>Git: clone_or_update
+  Git->>Root: pick root - env override, writable workspace parent, else hosting/app-sources
+  Git->>Rem: shallow clone at the chosen ref
+  Rem-->>Git: working tree
+  Git-->>UI: NDJSON progress with secrets redacted
+  Note over Git: temp credential dir removed when the context exits
+  Git-->>UI: done - path_field, commit, which root was used
+  UI->>API: POST /api/leco/detect
+  API->>Det: scan compose, wrangler, container ports
+  UI->>API: POST generate-yaml then save-yaml
+  API->>Mat: materialize hosting/app-available/slug
+  UI->>API: POST /api/leco/register
+  API->>CLI: ecosystem-register --merge-traefik
+  CLI->>Tr: merge routing.entries
+  API->>CLI: deploy
+  CLI-->>UI: containers up, main URL probed
+```
+
+## CI/CD run (and the failure branch that matters)
+
+```mermaid
+sequenceDiagram
+  participant GH as Git host
+  participant HK as POST /api/cicd/webhook/id
+  participant CI as cicd.py
+  participant Git as git_source
+  participant B as docker compose run
+  participant Ctl as control.run_action_streaming
+  participant App as Deployed app
+  participant Runs as cicd-runs.jsonl
+
+  GH->>HK: push payload plus signature header
+  HK->>CI: handle_webhook on the raw body
+  alt bad signature, unknown pipeline, or body too large
+    CI-->>GH: 403 forbidden, identical for all three
+  else signature verified with compare_digest
+    CI->>CI: parse event, filter branch, drop repeated delivery id
+    alt a run for this pipeline is already active
+      CI-->>GH: 202 coalesced, newest commit replaces the queued slot
+    else slot free
+      CI-->>GH: 202 run started
+      CI->>Git: check out the exact pushed commit
+      Git-->>CI: SHA actually checked out
+      opt build hook configured
+        CI->>B: run --rm --no-deps on an app-declared compose service
+        B-->>CI: exit code
+      end
+      CI->>Ctl: deploy leco-stack-slug
+      Ctl-->>CI: containers recreated
+      CI->>App: HTTP probe, up to 6 attempts 5s apart
+      alt probe answers 2xx or 3xx
+        App-->>CI: ok
+        CI->>Runs: status success
+        CI->>CI: advance last_deployed_sha
+      else probe never answers
+        App-->>CI: failure
+        CI->>Runs: status failed with every verify attempt
+        Note over CI,Runs: last_deployed_sha is NOT advanced<br/>rollback still points at the last verified release<br/>the deploy already happened - nothing rolls back by itself
+      end
+    end
+  end
+```
+
+If no verify URL can be derived the probe is recorded as **skipped**, the run succeeds, and the outcome says the release was not verified.
+
+## An agent operating the platform over MCP
+
+The MCP server has no Docker socket and no shell. Every tool is an HTTP call against the dashboard API, so an agent can never do more than the dashboard already allows. Tool tables and configuration: [MCP server](help:mcp-server).
+
+```mermaid
+sequenceDiagram
+  participant Ag as AI agent
+  participant MW as Activity middleware
+  participant T as leco-mcp tool
+  participant SG as Safety gates
+  participant Cl as LecoClient
+  participant API as Dashboard REST API
+  participant Eng as Docker, Traefik, leco-devops
+  participant Log as mcp-activity.jsonl
+
+  Ag->>MW: tools/call
+  MW->>T: dispatch
+  opt destructive or credential tool
+    T->>SG: check confirm argument and LECO_MCP_ALLOW flag
+  end
+  alt a required gate is missing
+    SG-->>T: blocked, message names both gates
+    MW->>Log: append event with blocked true
+    MW-->>Ag: blocked - nothing was called
+  else allowed, or the tool is not gated
+    T->>Cl: dashboard endpoint
+    Cl->>API: HTTP with X-Control-Token when configured
+    API->>Eng: compose, Docker socket, CLI
+    Eng-->>API: result
+    API-->>Cl: JSON or NDJSON stream
+    Cl-->>T: payload
+    T->>T: shape into a compact view
+    MW->>Log: append tool_call event with target and duration
+    MW-->>Ag: tool result
+  end
+```
+
+The dashboard reads that same log to build the **MCP** tab — it never writes it.
+
+## RAG answer over the platform's own docs
+
+```mermaid
+sequenceDiagram
+  participant U as Operator
+  participant API as POST /api/ai/rag/ask/stream
+  participant R as ai_rag
+  participant C as ai_corpus index
+  participant Live as Live collectors
+  participant P as AI provider
+
+  U->>API: question
+  API->>R: ask_stream
+  R->>C: load index, rebuild if file mtimes changed
+  C-->>R: scrubbed markdown chunks
+  R->>R: BM25 over text, headings and paths
+  opt local embeddings built and still valid
+    R->>R: fuse vector scores with the lexical scores
+  end
+  R->>R: match the question against the live source rules
+  opt a rule fired
+    R->>Live: collect only those sources
+    Live-->>R: status, routes, app snapshot or logs - scrubbed again
+    Note over Live,R: a failing collector becomes a note in the context, not a 500
+  end
+  R->>R: assemble prompt - live state first, then numbered passages
+  R-->>U: sources event, emitted before the first token
+  alt a provider is configured and answers
+    R->>P: system prompt plus context plus question
+    P-->>R: streamed JSON
+    R-->>U: prose tokens decoded out of the JSON string
+    R-->>U: done - answer with inline citations
+  else no provider, or the provider failed
+    R-->>U: retrieval-only answer - the retrieved passages themselves
+    Note over R,U: answered_by is retrieval-only and provider_error carries the reason
+  end
+```
+
+A local provider keeps the whole exchange on the machine. A cloud provider receives the question, the retrieved documentation and any live state collected for it — which can include container logs. The RAG status panel names the destination host for exactly that reason.
+
 ## Traefik routing (two files)
 
 ```mermaid
@@ -180,5 +346,7 @@ flowchart LR
 
 - [Onboarding overview](help:onboarding-overview)
 - [Hosting layout](help:hosting-layout)
+- [Git onboarding & CI/CD](help:git-cicd)
+- [MCP server](help:mcp-server) · [MCP server developer notes](help:dev-mcp-server)
 - [Registration flow developer](help:dev-registration-flow)
 - [Developer's guide](help:dev-overview)

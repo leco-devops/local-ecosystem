@@ -107,17 +107,33 @@ unset JAVA_HOME
 mkcert -install
 ```
 
-Generate a wildcard cert for `*.lh` (paths match Traefik service mounts):
+Generate the certificate with the repo script:
 
 ```bash
-mkdir -p "$REPO/certs"
-cd "$REPO/certs"
-mkcert "*.lh"
+"$REPO/certs/generate-certs.sh"
 ```
 
-You should have **`wildcard.lh.pem`** and **`wildcard.lh-key.pem`**. Traefik mounts **`$REPO/certs`** and **`$REPO/traefik`** (see `ecosystem-stack/services/traefik.sh`).
+It discovers every `*.lh` hostname the stack serves (Traefik routers, the app registry, materialized hosted apps), generates one certificate covering all of them, and verifies the coverage before it finishes. You should end up with **`wildcard.lh.pem`** and **`wildcard.lh-key.pem`** under `$REPO/certs`. Traefik mounts **`$REPO/certs`** and **`$REPO/traefik`** (see `ecosystem-stack/services/traefik.sh`).
+
+> **Do not run `mkcert "*.lh"`.** A wildcard directly below a top-level domain is rejected by every TLS client — RFC 6125 and the CA/Browser Forum rules refuse it, because `*.lh` would assert ownership of an entire TLD. Such a certificate matches **nothing**, not even `dashboard.lh`: the chain verifies (your CA is trusted) but the hostname check fails, so the browser still shows *Not secure*. The script uses explicit SANs instead, and only uses wildcards where they are legal (`*.myapp.lh` has three labels and is valid).
+
+**After adding a hosted app with a new hostname,** re-run the script and restart Traefik so the new name is covered:
+
+```bash
+"$REPO/certs/generate-certs.sh"
+./ecosystem-stack/ecosystem-stack.sh restart traefik
+```
 
 **Trust:** `mkcert -install` normally installs the local CA. If the browser still warns, import the CA from `$(mkcert -CAROOT)/rootCA.pem` into the **System** keychain (not iCloud) and set **Always Trust** (macOS).
+
+**Verify** that HTTPS really validates — no `-k`, which would hide the failure:
+
+```bash
+curl -sS -o /dev/null -w '%{http_code} verify=%{ssl_verify_result}\n' https://dashboard.lh
+# 200 verify=0   ← trusted chain AND matching hostname
+```
+
+`certs/generate-certs.sh --list` shows which hostnames would be included without generating anything.
 
 ---
 

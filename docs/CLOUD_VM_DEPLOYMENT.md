@@ -1,5 +1,7 @@
 # Cloud VM deployment
 
+> **Before you point DNS at the host:** the shipped defaults leave the Control API unauthenticated, Traefik's API insecure, and admin ports bound to `0.0.0.0`. Work through [PRODUCTION_HARDENING.md](PRODUCTION_HARDENING.md) first.
+
 Deploy **LEco DevOps** on a Linux cloud VM (development or preproduction) with selective services, custom domains, isolated dev stacks, and external LLM APIs.
 
 Requirements: [SRS_CLOUD_VM_PLATFORM.md](SRS_CLOUD_VM_PLATFORM.md).

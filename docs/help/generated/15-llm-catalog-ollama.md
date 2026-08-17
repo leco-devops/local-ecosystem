@@ -1,6 +1,6 @@
 # Ollama open-source LLM catalog (auto-generated)
 
-_Generated **2026-08-02T05:33:18Z**. Full live table: API `/api/llm-catalog/ollama` or Help topic below._
+_Generated **2026-08-17T02:47:13Z**. Full live table: API `/api/llm-catalog/ollama` or Help topic below._
 
 ## Curated + discovered models
 
@@ -20,9 +20,10 @@ _Generated **2026-08-02T05:33:18Z**. Full live table: API `/api/llm-catalog/olla
 | `qwen2.5-coder:7b` | Alibaba (Qwen team) | code, ide | ~4.7 GB | https://ollama.lh; Developer tooling; Open WebUI code mode | `./leco-cli.sh ollama install qwen2.5-coder:7b` |
 | `qwen2.5:0.5b` | Alibaba (Qwen team) | tiny, multilingual | ~0.4 GB | https://ollama.lh; CI / unit tests | `./leco-cli.sh ollama install qwen2.5:0.5b` |
 | `qwen2.5:7b` | Alibaba (Qwen team) | general, multilingual, code | ~4.7 GB | https://ollama.lh; https://ai.lh | `./leco-cli.sh ollama install qwen2.5:7b` |
-| `deepseek-v4-flash` 🆕 | DeepSeek | discovered | ~130.4 GB | https://ollama.lh; https://ai.lh | `./leco-cli.sh ollama install deepseek-v4-flash` |
 | `deepseek-v4-flash:0731` 🆕 | DeepSeek | discovered | ~155.4 GB | https://ollama.lh; https://ai.lh | `./leco-cli.sh ollama install deepseek-v4-flash:0731` |
-| `deepseek-v4-pro` 🆕 | DeepSeek | discovered | ~1.5 TB | https://ollama.lh; https://ai.lh | `./leco-cli.sh ollama install deepseek-v4-pro` |
+| `deepseek-v4-flash:preview` 🆕 | DeepSeek | discovered | ~130.4 GB | https://ollama.lh; https://ai.lh | `./leco-cli.sh ollama install deepseek-v4-flash:preview` |
+| `deepseek-v4-pro:0813` 🆕 | DeepSeek | discovered | ~831.4 GB | https://ollama.lh; https://ai.lh | `./leco-cli.sh ollama install deepseek-v4-pro:0813` |
+| `deepseek-v4-pro:preview` 🆕 | DeepSeek | discovered | ~1.5 TB | https://ollama.lh; https://ai.lh | `./leco-cli.sh ollama install deepseek-v4-pro:preview` |
 | `gemma4:31b` 🆕 | Gemma4 | discovered | ~58.3 GB | https://ollama.lh; https://ai.lh | `./leco-cli.sh ollama install gemma4:31b` |
 | `glm-5.1` 🆕 | Glm | discovered | ~1.4 TB | https://ollama.lh; https://ai.lh | `./leco-cli.sh ollama install glm-5.1` |
 | `glm-5.2` 🆕 | Glm | discovered |  | https://ollama.lh; https://ai.lh | `./leco-cli.sh ollama install glm-5.2` |

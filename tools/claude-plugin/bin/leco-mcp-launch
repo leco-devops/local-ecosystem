@@ -1,0 +1,82 @@
+#!/bin/sh
+# LEco DevOps MCP server launcher (plugin entrypoint).
+#
+# Resolves `leco-mcp` in the most reliable way available on this machine and execs it.
+# stdout is the MCP stdio transport channel, so every diagnostic here goes to stderr.
+#
+# Resolution order:
+#   1. $LECO_MCP_BIN                    explicit override (absolute path to an executable)
+#   2. leco-mcp on PATH                 normal `pip install leco-mcp` / `pip install -e tools/mcp-server`
+#   3. python -c "import leco_mcp"      package installed, console script not on PATH
+#   4. the repository source tree       plugin checkout, $LECO_ECOSYSTEM_ROOT, or $CLAUDE_PROJECT_DIR
+#
+# Override the interpreter with $LECO_MCP_PYTHON.
+
+set -eu
+
+self_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+
+die() {
+	printf '%s\n' "$@" >&2
+	exit 1
+}
+
+# 1. Explicit override.
+if [ -n "${LECO_MCP_BIN:-}" ]; then
+	[ -x "$LECO_MCP_BIN" ] || die "LECO_MCP_BIN is set but not executable: $LECO_MCP_BIN"
+	exec "$LECO_MCP_BIN" "$@"
+fi
+
+# 2. Console script on PATH.
+if command -v leco-mcp >/dev/null 2>&1; then
+	exec leco-mcp "$@"
+fi
+
+# Pick an interpreter.
+py=""
+for candidate in "${LECO_MCP_PYTHON:-}" python3 python; do
+	[ -n "$candidate" ] || continue
+	if command -v "$candidate" >/dev/null 2>&1; then
+		py=$(command -v "$candidate")
+		break
+	fi
+done
+[ -n "$py" ] || die \
+	"LEco DevOps MCP server: no Python interpreter found." \
+	"Install Python 3.11+, or set LECO_MCP_PYTHON to an interpreter that has leco-mcp installed."
+
+# 3. Package importable from the current environment.
+if "$py" -c 'import leco_mcp' >/dev/null 2>&1; then
+	exec "$py" -m leco_mcp "$@"
+fi
+
+# 4. Source tree next to this plugin, or a repository root the caller told us about.
+found_source=""
+for root in \
+	"$self_dir/../../mcp-server" \
+	"${LECO_ECOSYSTEM_ROOT:-}/tools/mcp-server" \
+	"${CLAUDE_PROJECT_DIR:-}/tools/mcp-server"; do
+	case "$root" in /tools/mcp-server) continue ;; esac
+	[ -f "$root/leco_mcp/__main__.py" ] || continue
+	found_source=$(CDPATH= cd -- "$root" && pwd)
+	if PYTHONPATH="$found_source${PYTHONPATH:+:$PYTHONPATH}" \
+		"$py" -c 'import leco_mcp, mcp, httpx' >/dev/null 2>&1; then
+		PYTHONPATH="$found_source${PYTHONPATH:+:$PYTHONPATH}"
+		export PYTHONPATH
+		exec "$py" -m leco_mcp "$@"
+	fi
+	break
+done
+
+if [ -n "$found_source" ]; then
+	die \
+		"LEco DevOps MCP server: found the source at $found_source but its dependencies are missing." \
+		"Install it:  pip install -e \"$found_source\"" \
+		"Then verify: leco-mcp doctor"
+fi
+
+die \
+	"LEco DevOps MCP server: 'leco-mcp' is not installed and no source tree was found." \
+	"From the local-ecosystem repository root:  pip install -e tools/mcp-server" \
+	"Then verify:                               leco-mcp doctor" \
+	"Or set LECO_MCP_BIN to an existing leco-mcp executable."

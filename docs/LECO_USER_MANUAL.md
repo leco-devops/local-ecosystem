@@ -1,47 +1,346 @@
 # LEco DevOps — User manual
 
-**LEco DevOps** is the product name for the multi-app deploy tooling in `tools/deploy-cli/`. You run it as **`leco-devops`**.
+This is the operator's manual: what LEco DevOps is, how to get your first application onto a hostname, how to keep it deploying, how to let an AI agent drive it, and where to look when something breaks.
 
-This guide explains **what LEco DevOps is**, **how to use it day to day**, and **how the CLI connects to the LEco DevOps web UI**. For exhaustive command-line and YAML tables, see **[DEPLOY_CLI.md](DEPLOY_CLI.md)** (also listed in the **Docs** tab). For architecture context, see **[ARCHITECTURE.md](ARCHITECTURE.md)**, **[HLD.md](HLD.md)**, **[LLD.md](LLD.md)**, and **[LECO_TOOLING.md](LECO_TOOLING.md)**.
+It is written to be read in order the first time. Everything deep lives in a canonical document; this page tells you which one and why.
+
+| You want to… | Go to |
+|---|---|
+| Understand the parts | [What LEco DevOps is](#what-leco-devops-is) |
+| Find your way around the UI | [The dashboard](#the-dashboard) |
+| Install it | [Install](#install) |
+| Put an app on a hostname | [Journey 1 — onboard an application](#journey-1--onboard-an-application) |
+| Make a push redeploy it | [Journey 2 — keep it deploying (CI/CD)](#journey-2--keep-it-deploying-cicd) |
+| Let Claude Code run it | [Journey 3 — point an AI agent at it](#journey-3--point-an-ai-agent-at-it) |
+| Give LEco its own LLM | [Journey 4 — configure an AI provider](#journey-4--configure-an-ai-provider) |
+| Run it on a real domain | [Real domains and TLS](#real-domains-and-tls) |
+| Fix something | [When something breaks](#when-something-breaks) |
+| Look up a command | [Command cheat sheet](#command-cheat-sheet) |
 
 ---
 
-## What is LEco DevOps?
+## What LEco DevOps is
 
-**LEco DevOps** is a small CLI for **third-party applications** you keep **outside** the local-ecosystem `ecosystem-stack`. Each app gets:
+**LEco DevOps** is a local DevOps platform. Three pieces, one machine:
 
-- A **bridge** manifest: **`leco.app.yaml`** — **`name`**, **`root`**, **`localHostProfile`**, optional **`configRefs`**, optional **`applicationVersion`**, optional **`localhost.notes`**. With **`lecoAppVersion: "3"`**, put **Docker Compose, Cloudflare, and Traefik routing** in **`leco.yaml`** under **`infrastructure`** (effective manifest = merge of bridge + profile).
-- A **profile**: **`leco.yaml`** (or **`localhost.yaml`** / inline `localhost:`) — archetype, **`urls`**, **`lifecycle`**, and (v3) **`infrastructure`**.
+| Piece | What it is |
+|-------|------------|
+| **The ecosystem stack** | Traefik edge routing, Postgres, Ollama, AirLLM, Open WebUI, n8n, Paperclip, Cloudflare-local adapters, an MCP server, optional infra add-ons and file transfer. Managed by `ecosystem-stack/ecosystem-stack.sh`. |
+| **The dashboard** | The web UI and the API behind it. Everything that changes state goes through it. |
+| **`leco-devops`** | The CLI for **hosted apps** — third-party applications you keep *outside* the ecosystem stack. (PyPI package name is `leco-app`; the command is `leco-devops`.) |
 
-The ecosystem **`config/leco-registry.yaml`** lists registered apps so the **Hosted apps** tab in LEco DevOps can monitor compose stacks, logs, and manifest excerpts.
+Two more entry points matter, and both act **through the dashboard API** rather than touching Docker themselves — which is why lifecycle rules and the control token live in one place no matter who is driving:
 
----
+- **`leco-mcp`** — an MCP server, so an AI agent (Claude Code, Claude Desktop, an IDE assistant) can run LEco with audited, gated tools.
+- **CI/CD** — a signed webhook from GitHub or GitLab triggers a deploy that is *verified* before it counts.
 
-## When to use LEco DevOps vs something else
+### What a hosted app looks like on disk
+
+| File | Role |
+|------|------|
+| **`leco.app.yaml`** | **Bridge**: `lecoAppVersion`, `name`, `root`, `localHostProfile`, optional `configRefs`, `applicationVersion` |
+| **`leco.yaml`** | **Profile**: `schemaVersion`, `archetype`, `urls[]`, `lifecycle`, `notes`, and (v3) `infrastructure` — `dockerCompose`, `cloudflare`, `routing`, `runtimes[]` |
+| **`config/leco-registry.yaml`** | The registry of apps LEco knows about (`id`, `label`, `manifest` path relative to the repo root) |
+| **`hosting/app-available/<slug>/`** | The app's hosting slot: manifests, optional `source` symlink, optional `docker-compose.leco-hosting.yml` overlay |
+| **`~/.local/share/leco/apps/<name>/`** | CLI state (override with `XDG_DATA_HOME`) |
+
+Use **`lecoAppVersion: "3"`** for new apps: infrastructure stays in `leco.yaml`, the bridge stays thin. Field-by-field reference: **[DEPLOY_CLI.md](DEPLOY_CLI.md)**. Merge rules, `source` symlinks, offboard semantics: **[LECO_APP_BLUEPRINT.md](LECO_APP_BLUEPRINT.md)**.
+
+### When *not* to use `leco-devops`
 
 | Goal | Use |
 |------|-----|
-| First-party ecosystem stack (Ollama, WebUI, Traefik, LEco DevOps **Control** targets, …) | `ecosystem-stack` scripts and **Control** tab — not **`leco-devops`** for those stacks |
-| A separate repo or folder with **docker compose** | **`leco-devops init`** → **`deploy`** → **`ecosystem-register`** |
-| **Cloudflare Workers** with **Wrangler** + optional compose | LEco DevOps: manifest **`cloudflare.wranglerConfig`**; **`cf-deploy`**, **`provision-local-cf`** as needed |
-| **WordPress, Magento, Node, PHP**, etc. without Workers | **`leco.yaml`** for URLs, hooks, and (v3) **`infrastructure.routing`**; Traefik merge uses the **effective** manifest (see **[LECO_APP_BLUEPRINT.md](LECO_APP_BLUEPRINT.md)**) |
-| No compose file yet | **`leco-devops init --manifest-only`** (TTY) or LEco DevOps wizard to stub manifest + **`leco.yaml`** |
-| Isolated DB/runtime per team on one VM (not a hosted app repo) | Dashboard **Platform** tab → **dev stacks** — see **[help/03-platform-tab.md](help/03-platform-tab.md)** and **[DEV_STACK_ISOLATION.md](DEV_STACK_ISOLATION.md)** |
-| Bind an app to a dev stack’s Postgres/MySQL | Set **`platform.devStackId`** in **`leco.yaml`**; register/deploy from **Hosted apps** |
+| First-party stack services (Traefik, Ollama, n8n, …) | `ecosystem-stack` scripts and the **Control** tab |
+| An isolated database/runtime per team on one machine | **Platform** tab → dev stacks — [help/03-platform-tab.md](help/03-platform-tab.md), [DEV_STACK_ISOLATION.md](DEV_STACK_ISOLATION.md) |
+| A separate repo or folder with docker compose | `leco-devops` — this manual |
+| Cloudflare Workers with Wrangler | `leco-devops` with `cloudflare.wranglerConfig` |
 
 ---
 
-## Platform tab and dev stacks
+## The dashboard
 
-**LEco DevOps → Platform** manages `config/leco-platform.yaml`, ecosystem bundles, and **isolated compose projects** under `platform/dev-stacks/<id>/`.
+Open **`https://localhost.lh`** (or `http://localhost:8090` before Traefik is up).
 
-- **Create** — presets (WordPress, Magento, Laravel, …) or custom components.
-- **Operate** — **Start**, **Stop**, **Repair** (fix routing/images, keep data), **Reinstall** (wipe volumes), **Destroy** (remove stack).
-- **Bind apps** — `platform.devStackId: <stackId>` in the app manifest.
+The navigation is **grouped**. Four items open a dropdown:
 
-Full operator guide: **[help/03-platform-tab.md](help/03-platform-tab.md)** (also in **Help** → *Platform tab & dev stacks*).
+| Nav | Contains | Use it to |
+|-----|----------|-----------|
+| **Overview** | — | See health, probes, and hosted app URLs at a glance |
+| **Deploy ▾** | **Hosted apps** · **CI/CD** · **Routes** | Put an application on a hostname and keep it there |
+| **Operate ▾** | **Control** · **Infrastructure** | Start/stop services, health, model managers, Docker inventory |
+| **Insight ▾** | **Metrics** · **Logs** · **Reference** | Host metric history, log tail, the `*.lh` URL encyclopedia |
+| **Platform ▾** | **Platform** · **MCP** | Platform config and dev stacks; the AI-agent bridge |
+| **Help** | page `/help` | The guided manual, searchable |
+| **Service hubs** | page `/hub` | Per-service ops pages, **UI credentials**, **AI providers** |
 
-**CLI** (from any directory with `LECO_ECOSYSTEM_ROOT` set):
+**Docs** (`/?tab=docsTab`) and **Develop** are no longer in the nav — reach them from the page footer or a direct URL such as `/?tab=docsTab&doc=production-hardening`.
+
+**Reference** is the URL encyclopedia, not the Docs tab renamed. They have always been different things.
+
+### The control token
+
+When `DASHBOARD_CONTROL_TOKEN` is set in `ecosystem-stack/services/dashboard.sh`, every mutating action needs it. Enter it once on **Control**; it is reused by Hosted apps, CI/CD, Routes, Platform, and the AI providers panel.
+
+When it is **not** set, the control API is open. That is fine on a laptop and unacceptable anywhere else — see [Real domains and TLS](#real-domains-and-tls).
+
+---
+
+## Install
+
+From the **repository root**:
+
+```bash
+# 1 · the stack
+./ecosystem-stack/ecosystem-stack.sh start
+
+# 2 · the CLI (Python 3.11+, Docker with Compose v2)
+cd tools/deploy-cli && pip install -e . && leco-devops --help
+```
+
+Do **not** `pip install` from `tools/` — only `tools/deploy-cli/` has a `pyproject.toml`.
+
+DNS and local TLS are prerequisites, not optional polish. Full first-machine setup: **[SETUP.md](SETUP.md)**; the short version is in [Local TLS](#local-tls-lh).
+
+---
+
+## Journey 1 — onboard an application
+
+**Goal:** an application you did not write is reachable at `https://myapp.lh`, visible in the dashboard, and controllable from it.
+
+### Step 1 — decide where the code comes from
+
+The Register wizard starts from **two sources**, and the only question is how the code reaches this machine:
+
+| Source | Pick it when |
+|--------|--------------|
+| **Local folder** | The tree is already here — in the repo, in a sibling repo mounted as `wsp:`, or at a host path |
+| **Git repository** | The code lives in Git and there is no checkout here — the normal case on a server, where there is no Finder to browse with |
+
+**They converge at the App root path.** *Clone / update & use* clones the repository and writes the resulting path into the same field the local-folder branch fills by hand. Everything after that is identical.
+
+### Step 2 — Register application
+
+**Deploy ▾ → Hosted apps → Register application (generate YAML · save · register)**.
+
+**If Local folder:** type or **Browse…** to the path. Repo-relative (`hosting/app-available/myapp`), `wsp:SiblingRepo/subpath`, or a host path. No `..` traversal. A read-only tree is **materialized** into `hosting/app-available/<slug>/` with a `source` symlink and config symlinks for `configRefs`, each `runtimes[].config`, and any `wrangler.*.toml` found — see [help/12-onboarding-materialize.md](help/12-onboarding-materialize.md).
+
+**If Git repository:** paste the URL, optionally a branch/tag/commit.
+
+- **Check repository** lists refs *without cloning* — do this first; a bad credential or branch name surfaces immediately.
+- **Clone / update & use** clones into **`hosting/app-sources/<id>/`** (gitignored). Shallow `--depth 1` unless you tick **Full history**; killed and cleaned up if it exceeds **300 s** or **2048 MB** (`LECO_GIT_TIMEOUT`, `LECO_GIT_MAX_CLONE_MB`).
+- Private repos take an HTTPS token or an OpenSSH key. Credentials go to `config/git-credentials.yaml` (mode `0600`, gitignored) and are passed to git through a temporary `GIT_ASKPASS` / `GIT_SSH_COMMAND` helper — never into the clone's `.git/config`, a manifest, a log, or a response. A URL that already embeds a token is refused.
+
+### Step 3 — Detect, generate, register
+
+1. Set **App id (slug)** and **Label**.
+2. **Detect** — scans compose, every `wrangler.*.toml`, ports, archetype; previews the YAML it would write.
+3. **Generate YAML** / **Save YAML** — writes `leco.app.yaml` + `leco.yaml`. **Register** stays disabled until both exist on disk.
+4. **Public URLs** — edit each `urls[]` entry; **Write into profile YAML** before saving.
+5. **Register** — runs `leco-devops ecosystem-register` inside the dashboard container: registry row, optional local KV/R2/D1 provisioning for Wrangler apps, Traefik merge. **Deploy stack** (on by default when the manifest has `dockerCompose`) then runs `leco-devops deploy`.
+
+Optional: the **AI-assisted onboarding** toggle streams an analysis of the detected tree. It uses whatever provider you configured in [Journey 4](#journey-4--configure-an-ai-provider).
+
+### The same thing from the CLI
+
+```bash
+cd /path/to/your/app
+export LECO_ECOSYSTEM_ROOT=/path/to/local-ecosystem
+leco-devops onboard          # compose up → register → Traefik merge
+```
+
+Or `leco-devops init --onboard -E /path/to/local-ecosystem` to scaffold the manifests first. Step-by-step equivalent: `deploy` → `ecosystem-register --merge-traefik`.
+
+### Step 4 — verify it actually answers
+
+Registration is not success; a hostname that returns 200 is.
+
+```bash
+curl -kIsS https://myapp.lh/            # through Traefik
+```
+
+On **Hosted apps**, the app's row shows a live probe. If it is red:
+
+- Are the containers on the external network **`lh-network`**? Traefik cannot reach anything else.
+- Does a router exist for the hostname? Check **Deploy ▾ → Routes**.
+- Does the `loadBalancer` host match the real container name (`container_name`, or `{project}-{service}-1`)?
+
+Full decision table: **[HOSTED_APPS_TRAEFIK_RUNBOOK.md](HOSTED_APPS_TRAEFIK_RUNBOOK.md)** and [help/09-502-routing.md](help/09-502-routing.md).
+
+### Step 5 — wire it up
+
+- **Attached services** — the app's data stores, runtimes, and Cloudflare bindings, with both **host** (`127.0.0.1` / `*.lh`) and **Docker DNS** connection strings. Use the *host* port from here in a GUI client; use the *Docker DNS* form inside compose. See [help/12-hosted-app-attached-services.md](help/12-hosted-app-attached-services.md).
+- **Seed data** — if `hosting/app-available/<slug>/data/` exists, **Import data** (or a dry-run plan) loads it. It is **never** run at register time. See [help/13-hosted-app-data-import.md](help/13-hosted-app-data-import.md).
+- **Dev stack binding** — set `platform.devStackId: <stackId>` in `leco.yaml` to attach the app to an isolated Platform stack's Postgres/MySQL.
+- **Lifecycle hooks** — `lifecycle.prepare` / `build` / `preStart` in `leco.yaml`, run with `leco-devops run-hooks --phase <phase>`. **These execute arbitrary shell commands.** Only enable them in repositories you trust.
+
+### Taking it back down
+
+| Action | Effect |
+|--------|--------|
+| `leco-devops down` | Stop the compose stack, keep everything else |
+| **Staging / offload** | Compose down, strip Traefik keys, **keep** `hosting/app-available/<slug>/` |
+| **Remove / Reset** (Hosted apps) | Local CF teardown → `docker compose down` (`-v` on Reset) → Traefik strip → registry row → hosting slot |
+| `leco-devops ecosystem-unregister <slug> -E …` | The CLI equivalent |
+
+There is no `hosting/app-staging/` directory. Details: [help/12-deploy-rebuild.md](help/12-deploy-rebuild.md).
+
+---
+
+## Journey 2 — keep it deploying (CI/CD)
+
+**Goal:** pushing to the repository redeploys the app, and a deploy that leaves the app broken is *recorded as broken*.
+
+Open **Deploy ▾ → CI/CD**.
+
+### Create the pipeline
+
+**New pipeline** takes: **Application (registry id)**, **Repository URL**, **Branch to deploy**, **Git host** (*Auto*, GitHub only, GitLab only, or Generic signed), an optional **Verify URL**, an optional **Build/test hook**, and **Auto-deploy on push**.
+
+One pipeline per application.
+
+### Install the webhook
+
+Copy the **webhook URL** and the **secret**. **The secret is shown once** — copy it before you dismiss the panel; if you lose it, use **Rotate secret**.
+
+- **GitHub** → *Settings → Webhooks*, content type `application/json`, paste the secret. GitHub signs the raw body as `X-Hub-Signature-256`.
+- **GitLab** → *Settings → Webhooks*, paste the secret into *Secret token*. GitLab sends it verbatim in `X-Gitlab-Token`; it does not sign the body.
+
+On a real domain, set `LECO_PUBLIC_BASE_URL=https://leco.example.com` on the dashboard first — otherwise the copied URL says `localhost:8090` and no Git host can reach it.
+
+### What a run does
+
+```
+pull → build hook (optional) → deploy → verify → record
+```
+
+- **pull** checks out the exact pushed commit.
+- **build hook** runs a **compose service your app defines** — not an arbitrary command string. That is deliberate: a command in a webhook-reachable config would be host code execution behind one leaked secret.
+- **deploy** is the same `leco-devops deploy` the dashboard runs.
+- **verify** is a **real HTTP probe** of the app's public URL, retried up to six times.
+- **record** stores the commit, per-step status, and the captured log.
+
+**A deploy that finishes while the app returns 502 is a FAILED run**, and the last-deployed commit is **not** advanced. That is the whole point: it is what makes **Rollback** point at a commit that actually served traffic.
+
+If verify reports *skipped*, no verify URL was configured or derivable — set one, or a broken deploy will be recorded as a success.
+
+### Rollback
+
+**Rollback** redeploys the previous good commit. It **does not** migrate a database backwards, and it does not undo anything the app did to its own data. Treat it as "put the old code back", nothing more.
+
+### Behaviours worth knowing
+
+- A push to a branch the pipeline does not track is acknowledged and ignored.
+- Ten rapid pushes produce **one** run, not ten.
+- An unsigned or wrongly-signed request gets a **403** and changes nothing — and the response is identical for every cause, so it will not tell you which. Diagnosis: [help/09-troubleshooting.md](help/09-troubleshooting.md).
+
+Operator guide: **[help/21-git-and-cicd.md](help/21-git-and-cicd.md)**. Full reference: **[GIT_AND_CICD.md](GIT_AND_CICD.md)**.
+
+---
+
+## Journey 3 — point an AI agent at it
+
+**Goal:** Claude Code (or another MCP client) can inspect and operate this platform, with a record of everything it did.
+
+Open **Platform ▾ → MCP**.
+
+1. **1 · Server status** tells you whether `leco-mcp` is installed, running, reachable, how many tools it exposes, which safety gates are on, and where the activity log is.
+2. **2 · Install on an agent** gives you copyable commands for the three ways to connect:
+   - **Claude Code plugin** — the fastest path; it bundles the skill, the server, and the slash commands.
+   - **stdio** — the agent launches the process; best for a single machine.
+   - **HTTP** — `https://mcp.lh/mcp`; best for agents elsewhere on the LAN, or ones that cannot spawn processes.
+   Then run `leco-mcp doctor` to confirm the endpoint, the tool list, and the log path.
+3. **3 · Plugin commands** lists every `/leco:*` command, read from the plugin on disk so the table cannot drift.
+
+Once an agent is connected, the rest of the tab is the audit trail: **Connected agents (sessions)**, **Applications — what MCP is doing to them**, the **Activity log** (every call, with filters for *blocked only* and *errors only*), and **Tool usage**.
+
+**`blocked` is not a failure.** It means a safety gate refused the call — destructive tools and credential access are opt-in and off by default. `error` is the different case: a tool that ran and failed.
+
+Operator guide: **[help/20-mcp-server.md](help/20-mcp-server.md)**. Full tool tables, transports, and gates: **[MCP_SERVER.md](MCP_SERVER.md)**.
+
+---
+
+## Journey 4 — configure an AI provider
+
+**Goal:** LEco itself can call an LLM, for AI-assisted onboarding and other AI-assisted tasks.
+
+Open **Service hubs → AI providers (LLM access)** (`/hub#hub-ai-providers`).
+
+### Pick a provider
+
+| Provider | Notes |
+|----------|-------|
+| **No AI (deterministic only)** | The default; everything still works, just without suggestions |
+| **Ollama (local)** · **AirLLM (local large models)** | Nothing leaves the machine |
+| **Anthropic (Claude API)** · **Google (Gemini API)** · **OpenAI** | Direct first-party APIs |
+| **Aggregator / OpenAI-compatible** | Eden AI, OpenRouter, Groq, Together, DeepSeek, Mistral, xAI, Cerebras, NVIDIA NIM, and self-hosted gateways (LiteLLM, vLLM, LM Studio, LocalAI) — pick the aggregator, then the **Service**, and it resolves its own base URL |
+| **Hybrid (local SLM + cloud LLM)** | A local model does the bulk; a cloud model handles what it cannot. Holds **two** providers and **two** model ids. |
+
+### Connect, then choose a model
+
+1. Fill only the fields the provider needs — **Service**, **Base URL**, **API key**, **Hybrid pair**, **Request timeout**.
+2. **Connect & list models** — LEco calls the provider and lists its **real** catalogue. Filter by name; sort by *Capability tier*, *Name*, *Context window*, or *Cost*.
+3. Click a model to fill **Selected model id**.
+4. **Save configuration** — active immediately, no restart.
+
+> **Never type a model id from memory.** An Anthropic provider paired with `gpt-4o-mini` authenticates perfectly and then returns **HTTP 404** on the first real call, because that model does not exist there. This is exactly what the *Connect & list models* step prevents. Watch for it in **Hybrid** mode especially, where a stale *cloud* model id can survive a change of cloud vendor.
+
+### Where the key goes
+
+Credentials are written server-side only, to **`config/ai-providers.yaml`** (mode `0600`, gitignored). They are never written into the repository, a manifest, `leco.app.yaml`, a log line, or any API response — the browser only ever receives a mask such as `sk-a••••••••••••x9f2`. The key field is **never prefilled**: leave it blank to keep the stored key, or press **Remove stored key** to delete it on the next save.
+
+The chosen provider is mirrored read-only on **Infrastructure → 8 · AI-assisted onboarding**, and drives the AI toggle in the Register wizard.
+
+### Ask LEco — grounded answers about this platform, API only
+
+There is a retrieval-augmented question API at **`/api/ai/rag/*`**. It indexes the repository's own documentation (`docs/**`, the top-level guides, the Claude plugin skills) and can mix in **live state** from this machine — stack status, services, control targets, hosted apps, Traefik routes, Cloudflare-local status, the AI config with keys masked, and service or per-app logs — then answers with numbered citations back to the files it used.
+
+**There is no UI for it.** Nothing in the dashboard calls these endpoints today. The only way to use it is an HTTP client:
+
+```bash
+# What is indexed, how fresh, and which provider would answer
+curl -s http://localhost:8090/api/ai/rag/status
+
+# Ask (add -H "X-Control-Token: $DASHBOARD_CONTROL_TOKEN" when a token is set)
+curl -s http://localhost:8090/api/ai/rag/ask \
+  -H 'Content-Type: application/json' \
+  -d '{"question":"why is my app returning 502 through Traefik?","app":"myapp","top_k":6}'
+
+# Retrieval only — never contacts a provider; good for checking the corpus
+curl -s http://localhost:8090/api/ai/rag/ask \
+  -H 'Content-Type: application/json' \
+  -d '{"question":"where are UI credentials stored","retrieval_only":true,"live":false}'
+```
+
+`POST /api/ai/rag/ask/stream` returns NDJSON (`status` → `sources` → `token`… → `done`). `POST /api/ai/rag/reindex` rebuilds the index and can opt into local embeddings. `GET /api/ai/rag/status` needs no token; the other three respect the control token. Pin live sources with `"live": ["traefik_routes","app_logs"]`, or disable them with `"live": false`.
+
+The index rebuilds when a document's mtime changes, so editing a file under `docs/` is picked up without restarting anything.
+
+---
+
+## Operating the platform
+
+### Control — start and stop things
+
+**Operate ▾ → Control**. Cards are grouped: *Bulk & orchestration*, *Ecosystem stack & Traefik*, *Infra add-ons & file transfer*, *Cloudflare local*. Each service also carries a **default policy** — `start` (included in bulk), `stop` (skipped by a bulk start), or `offloaded` (excluded from all bulk automation).
+
+Bulk `stop` / `restart` / `redeploy` skip the dashboard itself and, by default, **Traefik** and **Postgres**, so routing and the shared database stay up. Override with `ECOSYSTEM_BULK_PLATFORM_SKIP`.
+
+Registered apps appear here as `leco-stack-<id>` control targets. Details: [help/03-control.md](help/03-control.md).
+
+### Infrastructure — health and models
+
+**Operate ▾ → Infrastructure**. Jump bar: *Health · Services · Trends · CF local · Ollama · AirLLM · AI · Inventory*. Sections 5 and 6 hold the purple **Model manager** panels (Install / Load / Unload / Remove / Show CLI); section 7 is Paperclip; section 8 mirrors the AI provider. Details: [help/03-infrastructure.md](help/03-infrastructure.md).
+
+### Platform — dev stacks and platform config
+
+**Platform ▾ → Platform** edits `config/leco-platform.yaml` and builds **isolated dev stacks** under `platform/dev-stacks/<id>/` — WordPress, Magento, Laravel, plain Postgres/Redis, and so on, each its own compose project.
+
+| Action | Use it when |
+|--------|-------------|
+| **Start** / **Stop** | Ordinary lifecycle; Stop keeps volumes |
+| **Repair** | 502, wrong image name, missing route — fixes config in place, keeps data and manual edits |
+| **Reinstall** | Wrong DB major version, corrupt install — regenerates and wipes volumes |
+| **Destroy** | Remove the stack, its volumes, its directory, and its routes |
 
 ```bash
 export LECO_ECOSYSTEM_ROOT=/path/to/local-ecosystem
@@ -49,199 +348,154 @@ leco-devops platform presets
 leco-devops dev-stack create wordpress --preset wordpress --sample-data
 leco-devops dev-stack start wordpress --stream
 leco-devops dev-stack repair magento-full
-leco-devops platform bind billing -f hosting/app-available/myapp/leco.app.yaml
 ```
 
-See **[DEPLOY_CLI.md](DEPLOY_CLI.md)** § Platform and dev stacks.
+Details: [help/03-platform-tab.md](help/03-platform-tab.md) and [DEV_STACK_ISOLATION.md](DEV_STACK_ISOLATION.md).
+
+### Routes — Traefik
+
+**Deploy ▾ → Routes** shows merged routers and services, registry overlap, a quick route builder, and a **Merge YAML fragment** panel that calls `leco-devops traefik-fragment` for a registry id and merges the result into `hosting/traefik/dynamic.yml` (atomic write plus a `.bak`).
+
+Two files, two meanings:
+
+| File | Meaning |
+|------|---------|
+| `traefik/dynamic.yml` | Platform stack routes, in git. Copied to `hosting/traefik/01-stack-core.yml` every time Traefik starts. |
+| `hosting/traefik/dynamic.yml` | The merge target for hosted apps. Traefik's file provider **watches this directory**, so a merge usually applies without a restart. |
+
+Restart Traefik after changing `traefik/dynamic.yml`, the static config, or volume mounts. If routes vanish or everything 404s, run `ecosystem-stack/services/traefik.sh heal`.
+
+### Service hubs — credentials and per-service pages
+
+`/hub` gives each service a single operations page: what it does, live Docker status, credentials, connection strings, and every URL you can open. **UI access (local dev)** holds logins for MinIO, Adminer, n8n, Open WebUI, and SFTP/FTP, with short-lived **Auto-login** magic links. See [UI_CREDENTIAL_VAULT.md](UI_CREDENTIAL_VAULT.md) and [help/12-file-transfer.md](help/12-file-transfer.md).
 
 ---
 
-## Install
+## Real domains and TLS
 
-From the **local-ecosystem repository root**:
+### Local TLS (`*.lh`)
+
+Generate the local certificate with the repo script:
 
 ```bash
-cd tools/deploy-cli
-pip install -e .
-leco-devops --help
+./certs/generate-certs.sh
+./ecosystem-stack/ecosystem-stack.sh restart traefik
 ```
 
-Requirements: **Python 3.11+**, **Docker** with Compose v2 (`docker compose`). Do **not** run `pip install` from `tools/` alone — only **`tools/deploy-cli/`** has `pyproject.toml`.
+It discovers every `*.lh` hostname Traefik and the registry actually serve, writes **one explicit SAN per hostname**, and verifies coverage before finishing. Re-run it after adding a hosted app with a new hostname. `--list` previews without writing.
+
+> **Do not run `mkcert "*.lh"`.** A wildcard directly below a top-level domain is rejected by RFC 6125 and the CA/Browser Forum rules, because `*.lh` would claim an entire TLD. Such a certificate matches **nothing** — not even `dashboard.lh`. The chain still verifies, so `mkcert -install` looks like it worked and the browser still says *Not secure*. Wildcards remain legal one level deeper: `*.myapp.lh` is fine.
+
+mkcert is local-only. Its CA exists solely in the trust store of the machine that installed it.
+
+### Going to a real domain
+
+Three keys in `config/leco-platform.yaml` decide everything:
+
+```yaml
+deployment_mode: local   # or: cloud
+base_domain: lh          # or: a domain you own
+tls:
+  mode: mkcert           # or: acme | cloudflare | static
+```
+
+| `tls.mode` | Who issues certificates | Use when |
+|------------|-------------------------|----------|
+| `mkcert` | A CA trusted only on this machine | Local `.lh` development |
+| `acme` | Let's Encrypt via Traefik (HTTP-01 on the `web` entrypoint) | Public DNS resolves to the VM and TCP 80 reaches Traefik |
+| `cloudflare` | Cloudflare at its edge; origin uses an Origin Certificate or a Tunnel | Behind Cloudflare — [CLOUDFLARE_SSL_INSTALL.md](CLOUDFLARE_SSL_INSTALL.md) |
+| `static` | You do — operator-supplied PEM files | You already have certificates |
+
+`certs/generate-certs.sh` refuses to run in the non-mkcert modes and explains who issues certificates instead.
+
+> ### Read this before you expose anything
+>
+> **[PRODUCTION_HARDENING.md](PRODUCTION_HARDENING.md)** enumerates the defaults that make a laptop pleasant and a server dangerous: the **control API is unauthenticated unless you opt in**, the **Traefik API runs `insecure: true`**, **every published port binds `0.0.0.0`**, `cloud-install.sh` performs no hardening, local-development credentials would ship as-is, and the MCP server has its own exposure story. Each finding comes with the fix and a pre-flight checklist.
+>
+> Do this before DNS points at the machine, not after.
+
+Cloud VM install: [CLOUD_VM_DEPLOYMENT.md](CLOUD_VM_DEPLOYMENT.md) · [help/12-cloud-vm-deployment.md](help/12-cloud-vm-deployment.md).
 
 ---
 
-## Core files
+## When something breaks
 
-| File | Role |
-|------|------|
-| **`leco.app.yaml`** | Bridge: **`lecoAppVersion`**, **`name`**, **`root`**, **`localHostProfile`**, optional **`configRefs`**, optional **`applicationVersion`**. Legacy v2 may still list compose / cloudflare / routing here; **v3** keeps those under **`leco.yaml`** → **`infrastructure`**. |
-| **`leco.yaml`** (or **`localhost.yaml`**) | Profile: **`schemaVersion`**, **`archetype`**, **`urls[]`**, **`lifecycle`**, **`notes`**, and (v3) **`infrastructure`** (dockerCompose including **`additionalComposeFiles`**, cloudflare, routing, …) |
-| **`config/leco-registry.yaml`** | Registry of apps LEco DevOps knows about (`id`, `label`, **`manifest`** path relative to repo root) |
-| **`~/.local/share/leco/apps/<name>/`** | CLI state (override with `XDG_DATA_HOME`) |
+Start with **[help/09-troubleshooting.md](help/09-troubleshooting.md)** — it now covers webhook 403s, verify failures, clone timeouts and private-repo auth, model-id mismatches, and the `*.lh` certificate trap. Then:
 
-Manifest versions **`lecoAppVersion: "2"`** and **`"3"`** use **`localHostProfile`** (or inline **`localhost`**). **v3** is recommended for new apps so infra stays in **`leco.yaml`**. See **[DEPLOY_CLI.md](DEPLOY_CLI.md)** for full field lists and **[LECO_APP_BLUEPRINT.md](LECO_APP_BLUEPRINT.md)** for merge rules, **`source`** symlinks, and LEco DevOps behavior.
-
----
-
-## Typical workflows
-
-### 1. New app with Docker Compose (local-ecosystem)
-
-**Recommended — one command** after **`leco.app.yaml`** + **`leco.yaml`** exist (from **`init`** or hand-written):
-
-```bash
-cd /path/to/your/app
-export LECO_ECOSYSTEM_ROOT=/path/to/local-ecosystem
-leco-devops onboard       # compose up, leco-registry.yaml, merge routing.entries → hosting/traefik/dynamic.yml
-```
-
-Or combine init + onboarding:
-
-```bash
-leco-devops init --onboard -E /path/to/local-ecosystem
-```
-
-**Step-by-step equivalent:** **`deploy`** → **`ecosystem-register`** → optionally **`ecosystem-register --merge-traefik`** (or paste output of **`traefik-fragment`**).
-
-Put frontend/API containers on external network **`lh-network`** so Traefik can reach the hostnames in **`routing.entries`** (often compose **service** names or **container_name**). Details: **[DEPLOYMENT.md](DEPLOYMENT.md)** and **[DEPLOY_CUSTOM_APPS.md](DEPLOY_CUSTOM_APPS.md)**.
-
-### 2. Cloudflare (Wrangler) application
-
-If **`wrangler.toml`**, **`infra/wrangler.*.toml`**, or **`cloudflare/wrangler.toml`** exists, **`init`** / **Detect** can set **`cloudflare.wranglerConfig`** and multiple **`infrastructure.runtimes[]`** entries (one per Worker config; optional Pages runtime for **`wrangler.pages.toml`**). **Compose-only apps** (no `cloudflare` block) never trigger local KV/R2/D1. For Workers-backed apps:
-
-| Step | Local KV/R2/D1 from wrangler |
-|------|------------------------------|
-| **`leco-devops deploy`** | **Yes** by default after compose succeeds; use **`--no-provision-local-cf`** for compose-only. |
-| **`ecosystem-register`** / **`onboard`** | **Yes** unless **`--no-provision-local-cf`**. |
-| **`leco-devops provision-local-cf`** | **Always** runs when wrangler path exists (manual repair / CI). |
-
-Skips also apply when **`LECO_PROVISION_LOCAL_CF`** is `0`/`false`/`no`/`off`, or when the manifest sets **`cloudflare.provisionLocalResources: false`**. See **`tools/deploy-cli/README.md`** for extension points (new wrangler binding kinds).
-
-**Wrangler bindings not mirrored** to local adapters today include Queues, Durable Objects, and Vectorize. Browser Rendering, Hyperdrive, and Email Routing have partial local substitutes (Wrangler bridge planned). See **[CF_LECO_SERVICE_MAP.md](CF_LECO_SERVICE_MAP.md)** for the full binding → local service matrix and roadmap.
-
-Production deploys use:
-
-```bash
-leco-devops cf-deploy --env staging
-leco-devops cf-deploy --env production --confirm-production
-```
-
-### 3. URLs, admin panels, CDN — `leco.yaml`
-
-Use **`urls`** with **`role`** (`frontend`, `api`, `admin`, `backend`, `cdn`, `websocket`, `storybook`, `graphql`, `other`), **`label`**, and **`publicUrl`**. Optional **`internal`** documents compose service URLs (e.g. `http://php-fpm:9000`). These rows are primarily for **documentation, LEco DevOps display, and probes** unless you mirror them into **`routing.entries`** for Traefik.
-
-### 4. Build / install before `deploy` — lifecycle hooks
-
-Define commands under **`lifecycle.prepare`**, **`lifecycle.build`**, or **`lifecycle.preStart`** in **`leco.yaml`** (each step: **`command`**, optional **`cwd`**, **`shell`**, **`timeoutSec`**). Run from the app directory:
-
-```bash
-leco-devops run-hooks --phase prepare
-leco-devops run-hooks --phase build
-leco-devops run-hooks --phase preStart
-```
-
-**Trust model:** these run **arbitrary shell commands** like `docker compose`. Only enable hooks in repositories you trust.
-
-### 5. Traefik (`*.lh`)
-
-**`leco-devops onboard`**, **`init --onboard`**, and **`ecosystem-register --merge-traefik`** merge **`routing.entries`** from the **effective** manifest into **`hosting/traefik/dynamic.yml`** (atomic write). Platform stack routes live in **`traefik/dynamic.yml`** in git and are copied to **`hosting/traefik/01-stack-core.yml`** whenever **`traefik.sh start`** runs. In **v3**, **`infrastructure.routing`** normally lives in **`leco.yaml`**.
-
-For a preview or manual merge only:
-
-```bash
-leco-devops traefik-fragment -o /tmp/myapp-traefik.yml
-```
-
-**Hot reload:** Traefik’s file provider watches the **`hosting/traefik/`** directory. After a merge writes **`hosting/traefik/dynamic.yml`**, routes usually update **without restarting** Traefik. Restart Traefik after changing **`traefik/dynamic.yml`** (stack core) or **`traefik-static.yaml`** / volume mounts, or run **`traefik.sh heal`** if routes disappear (see **[DEPLOYMENT.md](DEPLOYMENT.md)** §7).
-
-### 6. Stop stack and optionally unregister
-
-```bash
-leco-devops down
-# Remove from registry + strip Traefik keys (see DEPLOY_CLI.md / offload)
-leco-devops ecosystem-unregister <slug> --ecosystem-root /path/to/local-ecosystem
-```
-
----
-
-## LEco DevOps web UI
-
-### Hosted apps tab
-
-After **`ecosystem-register`** (or the wizard below), open **Hosted apps** for:
-
-- Per-service metrics, logs, insights, health URL probes (from manifest).
-- **Attached services** — compose data stores, runtimes, Cloudflare bindings, with **host** (`127.0.0.1` / `*.lh`) and **Docker DNS** connection strings (see **`docs/help/12-hosted-app-attached-services.md`**).
-- **Seed data** — discover `hosting/app-available/<slug>/data/`, **Import data** / **Dry-run plan** (NDJSON logs, reimport). Not run at register. See **`docs/help/13-hosted-app-data-import.md`**.
-- **Local profile** summary: archetype, **`leco.yaml`** URLs, lifecycle steps (read-only in the UI).
-- Lifecycle actions via **Control** targets **`leco-stack-<id>`** (same token model as other Control actions). The LEco DevOps service runs **`leco-devops deploy`**, **`stop`**, **`down`** (and **`down -v`** on reset) with **`--manifest`** for those stacks; **restart** / **recreate** / **pause** still use **`docker compose`** where LEco DevOps has no matching command. **Remove** / **Reset** always runs **offboard** (registry + hosting dirs + Traefik / local CF as configured) after **`down`**, even when **`down`** exits non-zero (e.g. missing compose file on disk).
-
-### Routes tab
-
-- Inspect merged routers/services (effective config is **`hosting/traefik/*.yml`**) and registry overlap.
-- **Load fragment from manifest** / **Load and merge** call **`leco-devops traefik-fragment`** for a registry id, then optionally merge into **`hosting/traefik/dynamic.yml`** (atomic write + **`.bak`**). Same **control token** as other mutations.
-
-### Register application (wizard)
-
-On **Hosted apps**, expand **Register application**:
-
-1. **App root path** — relative to the mounted repo (e.g. **`dashboard/subapp`**) or, for siblings exposed as **workspace-parent**, the prefix **`wsp:FolderName`** (no **`..`** in the path field). **Browse** uses read-only **`GET /api/leco/browse`** to pick a folder.
-2. **Detect** — **`POST /api/leco/detect`** returns scan metadata plus, when present on disk, **`existing_manifest_yaml`** / **`existing_localhost_yaml`** (size-capped). The UI can load those into the editors or use generated previews. **Sample templates** come from **`GET /api/leco/register-samples`**.
-3. **Generate YAML** / **Save YAML** (when needed) — **`POST /api/leco/generate-yaml`** or **`POST /api/leco/save-yaml`** with the control token. Read-only **`wsp:`** trees are **materialized** under **`hosting/app-available/<slug>/`** with a **`source`** symlink and **config symlinks** for **`configRefs`**, each **`runtimes[].config`**, and discovered **`wrangler.*.toml`** files (multi-Wrangler monorepos: **`docs/help/12-multi-wrangler-monorepo.md`**); **`Register`** is gated until YAML exists on disk (**`POST /api/leco/yaml-status`**).
-4. Edit the optional YAML text areas if needed.
-5. **Register** — **`POST /api/leco/register`** with the **control token** (same as **Control** tab). Writes or uses **`leco.app.yaml`** / **`leco.yaml`**, then runs **`leco-devops ecosystem-register`** inside the LEco DevOps container (includes optional local KV/R2/D1 provision for Wrangler apps).
-
-If **`DASHBOARD_CONTROL_TOKEN`** is set, you must configure the token in LEco DevOps before **Register** succeeds.
+| Symptom | Look at |
+|---------|---------|
+| App not in the Hosted apps list | `ecosystem-register` run with the right `LECO_ECOSYSTEM_ROOT`; v3 apps need compose in the **effective** manifest (`infrastructure.dockerCompose` in `leco.yaml`), not only on the bridge |
+| Traefik **502** / no route | Containers on `lh-network`; `docker-compose.leco-hosting.yml` + `additionalComposeFilesFromManifest`; fragment merged into `hosting/traefik/dynamic.yml`; `loadBalancer` host matches the container name. **[HOSTED_APPS_TRAEFIK_RUNBOOK.md](HOSTED_APPS_TRAEFIK_RUNBOOK.md)** |
+| Global **404** on every host | `traefik.sh heal` / `ensure-hosting-files` — usually an empty or invalid `http` block in the runtime file provider |
+| Varnish **503 Backend fetch failed** after restart | Server still starting or crash-looping; use the `sample-node-varnish-multiprocess` template. [help/09-503-varnish-backend.md](help/09-503-varnish-backend.md) |
+| URL column shows **HTTP 0**, or API works but UI does not | Restart the dashboard after upgrades; probes use `http://traefik` for `*.lh`. The browser's API base must be `https://<app>.lh/api`, not `localhost` |
+| CI/CD webhook returns **403** | Signature mismatch — rotate the secret, check content type, check GitHub vs GitLab |
+| CI/CD run fails at **verify** | The check working: the deploy finished, the app did not answer. Fix the app |
+| Clone hangs or fails | Shallow by default; timeout and size guards; private repos need a token or key in the credential field, never in the URL |
+| AI provider returns **404** | Model id from another vendor — use **Connect & list models** |
+| Browser says **Not secure** on `.lh` | The old `*.lh` wildcard certificate. Run `./certs/generate-certs.sh` |
+| Detect / wizard path errors | Path must be under the project or workspace-parent mount; no `..` traversal |
+| Hooks fail | Run from the manifest directory; check `cwd`; raise `timeoutSec` |
+| Seed import failed / wrong port | Use the **host** port from **Attached services** (e.g. `27018`). [help/13-hosted-app-data-import.md](help/13-hosted-app-data-import.md) |
 
 ---
 
 ## Command cheat sheet
 
+```bash
+export LECO_ECOSYSTEM_ROOT=/path/to/local-ecosystem
+```
+
 | Command | Purpose |
 |---------|---------|
-| **`leco-devops onboard`** | Deploy + registry + Traefik merge (typical new-app flow) |
-| **`leco-devops init`** | Wizard: manifest + `leco.yaml` stub; **`--onboard -E …`** adds register + Traefik merge |
-| **`leco-devops init -y`** | Non-interactive defaults |
-| **`leco-devops init --manifest-only`** | Minimal manifest when no compose (TTY confirm) |
-| **`leco-devops detect`** | JSON: compose, Wrangler, archetype (scripts / LEco DevOps) |
-| **`leco-devops deploy` / `stop` / `down` / `status` / `logs`** | Compose lifecycle |
-| **`leco-devops run-hooks --phase <prepare\|build\|preStart>`** | Run merged sidecar profile lifecycle |
-| **`leco-devops traefik-fragment`** | Emit Traefik YAML snippet |
-| **`leco-devops ecosystem-register`** | Append/update **`leco-registry.yaml`** |
-| **`leco-devops ecosystem-unregister`** | **Local CF cleanup** (default), then **`docker compose down`**, then registry row + optional Traefik strip; **`--no-compose-down`** / **`--compose-volumes`** / **`--no-clean-local-cf`** |
-| **`leco-devops cf-deploy`**, **`cf-secrets-checklist`** | Wrangler deploy and secrets hints |
+| `leco-devops onboard` | Deploy + registry + Traefik merge (the typical new-app flow) |
+| `leco-devops init` | Wizard: manifest + `leco.yaml` stub. `--onboard -E …` adds register + merge; `-y` for defaults; `--manifest-only` when there is no compose |
+| `leco-devops detect` | JSON: compose, Wrangler, archetype |
+| `leco-devops deploy` / `stop` / `down` / `status` / `logs` | Compose lifecycle |
+| `leco-devops run-hooks --phase prepare\|build\|preStart` | Run merged profile lifecycle steps |
+| `leco-devops traefik-fragment -o file.yml` | Emit a Traefik YAML snippet |
+| `leco-devops ecosystem-register [--merge-traefik]` | Append/update `leco-registry.yaml` |
+| `leco-devops ecosystem-unregister <slug>` | Local CF cleanup → `compose down` → registry row → optional Traefik strip |
+| `leco-devops scaffold <id> --template … --source-path …` | Copy a `hosting/samples/` pack into a hosting slot |
+| `leco-devops cf-deploy --env staging` | Wrangler deploy (`--confirm-production` for production) |
+| `leco-devops platform presets` · `dev-stack create/start/repair/reinstall` | Platform and dev stacks |
+| `./ecosystem-stack/ecosystem-stack.sh start\|stop\|restart\|heal <svc>` | Stack services |
+| `./leco-cli.sh stack status` | Stack overview |
+| `./certs/generate-certs.sh [--list]` | Local `.lh` certificate |
+| `leco-mcp doctor` | Check the MCP server end to end |
 
-Full syntax, offload, and edge cases: **[DEPLOY_CLI.md](DEPLOY_CLI.md)**.
+Full syntax and edge cases: **[DEPLOY_CLI.md](DEPLOY_CLI.md)**.
+
+### Cloudflare (Wrangler) applications
+
+If `wrangler.toml`, `infra/wrangler.*.toml`, or `cloudflare/wrangler.toml` exists, `init` / **Detect** can set `cloudflare.wranglerConfig` and one `infrastructure.runtimes[]` entry per Worker config. Local KV/R2/D1 are provisioned by `deploy`, `ecosystem-register`, and `onboard` unless you pass `--no-provision-local-cf`, set `LECO_PROVISION_LOCAL_CF=0`, or set `cloudflare.provisionLocalResources: false`. `leco-devops provision-local-cf` always runs when a wrangler path exists.
+
+Queues, Durable Objects, and Vectorize have **no** local adapter today; Browser Rendering, Hyperdrive, and Email Routing have partial substitutes. Matrix and roadmap: **[CF_LECO_SERVICE_MAP.md](CF_LECO_SERVICE_MAP.md)**.
 
 ---
 
-## Security and operations
+## Security notes
 
-- **Lifecycle hooks** and **compose** execute commands on the machine where leco runs — treat manifests like infrastructure code.
-- **LEco DevOps registration** writes files and the registry only with a valid **control token** and **confined paths**.
-- **Registry manifest paths** are stored **relative to the ecosystem repo**; the LEco DevOps container expects mounts documented in **`ecosystem-stack/services/dashboard.sh`** (**`/project`**, optional **`DASHBOARD_WORKSPACE_PARENT`**) so **`../other-repo/leco.app.yaml`** resolves inside the container.
-
----
-
-## Troubleshooting
-
-| Symptom | Check |
-|---------|--------|
-| App not in Hosted apps list | **`ecosystem-register`** run with correct **`LECO_ECOSYSTEM_ROOT`**; v3 apps need **effective** compose (e.g. **`infrastructure.dockerCompose`** in **`leco.yaml`**, not only on the bridge); rebuild/restart LEco DevOps after registry edits |
-| Traefik 502 / no route | Containers on **`lh-network`**; **`docker-compose.leco-hosting.yml`** + **`additionalComposeFilesFromManifest`**; **`traefik-fragment`** merged into **`hosting/traefik/dynamic.yml`**; **`loadBalancer`** hosts match **`container_name`** or **`{project}-{service}-1`**. Full table: **[HOSTED_APPS_TRAEFIK_RUNBOOK.md](HOSTED_APPS_TRAEFIK_RUNBOOK.md)**. |
-| Varnish **503 Backend fetch failed** after restart | **`server`** still starting or crash loop; use **`sample-node-varnish-multiprocess`** (server healthcheck, varnish **`service_healthy`**, **`LECO_DISABLE_VARNISH_NCSA`**). See **`docs/help/09-503-varnish-backend.md`**. |
-| Hosted apps URL column **HTTP 0** or API vs UI mismatch | Restart LEco DevOps after upgrades; probes use **`http://traefik`** for `*.lh`. Browser API base must use **`https://<app>.lh/api`** (overlay env / app code), not **`localhost`**. See runbook. |
-| **`detect`** / wizard path errors | Path must be under project or workspace-parent mount; no forbidden **`..`** traversal |
-| Hooks fail | Run from manifest directory; check **`cwd`** in steps; increase **`timeoutSec`** |
-| Seed import failed / Compass wrong port / app 403 after deploy | Use **Attached services** host port (e.g. `27018`); recreate mongo if `docker ps` shows no publish; see **`docs/help/13-hosted-app-data-import.md`** |
+- **Lifecycle hooks and compose execute commands on this machine.** Treat manifests as infrastructure code and only enable hooks for repositories you trust.
+- **Registration writes files and the registry only with a valid control token and confined paths.** Registry manifest paths are stored relative to the ecosystem repo; the dashboard container expects the mounts documented in `ecosystem-stack/services/dashboard.sh` (`/project`, optional `DASHBOARD_WORKSPACE_PARENT`).
+- **Secrets are file-scoped and gitignored**: `config/ai-providers.yaml`, `config/git-credentials.yaml`, `config/ui-credentials.yaml`, all mode `0600`, all masked in every API response.
+- **The CI/CD webhook is authenticated by its HMAC signature and nothing else.** Do not add a control-token check in front of it — the Git host cannot send one, and it would silently break every webhook while looking like an improvement.
+- **MCP destructive tools and credential access are opt-in**, gated by `LECO_MCP_ALLOW_DESTRUCTIVE` / `LECO_MCP_ALLOW_CREDENTIALS`, and every call is written to the activity log.
 
 ---
 
 ## See also
 
-- **[LECO_APP_BLUEPRINT.md](LECO_APP_BLUEPRINT.md)** — Bridge vs profile, hosting **`source`**, **`additionalComposeFiles`**, Wrangler vs **`wranglerBindingPreview`**, offboard semantics, code map.
-- **[DEPLOY_CLI.md](DEPLOY_CLI.md)** — Technical reference: install, manifest tables, Traefik examples, offload, LEco DevOps API notes.
-- **[DEPLOY_CUSTOM_APPS.md](DEPLOY_CUSTOM_APPS.md)** — Broader custom app routing and patterns.
-- **`tools/deploy-cli/README.md`** — Package-oriented overview and resource model (local CF, state dir).
+| Document | For |
+|----------|-----|
+| **[Help & User Manual](help/00-welcome.md)** (`/help` in the dashboard) | The guided, searchable version of this material |
+| [LECO_APP_BLUEPRINT.md](LECO_APP_BLUEPRINT.md) | Bridge vs profile, `source` symlinks, offboard semantics, code map |
+| [DEPLOY_CLI.md](DEPLOY_CLI.md) | Command and YAML field reference |
+| [DEPLOY_CUSTOM_APPS.md](DEPLOY_CUSTOM_APPS.md) | Broader custom-app routing patterns |
+| [GIT_AND_CICD.md](GIT_AND_CICD.md) | Pipelines, signatures, runs, rollback |
+| [MCP_SERVER.md](MCP_SERVER.md) | MCP transports, tools, gates |
+| [PRODUCTION_HARDENING.md](PRODUCTION_HARDENING.md) | Everything to close before going public |
+| [ARCHITECTURE.md](ARCHITECTURE.md) · [HLD.md](HLD.md) · [LLD.md](LLD.md) | Design context |
+| [DEVELOPMENT_PLAYBOOK.md](DEVELOPMENT_PLAYBOOK.md) | Maintainer daily commands |
 
-Open these from the LEco DevOps **Docs** tab when the repo is mounted at **`/project`**.
+Open any of these from the dashboard footer, or at `/?tab=docsTab`.

@@ -56,6 +56,7 @@ HELP_TREE: list[dict] = [
         "title": "AI agents & automation",
         "children": [
             {"id": "paperclip", "title": "Paperclip (agent orchestration)", "file": "06-paperclip.md"},
+            {"id": "mcp-server", "title": "MCP server (agents run LEco)", "file": "20-mcp-server.md"},
         ],
     },
     {
@@ -83,6 +84,7 @@ HELP_TREE: list[dict] = [
         "children": [
             {"id": "hosting-layout", "title": "Hosting layout & components", "file": "12-hosting-layout.md"},
             {"id": "onboarding-overview", "title": "Onboarding new apps", "file": "12-onboarding-overview.md"},
+            {"id": "git-cicd", "title": "Onboard from Git & CI/CD", "file": "21-git-and-cicd.md"},
             {"id": "onboarding-materialize", "title": "wsp: paths & materialize", "file": "12-onboarding-materialize.md"},
             {"id": "multi-wrangler-monorepo", "title": "Multi-Wrangler monorepos", "file": "12-multi-wrangler-monorepo.md"},
             {"id": "hosted-app-attached-services", "title": "Attached services panel", "file": "12-hosted-app-attached-services.md"},
@@ -117,6 +119,7 @@ HELP_TREE: list[dict] = [
             {"id": "dev-traefik", "title": "Traefik & routing code", "file": "dev-04-traefik.md"},
             {"id": "dev-ecosystem-stack", "title": "Ecosystem stack", "file": "dev-05-ecosystem-stack.md"},
             {"id": "dev-file-transfer", "title": "File transfer stack", "file": "dev-10-file-transfer.md"},
+            {"id": "dev-mcp-server", "title": "MCP server", "file": "dev-11-mcp-server.md"},
             {"id": "dev-extending", "title": "Extending LEco", "file": "dev-06-extending.md"},
             {"id": "dev-debugging", "title": "Debugging & validation", "file": "dev-07-debugging.md"},
             {"id": "dev-hosted-app-services", "title": "Attached services (API)", "file": "dev-08-hosted-app-services.md"},

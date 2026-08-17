@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>LEco DevOps</title>
     {% include "_head_icons.html" %}
-    <link rel="stylesheet" href="/static/dashboard.css?v=20260516b" />
+    <link rel="stylesheet" href="/static/dashboard.css?v=20260544" />
   </head>
   <body>
     <div class="wrap">
@@ -345,92 +345,29 @@
             CPU-only VMs to save RAM.
           </div>
           <p class="infra-group__lead muted small">
-            Configure AI provider for automatic application analysis during registration.
-            Supports <strong>local</strong> (Ollama) or <strong>cloud</strong> (OpenAI, Anthropic, Google, OpenAI-compatible) providers.
-            API keys are stored server-side only — never sent to the browser.
+            Connect an <strong>external AI provider</strong> for automatic application analysis during registration
+            and for other LEco tasks. Local (Ollama, AirLLM), first-party cloud (OpenAI, Anthropic, Google),
+            or any OpenAI-compatible <strong>aggregator</strong> (OpenRouter, Groq, Together, LiteLLM, vLLM, LM Studio).
+            On connect the provider's real model catalogue is discovered and you choose the model.
+            The configuration screen lives on the
+            <a href="/hub#hub-ai-providers">Service hubs</a> page, next to UI access.
           </p>
           <div class="infra-group__block">
-            <h4 class="infra-subhead">Provider settings</h4>
-            <div class="ai-settings">
-              <div class="ai-settings__row">
-                <label class="ai-settings__field">
-                  <span class="ai-settings__label">AI provider</span>
-                  <select id="aiProviderSelect" aria-label="AI provider">
-                    <option value="none">No AI (deterministic only)</option>
-                    <option value="ollama">Ollama (local SLM)</option>
-                    <option value="airllm">AirLLM (local large models)</option>
-                    <option value="openai">OpenAI</option>
-                    <option value="anthropic">Anthropic</option>
-                    <option value="google">Google Gemini</option>
-                    <option value="openai-compatible">OpenAI-compatible endpoint</option>
-                    <option value="hybrid">Hybrid (local SLM + cloud LLM)</option>
-                  </select>
-                </label>
-                <label class="ai-settings__field" id="aiModelField">
-                  <span class="ai-settings__label">Model</span>
-                  <span class="ai-settings__model-row">
-                    <select id="aiModelSelect" aria-label="Model">
-                      <option value="">— select provider first —</option>
-                    </select>
-                    <input type="text" id="aiModelCustom" placeholder="or type model name" autocomplete="off" />
-                  </span>
-                </label>
-              </div>
-              <div class="ai-settings__row" id="aiKeyRow" style="display:none">
-                <label class="ai-settings__field ai-settings__field--grow">
-                  <span class="ai-settings__label">API key</span>
-                  <input type="password" id="aiApiKeyInput" autocomplete="off" placeholder="sk-… / key-… (stored server-side)" />
-                </label>
-              </div>
-              <div class="ai-settings__row" id="aiBaseUrlRow" style="display:none">
-                <label class="ai-settings__field ai-settings__field--grow">
-                  <span class="ai-settings__label">Base URL</span>
-                  <input type="text" id="aiBaseUrlInput" autocomplete="off" placeholder="http://localhost:8080/v1" />
-                </label>
-              </div>
-              <div class="ai-settings__row" id="aiTimeoutRow" style="display:none">
-                <label class="ai-settings__field">
-                  <span class="ai-settings__label">Request timeout (seconds)</span>
-                  <input type="number" id="aiTimeoutInput" min="10" max="900" step="10" value="180" autocomplete="off" placeholder="180" />
-                </label>
-                <span class="ai-settings__timeout-hint muted small">
-                  Local SLMs on CPU may need 300–600 s for large codebases. Cloud APIs typically need 60–180 s.
+            <h4 class="infra-subhead">Active provider</h4>
+            <div class="ai-status-card" id="aiStatusCard">
+              <div class="ai-status-card__main">
+                <span class="ai-status-card__dot" id="aiStatusDot" aria-hidden="true"></span>
+                <span class="ai-status-card__text">
+                  <span class="ai-status-card__provider" id="aiStatusProvider">Loading…</span>
+                  <span class="ai-status-card__meta muted small" id="aiStatusMeta"></span>
                 </span>
               </div>
-              <div class="ai-settings__row ai-settings__hybrid-row" id="aiHybridRow" style="display:none">
-                <label class="ai-settings__field">
-                  <span class="ai-settings__label">Local SLM (summarizer)</span>
-                  <select id="aiHybridSlmSelect" aria-label="Local SLM">
-                    <option value="ollama" selected>Ollama</option>
-                    <option value="airllm">AirLLM (large models)</option>
-                    <option value="openai-compatible">OpenAI-compatible local</option>
-                  </select>
-                </label>
-                <label class="ai-settings__field">
-                  <span class="ai-settings__label">Cloud LLM (analyzer)</span>
-                  <select id="aiHybridLlmSelect" aria-label="Cloud LLM">
-                    <option value="openai" selected>OpenAI</option>
-                    <option value="anthropic">Anthropic</option>
-                    <option value="google">Google Gemini</option>
-                  </select>
-                </label>
-                <label class="ai-settings__field ai-settings__field--grow">
-                  <span class="ai-settings__label">Cloud API key</span>
-                  <input type="password" id="aiHybridLlmKey" autocomplete="off" placeholder="Cloud provider API key (stored server-side)" />
-                </label>
+              <div class="ai-status-card__actions">
+                <span class="ai-privacy-badge" id="aiStatusPrivacy" hidden></span>
+                <a href="/hub#hub-ai-providers" id="aiOpenConfig" class="ctrl-act ctrl-act--ops">Configure on Service hubs →</a>
               </div>
-              <p class="muted small ai-settings__hybrid-hint is-hidden" id="aiHybridHint">
-                <strong>Hybrid flow:</strong> Local SLM pre-summarizes your app's source code (fast, free, private),
-                then Cloud LLM produces the structured analysis from that summary (accurate, fewer tokens = lower cost).
-              </p>
-              <div class="ai-settings__toolbar">
-                <button type="button" id="aiSettingsSave" class="ctrl-act ctrl-act--ops">Save settings</button>
-                <button type="button" id="aiSettingsTest" class="ctrl-act ctrl-act--safe">Test connection</button>
-                <button type="button" id="aiModelsRefresh" class="ctrl-act ctrl-act--safe">Refresh models</button>
-                <span id="aiSettingsStatus" class="ai-settings__status muted small"></span>
-              </div>
-              <pre id="aiSettingsTestOutput" class="hosted-reg-pre is-hidden" aria-live="polite"></pre>
             </div>
+            <p class="muted small ai-status-storage" id="aiStatusStorage"></p>
           </div>
         </div>
 
@@ -731,6 +668,89 @@
               <strong>Label</strong> after Detect is guessed from <code>package.json</code> / Wrangler <code>name</code> / Compose top-level <code>name</code> when present (not from the folder name).
               <strong>URLs in Traefik</strong> (e.g. <code>cv.lh</code>) come from <code>infrastructure.routing.entries[].hostname</code> in your profile (<code>leco.yaml</code>), not from the registry slug; <code>cloudflare.localCfPublicPrefix</code> only shapes KV/R2/D1 hosts (<code>cv-kv.lh</code>, …). Use the <strong>Public URLs</strong> table below to edit every <code>urls[]</code> entry (dashboard, probes, docs); <strong>Write into profile YAML</strong> copies them into the textarea before Save, and <strong>Register</strong> applies the table to disk before <code>ecosystem-register</code>.
             </p>
+            <div class="hosted-register-source" role="radiogroup" aria-label="Application source">
+              <span class="hosted-register-source__label">Source</span>
+              <label class="hosted-register-source__opt">
+                <input type="radio" name="hostedRegSource" id="hostedRegSourceLocal" value="local" checked />
+                <span>Local folder</span>
+              </label>
+              <label class="hosted-register-source__opt">
+                <input type="radio" name="hostedRegSource" id="hostedRegSourceGit" value="git" />
+                <span>Git repository</span>
+              </label>
+              <span class="muted small hosted-register-source__hint" id="hostedRegGitRootHint"></span>
+            </div>
+
+            <div class="hosted-register-git is-hidden" id="hostedRegGitPanel">
+              <p class="muted small hosted-register-git__lead">
+                Paste a repository URL — LEco clones it into the managed workspace and fills
+                <strong>App root path</strong> below, then <strong>Detect</strong> → <strong>Generate YAML</strong> →
+                <strong>Register</strong> continue exactly as they do for a local folder. Clones are shallow
+                (<code>--depth 1</code>) unless you ask for full history. Credentials are stored server-side in
+                <code>config/git-credentials.yaml</code> (gitignored, mode 0600) and are never written into the clone,
+                a manifest, a log line, or a response.
+              </p>
+              <div class="hosted-register-git-grid">
+                <label class="hosted-register-field hosted-register-field--full"
+                  >Repository URL
+                  <input
+                    type="text"
+                    id="hostedRegGitUrl"
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder="https://github.com/owner/repo.git or git@github.com:owner/repo.git"
+                  />
+                </label>
+                <label class="hosted-register-field"
+                  >Branch, tag or commit <span class="muted">(blank = default branch)</span>
+                  <input type="text" id="hostedRegGitRef" autocomplete="off" list="hostedRegGitRefList" placeholder="main" />
+                  <datalist id="hostedRegGitRefList"></datalist>
+                </label>
+                <label class="hosted-register-field"
+                  >Saved credential
+                  <select id="hostedRegGitCredential" aria-label="Saved git credential">
+                    <option value="">— None (public repository) —</option>
+                  </select>
+                </label>
+                <label class="hosted-register-field"
+                  >Token or SSH private key <span class="muted">(private repos; not stored unless you save it)</span>
+                  <textarea
+                    id="hostedRegGitSecret"
+                    rows="2"
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder="ghp_… / glpat-… — or paste an OpenSSH private key for ssh:// and git@ URLs"
+                  ></textarea>
+                </label>
+                <label class="hosted-register-field"
+                  >Save this credential as <span class="muted">(optional)</span>
+                  <span class="hosted-register-git-save-row">
+                    <input type="text" id="hostedRegGitSaveAs" autocomplete="off" placeholder="github-bot" />
+                    <button type="button" id="hostedRegGitSaveCred" class="ctrl-act ctrl-act--ops">Save credential</button>
+                  </span>
+                </label>
+              </div>
+              <div class="hosted-register-git-opts">
+                <label class="hosted-register-check muted small">
+                  <input type="checkbox" id="hostedRegGitFullHistory" />
+                  Full history (skip the shallow <code>--depth 1</code> clone — slower, needed for release tooling that reads past commits)
+                </label>
+                <label class="hosted-register-check muted small">
+                  <input type="checkbox" id="hostedRegGitReset" />
+                  On update, <strong>discard local changes</strong> and hard-reset the existing clone to the requested ref
+                </label>
+              </div>
+              <div class="hosted-register-git-btns">
+                <button type="button" id="hostedRegGitInspect" class="ctrl-act ctrl-act--ops">Check repository</button>
+                <button type="button" id="hostedRegGitClone" class="ctrl-act ctrl-act--ops hosted-register-git__go">
+                  Clone / update &amp; use
+                </button>
+                <span class="muted small" id="hostedRegGitMsg"></span>
+              </div>
+              <div class="hosted-register-git-result is-hidden" id="hostedRegGitResult"></div>
+              <pre class="hosted-register-git-log is-hidden" id="hostedRegGitLog" role="log" aria-live="polite"></pre>
+            </div>
+
             <div class="hosted-register-path-row">
               <label class="hosted-register-field hosted-register-field--grow"
                 >App root path
@@ -791,7 +811,7 @@
                 <span class="ai-toggle__text">AI-assisted onboarding</span>
               </label>
               <span class="ai-toggle__provider muted small" id="aiToggleProvider">No provider configured</span>
-              <button type="button" id="aiToggleSettings" class="ctrl-act ctrl-act--safe ai-toggle__config-btn">AI Settings</button>
+              <button type="button" id="aiToggleSettings" class="ctrl-act ctrl-act--safe ai-toggle__config-btn">Configure AI provider →</button>
             </div>
             <div class="ai-analysis-panel is-hidden" id="aiAnalysisPanel">
               <div class="ai-analysis-panel__header">
@@ -1257,6 +1277,229 @@
         <p id="traefikRoutesMsg" class="muted small" role="status"></p>
       </section>
 
+      <section id="mcpTab" class="tab-content">
+        <h2 class="tab-heading">MCP agents</h2>
+        <p class="tab-lead muted small">
+          Model Context Protocol bridge for LEco DevOps: AI agents (Claude Code, Claude Desktop, IDE assistants) connect to
+          <code>leco-mcp</code> and read stack health, hosted apps, routes and logs — and run guarded actions — through audited tools.
+          <strong>1 · Server</strong> → <strong>2 · Install on an agent</strong> → <strong>3 · Plugin commands</strong> →
+          <strong>4 · Connected agents</strong> → <strong>5 · Applications</strong> → <strong>6 · Activity log</strong> →
+          <strong>7 · Tool usage</strong>.
+          Every tool call is written to the activity log, so this tab answers “which agent touched which application, and when”.
+        </p>
+        <div id="mcpSetupBanner" class="mcp-banner-slot"></div>
+
+        <h3 class="routes-subhead" id="mcp-server">1 · Server status</h3>
+        <div id="mcpServerPanel" class="mcp-server">
+          <p class="muted small">Loading MCP server status…</p>
+        </div>
+
+        <h3 class="routes-subhead" id="mcp-install">2 · Install on an agent</h3>
+        <p class="muted small">
+          Pick one transport per agent. The <strong>plugin</strong> is the fastest path for Claude Code (it bundles the skill,
+          the MCP server and its slash commands — see section 3); <strong>stdio</strong> suits a single machine;
+          <strong>HTTP</strong> suits agents running elsewhere on the LAN.
+        </p>
+        <div id="mcpInstallPanel" class="mcp-install">
+          <p class="muted small">Loading install commands…</p>
+        </div>
+
+        <h3 class="routes-subhead" id="mcp-commands">3 · Plugin commands</h3>
+        <p class="muted small">
+          Every command the plugin installs, read from the plugin on disk — so this table stays accurate as commands are
+          added or renamed. A <strong>skill</strong> is namespaced by the plugin (<code>/plugin:name</code>) and Claude can
+          also load it on its own when a task matches its description; a <strong>command</strong> only runs when you type it.
+        </p>
+        <div class="routes-table-wrap">
+          <table class="routes-table mcp-table mcp-commands-table" aria-label="Plugin commands">
+            <thead>
+              <tr>
+                <th>Command</th>
+                <th>Type</th>
+                <th>What it does</th>
+                <th>Source</th>
+              </tr>
+            </thead>
+            <tbody id="mcpCommandsBody"></tbody>
+          </table>
+        </div>
+
+        <h3 class="routes-subhead" id="mcp-sessions">4 · Connected agents (sessions)</h3>
+        <div class="mcp-filters">
+          <label class="mcp-filters__field mcp-filters__field--grow">
+            <span class="muted small">Search</span>
+            <input id="mcpSessSearch" class="uc-input" type="search" placeholder="client, session id, or tool" />
+          </label>
+          <label class="mcp-filters__field">
+            <span class="muted small">Transport</span>
+            <select id="mcpSessTransport" class="uc-input">
+              <option value="">All transports</option>
+              <option value="stdio">stdio</option>
+              <option value="http">http</option>
+            </select>
+          </label>
+          <label class="mcp-filters__field">
+            <span class="muted small">Rows</span>
+            <select id="mcpSessSize" class="uc-input" data-mcp-size="sessions">
+              <option value="10">10</option>
+              <option value="25" selected>25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+          </label>
+          <label class="mcp-filters__toggle"><input type="checkbox" id="mcpSessLive" /> Live only</label>
+          <label class="mcp-filters__toggle"><input type="checkbox" id="mcpSessProblems" /> With errors or blocked</label>
+          <button type="button" class="btn btn-small" id="mcpSessReset">Reset filters</button>
+        </div>
+        <p class="muted small" id="mcpSessionsMeta"></p>
+        <div class="routes-table-wrap">
+          <table class="routes-table mcp-table" aria-label="MCP agent sessions">
+            <thead>
+              <tr>
+                <th>Client</th>
+                <th>Transport</th>
+                <th>Session</th>
+                <th>First seen</th>
+                <th>Last seen</th>
+                <th>Calls</th>
+                <th>Errors</th>
+                <th>Blocked</th>
+                <th>Tools used</th>
+              </tr>
+            </thead>
+            <tbody id="mcpSessionsBody"></tbody>
+          </table>
+        </div>
+        <div class="mcp-pager" id="mcpSessionsPager"></div>
+
+        <h3 class="routes-subhead" id="mcp-apps">5 · Applications — what MCP is doing to them</h3>
+        <p class="muted small">Apps with MCP activity first. “Last tool” is the most recent tool call that targeted the app.</p>
+        <div class="routes-table-wrap">
+          <table class="routes-table mcp-table" aria-label="Applications touched over MCP">
+            <thead>
+              <tr>
+                <th>Application</th>
+                <th>State</th>
+                <th>URL</th>
+                <th>MCP calls</th>
+                <th>Last tool</th>
+                <th>Last activity</th>
+                <th>Outcome</th>
+              </tr>
+            </thead>
+            <tbody id="mcpAppsBody"></tbody>
+          </table>
+        </div>
+
+        <h3 class="routes-subhead" id="mcp-activity">6 · Activity log</h3>
+        <p class="muted small">
+          Newest first. <span class="mcp-legend mcp-legend--blocked">blocked</span> means a safety gate refused the call —
+          that is the guard working, not a failure. <span class="mcp-legend mcp-legend--error">error</span> is a tool that ran and failed.
+        </p>
+        <div class="mcp-filters">
+          <label class="mcp-filters__field">
+            <span class="muted small">Tool</span>
+            <select id="mcpFilterTool" class="uc-input"><option value="">All tools</option></select>
+          </label>
+          <label class="mcp-filters__field">
+            <span class="muted small">Session</span>
+            <select id="mcpFilterSession" class="uc-input"><option value="">All sessions</option></select>
+          </label>
+          <label class="mcp-filters__field">
+            <span class="muted small">Target</span>
+            <select id="mcpFilterTarget" class="uc-input"><option value="">All targets</option></select>
+          </label>
+          <label class="mcp-filters__field">
+            <span class="muted small">Window</span>
+            <select id="mcpFilterHours" class="uc-input">
+              <option value="1">Last 1 h</option>
+              <option value="6">Last 6 h</option>
+              <option value="24" selected>Last 24 h</option>
+              <option value="72">Last 3 days</option>
+              <option value="168">Last 7 days</option>
+              <option value="0">All time</option>
+            </select>
+          </label>
+          <label class="mcp-filters__field">
+            <span class="muted small">Rows</span>
+            <select id="mcpFilterLimit" class="uc-input">
+              <option value="50" selected>50</option>
+              <option value="100">100</option>
+              <option value="250">250</option>
+            </select>
+          </label>
+          <label class="mcp-filters__toggle"><input type="checkbox" id="mcpFilterBlocked" /> Blocked only</label>
+          <label class="mcp-filters__toggle"><input type="checkbox" id="mcpFilterErrors" /> Errors only</label>
+          <button type="button" id="mcpFilterReset" class="ctrl-act ctrl-act--ops">Reset filters</button>
+        </div>
+        <p id="mcpActivityMeta" class="muted small" role="status"></p>
+        <div class="routes-table-wrap">
+          <table class="routes-table mcp-table" aria-label="MCP activity log">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Client</th>
+                <th>Tool</th>
+                <th>Target</th>
+                <th>Arguments</th>
+                <th>Outcome</th>
+                <th>Duration</th>
+              </tr>
+            </thead>
+            <tbody id="mcpActivityBody"></tbody>
+          </table>
+        </div>
+        <div class="mcp-pager" id="mcpActivityPager"></div>
+
+        <h3 class="routes-subhead" id="mcp-tools">7 · Tool usage</h3>
+        <div class="mcp-filters">
+          <label class="mcp-filters__field mcp-filters__field--grow">
+            <span class="muted small">Search</span>
+            <input id="mcpToolSearch" class="uc-input" type="search" placeholder="tool name" />
+          </label>
+          <label class="mcp-filters__field">
+            <span class="muted small">Sort by</span>
+            <select id="mcpToolSort" class="uc-input">
+              <option value="calls">Most calls</option>
+              <option value="errors">Most errors</option>
+              <option value="blocked">Most blocked</option>
+              <option value="slow">Slowest</option>
+              <option value="recent">Most recent</option>
+              <option value="name">Name</option>
+            </select>
+          </label>
+          <label class="mcp-filters__field">
+            <span class="muted small">Rows</span>
+            <select id="mcpToolSize" class="uc-input" data-mcp-size="tools">
+              <option value="10">10</option>
+              <option value="25" selected>25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+          </label>
+          <label class="mcp-filters__toggle"><input type="checkbox" id="mcpToolErrors" /> Errors only</label>
+          <label class="mcp-filters__toggle"><input type="checkbox" id="mcpToolBlocked" /> Blocked only</label>
+          <button type="button" class="btn btn-small" id="mcpToolReset">Reset filters</button>
+        </div>
+        <p class="muted small" id="mcpToolsMeta"></p>
+        <div class="routes-table-wrap">
+          <table class="routes-table mcp-table" aria-label="MCP tool usage">
+            <thead>
+              <tr>
+                <th>Tool</th>
+                <th>Calls</th>
+                <th>Errors</th>
+                <th>Blocked</th>
+                <th>Avg duration</th>
+                <th>Last used</th>
+              </tr>
+            </thead>
+            <tbody id="mcpToolsBody"></tbody>
+          </table>
+        </div>
+        <div class="mcp-pager" id="mcpToolsPager"></div>
+      </section>
+
       <section id="docsTab" class="tab-content">
         <h2>Documentation</h2>
         <p class="muted small">
@@ -1315,6 +1558,8 @@
         </article>
         <div id="developCards" class="dev-grid"></div>
       </section>
+
+      {% include "_cicd.html" %}
 
       <section id="logsTab" class="tab-content">
         <h2>Service Logs</h2>
@@ -1473,6 +1718,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
-    <script src="/static/dashboard.js?v=20260533"></script>
+    <script src="/static/dashboard.js?v=20260544"></script>
   </body>
 </html>

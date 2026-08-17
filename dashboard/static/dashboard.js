@@ -58,6 +58,7 @@ const TAB_LABELS = {
   platformTab: "Platform",
   hostedAppsTab: "Hosted apps",
   routesTab: "Routes",
+  mcpTab: "MCP",
   docsTab: "Docs",
   developTab: "Develop",
   logsTab: "Logs",
@@ -385,6 +386,7 @@ function backendAreaLabel(pathname) {
     hosted: "hosted apps",
     "hosted-apps": "hosted apps",
     traefik: "routes",
+    mcp: "MCP agents",
     docs: "docs",
     reference: "reference",
     leco: "registration",
@@ -4697,6 +4699,8 @@ function initHostedChartExpandModal() {
 }
 
 function activateTab(tabId, opts = {}) {
+  // Keep the grouped-nav highlight in step with the open tab.
+  setTimeout(() => { try { syncActiveTabGroup(); } catch (_) {} }, 0);
   const switchToken = beginGlobalPreloader({
     label: `Switching to ${tabLabel(tabId)}…`,
     detail: `UI tab · loading ${tabLabel(tabId)} data`,
@@ -4741,6 +4745,9 @@ function activateTab(tabId, opts = {}) {
     }
     if (tabId === "routesTab") {
       loadTraefikRoutesPanel();
+    }
+    if (tabId === "mcpTab") {
+      loadMcpTab();
     }
     if (tabId === "referenceTab") {
       loadReferenceTab();
@@ -4796,6 +4803,7 @@ function initTabs() {
   document.querySelectorAll(".tab-btn[data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => activateTab(btn.dataset.tab));
   });
+  wireTabGroups();
 }
 
 function renderSystemStatus(s) {
@@ -7756,6 +7764,301 @@ function initHostedBrowseModal(pathIn, setMsg, onFolderPicked) {
   });
 }
 
+/**
+ * Register wizard source selector: Local folder (unchanged, still the default)
+ * or Git repository.
+ *
+ * The Git path is deliberately a *front door* to the existing wizard rather than
+ * a parallel one: a successful clone writes the returned `wsp:`/repo-relative
+ * path into the App root path field, and Detect → Generate YAML → Register run
+ * afterwards exactly as they do for a folder someone browsed to.
+ *
+ * @param {HTMLInputElement} pathIn App root path field to fill on success.
+ * @param {(text: string, isErr?: boolean) => void} setMsg Wizard status line.
+ * @param {() => (void|Promise<void>)} onCloned Runs after the path is filled.
+ */
+function initHostedRegisterGitSource(pathIn, setMsg, onCloned) {
+  const radioLocal = document.getElementById("hostedRegSourceLocal");
+  const radioGit = document.getElementById("hostedRegSourceGit");
+  const panel = document.getElementById("hostedRegGitPanel");
+  const urlIn = document.getElementById("hostedRegGitUrl");
+  const refIn = document.getElementById("hostedRegGitRef");
+  const refList = document.getElementById("hostedRegGitRefList");
+  const credSel = document.getElementById("hostedRegGitCredential");
+  const secretIn = document.getElementById("hostedRegGitSecret");
+  const saveAsIn = document.getElementById("hostedRegGitSaveAs");
+  const saveCredBtn = document.getElementById("hostedRegGitSaveCred");
+  const fullHistoryChk = document.getElementById("hostedRegGitFullHistory");
+  const resetChk = document.getElementById("hostedRegGitReset");
+  const inspectBtn = document.getElementById("hostedRegGitInspect");
+  const cloneBtn = document.getElementById("hostedRegGitClone");
+  const msgEl = document.getElementById("hostedRegGitMsg");
+  const resultEl = document.getElementById("hostedRegGitResult");
+  const logEl = document.getElementById("hostedRegGitLog");
+  const rootHint = document.getElementById("hostedRegGitRootHint");
+  const localBtns = document.querySelector(".hosted-register-path-btns");
+  if (!radioGit || !panel || !urlIn || !cloneBtn) return;
+
+  let configLoaded = false;
+
+  function gitMsg(text, isErr) {
+    if (!msgEl) return;
+    msgEl.textContent = text || "";
+    msgEl.style.color = isErr ? "#fca5a5" : "";
+  }
+
+  function showResult(rows, note, isErr) {
+    if (!resultEl) return;
+    resultEl.innerHTML = "";
+    resultEl.classList.toggle("hosted-register-git-result--error", !!isErr);
+    const dl = document.createElement("dl");
+    rows.forEach(([label, value]) => {
+      if (value == null || value === "") return;
+      const dt = document.createElement("dt");
+      dt.textContent = label;
+      const dd = document.createElement("dd");
+      dd.textContent = String(value);
+      dl.appendChild(dt);
+      dl.appendChild(dd);
+    });
+    resultEl.appendChild(dl);
+    if (note) {
+      const p = document.createElement("p");
+      p.className = "hosted-register-git-result__note muted small";
+      p.textContent = note;
+      resultEl.appendChild(p);
+    }
+    resultEl.classList.remove("is-hidden");
+  }
+
+  function appendLog(text) {
+    if (!logEl) return;
+    logEl.classList.remove("is-hidden");
+    logEl.textContent += text;
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function setGitBusy(on) {
+    [inspectBtn, cloneBtn, saveCredBtn].forEach((b) => {
+      if (b) b.disabled = !!on;
+    });
+  }
+
+  /** Credential for this request: a saved id, or the pasted secret (never both). */
+  function credentialPayload() {
+    const saved = credSel && credSel.value ? String(credSel.value) : "";
+    if (saved) return { credential_id: saved };
+    const raw = secretIn ? String(secretIn.value || "").trim() : "";
+    if (!raw) return {};
+    // `token` is the dashboard control token on these endpoints; the git secret
+    // travels as `credential_token` so the two can never be confused.
+    if (raw.includes("PRIVATE KEY")) return { credential_kind: "ssh-key", ssh_key: secretIn.value };
+    return { credential_kind: "https-token", credential_token: raw };
+  }
+
+  async function loadGitConfig() {
+    if (configLoaded) return;
+    try {
+      const res = await fetch("/api/leco/git/config");
+      const data = await res.json();
+      configLoaded = true;
+      if (credSel) {
+        const keep = credSel.value;
+        credSel.innerHTML = '<option value="">— None (public repository) —</option>';
+        (data.credentials || []).forEach((c) => {
+          const opt = document.createElement("option");
+          opt.value = c.id;
+          opt.textContent = `${c.id} · ${c.kind}${c.host ? ` · ${c.host}` : ""}`;
+          credSel.appendChild(opt);
+        });
+        credSel.value = keep;
+      }
+      if (rootHint) {
+        const root = data.clone_root || {};
+        const lim = data.limits || {};
+        rootHint.textContent = root.ok
+          ? `Clones → ${root.label} · shallow depth ${lim.default_depth} · ${lim.max_clone_mb} MB / ${lim.timeout_seconds}s limit`
+          : `Clone root unavailable: ${root.error || "unknown"}`;
+        rootHint.title = (root.note || "") + " " + ((data.storage && data.storage.note) || "");
+      }
+    } catch (e) {
+      gitMsg(String(e.message || e), true);
+    }
+  }
+
+  function setSourceMode(useGit) {
+    panel.classList.toggle("is-hidden", !useGit);
+    if (localBtns) localBtns.classList.toggle("is-hidden", !!useGit);
+    if (pathIn) {
+      pathIn.readOnly = !!useGit;
+      pathIn.placeholder = useGit
+        ? "filled by Clone / update & use"
+        : "wsp:CrawlerVision/cloudflare or full path from Finder";
+    }
+    if (useGit) void loadGitConfig();
+  }
+
+  radioGit.addEventListener("change", () => setSourceMode(radioGit.checked));
+  radioLocal?.addEventListener("change", () => setSourceMode(!radioLocal.checked));
+
+  saveCredBtn?.addEventListener("click", async () => {
+    const name = saveAsIn ? String(saveAsIn.value || "").trim() : "";
+    const raw = secretIn ? String(secretIn.value || "") : "";
+    if (!name) return gitMsg("Enter a name to save this credential as.", true);
+    if (!raw.trim()) return gitMsg("Paste a token or SSH private key first.", true);
+    if (dashboardTokenRequired() && !controlToken()) {
+      return gitMsg("Set the Control token on the Control tab first.", true);
+    }
+    const isKey = raw.includes("PRIVATE KEY");
+    setGitBusy(true);
+    try {
+      const res = await fetch("/api/leco/git/credentials", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Control-Token": controlToken() },
+        body: JSON.stringify({
+          token: controlToken(),
+          action: "save",
+          id: name,
+          kind: isKey ? "ssh-key" : "https-token",
+          ...(isKey ? { private_key: raw } : { credential_token: raw.trim() }),
+        }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "save failed");
+      configLoaded = false;
+      await loadGitConfig();
+      if (credSel) credSel.value = (data.saved && data.saved.id) || "";
+      if (secretIn) secretIn.value = "";
+      if (saveAsIn) saveAsIn.value = "";
+      gitMsg(`Saved to ${(data.storage && data.storage.path) || "config/git-credentials.yaml"} (0600, gitignored).`);
+    } catch (e) {
+      gitMsg(String(e.message || e), true);
+    } finally {
+      setGitBusy(false);
+    }
+  });
+
+  inspectBtn?.addEventListener("click", async () => {
+    const url = String(urlIn.value || "").trim();
+    if (!url) return gitMsg("Repository URL is required.", true);
+    if (dashboardTokenRequired() && !controlToken()) {
+      return gitMsg("Set the Control token on the Control tab first.", true);
+    }
+    setGitBusy(true);
+    gitMsg("Checking repository (git ls-remote — nothing is downloaded)…");
+    try {
+      const res = await fetch("/api/leco/git/inspect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Control-Token": controlToken() },
+        body: JSON.stringify({ token: controlToken(), url, ...credentialPayload() }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        showResult([["Repository", url]], data.error || "Could not read the repository.", true);
+        gitMsg(data.error || "Could not read the repository.", true);
+        return;
+      }
+      if (refList) {
+        refList.innerHTML = "";
+        [...(data.branches || []), ...(data.tags || [])].forEach((r) => {
+          const o = document.createElement("option");
+          o.value = r;
+          refList.appendChild(o);
+        });
+      }
+      if (refIn && !refIn.value.trim() && data.default_branch) refIn.value = data.default_branch;
+      const idIn = document.getElementById("hostedRegId");
+      if (idIn && !idIn.value.trim() && data.suggested_app_id) idIn.value = data.suggested_app_id;
+      showResult(
+        [
+          ["Repository", data.repo],
+          ["Host", data.host],
+          ["Default branch", data.default_branch],
+          ["Branches", (data.branches || []).length],
+          ["Tags", (data.tags || []).length],
+        ],
+        "Nothing has been downloaded yet — use Clone / update & use to fetch the code.",
+        false,
+      );
+      gitMsg(`Repository reachable · ${(data.branches || []).length} branch(es).`);
+    } catch (e) {
+      gitMsg(String(e.message || e), true);
+    } finally {
+      setGitBusy(false);
+    }
+  });
+
+  cloneBtn.addEventListener("click", async () => {
+    const url = String(urlIn.value || "").trim();
+    if (!url) return gitMsg("Repository URL is required.", true);
+    if (dashboardTokenRequired() && !controlToken()) {
+      return gitMsg("Set the Control token on the Control tab first.", true);
+    }
+    const idIn = document.getElementById("hostedRegId");
+    const appId = idIn ? String(idIn.value || "").trim() : "";
+    if (logEl) {
+      logEl.textContent = "";
+      logEl.classList.remove("is-hidden");
+    }
+    setGitBusy(true);
+    gitMsg("Cloning…");
+    try {
+      const res = await fetch("/api/leco/git/clone/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Control-Token": controlToken() },
+        body: JSON.stringify({
+          token: controlToken(),
+          url,
+          app_id: appId,
+          ref: refIn ? String(refIn.value || "").trim() : "",
+          full_history: !!(fullHistoryChk && fullHistoryChk.checked),
+          reset: !!(resetChk && resetChk.checked),
+          ...credentialPayload(),
+        }),
+      });
+      if (!res.ok && !res.body) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      const final = await readNdjsonLinesFromReader(res.body.getReader(), appendLog);
+      if (!final || !final.ok) {
+        const err = (final && final.error) || "Clone failed.";
+        showResult([["Repository", url]], err, true);
+        gitMsg(err, true);
+        return;
+      }
+      if (pathIn) pathIn.value = final.path_field || "";
+      if (idIn && !idIn.value.trim() && final.dir_name) idIn.value = final.dir_name.toLowerCase();
+      showResult(
+        [
+          ["Repository", final.repo_name],
+          ["Remote", final.repo_url],
+          ["Ref", `${final.ref}${final.ref_kind ? ` (${final.ref_kind})` : ""}`],
+          ["Commit", `${final.short_commit} — ${final.commit_subject || ""}`],
+          ["Committed", final.commit_date],
+          ["Action", `${final.action}${final.shallow ? " · shallow" : " · full history"}`],
+          ["Path", final.path_field],
+          ["Size", `${final.size_mb} MB`],
+        ],
+        (final.notes || []).join(" "),
+        false,
+      );
+      gitMsg(`${final.action} · ${final.short_commit} · path filled below.`);
+      setMsg(
+        `Cloned ${final.repo_name} @ ${final.short_commit} into ${final.path_field}. Detect runs next.`,
+        false,
+      );
+      if (typeof onCloned === "function") await onCloned();
+    } catch (e) {
+      gitMsg(String(e.message || e), true);
+    } finally {
+      setGitBusy(false);
+    }
+  });
+
+  setSourceMode(!!radioGit.checked);
+}
+
 function initHostedRegisterWizard() {
   const detectBtn = document.getElementById("hostedRegDetect");
   const genBtn = document.getElementById("hostedRegGenerateYaml");
@@ -8260,6 +8563,14 @@ function initHostedRegisterWizard() {
   initHostedBrowseModal(pathIn, setMsg, async () => {
     await runHostedRegisterDetect({ fromBrowse: true });
     // Trigger AI analysis after browse+detect if toggle is on
+    if (typeof window._runAiAnalysis === "function") {
+      window._runAiAnalysis();
+    }
+  });
+
+  // Git source: a clone fills the same path field, then the existing Detect runs.
+  initHostedRegisterGitSource(pathIn, setMsg, async () => {
+    await runHostedRegisterDetect({ fromBrowse: true });
     if (typeof window._runAiAnalysis === "function") {
       window._runAiAnalysis();
     }
@@ -10645,6 +10956,8 @@ function scheduleRefresh() {
         refreshHostedAppsPanel();
       } else if (activeTab === "routesTab") {
         loadTraefikRoutesPanel();
+      } else if (activeTab === "mcpTab") {
+        loadMcpTab();
       } else if (activeTab === "referenceTab") {
         loadReferenceTab();
       }
@@ -10826,6 +11139,8 @@ async function bootstrap() {
   instrumentBackendFetchPreloader();
   if (!document.getElementById("overviewTab")) {
     await bootstrapHubChrome();
+    // The AI provider configuration screen lives on the Service hubs page.
+    initAiSettingsPanel();
     return;
   }
   initAppModal();
@@ -10936,259 +11251,721 @@ async function bootstrap() {
 }
 
 /* ==========================================================================
-   AI Settings panel (Infrastructure §6) + AI Wizard toggle
+   External AI provider configuration (Service hubs page) + wizard toggle
+
+   The configuration screen itself lives on /hub (#hub-ai-providers).  The
+   Infrastructure tab and the Hosted-apps register form show a read-only
+   summary of the same state and link across.  Both surfaces load the same
+   dashboard.js, so the render functions below no-op on whichever elements
+   the current page does not have.
    ========================================================================== */
 
-/** Which providers need an API key and/or base_url field. */
+/** Order providers appear in the configuration screen. */
+const AI_PROVIDER_ORDER = [
+  "none", "ollama", "airllm", "anthropic", "google", "openai", "openai-compatible", "hybrid",
+];
+
+/** Client-side fallbacks; the server's PROVIDER_META is authoritative once loaded. */
 const AI_PROVIDER_META = {
-  none:                { needsKey: false, needsUrl: false, label: "No AI" },
-  ollama:              { needsKey: false, needsUrl: false, label: "Ollama (local SLM)" },
-  openai:              { needsKey: true,  needsUrl: false, label: "OpenAI" },
-  anthropic:           { needsKey: true,  needsUrl: false, label: "Anthropic" },
-  google:              { needsKey: true,  needsUrl: false, label: "Google Gemini" },
-  "openai-compatible": { needsKey: true,  needsUrl: true,  label: "OpenAI-compatible" },
-  hybrid:              { needsKey: true,  needsUrl: false, label: "Hybrid (SLM + LLM)" },
+  none:                { label: "No AI", needs_key: false, needs_url: false, privacy: "full" },
+  ollama:              { label: "Ollama (local)", needs_key: false, needs_url: true, privacy: "full" },
+  airllm:              { label: "AirLLM (local)", needs_key: false, needs_url: true, privacy: "full" },
+  openai:              { label: "OpenAI", needs_key: true, needs_url: false, privacy: "cloud" },
+  anthropic:           { label: "Anthropic (Claude API)", needs_key: true, needs_url: false, privacy: "cloud" },
+  google:              { label: "Google (Gemini API)", needs_key: true, needs_url: false, privacy: "cloud" },
+  "openai-compatible": { label: "Aggregator / OpenAI-compatible", needs_key: true, needs_url: true, privacy: "depends" },
+  edenai:              { label: "Eden AI", needs_key: true, needs_url: false, privacy: "cloud" },
+  hybrid:              { label: "Hybrid (local SLM + cloud LLM)", needs_key: true, needs_url: false, privacy: "hybrid" },
 };
 
-/** Cached state so wizard toggle can read current provider. */
+const AI_PRIVACY_LABEL = {
+  full:    { short: "Local", text: "Local · stays on this host", cls: "ai-privacy-badge--local" },
+  cloud:   { short: "Cloud", text: "Cloud · source excerpts leave this host", cls: "ai-privacy-badge--cloud" },
+  depends: { short: "Depends", text: "Depends on the endpoint you choose", cls: "ai-privacy-badge--depends" },
+  hybrid:  { short: "Hybrid", text: "Hybrid · only a local summary leaves this host", cls: "ai-privacy-badge--hybrid" },
+};
+
+/** Cached state so the wizard toggle can read the current provider. */
 let _aiCurrentProvider = "none";
 let _aiCurrentModel = "";
+let _aiConfigured = false;
 
-function initAiSettingsPanel() {
-  const provSel    = document.getElementById("aiProviderSelect");
-  const modelSel   = document.getElementById("aiModelSelect");
-  const modelIn    = document.getElementById("aiModelCustom");
-  const keyRow     = document.getElementById("aiKeyRow");
-  const urlRow     = document.getElementById("aiBaseUrlRow");
-  const keyIn      = document.getElementById("aiApiKeyInput");
-  const urlIn      = document.getElementById("aiBaseUrlInput");
-  const saveBtn    = document.getElementById("aiSettingsSave");
-  const testBtn    = document.getElementById("aiSettingsTest");
-  const refreshBtn = document.getElementById("aiModelsRefresh");
-  const statusEl   = document.getElementById("aiSettingsStatus");
-  const testOut    = document.getElementById("aiSettingsTestOutput");
-  if (!provSel) return;
+/** Live configuration-screen state. */
+const _aiCfg = {
+  settings: null,     // last /api/ai/settings payload
+  provider: "none",   // provider selected in the screen (may differ from saved)
+  models: [],         // last discovered model list
+  discovery: "",      // "api" | "curated" | "none"
+  qualityNote: "",
+  filter: "",
+  sort: "tier",
+  loaded: false,
+};
 
-  const hybridRow  = document.getElementById("aiHybridRow");
-  const hybridSlm  = document.getElementById("aiHybridSlmSelect");
-  const hybridLlm  = document.getElementById("aiHybridLlmSelect");
-  const hybridKey  = document.getElementById("aiHybridLlmKey");
-  const timeoutRow = document.getElementById("aiTimeoutRow");
-  const timeoutIn  = document.getElementById("aiTimeoutInput");
+function aiCfgEl(id) { return document.getElementById(id); }
 
-  function showFieldsForProvider(prov) {
-    const meta = AI_PROVIDER_META[prov] || {};
-    keyRow.style.display    = (meta.needsKey && prov !== "hybrid") ? "" : "none";
-    urlRow.style.display    = meta.needsUrl ? "" : "none";
-    if (hybridRow) hybridRow.style.display = (prov === "hybrid") ? "" : "none";
-    if (timeoutRow) timeoutRow.style.display = (prov !== "none") ? "" : "none";
-    const hybridHint = document.getElementById("aiHybridHint");
-    if (hybridHint) hybridHint.classList.toggle("is-hidden", prov !== "hybrid");
-    if (document.getElementById("aiModelField")) {
-      document.getElementById("aiModelField").style.display = (prov === "hybrid") ? "none" : "";
-    }
-  }
-
-  provSel.addEventListener("change", () => {
-    showFieldsForProvider(provSel.value);
-    // Set sensible default timeout per provider type
-    if (timeoutIn) {
-      const defaults = { ollama: 300, "openai-compatible": 300, hybrid: 300, openai: 120, anthropic: 120, google: 120 };
-      timeoutIn.value = defaults[provSel.value] || 180;
-    }
-    // Auto-fetch models when provider changes (except none/hybrid)
-    if (provSel.value !== "none" && provSel.value !== "hybrid") {
-      refreshAiModels();
-    }
-  });
-
-  /** Load current settings from backend. */
-  async function loadAiSettings() {
-    try {
-      const r = await fetch("/api/ai/settings");
-      const d = await r.json();
-      if (!d.ok) return;
-      const prov = d.provider || "none";
-      const plat = d.platform || {};
-      const cloudBanner = document.getElementById("aiCloudBanner");
-      if (cloudBanner) {
-        cloudBanner.classList.toggle("is-hidden", !plat.cloud_first);
-      }
-      if (plat.cloud_first && plat.default_provider && prov === "none") {
-        provSel.value = plat.default_provider;
-      } else {
-        provSel.value = prov;
-      }
-      _aiCurrentProvider = provSel.value;
-      showFieldsForProvider(provSel.value);
-
-      const activeProv = provSel.value;
-      const provCfg = (d.providers || {})[activeProv] || {};
-      keyIn.value  = provCfg.api_key || "";
-      urlIn.value  = provCfg.base_url || "";
-      const mdl = provCfg.default_model || d.default_model || "";
-      _aiCurrentModel = mdl;
-      modelIn.value = mdl;
-
-      // Populate timeout — use per-provider timeout if set, else global
-      if (timeoutIn) {
-        const provTimeout = provCfg.timeout || d.timeout || 180;
-        timeoutIn.value = provTimeout;
-      }
-
-      // Populate hybrid fields if present
-      const hybCfg = (d.providers || {}).hybrid || {};
-      if (hybridSlm) hybridSlm.value = hybCfg.local_provider || "ollama";
-      if (hybridLlm) hybridLlm.value = hybCfg.cloud_provider || "openai";
-      if (hybridKey) hybridKey.value = hybCfg.cloud_api_key || "";
-
-      updateWizardToggleProvider(activeProv, mdl);
-
-      // Auto-fetch models for the active provider
-      if (activeProv !== "none" && activeProv !== "hybrid") {
-        refreshAiModels();
-      }
-    } catch (_) { /* offline / not running */ }
-  }
-
-  /** Save settings to backend. */
-  async function saveAiSettings() {
-    statusEl.textContent = "Saving…";
-    statusEl.className = "ai-settings__status muted small";
-    const prov = provSel.value;
-    const model = modelSel.value || modelIn.value.trim();
-    const timeoutVal = timeoutIn ? parseInt(timeoutIn.value, 10) || 180 : 180;
-    const payload = {
-      provider: prov,
-      default_model: model,
-      timeout: timeoutVal,
-      providers: {},
-    };
-    const pc = {};
-    if (prov === "hybrid") {
-      // Hybrid stores both local + cloud config
-      pc.local_provider = hybridSlm?.value || "ollama";
-      pc.cloud_provider = hybridLlm?.value || "openai";
-      if (hybridKey?.value.trim()) pc.cloud_api_key = hybridKey.value.trim();
-      pc.local_timeout = timeoutVal;
-      pc.cloud_timeout = Math.min(timeoutVal, 120);
-    } else {
-      if (keyIn.value.trim()) pc.api_key = keyIn.value.trim();
-      if (urlIn.value.trim()) pc.base_url = urlIn.value.trim();
-      if (model) pc.default_model = model;
-      pc.timeout = timeoutVal;
-    }
-    payload.providers[prov] = pc;
-
-    try {
-      const tok = controlToken();
-      const r = await fetch("/api/ai/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Control-Token": tok },
-        body: JSON.stringify(payload),
-      });
-      const d = await r.json();
-      if (d.ok) {
-        statusEl.textContent = "Saved ✓";
-        statusEl.className = "ai-settings__status muted small ai-settings__status--ok";
-        _aiCurrentProvider = prov;
-        _aiCurrentModel = model;
-        updateWizardToggleProvider(prov, model);
-      } else {
-        statusEl.textContent = d.error || "Save failed";
-        statusEl.className = "ai-settings__status muted small ai-settings__status--err";
-      }
-    } catch (e) {
-      statusEl.textContent = e.message;
-      statusEl.className = "ai-settings__status muted small ai-settings__status--err";
-    }
-  }
-
-  /** Test provider connectivity. */
-  async function testAiProvider() {
-    testOut.classList.remove("is-hidden");
-    testOut.textContent = "Testing connection…\n";
-    try {
-      const tok = controlToken();
-      const r = await fetch("/api/ai/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Control-Token": tok },
-        body: JSON.stringify({ provider: provSel.value }),
-      });
-      const d = await r.json();
-      if (d.ok) {
-        let out = `✓ ${d.provider} — ${d.message}\n`;
-        if (d.models && d.models.length) {
-          out += `\nAvailable models (${d.models.length}):\n`;
-          d.models.forEach((m) => { out += `  • ${m.name}\n`; });
-        }
-        testOut.textContent = out;
-      } else {
-        testOut.textContent = `✗ ${d.provider || provSel.value}: ${d.error || d.message || "failed"}\n`;
-      }
-    } catch (e) {
-      testOut.textContent = `✗ ${e.message}\n`;
-    }
-  }
-
-  /** Refresh model dropdown from provider. */
-  async function refreshAiModels() {
-    modelSel.innerHTML = '<option value="">Loading…</option>';
-    try {
-      const r = await fetch("/api/ai/models");
-      const d = await r.json();
-      modelSel.innerHTML = '<option value="">— select model —</option>';
-      if (d.ok && d.models) {
-        d.models.forEach((m) => {
-          const opt = document.createElement("option");
-          opt.value = m.name;
-          opt.textContent = m.name;
-          modelSel.appendChild(opt);
-        });
-        // Pre-select current
-        if (_aiCurrentModel) modelSel.value = _aiCurrentModel;
-      }
-    } catch (_) {
-      modelSel.innerHTML = '<option value="">— error loading —</option>';
-    }
-  }
-
-  modelSel.addEventListener("change", () => {
-    if (modelSel.value) modelIn.value = modelSel.value;
-  });
-
-  saveBtn.addEventListener("click", saveAiSettings);
-  testBtn.addEventListener("click", testAiProvider);
-  refreshBtn.addEventListener("click", refreshAiModels);
-
-  // Initial load
-  loadAiSettings();
+/** Server metadata for a provider, falling back to the built-in table. */
+function aiMeta(prov) {
+  const fromServer = (_aiCfg.settings && _aiCfg.settings.provider_meta) || {};
+  return fromServer[prov] || AI_PROVIDER_META[prov] || { label: prov, needs_key: false, needs_url: false, privacy: "depends" };
 }
 
-/** Update the wizard toggle indicator with current provider info. */
-function updateWizardToggleProvider(prov, model) {
+function aiProviderLabel(prov) {
+  return aiMeta(prov).label || prov;
+}
+
+/** Saved config section for a provider (keys already masked by the server). */
+function aiSavedSection(prov) {
+  return ((_aiCfg.settings && _aiCfg.settings.providers) || {})[prov] || {};
+}
+
+/** Which credential field this provider stores its key under. */
+function aiKeyField(prov) {
+  return prov === "hybrid" ? "cloud_api_key" : "api_key";
+}
+
+/** True when the saved config for `prov` has everything it needs to run. */
+function aiProviderIsConfigured(prov) {
+  if (!prov || prov === "none") return false;
+  const meta = aiMeta(prov);
+  const sect = aiSavedSection(prov);
+  if (prov === "openai-compatible" && !sect.base_url) return false;
+  if (prov === "hybrid") {
+    return Boolean(sect.cloud_api_key_set) || Boolean(aiSavedSection(sect.cloud_provider || "openai").api_key_set);
+  }
+  if (meta.needs_key && !sect.api_key_set) return false;
+  return true;
+}
+
+function aiFormatContext(n) {
+  const v = Number(n) || 0;
+  if (!v) return "";
+  if (v >= 1000000) return (v / 1000000).toFixed(v % 1000000 ? 1 : 0) + "M ctx";
+  if (v >= 1000) return Math.round(v / 1000) + "K ctx";
+  return v + " ctx";
+}
+
+/** Aggregators quote per-token prices as decimal strings; show $ per 1M tokens. */
+function aiPricePerMillion(pricing) {
+  if (!pricing || typeof pricing !== "object") return null;
+  const inTok = parseFloat(pricing.prompt !== undefined ? pricing.prompt : pricing.input);
+  const outTok = parseFloat(pricing.completion !== undefined ? pricing.completion : pricing.output);
+  if (!isFinite(inTok) && !isFinite(outTok)) return null;
+  return {
+    in: isFinite(inTok) ? inTok * 1000000 : null,
+    out: isFinite(outTok) ? outTok * 1000000 : null,
+  };
+}
+
+function aiFormatPricing(pricing) {
+  const p = aiPricePerMillion(pricing);
+  if (!p) return "";
+  const fmt = (v) => (v === 0 ? "free" : "$" + v.toFixed(2));
+  const parts = [];
+  if (p.in !== null) parts.push(fmt(p.in) + " in");
+  if (p.out !== null) parts.push(fmt(p.out) + " out");
+  return parts.length ? parts.join(" · ") + " /M tok" : "";
+}
+
+/* --------------------------------------------------------------------------
+   Read-only summary (Infrastructure tab + hub panel header)
+   -------------------------------------------------------------------------- */
+
+function renderAiStatusCard() {
+  const provEl = aiCfgEl("aiStatusProvider");
+  const metaEl = aiCfgEl("aiStatusMeta");
+  const dotEl = aiCfgEl("aiStatusDot");
+  const privEl = aiCfgEl("aiStatusPrivacy");
+  if (!provEl) return;
+
+  const d = _aiCfg.settings || {};
+  const prov = d.provider || "none";
+  const sect = aiSavedSection(prov);
+  const model = (prov === "hybrid" ? sect.local_model : sect.default_model) || d.default_model || "";
+  const configured = aiProviderIsConfigured(prov);
+
+  if (prov === "none") {
+    provEl.textContent = "No AI provider configured";
+    if (metaEl) metaEl.textContent = "Registration falls back to deterministic detection only.";
+  } else if (!configured) {
+    provEl.textContent = aiProviderLabel(prov) + " — incomplete";
+    if (metaEl) {
+      metaEl.textContent = prov === "openai-compatible"
+        ? "No endpoint saved. Pick a service or enter a base URL."
+        : "No API key saved for this provider.";
+    }
+  } else {
+    provEl.textContent = aiProviderLabel(prov);
+    const bits = [];
+    if (prov === "hybrid") {
+      bits.push(`${aiProviderLabel(sect.local_provider || "ollama")} → ${aiProviderLabel(sect.cloud_provider || "openai")}`);
+      if (sect.local_model) bits.push(sect.local_model);
+    } else {
+      bits.push(model || "no model selected");
+    }
+    if (sect.base_url) bits.push(sect.base_url);
+    if (metaEl) metaEl.textContent = bits.join(" · ");
+  }
+
+  if (dotEl) dotEl.className = "ai-status-card__dot" + (configured ? " ai-status-card__dot--on" : "");
+  if (privEl) {
+    const p = AI_PRIVACY_LABEL[aiMeta(prov).privacy];
+    if (p && prov !== "none") {
+      privEl.hidden = false;
+      privEl.textContent = p.text;
+      privEl.className = "ai-privacy-badge " + p.cls;
+    } else {
+      privEl.hidden = true;
+    }
+  }
+
+  const storageText = (d.storage || {}).note
+    || "Credentials are stored server-side only in config/ai-providers.yaml (gitignored).";
+  const infraStore = aiCfgEl("aiStatusStorage");
+  if (infraStore) infraStore.textContent = storageText;
+  const cfgStore = aiCfgEl("aiCfgStorage");
+  if (cfgStore) cfgStore.textContent = storageText;
+
+  const banner = aiCfgEl("aiCloudBanner");
+  if (banner) banner.classList.toggle("is-hidden", !(d.platform || {}).cloud_first);
+}
+
+/* --------------------------------------------------------------------------
+   Step 1 — provider picker
+   -------------------------------------------------------------------------- */
+
+function renderAiProviderList() {
+  const host = aiCfgEl("aiCfgProviderList");
+  if (!host) return;
+  const saved = (_aiCfg.settings || {}).provider || "none";
+  host.innerHTML = "";
+  AI_PROVIDER_ORDER.forEach((prov) => {
+    const meta = aiMeta(prov);
+    const priv = AI_PRIVACY_LABEL[meta.privacy] || AI_PRIVACY_LABEL.depends;
+    const configured = aiProviderIsConfigured(prov);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ai-cfg__provider" + (prov === _aiCfg.provider ? " is-active" : "");
+    btn.setAttribute("role", "radio");
+    btn.setAttribute("aria-checked", prov === _aiCfg.provider ? "true" : "false");
+    btn.dataset.provider = prov;
+    const chips = [];
+    if (prov !== "none") chips.push(`<span class="ai-cfg__chip ai-cfg__chip--${escapeHtml(meta.privacy || "depends")}">${escapeHtml(priv.short)}</span>`);
+    if (prov === saved) chips.push(`<span class="ai-cfg__chip ai-cfg__chip--active">active</span>`);
+    else if (configured) chips.push(`<span class="ai-cfg__chip ai-cfg__chip--ready">ready</span>`);
+    btn.innerHTML =
+      `<span class="ai-cfg__provider-name">${escapeHtml(meta.label || prov)}</span>` +
+      `<span class="ai-cfg__provider-tags">${chips.join("")}</span>`;
+    btn.addEventListener("click", () => selectAiCfgProvider(prov));
+    host.appendChild(btn);
+  });
+}
+
+function renderAiCfgPresets() {
+  const sel = aiCfgEl("aiCfgPreset");
+  if (!sel) return;
+  const presets = (_aiCfg.settings || {}).presets || [];
+  const current = sel.value;
+  sel.innerHTML = "";
+  const kindLabel = { aggregator: "aggregator", vendor: "vendor API", gateway: "self-hosted gateway", local: "local", custom: "" };
+  presets.forEach((p) => {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    const kind = kindLabel[p.kind] || "";
+    opt.textContent = p.label + (kind ? ` · ${kind}` : "");
+    sel.appendChild(opt);
+  });
+  if (current) sel.value = current;
+}
+
+function aiCurrentPreset() {
+  const presets = (_aiCfg.settings || {}).presets || [];
+  const id = aiCfgEl("aiCfgPreset")?.value || "custom";
+  return presets.find((p) => p.id === id) || { id: "custom", label: "Custom endpoint", base_url: "", privacy: "depends" };
+}
+
+function applyAiCfgPreset(userInitiated) {
+  const preset = aiCurrentPreset();
+  const urlIn = aiCfgEl("aiCfgUrl");
+  const docs = aiCfgEl("aiCfgPresetDocs");
+  const note = aiCfgEl("aiCfgPresetNote");
+  if (urlIn) {
+    if (preset.id === "custom" && userInitiated) urlIn.value = "";
+    else if (preset.base_url && (userInitiated || !urlIn.value.trim())) urlIn.value = preset.base_url;
+  }
+  if (docs) {
+    if (preset.docs_url) { docs.hidden = false; docs.href = preset.docs_url; }
+    else docs.hidden = true;
+  }
+  if (note) {
+    const priv = AI_PRIVACY_LABEL[preset.privacy] || AI_PRIVACY_LABEL.depends;
+    const bits = [];
+    if (preset.note) bits.push(preset.note);
+    bits.push(priv.text + ".");
+    // Say plainly which presets were exercised against a live service and
+    // which are wired from vendor docs only — never let the two blur.
+    if (preset.verified === true) bits.push("✓ Verified: " + (preset.verified_note || "exercised live."));
+    else if (preset.verified === "partial") bits.push("~ Partly verified: " + (preset.verified_note || ""));
+    else if (preset.verified === false && preset.verified_note) bits.push("⚠ Unverified: " + preset.verified_note);
+    note.textContent = bits.join(" ");
+    note.classList.toggle("ai-cfg__hint--warn", preset.verified === false && preset.id !== "custom");
+  }
+  if (_aiCfg.provider === "openai-compatible") renderAiCfgPrivacy();
+}
+
+function renderAiCfgPrivacy() {
+  const badge = aiCfgEl("aiCfgPrivacyBadge");
+  const text = aiCfgEl("aiCfgPrivacyText");
+  if (!badge || !text) return;
+  const prov = _aiCfg.provider;
+  const meta = aiMeta(prov);
+  let privacy = meta.privacy || "depends";
+  let note = meta.privacy_note || "";
+  if (prov === "openai-compatible") {
+    const preset = aiCurrentPreset();
+    if (preset.id !== "custom") {
+      privacy = preset.privacy || privacy;
+      note = `${preset.label}: ` + (privacy === "full"
+        ? "self-hosted / on-host endpoint — source excerpts stay on your infrastructure."
+        : privacy === "cloud"
+          ? "hosted service — source excerpts (truncated) are sent to this third party."
+          : "self-hosted gateway — privacy depends on the upstream models it routes to.");
+    }
+  }
+  const p = AI_PRIVACY_LABEL[privacy] || AI_PRIVACY_LABEL.depends;
+  badge.textContent = p.text;
+  badge.className = "ai-privacy-badge " + p.cls;
+  text.textContent = note;
+}
+
+/** Show only the fields this provider actually uses. */
+function renderAiCfgFields() {
+  const prov = _aiCfg.provider;
+  const meta = aiMeta(prov);
+  const sect = aiSavedSection(prov);
+  const show = (id, on) => aiCfgEl(id)?.classList.toggle("is-hidden", !on);
+
+  show("aiCfgPresetRow", prov === "openai-compatible");
+  show("aiCfgUrlRow", Boolean(meta.needs_url));
+  show("aiCfgKeyRow", Boolean(meta.needs_key));
+  show("aiCfgHybridRow", prov === "hybrid");
+  show("aiCfgTimeoutRow", prov !== "none");
+  aiCfgEl("aiCfgModelsBlock")?.classList.toggle("is-hidden", prov === "none");
+  const testBtn = aiCfgEl("aiCfgTest");
+  if (testBtn) testBtn.disabled = prov === "none";
+
+  const urlIn = aiCfgEl("aiCfgUrl");
+  if (urlIn) urlIn.value = sect.base_url || "";
+
+  if (prov === "openai-compatible") {
+    const sel = aiCfgEl("aiCfgPreset");
+    if (sel) sel.value = sect.preset || "custom";
+    applyAiCfgPreset(false);
+  }
+
+  // API key: never prefilled — the browser only ever sees the mask.
+  const keyIn = aiCfgEl("aiCfgKey");
+  const keyState = aiCfgEl("aiCfgKeyState");
+  const keyClear = aiCfgEl("aiCfgKeyClear");
+  const field = aiKeyField(prov);
+  const isSet = Boolean(sect[field + "_set"]);
+  const masked = sect[field + "_masked"] || "";
+  if (keyIn) {
+    keyIn.value = "";
+    keyIn.dataset.cleared = "";
+    keyIn.placeholder = isSet ? `Stored: ${masked} — leave blank to keep it` : (meta.key_hint ? `${meta.key_hint} — stored server-side only` : "Paste key — stored server-side only");
+  }
+  if (keyState) {
+    keyState.textContent = isSet
+      ? `A key is stored for ${meta.label || prov}. The browser only ever receives this mask, never the key itself.`
+      : "No key stored yet. It is written to config/ai-providers.yaml (mode 0600, gitignored) and never returned to the browser.";
+  }
+  if (keyClear) keyClear.hidden = !isSet;
+
+  const timeoutIn = aiCfgEl("aiCfgTimeout");
+  if (timeoutIn) {
+    const defaults = { ollama: 300, airllm: 600, "openai-compatible": 180, hybrid: 300, openai: 120, anthropic: 120, google: 120, edenai: 180 };
+    timeoutIn.value = sect.timeout || sect.local_timeout || (_aiCfg.settings || {}).timeout || defaults[prov] || 180;
+  }
+
+  if (prov === "hybrid") {
+    const l = aiCfgEl("aiCfgHybridLocal");
+    const c = aiCfgEl("aiCfgHybridCloud");
+    const cm = aiCfgEl("aiCfgHybridCloudModel");
+    if (l) l.value = sect.local_provider || "ollama";
+    if (c) c.value = sect.cloud_provider || "openai";
+    if (cm) cm.value = sect.cloud_model || "";
+  }
+
+  const manual = aiCfgEl("aiCfgModelManual");
+  if (manual) manual.value = (prov === "hybrid" ? sect.local_model : sect.default_model) || "";
+
+  renderAiCfgPrivacy();
+}
+
+function selectAiCfgProvider(prov) {
+  _aiCfg.provider = prov;
+  _aiCfg.models = [];
+  _aiCfg.discovery = "";
+  _aiCfg.filter = "";
+  const search = aiCfgEl("aiCfgModelSearch");
+  if (search) search.value = "";
+  const res = aiCfgEl("aiCfgResult");
+  if (res) { res.textContent = ""; res.className = "ai-cfg__result"; }
+  const status = aiCfgEl("aiCfgStatus");
+  if (status) { status.textContent = ""; status.className = "ai-cfg__status"; }
+  renderAiProviderList();
+  renderAiCfgFields();
+  renderAiCfgModels();
+}
+
+/* --------------------------------------------------------------------------
+   Step 2 — model picker (searchable + sortable; aggregators return hundreds)
+   -------------------------------------------------------------------------- */
+
+function aiSortModels(list) {
+  const arr = list.slice();
+  const priceOf = (m) => {
+    const p = aiPricePerMillion(m.pricing);
+    if (!p) return Number.POSITIVE_INFINITY;
+    const vals = [p.in, p.out].filter((v) => v !== null);
+    return vals.length ? Math.max.apply(null, vals) : Number.POSITIVE_INFINITY;
+  };
+  if (_aiCfg.sort === "name") arr.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  else if (_aiCfg.sort === "context") arr.sort((a, b) => (Number(b.context_window) || 0) - (Number(a.context_window) || 0));
+  else if (_aiCfg.sort === "price") arr.sort((a, b) => priceOf(a) - priceOf(b));
+  else {
+    arr.sort((a, b) => {
+      const d = (a.tier_rank ?? 3) - (b.tier_rank ?? 3);
+      return d !== 0 ? d : String(a.id).localeCompare(String(b.id));
+    });
+  }
+  return arr;
+}
+
+function renderAiCfgModels() {
+  const host = aiCfgEl("aiCfgModelList");
+  const metaEl = aiCfgEl("aiCfgModelsMeta");
+  const tierNote = aiCfgEl("aiCfgTierNote");
+  if (!host) return;
+
+  const selected = (aiCfgEl("aiCfgModelManual")?.value || "").trim();
+  const q = _aiCfg.filter.trim().toLowerCase();
+  const all = _aiCfg.models;
+  const matches = aiSortModels(
+    q
+      ? all.filter((m) =>
+          String(m.id || "").toLowerCase().includes(q) ||
+          String(m.label || "").toLowerCase().includes(q) ||
+          String(m.tier_label || "").toLowerCase().includes(q) ||
+          String(m.description || "").toLowerCase().includes(q))
+      : all
+  );
+
+  if (metaEl) {
+    if (!all.length) {
+      metaEl.textContent = _aiCfg.discovery === "none"
+        ? "No models listed — type a model id below."
+        : "Not discovered yet — press “Connect & list models”.";
+      metaEl.className = "ai-cfg__models-meta muted small";
+    } else {
+      const curated = _aiCfg.discovery === "curated";
+      metaEl.textContent =
+        `${matches.length}${q ? " of " + all.length : ""} model${all.length === 1 ? "" : "s"}` +
+        (curated ? " · curated list (provider exposes no live catalogue)" : " · live from the provider");
+      metaEl.className = "ai-cfg__models-meta small " + (curated ? "ai-cfg__models-meta--curated" : "ai-cfg__models-meta--live");
+    }
+  }
+  if (tierNote) {
+    tierNote.textContent = all.length
+      ? (_aiCfg.qualityNote || "")
+      : "";
+  }
+
+  host.innerHTML = "";
+  if (!all.length) return;
+  if (!matches.length) {
+    const p = document.createElement("p");
+    p.className = "ai-cfg__empty muted small";
+    p.textContent = `No model matches “${_aiCfg.filter}”.`;
+    host.appendChild(p);
+    return;
+  }
+
+  const CAP = 200;
+  matches.slice(0, CAP).forEach((m) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ai-cfg__model" + (m.id === selected ? " is-selected" : "");
+    btn.setAttribute("role", "option");
+    btn.setAttribute("aria-selected", m.id === selected ? "true" : "false");
+    const chips = [];
+    if (m.tier) {
+      const src = m.quality_source === "provider" ? "provider ranking" : "curated hint, not a measured score";
+      chips.push(`<span class="ai-cfg__chip ai-cfg__chip--tier-${escapeHtml(m.tier)}" title="${escapeHtml(src)}">${escapeHtml(m.tier_label || m.tier)}</span>`);
+    }
+    const ctx = aiFormatContext(m.context_window);
+    if (ctx) chips.push(`<span class="ai-cfg__chip">${escapeHtml(ctx)}</span>`);
+    const price = aiFormatPricing(m.pricing);
+    if (price) chips.push(`<span class="ai-cfg__chip ai-cfg__chip--price">${escapeHtml(price)}</span>`);
+    if (m.owned_by) chips.push(`<span class="ai-cfg__chip">${escapeHtml(m.owned_by)}</span>`);
+    btn.innerHTML =
+      `<span class="ai-cfg__model-top">` +
+        `<span class="ai-cfg__model-id">${escapeHtml(m.id)}</span>` +
+        `<span class="ai-cfg__model-chips">${chips.join("")}</span>` +
+      `</span>` +
+      (m.label && m.label !== m.id ? `<span class="ai-cfg__model-label">${escapeHtml(m.label)}</span>` : "") +
+      (m.description ? `<span class="ai-cfg__model-desc">${escapeHtml(m.description)}</span>` : "");
+    btn.addEventListener("click", () => {
+      const manual = aiCfgEl("aiCfgModelManual");
+      if (manual) manual.value = m.id;
+      renderAiCfgModels();
+    });
+    host.appendChild(btn);
+  });
+  if (matches.length > CAP) {
+    const more = document.createElement("p");
+    more.className = "ai-cfg__empty muted small";
+    more.textContent = `Showing the first ${CAP} of ${matches.length} matches — refine the search to narrow it down.`;
+    host.appendChild(more);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Connect / save
+   -------------------------------------------------------------------------- */
+
+/** Collect the screen's current values into an API payload (no masked echoes). */
+function aiCfgFormValues() {
+  const prov = _aiCfg.provider;
+  const keyIn = aiCfgEl("aiCfgKey");
+  const out = {
+    provider: prov,
+    timeout: parseInt(aiCfgEl("aiCfgTimeout")?.value, 10) || 180,
+    model: (aiCfgEl("aiCfgModelManual")?.value || "").trim(),
+  };
+  if (prov === "openai-compatible") {
+    out.preset = aiCfgEl("aiCfgPreset")?.value || "custom";
+    out.base_url = (aiCfgEl("aiCfgUrl")?.value || "").trim();
+  } else if (aiMeta(prov).needs_url) {
+    out.base_url = (aiCfgEl("aiCfgUrl")?.value || "").trim();
+  }
+  if (keyIn && keyIn.value.trim()) out.api_key = keyIn.value.trim();
+  if (prov === "hybrid") {
+    out.local_provider = aiCfgEl("aiCfgHybridLocal")?.value || "ollama";
+    out.cloud_provider = aiCfgEl("aiCfgHybridCloud")?.value || "openai";
+    out.cloud_model = (aiCfgEl("aiCfgHybridCloudModel")?.value || "").trim();
+  }
+  return out;
+}
+
+/** Connect to the provider and list its models. */
+async function aiCfgTestConnection() {
+  const btn = aiCfgEl("aiCfgTest");
+  const res = aiCfgEl("aiCfgResult");
+  if (!res) return;
+  if (_aiCfg.provider === "none") {
+    res.className = "ai-cfg__result ai-cfg__result--warn";
+    res.textContent = "No AI selected — nothing to connect to.";
+    return;
+  }
+  if (btn) btn.disabled = true;
+  res.className = "ai-cfg__result ai-cfg__result--busy";
+  res.textContent = "Connecting…";
+  try {
+    const r = await fetch("/api/ai/discover", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Control-Token": controlToken() },
+      body: JSON.stringify(aiCfgFormValues()),
+    });
+    if (r.status === 401) {
+      res.className = "ai-cfg__result ai-cfg__result--err";
+      res.textContent = "Unauthorized — save the dashboard control token on the Control tab first.";
+      return;
+    }
+    const d = await r.json();
+    _aiCfg.models = Array.isArray(d.models) ? d.models : [];
+    _aiCfg.discovery = d.discovery || "";
+    _aiCfg.qualityNote = d.quality_note || "";
+    if (d.ok) {
+      const bits = [`Reachable · ${d.model_count || _aiCfg.models.length} model(s)`];
+      if (d.latency_ms) bits.push(`${d.latency_ms} ms`);
+      if (d.discovery === "curated") bits.push("curated list (no live catalogue)");
+      if (d.truncated) bits.push("list truncated");
+      const sel = (aiCfgEl("aiCfgModelManual")?.value || "").trim();
+      if (sel) bits.push(`selected: ${sel}`);
+      res.className = "ai-cfg__result ai-cfg__result--ok";
+      res.textContent = "✓ " + bits.join(" · ");
+      const manual = aiCfgEl("aiCfgModelManual");
+      if (manual && !manual.value.trim() && _aiCfg.models.length === 1) manual.value = _aiCfg.models[0].id;
+    } else {
+      res.className = "ai-cfg__result ai-cfg__result--err";
+      res.textContent = "✗ " + (d.error || d.message || "Connection failed");
+    }
+  } catch (e) {
+    _aiCfg.models = [];
+    res.className = "ai-cfg__result ai-cfg__result--err";
+    res.textContent = "✗ " + (e.message || "Request failed");
+  } finally {
+    if (btn) btn.disabled = false;
+    renderAiCfgModels();
+  }
+}
+
+/** Persist the screen. */
+async function aiCfgSave() {
+  const status = aiCfgEl("aiCfgStatus");
+  const prov = _aiCfg.provider;
+  const vals = aiCfgFormValues();
+  const keyIn = aiCfgEl("aiCfgKey");
+  const payload = { provider: prov, default_model: vals.model, timeout: vals.timeout, providers: {} };
+  const sect = {};
+
+  if (prov !== "none") {
+    sect.timeout = vals.timeout;
+    if (vals.base_url !== undefined) sect.base_url = vals.base_url;
+    if (prov === "openai-compatible") sect.preset = vals.preset;
+    if (prov === "hybrid") {
+      sect.local_provider = vals.local_provider;
+      sect.cloud_provider = vals.cloud_provider;
+      sect.local_model = vals.model;
+      sect.cloud_model = vals.cloud_model;
+      sect.local_timeout = vals.timeout;
+      sect.cloud_timeout = Math.min(vals.timeout, 180);
+      if (vals.api_key) sect.cloud_api_key = vals.api_key;
+      if (keyIn && keyIn.dataset.cleared === "1") sect.cloud_api_key_clear = true;
+    } else {
+      if (vals.model) sect.default_model = vals.model;
+      if (vals.api_key) sect.api_key = vals.api_key;
+      if (keyIn && keyIn.dataset.cleared === "1") sect.api_key_clear = true;
+    }
+    payload.providers[prov] = sect;
+  }
+
+  if (status) { status.textContent = "Saving…"; status.className = "ai-cfg__status"; }
+  try {
+    const r = await fetch("/api/ai/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Control-Token": controlToken() },
+      body: JSON.stringify(payload),
+    });
+    if (r.status === 401) {
+      if (status) { status.textContent = "Unauthorized — save the dashboard control token on the Control tab first."; status.className = "ai-cfg__status ai-cfg__status--err"; }
+      return;
+    }
+    const d = await r.json();
+    if (!d.ok) {
+      if (status) { status.textContent = d.error || "Save failed"; status.className = "ai-cfg__status ai-cfg__status--err"; }
+      return;
+    }
+    _aiCfg.settings = d;
+    if (keyIn) { keyIn.value = ""; keyIn.dataset.cleared = ""; }
+    if (status) { status.textContent = "Saved ✓ — active immediately, no dashboard restart needed."; status.className = "ai-cfg__status ai-cfg__status--ok"; }
+    syncAiStateFromSettings();
+    renderAiProviderList();
+    renderAiCfgFields();
+    renderAiStatusCard();
+  } catch (e) {
+    if (status) { status.textContent = e.message || "Save failed"; status.className = "ai-cfg__status ai-cfg__status--err"; }
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Wiring
+   -------------------------------------------------------------------------- */
+
+/** Mirror the saved settings into the globals the wizard toggle reads. */
+function syncAiStateFromSettings() {
+  const d = _aiCfg.settings || {};
+  const prov = d.provider || "none";
+  const sect = aiSavedSection(prov);
+  _aiCurrentProvider = prov;
+  _aiCurrentModel = (prov === "hybrid" ? sect.local_model : sect.default_model) || d.default_model || "";
+  _aiConfigured = aiProviderIsConfigured(prov);
+  updateWizardToggleProvider();
+}
+
+/** Load settings from the backend (single source of truth for every surface). */
+async function loadAiSettings() {
+  try {
+    const r = await fetch("/api/ai/settings");
+    const d = await r.json();
+    if (!d || !d.ok) return;
+    _aiCfg.settings = d;
+    _aiCfg.loaded = true;
+    if (!_aiCfg.provider || _aiCfg.provider === "none") _aiCfg.provider = d.provider || "none";
+    syncAiStateFromSettings();
+    renderAiStatusCard();
+  } catch (_) {
+    /* dashboard offline — leave the toggle disabled */
+  }
+}
+
+function initAiSettingsPanel() {
+  const panel = aiCfgEl("aiConfigPanel");
+  const summaryOnly = !panel;
+  if (summaryOnly && !aiCfgEl("aiStatusProvider") && !aiCfgEl("aiToggleProvider")) return;
+
+  if (panel) {
+    aiCfgEl("aiCfgPreset")?.addEventListener("change", () => applyAiCfgPreset(true));
+    aiCfgEl("aiCfgTest")?.addEventListener("click", aiCfgTestConnection);
+    aiCfgEl("aiCfgSave")?.addEventListener("click", aiCfgSave);
+    aiCfgEl("aiCfgModelSearch")?.addEventListener("input", (ev) => {
+      _aiCfg.filter = ev.target.value || "";
+      renderAiCfgModels();
+    });
+    aiCfgEl("aiCfgModelSort")?.addEventListener("change", (ev) => {
+      _aiCfg.sort = ev.target.value || "tier";
+      renderAiCfgModels();
+    });
+    aiCfgEl("aiCfgModelManual")?.addEventListener("input", () => renderAiCfgModels());
+    aiCfgEl("aiCfgKeyClear")?.addEventListener("click", () => {
+      const keyIn = aiCfgEl("aiCfgKey");
+      const state = aiCfgEl("aiCfgKeyState");
+      if (keyIn) { keyIn.value = ""; keyIn.dataset.cleared = "1"; keyIn.placeholder = "Key will be removed on save"; }
+      if (state) state.textContent = "The stored key will be deleted from config/ai-providers.yaml when you save.";
+    });
+  }
+
+  loadAiSettings().then(() => {
+    if (!panel) return;
+    renderAiCfgPresets();
+    selectAiCfgProvider((_aiCfg.settings || {}).provider || "none");
+    if (location.hash === "#hub-ai-providers") {
+      document.getElementById("hub-ai-providers")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  });
+}
+
+/** Update the wizard toggle indicator from the saved configuration. */
+function updateWizardToggleProvider() {
   const el = document.getElementById("aiToggleProvider");
   const toggle = document.getElementById("aiAssistToggle");
   if (!el) return;
+  const prov = _aiCurrentProvider;
+  const sect = aiSavedSection(prov);
+
   if (prov === "none" || !prov) {
-    el.textContent = "No provider configured";
+    el.textContent = "No provider configured — set one up on Service hubs";
     el.classList.remove("ai-toggle__provider--active");
     if (toggle) { toggle.checked = false; toggle.disabled = true; }
-  } else if (prov === "hybrid") {
-    const hSlm = document.getElementById("aiHybridSlmSelect");
-    const hLlm = document.getElementById("aiHybridLlmSelect");
-    const slmLabel = hSlm ? (AI_PROVIDER_META[hSlm.value] || {}).label || hSlm.value : "Ollama";
-    const llmLabel = hLlm ? (AI_PROVIDER_META[hLlm.value] || {}).label || hLlm.value : "Cloud";
-    el.textContent = `Hybrid · ${slmLabel} → ${llmLabel}`;
-    el.classList.add("ai-toggle__provider--active");
-    if (toggle) toggle.disabled = false;
-  } else {
-    const meta = AI_PROVIDER_META[prov] || {};
-    el.textContent = `${meta.label || prov}${model ? " · " + model : ""}`;
-    el.classList.add("ai-toggle__provider--active");
-    if (toggle) toggle.disabled = false;
+    return;
   }
+  if (!_aiConfigured) {
+    el.textContent = `${aiProviderLabel(prov)} — incomplete configuration`;
+    el.classList.remove("ai-toggle__provider--active");
+    if (toggle) { toggle.checked = false; toggle.disabled = true; }
+    return;
+  }
+  if (prov === "hybrid") {
+    el.textContent = `Hybrid · ${aiProviderLabel(sect.local_provider || "ollama")} → ${aiProviderLabel(sect.cloud_provider || "openai")}`;
+  } else {
+    el.textContent = `${aiProviderLabel(prov)}${_aiCurrentModel ? " · " + _aiCurrentModel : " · no model selected"}`;
+  }
+  el.classList.add("ai-toggle__provider--active");
+  if (toggle) toggle.disabled = false;
 }
+
 
 function initAiWizardToggle() {
   const toggle    = document.getElementById("aiAssistToggle");
@@ -11279,12 +12056,9 @@ function initAiWizardToggle() {
     }
   }
 
-  /** Navigate to AI settings on Infrastructure tab. */
+  /** The configuration screen lives on the Service hubs page. */
   settBtn?.addEventListener("click", () => {
-    activateTab("infrastructureTab");
-    setTimeout(() => {
-      document.getElementById("aiSettingsGroup")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 120);
+    window.location.href = "/hub#hub-ai-providers";
   });
 
   /** Toggle panel visibility. */
@@ -13196,4 +13970,1096 @@ function initPlatformTab() {
 
 initPlatformTab();
 
+/* ------------------------------------------------------------------ *
+ * MCP tab — connected agents, what they touch, and how to install     *
+ * the Skill / plugin / MCP server on an agent.                        *
+ * Data: /api/mcp/insights, /api/mcp/activity, /api/mcp/install.       *
+ * ------------------------------------------------------------------ */
+
+let mcpInsightsData = null;
+let mcpTabWired = false;
+let mcpDocIndexPromise = null;
+
+/** Numeric guard: API may return null for version/tool_count/counts. */
+function mcpNum(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function mcpText(v, fallback = "—") {
+  const s = String(v ?? "").trim();
+  return s || fallback;
+}
+
+/** "2m ago" style; absolute timestamp goes in the title attribute. */
+function mcpRelTime(iso) {
+  if (!iso) return "";
+  const t = Date.parse(String(iso));
+  if (!Number.isFinite(t)) return "";
+  const secs = Math.round((Date.now() - t) / 1000);
+  if (secs < 0) return "just now";
+  if (secs < 45) return `${secs}s ago`;
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  return `${days}d ago`;
+}
+
+/** Relative label with the absolute time on hover (formatCatalogWhen). */
+function mcpTimeCell(iso) {
+  if (!iso) return '<span class="muted">—</span>';
+  const abs = formatCatalogWhen(iso);
+  const rel = mcpRelTime(iso);
+  if (!rel) return `<span>${escapeHtml(abs)}</span>`;
+  return `<span class="mcp-time" title="${escapeAttr(abs)}">${escapeHtml(rel)}</span>`;
+}
+
+function mcpDuration(ms) {
+  const n = Number(ms);
+  if (!Number.isFinite(n) || n < 0) return '<span class="muted">—</span>';
+  if (n < 1) return "&lt;1 ms";
+  if (n < 1000) return `${Math.round(n)} ms`;
+  return `${(n / 1000).toFixed(2)} s`;
+}
+
+/** Copy button reusing the shared copyTextToClipboard helper (works on http://). */
+function mcpCopyBtn(text, label = "Copy") {
+  const t = String(text ?? "").trim();
+  if (!t) return "";
+  return `<button type="button" class="small-copy mcp-copy" data-mcp-copy="${escapeAttr(t)}" title="Copy to clipboard">${escapeHtml(label)}</button>`;
+}
+
+/** One labelled shell command / endpoint with a copy button. */
+function mcpCommandRow(label, command, hint = "", opts = {}) {
+  const cmd = String(command ?? "").trim();
+  if (!cmd) return "";
+  const unavailable = opts.available === false;
+  return `<div class="mcp-cmd${unavailable ? " mcp-cmd--unavailable" : ""}">
+      <div class="mcp-cmd__head">
+        <span class="mcp-cmd__label">${escapeHtml(label)}</span>
+        ${unavailable ? '<span class="mcp-pill mcp-pill--muted" title="Not present on this machine">not on this machine</span>' : ""}
+        ${mcpCopyBtn(cmd)}
+      </div>
+      <code class="mcp-cmd__code">${escapeHtml(cmd)}</code>
+      ${hint ? `<p class="muted small mcp-cmd__hint">${hint}</p>` : ""}
+    </div>`;
+}
+
+/** on/off state chip. `good` decides the colour, not the truthiness of `on`. */
+function mcpStateChip(on, labelOn, labelOff, good = true) {
+  const cls = on ? (good ? "mcp-pill--ok" : "mcp-pill--warn") : good ? "mcp-pill--bad" : "mcp-pill--muted";
+  return `<span class="mcp-pill ${cls}">${escapeHtml(on ? labelOn : labelOff)}</span>`;
+}
+
+function mcpClientLabel(row) {
+  const c = row?.client || row || {};
+  const name = mcpText(c.name || row?.client_name, "unknown agent");
+  const version = String(c.version || row?.client_version || "").trim();
+  return version ? `${name} ${version}` : name;
+}
+
+function mcpTargetLabel(target) {
+  if (!target) return "";
+  let kind = String(target.kind || "").trim();
+  if (kind.toLowerCase() === "none") kind = "";
+  const id = String(target.id || target.label || "").trim();
+  if (!kind && !id) return "";
+  if (!kind) return id;
+  if (!id) return kind;
+  return `${kind}:${id}`;
+}
+
+/** `labelHint` is the row-level `target_label` the API sends alongside `target`. */
+function mcpTargetCell(target, labelHint) {
+  if (!mcpTargetLabel(target)) return '<span class="muted">—</span>';
+  const id = String(target.id || target.label || "");
+  const friendly = String(labelHint || target.label || "").trim();
+  const kind = String(target.kind || "").trim();
+  return `<span class="mcp-target">${
+    kind && kind.toLowerCase() !== "none" ? `<span class="mcp-target__kind">${escapeHtml(kind)}</span>` : ""
+  }<code title="${escapeAttr(
+    friendly && friendly !== id ? friendly : id,
+  )}">${escapeHtml(id)}</code></span>`;
+}
+
+function mcpArgsCell(args) {
+  if (!args || typeof args !== "object") return '<span class="muted">—</span>';
+  const parts = Object.keys(args)
+    .slice(0, 6)
+    .map((k) => {
+      const v = args[k];
+      const text = v && typeof v === "object" ? JSON.stringify(v) : String(v ?? "");
+      return `${k}=${text.length > 40 ? `${text.slice(0, 40)}…` : text}`;
+    });
+  if (!parts.length) return '<span class="muted">—</span>';
+  const full = parts.join(" · ");
+  return `<span class="mcp-args" title="${escapeAttr(full)}">${escapeHtml(full)}</span>`;
+}
+
+/** Blocked is the safety system working — never styled as a failure. */
+function mcpOutcomeCell(row) {
+  const bits = [];
+  if (row?.blocked) {
+    bits.push('<span class="mcp-outcome mcp-outcome--blocked" title="Refused by a safety gate before running">blocked</span>');
+  } else if (row?.ok === false || row?.error) {
+    bits.push('<span class="mcp-outcome mcp-outcome--error">error</span>');
+  } else {
+    bits.push('<span class="mcp-outcome mcp-outcome--ok">ok</span>');
+  }
+  if (row?.destructive) bits.push('<span class="mcp-pill mcp-pill--warn">destructive</span>');
+  const reason = String(row?.error || "").trim();
+  if (reason) bits.push(`<span class="mcp-outcome__reason muted" title="${escapeAttr(reason)}">${escapeHtml(reason)}</span>`);
+  return `<div class="mcp-outcome-cell">${bits.join(" ")}</div>`;
+}
+
+/** Fill docPathToId once so repo-relative doc paths can open the Docs tab. */
+function ensureMcpDocIndex() {
+  if (docPathToId.size) return Promise.resolve();
+  if (!mcpDocIndexPromise) {
+    mcpDocIndexPromise = fetch("/api/docs/catalog")
+      .then((res) => res.json())
+      .then((data) => {
+        (data?.modules || []).forEach((m) => {
+          if (m && m.path) docPathToId.set(normalizeRepoRelPath(m.path), m.id);
+        });
+      })
+      .catch(() => {
+        /* docs catalog is optional for this panel */
+      });
+  }
+  return mcpDocIndexPromise;
+}
+
+/** Link out to a doc: in-app Docs tab when catalogued, otherwise a plain link/path. */
+function mcpDocLink(label, ref) {
+  const raw = String(ref || "").trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) {
+    return `<a class="mcp-doc-link" href="${escapeAttr(raw)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`;
+  }
+  const rel = normalizeRepoRelPath(raw);
+  const docId = docPathToId.get(rel) || docPathToId.get(`${rel}.md`);
+  if (docId) {
+    return `<button type="button" class="mcp-doc-link" data-doc-open="${escapeAttr(docId)}" title="Open in Docs tab">${escapeHtml(label)}</button>`;
+  }
+  return `<span class="mcp-doc-link mcp-doc-link--plain" title="${escapeAttr(rel)}">${escapeHtml(label)} <code>${escapeHtml(rel)}</code></span>`;
+}
+
+function mcpFilterValues() {
+  const val = (id) => String(document.getElementById(id)?.value || "").trim();
+  return {
+    tool: val("mcpFilterTool"),
+    session: val("mcpFilterSession"),
+    target: val("mcpFilterTarget"),
+    hours: val("mcpFilterHours") || "24",
+    limit: val("mcpFilterLimit") || "50",
+    blocked: !!document.getElementById("mcpFilterBlocked")?.checked,
+    errors: !!document.getElementById("mcpFilterErrors")?.checked,
+  };
+}
+
+function mcpActivityFilterActive(f) {
+  return !!(f.tool || f.session || f.target || f.blocked || f.errors);
+}
+
+async function loadMcpTab() {
+  wireMcpTab();
+  await ensureMcpDocIndex();
+  const f = mcpFilterValues();
+  const params = new URLSearchParams();
+  if (f.hours && f.hours !== "0") params.set("hours", f.hours);
+  params.set("limit", f.limit);
+  try {
+    const res = await fetch(`/api/mcp/insights?${params.toString()}`);
+    if (!res.ok) {
+      renderMcpUnavailable(`MCP insights API returned HTTP ${res.status}.`);
+      return;
+    }
+    const data = await res.json();
+    if (!data || data.ok === false) {
+      renderMcpUnavailable(mcpText(data?.error, "MCP insights unavailable."));
+      return;
+    }
+    mcpInsightsData = data;
+    renderMcpTab(data);
+  } catch (e) {
+    renderMcpUnavailable(String(e?.message || e));
+    return;
+  }
+  if (mcpActivityFilterActive(f)) loadMcpActivity();
+}
+
+/** Backend not built / not reachable — keep the tab readable instead of blank. */
+function renderMcpUnavailable(message) {
+  const banner = document.getElementById("mcpSetupBanner");
+  if (banner) {
+    banner.innerHTML = `<div class="mcp-banner mcp-banner--warn">
+      <h4 class="mcp-banner__title">MCP data is not available</h4>
+      <p class="mcp-banner__body">${escapeHtml(message)}</p>
+      <p class="mcp-banner__body muted small">The dashboard could not read <code>/api/mcp/insights</code>. Update the dashboard container, then reload this tab.</p>
+    </div>`;
+  }
+  const server = document.getElementById("mcpServerPanel");
+  if (server) server.innerHTML = `<p class="muted small">${escapeHtml(message)}</p>`;
+  const install = document.getElementById("mcpInstallPanel");
+  if (install) install.innerHTML = '<p class="muted small">Install commands are served by <code>/api/mcp/install</code>, which is not reachable.</p>';
+  mcpEmptyRow("mcpCommandsBody", 4, "No plugin command data.");
+  mcpEmptyRow("mcpSessionsBody", 9, "No session data.");
+  mcpEmptyRow("mcpAppsBody", 7, "No application data.");
+  mcpEmptyRow("mcpActivityBody", 7, "No activity data.");
+  mcpEmptyRow("mcpToolsBody", 6, "No tool data.");
+}
+
+function mcpEmptyRow(bodyId, cols, message) {
+  const el = document.getElementById(bodyId);
+  if (el) el.innerHTML = `<tr><td colspan="${cols}" class="muted">${escapeHtml(message)}</td></tr>`;
+}
+
+function renderMcpTab(data) {
+  const server = data.server || {};
+  renderMcpSetupBanner(server, data.counts || {});
+  renderMcpServerPanel(server, data.counts || {});
+  renderMcpInstallPanel(data.install || {});
+  renderMcpCommands(data.install || {}, server);
+  renderMcpFilterOptions(data);
+  renderMcpSessions(data.sessions || [], server);
+  renderMcpApps(data.apps || [], server);
+  renderMcpTools(data.by_tool || [], server);
+  if (!mcpActivityFilterActive(mcpFilterValues())) {
+    renderMcpActivity(data.recent || [], { source: "insights", counts: data.counts || {} });
+  }
+}
+
+/** Empty state is the primary case: explain the value, then show the commands. */
+function renderMcpSetupBanner(server, counts) {
+  const el = document.getElementById("mcpSetupBanner");
+  if (!el) return;
+  const installed = !!server.installed;
+  const running = !!server.running;
+  const reachable = !!server.reachable;
+
+  if (!installed) {
+    el.innerHTML = `<div class="mcp-banner mcp-banner--setup">
+      <h4 class="mcp-banner__title">MCP is not set up on this machine yet</h4>
+      <p class="mcp-banner__body">
+        The LEco MCP server lets an AI agent talk to this stack directly: it can read service health, hosted apps,
+        Traefik routes, container logs and update catalogs, and run guarded operations — without you pasting output
+        into a chat window. Every call is logged, and destructive tools plus credential access stay switched off
+        until you explicitly enable them.
+      </p>
+      <ul class="mcp-banner__list">
+        <li>Ask “why is <code>app.lh</code> returning 502?” and let the agent read the route, the container state and the logs.</li>
+        <li>Give the agent a read-only view of the stack by default — nothing destructive without an explicit gate.</li>
+        <li>See here, afterwards, exactly which agent touched which application and when.</li>
+      </ul>
+      <p class="mcp-banner__body muted small">
+        Start with <strong>2 · Install on an agent</strong> below — the commands are generated for this machine.
+      </p>
+    </div>`;
+    return;
+  }
+  if (!running || !reachable) {
+    el.innerHTML = `<div class="mcp-banner mcp-banner--warn">
+      <h4 class="mcp-banner__title">MCP server installed, but ${running ? "not answering" : "not running"}</h4>
+      <p class="mcp-banner__body">
+        Container <code>${escapeHtml(mcpText(server.container, "leco-mcp"))}</code> is
+        ${running ? "running but the endpoint did not respond" : "not running"}. Agents using the HTTP transport will fail to connect;
+        <code>stdio</code> agents launch their own process and are unaffected. Run the doctor command in section 2 to diagnose.
+      </p>
+    </div>`;
+    return;
+  }
+  const sessions = mcpNum(counts.sessions);
+  if (!sessions) {
+    el.innerHTML = `<div class="mcp-banner mcp-banner--ok">
+      <h4 class="mcp-banner__title">MCP server is up — no agent has connected yet</h4>
+      <p class="mcp-banner__body">
+        Everything is ready. Register the server with an agent using the commands in section 2; sessions and tool calls
+        appear here as soon as an agent connects.
+      </p>
+    </div>`;
+    return;
+  }
+  el.innerHTML = "";
+}
+
+function renderMcpServerPanel(server, counts) {
+  const el = document.getElementById("mcpServerPanel");
+  if (!el) return;
+  const endpoints = server.endpoints || {};
+  const log = server.activity_log || {};
+  const windowHours = mcpNum(counts.window_hours);
+
+  const endpointRow = (label, value, hint) => {
+    const v = String(value || "").trim();
+    if (!v) return `<div class="mcp-endpoint"><span class="mcp-label">${escapeHtml(label)}</span><span class="muted small">not configured</span></div>`;
+    return `<div class="mcp-endpoint">
+        <span class="mcp-label">${escapeHtml(label)}</span>
+        <code class="mcp-endpoint__value">${escapeHtml(v)}</code>
+        ${mcpCopyBtn(v)}
+        ${hint ? `<span class="muted small mcp-endpoint__hint">${escapeHtml(hint)}</span>` : ""}
+      </div>`;
+  };
+
+  // Tri-state: true = gate open, false = safe default, null/undefined = server did not report.
+  const gateRow = (state, label, offText, onText, unknownText) => {
+    const unknown = state == null;
+    const on = !!state;
+    const cls = unknown ? "mcp-gate--unknown" : on ? "mcp-gate--on" : "";
+    const pill = unknown ? "mcp-pill--muted" : on ? "mcp-pill--warn" : "mcp-pill--ok";
+    const pillText = unknown ? "not reported" : on ? "enabled" : "off";
+    return `<div class="mcp-gate${cls ? ` ${cls}` : ""}">
+      <div class="mcp-row">
+        <span class="mcp-label">${escapeHtml(label)}</span>
+        <span class="mcp-pill ${pill}">${pillText}</span>
+      </div>
+      <p class="muted small mcp-gate__note">${escapeHtml(unknown ? unknownText : on ? onText : offText)}</p>
+    </div>`;
+  };
+
+  el.innerHTML = `
+    <div class="mcp-stat-grid">
+      <div class="uc-stat"><span class="uc-stat__n">${mcpNum(counts.tool_calls)}</span><span class="uc-stat__l">tool calls${windowHours ? ` · ${windowHours}h` : ""}</span></div>
+      <div class="uc-stat"><span class="uc-stat__n">${mcpNum(counts.sessions)}</span><span class="uc-stat__l">agent sessions</span></div>
+      <div class="uc-stat${mcpNum(counts.errors) ? " uc-stat--alert" : ""}"><span class="uc-stat__n">${mcpNum(counts.errors)}</span><span class="uc-stat__l">errors</span></div>
+      <div class="uc-stat"><span class="uc-stat__n">${mcpNum(counts.blocked)}</span><span class="uc-stat__l">blocked by gates</span></div>
+      <div class="uc-stat"><span class="uc-stat__n">${mcpNum(counts.destructive)}</span><span class="uc-stat__l">destructive calls</span></div>
+    </div>
+    <div class="mcp-grid">
+      <div class="uc-block mcp-block">
+        <div class="mcp-row"><span class="mcp-label">Installed</span>${mcpStateChip(!!server.installed, "yes", "no")}</div>
+        <div class="mcp-row"><span class="mcp-label">Running</span>${mcpStateChip(!!server.running, "running", "stopped")}</div>
+        <div class="mcp-row"><span class="mcp-label">Reachable</span>${mcpStateChip(!!server.reachable, "reachable", "unreachable")}</div>
+        <div class="mcp-row"><span class="mcp-label">Container</span><code>${escapeHtml(mcpText(server.container, "leco-mcp"))}</code></div>
+        <div class="mcp-row"><span class="mcp-label">Version</span><span>${escapeHtml(mcpText(server.version))}</span></div>
+        <div class="mcp-row"><span class="mcp-label">Tools exposed</span><span>${server.tool_count == null ? "—" : mcpNum(server.tool_count)}</span></div>
+      </div>
+      <div class="uc-block mcp-block">
+        <div class="mcp-label mcp-block__title">Endpoints</div>
+        ${endpointRow("HTTP (Traefik)", endpoints.http, "for agents on this LAN")}
+        ${endpointRow("HTTP (host)", endpoints.host, "bypasses Traefik")}
+        ${endpointRow("stdio", endpoints.stdio, "agent launches the process")}
+      </div>
+      <div class="uc-block mcp-block">
+        <div class="mcp-label mcp-block__title">Safety gates</div>
+        ${gateRow(
+          server.destructive_enabled,
+          "Destructive tools",
+          "Safe default. Agents can read and inspect, but cannot delete, prune or tear anything down.",
+          "Agents may call destructive tools. Every such call is flagged in the activity log below.",
+          "The running server did not report this gate. Each stdio agent starts its own process, so the effective setting is whatever LECO_MCP_ALLOW_DESTRUCTIVE was for that process; blocked calls below show the gate refusing work.",
+        )}
+        ${gateRow(
+          server.credentials_enabled,
+          "Credential access",
+          "Safe default. UI logins and secrets are not exposed to agents.",
+          "Agents may read UI credentials from the vault. Review the activity log regularly.",
+          "The running server did not report this gate. Treat credential access as unverified until the doctor command confirms it.",
+        )}
+      </div>
+      <div class="uc-block mcp-block">
+        <div class="mcp-label mcp-block__title">Activity log</div>
+        <div class="mcp-endpoint"><span class="mcp-label">File</span>${log.path ? `<code class="mcp-endpoint__value">${escapeHtml(String(log.path))}</code>${mcpCopyBtn(String(log.path), "Copy")}` : '<span class="muted small">not configured</span>'}</div>
+        <div class="mcp-row"><span class="mcp-label">Exists</span>${mcpStateChip(!!log.exists, "yes", "no")}</div>
+        <div class="mcp-row"><span class="mcp-label">Events recorded</span><span>${mcpNum(log.events)}</span></div>
+        <div class="mcp-row"><span class="mcp-label">Malformed lines</span><span class="${mcpNum(log.malformed_lines) ? "bad-text" : ""}">${mcpNum(log.malformed_lines)}</span></div>
+      </div>
+    </div>`;
+}
+
+function renderMcpInstallPanel(install) {
+  const el = document.getElementById("mcpInstallPanel");
+  if (!el) return;
+  const plugin = install.plugin || {};
+  const skill = install.skill || {};
+  const mcp = install.mcp || {};
+  const docs = install.docs || {};
+  const repo = String(install.repository || "").trim();
+
+  const cards = [];
+
+  const pluginCmds = [
+    mcpCommandRow("Add the marketplace (local checkout)", plugin.marketplace_local, "", { available: plugin.available }),
+    mcpCommandRow("Add the marketplace (from GitHub)", plugin.marketplace_github),
+    mcpCommandRow("Install the plugin", plugin.install, "", { available: plugin.available }),
+  ]
+    .filter(Boolean)
+    .join("");
+  // The full list with descriptions lives in section 3; here we only summarise, so the
+  // install card stays about installing.
+  const cmdCount = Number(plugin.command_count) || (plugin.commands || []).length;
+  const cmdList = cmdCount
+    ? `<li>${cmdCount} command${cmdCount === 1 ? "" : "s"} — see <a href="#mcp-commands" class="mcp-doc-link">3 · Plugin commands</a> for the full list</li>`
+    : "";
+  if (pluginCmds || cmdList) {
+    cards.push(`<article class="mcp-install-card">
+      <header class="mcp-install-card__head">
+        <span class="mcp-install-card__title">Claude Code plugin</span>
+        ${plugin.name ? `<code>${escapeHtml(String(plugin.name))}</code>` : ""}
+        ${plugin.available === false ? '<span class="mcp-pill mcp-pill--muted">not on this machine</span>' : ""}
+      </header>
+      <p class="muted small">Bundles the skill, the MCP server and the slash commands in one install. Recommended for Claude Code.</p>
+      ${pluginCmds}
+      ${cmdList ? `<div class="mcp-install-card__sub"><span class="mcp-label">Slash commands it adds</span><ul class="mcp-cmd-list">${cmdList}</ul></div>` : ""}
+      ${plugin.path || plugin.url ? `<p class="muted small mcp-install-card__foot">${plugin.path ? `Path <code>${escapeHtml(String(plugin.path))}</code> ` : ""}${plugin.url ? mcpDocLink("Plugin source", plugin.url) : ""}</p>` : ""}
+    </article>`);
+  }
+
+  if (skill.name || skill.path || skill.url) {
+    cards.push(`<article class="mcp-install-card">
+      <header class="mcp-install-card__head">
+        <span class="mcp-install-card__title">Skill</span>
+        ${skill.name ? `<code>${escapeHtml(String(skill.name))}</code>` : ""}
+        ${skill.available === false ? '<span class="mcp-pill mcp-pill--muted">not on this machine</span>' : ""}
+      </header>
+      <p class="muted small">Teaches the agent how this stack is laid out. Copy the folder into your agent's skills directory, or let the plugin install it.</p>
+      ${skill.path ? mcpCommandRow("Skill location", skill.path, "", { available: skill.available }) : ""}
+      ${skill.url ? `<p class="muted small mcp-install-card__foot">${mcpDocLink("Skill source", skill.url)}</p>` : ""}
+    </article>`);
+  }
+
+  const stdioCmds = [
+    mcpCommandRow("Install the server", mcp.stdio_install, "Installs the <code>leco-mcp</code> entrypoint on this machine."),
+    mcpCommandRow("Register with the agent (stdio)", mcp.stdio_register),
+  ]
+    .filter(Boolean)
+    .join("");
+  if (stdioCmds) {
+    cards.push(`<article class="mcp-install-card">
+      <header class="mcp-install-card__head"><span class="mcp-install-card__title">MCP server — stdio</span></header>
+      <p class="muted small">Best for an agent running on this machine. The agent starts the server itself; nothing needs to listen on a port.</p>
+      ${stdioCmds}
+    </article>`);
+  }
+
+  const httpCmds = [
+    mcpCommandRow("Endpoint", mcp.http_url),
+    mcpCommandRow("Register with the agent (HTTP)", mcp.http_register),
+    mcpCommandRow("Project-scoped config file", mcp.project_config, "Checked into the repo, so teammates inherit the server automatically.", {
+      available: mcp.project_config_available,
+    }),
+  ]
+    .filter(Boolean)
+    .join("");
+  if (httpCmds) {
+    cards.push(`<article class="mcp-install-card">
+      <header class="mcp-install-card__head"><span class="mcp-install-card__title">MCP server — HTTP</span></header>
+      <p class="muted small">Best for agents on another machine on the LAN, or agents that cannot spawn processes.</p>
+      ${httpCmds}
+    </article>`);
+  }
+
+  if (mcp.doctor) {
+    cards.push(`<article class="mcp-install-card mcp-install-card--verify">
+      <header class="mcp-install-card__head"><span class="mcp-install-card__title">Verify</span></header>
+      <p class="muted small">Run this after registering. It checks the endpoint, the tool list and the activity log path.</p>
+      ${mcpCommandRow("Doctor", mcp.doctor)}
+    </article>`);
+  }
+
+  const docLinks = [
+    mcpDocLink("MCP server guide", docs.guide),
+    mcpDocLink("Route map", docs.route_map),
+    mcpDocLink("Plugin README", docs.plugin_readme),
+    repo ? mcpDocLink("Repository", repo) : "",
+  ]
+    .filter(Boolean)
+    .join("");
+
+  if (!cards.length) {
+    el.innerHTML = `<p class="muted small">No install commands were returned by <code>/api/mcp/install</code>.</p>${
+      docLinks ? `<div class="mcp-doc-links">${docLinks}</div>` : ""
+    }`;
+    return;
+  }
+  el.innerHTML = `<div class="mcp-install-grid">${cards.join("")}</div>${
+    docLinks ? `<div class="mcp-doc-links"><span class="mcp-label">Read more</span>${docLinks}</div>` : ""
+  }`;
+}
+
+/* ---------- shared paging for the MCP tables -------------------------------
+ * Sessions, activity and tool usage all page the same way, so the page state,
+ * the slicing and the control markup live here once. Datasets are cached so a
+ * page change re-renders from memory instead of refetching. */
+const mcpPageState = {
+  sessions: { page: 1, size: 25 },
+  activity: { page: 1, size: 50 },
+  tools: { page: 1, size: 25 },
+};
+const mcpDatasets = { sessions: [], activity: [], tools: [] };
+
+function mcpPageSlice(rows, key) {
+  const st = mcpPageState[key];
+  const total = rows.length;
+  const size = Math.max(1, Number(st.size) || 25);
+  const pages = Math.max(1, Math.ceil(total / size));
+  if (st.page > pages) st.page = pages;
+  if (st.page < 1) st.page = 1;
+  const start = (st.page - 1) * size;
+  return { rows: rows.slice(start, start + size), page: st.page, pages, total, start, end: Math.min(start + size, total) };
+}
+
+function mcpRenderPager(containerId, key, info) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (info.total === 0) {
+    el.innerHTML = "";
+    return;
+  }
+  const btn = (page, label, disabled, aria) =>
+    `<button type="button" class="btn btn-small mcp-pager__btn" data-mcp-page="${key}" data-mcp-page-to="${page}"${
+      disabled ? " disabled" : ""
+    } aria-label="${escapeAttr(aria || label)}">${escapeHtml(label)}</button>`;
+  const first = info.total ? info.start + 1 : 0;
+  el.innerHTML = `
+    <span class="muted small mcp-pager__count">${first}–${info.end} of ${info.total}</span>
+    <span class="mcp-pager__controls">
+      ${btn(1, "«", info.page <= 1, "First page")}
+      ${btn(info.page - 1, "‹", info.page <= 1, "Previous page")}
+      <span class="muted small mcp-pager__page">Page ${info.page} of ${info.pages}</span>
+      ${btn(info.page + 1, "›", info.page >= info.pages, "Next page")}
+      ${btn(info.pages, "»", info.page >= info.pages, "Last page")}
+    </span>`;
+}
+
+function mcpGoToPage(key, page) {
+  const st = mcpPageState[key];
+  if (!st) return;
+  st.page = Math.max(1, Number(page) || 1);
+  if (key === "sessions") renderMcpSessions(mcpDatasets.sessions, mcpInsightsData?.server);
+  else if (key === "tools") renderMcpTools(mcpDatasets.tools, mcpInsightsData?.server);
+  else if (key === "activity") renderMcpActivity(mcpDatasets.activity, mcpDatasets.activityMeta || {});
+}
+
+function mcpResetPage(key) {
+  if (mcpPageState[key]) mcpPageState[key].page = 1;
+}
+
+function mcpVal(id) {
+  return String(document.getElementById(id)?.value || "").trim().toLowerCase();
+}
+
+function mcpChecked(id) {
+  return !!document.getElementById(id)?.checked;
+}
+
+function renderMcpCommands(install, server) {
+  const body = document.getElementById("mcpCommandsBody");
+  if (!body) return;
+  const plugin = install?.plugin || {};
+  // commands_detail carries the descriptions; commands[] is the legacy list of names, kept
+  // as a fallback so the table still renders against an older API response.
+  let rows = Array.isArray(plugin.commands_detail) ? plugin.commands_detail.slice() : [];
+  if (!rows.length && Array.isArray(plugin.commands)) {
+    rows = plugin.commands
+      .map((c) => (typeof c === "string" ? { command: c, name: c, kind: "", description: "" } : c))
+      .filter((c) => c && c.command);
+  }
+  if (!rows.length) {
+    mcpEmptyRow(
+      "mcpCommandsBody",
+      4,
+      plugin.available === false
+        ? "The plugin is not on this machine — install it with section 2 to get these commands."
+        : "No plugin commands found on disk.",
+    );
+    return;
+  }
+  body.innerHTML = rows
+    .map((c) => {
+      const cmd = String(c.command || "");
+      const kind = String(c.kind || "").toLowerCase();
+      const kindCell = kind
+        ? `<span class="mcp-pill ${kind === "skill" ? "mcp-pill--ok" : "mcp-pill--muted"}">${escapeHtml(kind)}</span>`
+        : '<span class="muted">—</span>';
+      const refs = (c.references || []).filter(Boolean);
+      const desc = String(c.description || "").trim();
+      const refNote = refs.length
+        ? `<div class="muted small">Loads on demand: ${refs.map((r) => `<code>${escapeHtml(String(r))}</code>`).join(" ")}</div>`
+        : "";
+      // Paths are all under tools/claude-plugin/; trimming that prefix keeps the cell narrow
+      // while the title attribute still carries the full path.
+      const path = String(c.path || "");
+      const shortPath = path.replace(/^tools\/claude-plugin\//, "");
+      const source = c.url
+        ? `<a class="mcp-doc-link" href="${escapeAttr(String(c.url))}" target="_blank" rel="noopener noreferrer" title="${escapeAttr(path)}">${escapeHtml(shortPath || "source")}</a>`
+        : path
+          ? `<code title="${escapeAttr(path)}">${escapeHtml(shortPath)}</code>`
+          : '<span class="muted">—</span>';
+      return `<tr>
+        <td><code class="mcp-cmd-name">${escapeHtml(cmd)}</code></td>
+        <td>${kindCell}</td>
+        <td>${desc ? escapeHtml(desc) : '<span class="muted">—</span>'}${refNote}</td>
+        <td class="mcp-cmd-source">${source}</td>
+      </tr>`;
+    })
+    .join("");
+  void server;
+}
+
+function renderMcpSessions(sessions, server) {
+  const body = document.getElementById("mcpSessionsBody");
+  if (!body) return;
+  mcpDatasets.sessions = sessions || [];
+  const all = (sessions || []).slice().sort((a, b) => String(b?.last_seen || "").localeCompare(String(a?.last_seen || "")));
+
+  const q = mcpVal("mcpSessSearch");
+  const transport = mcpVal("mcpSessTransport");
+  const liveOnly = mcpChecked("mcpSessLive");
+  const problemsOnly = mcpChecked("mcpSessProblems");
+  const filtered = all.filter((s) => {
+    if (transport && String(s.transport || "").toLowerCase() !== transport) return false;
+    if (liveOnly && !s.live) return false;
+    if (problemsOnly && !(mcpNum(s.error_count) || mcpNum(s.blocked_count))) return false;
+    if (q) {
+      const hay = [mcpClientLabel(s), s.session_id, s.client_version, ...(s.tools || [])]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  const info = mcpPageSlice(filtered, "sessions");
+  const metaEl = document.getElementById("mcpSessionsMeta");
+  if (metaEl) {
+    metaEl.textContent = filtered.length
+      ? `Showing ${info.start + 1}–${info.end} of ${filtered.length} session${filtered.length === 1 ? "" : "s"}${
+          filtered.length !== all.length ? ` (filtered from ${all.length})` : ""
+        }.`
+      : "";
+  }
+  mcpRenderPager("mcpSessionsPager", "sessions", info);
+
+  if (!info.rows.length) {
+    mcpEmptyRow(
+      "mcpSessionsBody",
+      9,
+      all.length
+        ? "No sessions match these filters."
+        : server?.installed
+          ? "No agent has connected yet. Register the server with an agent using section 2."
+          : "No sessions — the MCP server is not installed on this machine yet.",
+    );
+    return;
+  }
+  body.innerHTML = info.rows
+    .map((s) => {
+      const tools = (s.tools || []).filter(Boolean);
+      const toolText = tools.length ? tools.map((t) => `<code>${escapeHtml(String(t))}</code>`).join(" ") : '<span class="muted">—</span>';
+      const errors = mcpNum(s.error_count);
+      const blocked = mcpNum(s.blocked_count);
+      const sid = String(s.session_id || "");
+      return `<tr class="${s.live ? "mcp-row--active" : ""}">
+        <td><strong>${escapeHtml(mcpClientLabel(s))}</strong>${s.live ? ' <span class="mcp-pill mcp-pill--ok">live</span>' : ""}</td>
+        <td><span class="mcp-pill mcp-pill--muted">${escapeHtml(mcpText(s.transport, "—"))}</span></td>
+        <td><code class="mcp-session-id" title="${escapeAttr(sid)}">${escapeHtml(sid ? sid.slice(0, 12) : "—")}</code></td>
+        <td>${mcpTimeCell(s.first_seen)}</td>
+        <td>${mcpTimeCell(s.last_seen)}</td>
+        <td>${mcpNum(s.call_count)}</td>
+        <td class="${errors ? "bad-text" : "muted"}">${errors}</td>
+        <td>${blocked ? `<span class="mcp-outcome mcp-outcome--blocked">${blocked}</span>` : '<span class="muted">0</span>'}</td>
+        <td class="mcp-tools-cell">${toolText}</td>
+      </tr>`;
+    })
+    .join("");
+}
+
+function renderMcpApps(apps, server) {
+  const body = document.getElementById("mcpAppsBody");
+  if (!body) return;
+  const rows = (apps || []).slice().sort((a, b) => {
+    const d = mcpNum(b?.mcp_calls) - mcpNum(a?.mcp_calls);
+    if (d) return d;
+    return String(a?.label || a?.slug || "").localeCompare(String(b?.label || b?.slug || ""));
+  });
+  if (!rows.length) {
+    mcpEmptyRow(
+      "mcpAppsBody",
+      7,
+      server?.installed ? "No hosted apps have been touched over MCP yet." : "No application activity — MCP is not installed yet.",
+    );
+    return;
+  }
+  body.innerHTML = rows
+    .map((a) => {
+      const calls = mcpNum(a.mcp_calls);
+      const url = String(a.main_url || "").trim();
+      const outcome = a.last_ts
+        ? a.last_ok === false
+          ? '<span class="mcp-outcome mcp-outcome--error">error</span>'
+          : '<span class="mcp-outcome mcp-outcome--ok">ok</span>'
+        : '<span class="muted">—</span>';
+      return `<tr class="${calls ? "mcp-row--active" : ""}">
+        <td><strong>${escapeHtml(mcpText(a.label, mcpText(a.slug, "—")))}</strong><br /><code class="muted">${escapeHtml(mcpText(a.slug, ""))}</code></td>
+        <td>${mcpStateChip(!!a.running, "running", "stopped")}</td>
+        <td>${url ? `<a href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(url)}</a>` : '<span class="muted">—</span>'}</td>
+        <td>${calls ? `<strong>${calls}</strong>` : '<span class="muted">0</span>'}</td>
+        <td>${a.last_tool ? `<code>${escapeHtml(String(a.last_tool))}</code>` : '<span class="muted">—</span>'}</td>
+        <td>${mcpTimeCell(a.last_ts)}</td>
+        <td>${outcome}</td>
+      </tr>`;
+    })
+    .join("");
+}
+
+function renderMcpTools(byTool, server) {
+  const body = document.getElementById("mcpToolsBody");
+  if (!body) return;
+  mcpDatasets.tools = byTool || [];
+  const all = (byTool || []).slice();
+
+  const q = mcpVal("mcpToolSearch");
+  const errorsOnly = mcpChecked("mcpToolErrors");
+  const blockedOnly = mcpChecked("mcpToolBlocked");
+  const filtered = all.filter((t) => {
+    if (errorsOnly && !mcpNum(t.errors)) return false;
+    if (blockedOnly && !mcpNum(t.blocked)) return false;
+    if (q && !String(t.tool || "").toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  const sort = mcpVal("mcpToolSort") || "calls";
+  const cmp = {
+    calls: (a, b) => mcpNum(b.count) - mcpNum(a.count),
+    errors: (a, b) => mcpNum(b.errors) - mcpNum(a.errors),
+    blocked: (a, b) => mcpNum(b.blocked) - mcpNum(a.blocked),
+    slow: (a, b) => mcpNum(b.avg_ms) - mcpNum(a.avg_ms),
+    recent: (a, b) => String(b.last_ts || "").localeCompare(String(a.last_ts || "")),
+    name: (a, b) => String(a.tool || "").localeCompare(String(b.tool || "")),
+  }[sort];
+  filtered.sort((a, b) => cmp(a, b) || String(a.tool || "").localeCompare(String(b.tool || "")));
+
+  const info = mcpPageSlice(filtered, "tools");
+  const metaEl = document.getElementById("mcpToolsMeta");
+  if (metaEl) {
+    metaEl.textContent = filtered.length
+      ? `Showing ${info.start + 1}–${info.end} of ${filtered.length} tool${filtered.length === 1 ? "" : "s"}${
+          filtered.length !== all.length ? ` (filtered from ${all.length})` : ""
+        }.`
+      : "";
+  }
+  mcpRenderPager("mcpToolsPager", "tools", info);
+
+  if (!info.rows.length) {
+    mcpEmptyRow(
+      "mcpToolsBody",
+      6,
+      all.length
+        ? "No tools match these filters."
+        : server?.installed
+          ? "No tool has been called yet."
+          : "No tool usage — MCP is not installed yet.",
+    );
+    return;
+  }
+  body.innerHTML = info.rows
+    .map((t) => {
+      const count = mcpNum(t.count);
+      const errors = mcpNum(t.errors);
+      const blocked = mcpNum(t.blocked);
+      const errPct = count ? Math.round((errors / count) * 100) : 0;
+      return `<tr>
+        <td><code>${escapeHtml(mcpText(t.tool, "—"))}</code></td>
+        <td>${count}</td>
+        <td class="${errors ? "bad-text" : "muted"}">${errors}${errors ? ` <span class="muted small">(${errPct}%)</span>` : ""}</td>
+        <td>${blocked ? `<span class="mcp-outcome mcp-outcome--blocked">${blocked}</span>` : '<span class="muted">0</span>'}</td>
+        <td>${mcpDuration(t.avg_ms)}</td>
+        <td>${mcpTimeCell(t.last_ts)}</td>
+      </tr>`;
+    })
+    .join("");
+}
+
+function renderMcpActivity(rows, meta = {}) {
+  const body = document.getElementById("mcpActivityBody");
+  const metaEl = document.getElementById("mcpActivityMeta");
+  if (!body) return;
+  mcpDatasets.activity = rows || [];
+  mcpDatasets.activityMeta = meta || {};
+  const list = (rows || []).slice().sort((a, b) => String(b?.ts || "").localeCompare(String(a?.ts || "")));
+  // The Rows selector bounds what the API returns; paging then walks that set locally.
+  const info = mcpPageSlice(list, "activity");
+  mcpRenderPager("mcpActivityPager", "activity", info);
+  if (metaEl) {
+    if (meta.error) {
+      metaEl.textContent = meta.error;
+    } else {
+      const src = meta.source === "activity" ? "filtered from /api/mcp/activity" : "latest calls in the selected window";
+      const matched = Number(meta.totalMatched);
+      const extra = Number.isFinite(matched) && matched > list.length ? ` of ${matched} matching` : "";
+      metaEl.textContent = list.length
+        ? `Showing ${info.start + 1}–${info.end} of ${list.length}${extra} call${list.length === 1 ? "" : "s"} — ${src}.`
+        : "";
+    }
+  }
+  if (!list.length) {
+    const installed = !!mcpInsightsData?.server?.installed;
+    const filtered = mcpActivityFilterActive(mcpFilterValues());
+    mcpEmptyRow(
+      "mcpActivityBody",
+      7,
+      filtered
+        ? "No calls match these filters."
+        : installed
+          ? "No tool calls recorded yet in this window."
+          : "No activity — the MCP server is not installed on this machine yet.",
+    );
+    return;
+  }
+  body.innerHTML = info.rows
+    .map((r) => {
+      const rowCls = r.blocked ? "mcp-row--blocked" : r.ok === false || r.error ? "mcp-row--error" : "";
+      return `<tr class="${rowCls}">
+        <td>${mcpTimeCell(r.ts)}</td>
+        <td>${escapeHtml(mcpClientLabel(r))}<br /><span class="muted small">${escapeHtml(mcpText(r.transport, ""))}</span></td>
+        <td><code>${escapeHtml(mcpText(r.tool, "—"))}</code></td>
+        <td>${mcpTargetCell(r.target, r.target_label)}</td>
+        <td>${mcpArgsCell(r.args_summary)}</td>
+        <td>${mcpOutcomeCell(r)}</td>
+        <td>${mcpDuration(r.duration_ms)}</td>
+      </tr>`;
+    })
+    .join("");
+}
+
+/** Rebuild the filter dropdowns from the insights payload, preserving the selection. */
+function renderMcpFilterOptions(data) {
+  const fill = (id, options, placeholder) => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const current = sel.value;
+    const html = [`<option value="">${escapeHtml(placeholder)}</option>`]
+      .concat(options.map((o) => `<option value="${escapeAttr(o.value)}">${escapeHtml(o.label)}</option>`))
+      .join("");
+    if (sel.innerHTML !== html) sel.innerHTML = html;
+    sel.value = options.some((o) => o.value === current) ? current : "";
+  };
+
+  fill(
+    "mcpFilterTool",
+    (data.by_tool || [])
+      .map((t) => String(t?.tool || "").trim())
+      .filter(Boolean)
+      .map((t) => ({ value: t, label: t })),
+    "All tools",
+  );
+  fill(
+    "mcpFilterSession",
+    (data.sessions || [])
+      .filter((s) => s && s.session_id)
+      .map((s) => ({ value: String(s.session_id), label: `${mcpClientLabel(s)} · ${String(s.session_id).slice(0, 8)}` })),
+    "All sessions",
+  );
+  fill(
+    "mcpFilterTarget",
+    (data.by_target || [])
+      .filter((t) => t && (t.id || t.label))
+      .map((t) => ({ value: String(t.id || t.label), label: mcpTargetLabel(t) || String(t.id || t.label) })),
+    "All targets",
+  );
+}
+
+async function loadMcpActivity() {
+  const f = mcpFilterValues();
+  if (!mcpActivityFilterActive(f)) {
+    renderMcpActivity(mcpInsightsData?.recent || [], { source: "insights" });
+    return;
+  }
+  const params = new URLSearchParams();
+  params.set("limit", f.limit);
+  if (f.tool) params.set("tool", f.tool);
+  if (f.session) params.set("session", f.session);
+  if (f.target) params.set("target", f.target);
+  if (f.blocked) params.set("blocked", "true");
+  if (f.errors) params.set("errors_only", "true");
+  if (f.hours && f.hours !== "0") params.set("hours", f.hours);
+  try {
+    const res = await fetch(`/api/mcp/activity?${params.toString()}`);
+    const data = res.ok ? await res.json() : null;
+    if (!data || data.ok === false) {
+      renderMcpActivity([], { error: `Could not load filtered activity (HTTP ${res.status}).` });
+      return;
+    }
+    const rows = Array.isArray(data) ? data : data.events || data.recent || data.activity || [];
+    renderMcpActivity(rows, { source: "activity", totalMatched: data.total_matched });
+  } catch (e) {
+    renderMcpActivity([], { error: String(e?.message || e) });
+  }
+}
+
+function wireMcpTab() {
+  if (mcpTabWired) return;
+  const root = document.getElementById("mcpTab");
+  if (!root) return;
+  mcpTabWired = true;
+
+  // Window/limit change the insights query itself; the rest only re-filter activity.
+  ["mcpFilterHours", "mcpFilterLimit"].forEach((id) => {
+    document.getElementById(id)?.addEventListener("change", () => loadMcpTab());
+  });
+  ["mcpFilterTool", "mcpFilterSession", "mcpFilterTarget", "mcpFilterBlocked", "mcpFilterErrors"].forEach((id) => {
+    document.getElementById(id)?.addEventListener("change", () => loadMcpActivity());
+  });
+  document.getElementById("mcpFilterReset")?.addEventListener("click", () => {
+    ["mcpFilterTool", "mcpFilterSession", "mcpFilterTarget"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.value = "";
+    });
+    ["mcpFilterBlocked", "mcpFilterErrors"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.checked = false;
+    });
+    loadMcpActivity();
+  });
+
+  // Activity filters change the query, so page 1 is the only sensible landing spot.
+  ["mcpFilterTool", "mcpFilterSession", "mcpFilterTarget", "mcpFilterBlocked", "mcpFilterErrors", "mcpFilterHours", "mcpFilterLimit"].forEach(
+    (id) => document.getElementById(id)?.addEventListener("change", () => mcpResetPage("activity")),
+  );
+
+  // Sessions and tool-usage filters re-render from the cached dataset — no refetch.
+  const rerender = (key) => () => {
+    mcpResetPage(key);
+    mcpGoToPage(key, 1);
+  };
+  ["mcpSessSearch", "mcpSessTransport", "mcpSessLive", "mcpSessProblems"].forEach((id) => {
+    const el = document.getElementById(id);
+    el?.addEventListener(el.tagName === "INPUT" && el.type === "search" ? "input" : "change", rerender("sessions"));
+  });
+  ["mcpToolSearch", "mcpToolSort", "mcpToolErrors", "mcpToolBlocked"].forEach((id) => {
+    const el = document.getElementById(id);
+    el?.addEventListener(el.tagName === "INPUT" && el.type === "search" ? "input" : "change", rerender("tools"));
+  });
+  document.getElementById("mcpSessReset")?.addEventListener("click", () => {
+    ["mcpSessSearch", "mcpSessTransport"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.value = "";
+    });
+    ["mcpSessLive", "mcpSessProblems"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.checked = false;
+    });
+    rerender("sessions")();
+  });
+  document.getElementById("mcpToolReset")?.addEventListener("click", () => {
+    const s = document.getElementById("mcpToolSearch");
+    if (s) s.value = "";
+    const sort = document.getElementById("mcpToolSort");
+    if (sort) sort.value = "calls";
+    ["mcpToolErrors", "mcpToolBlocked"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.checked = false;
+    });
+    rerender("tools")();
+  });
+
+  root.addEventListener("change", (e) => {
+    const sel = e.target.closest("[data-mcp-size]");
+    if (!sel) return;
+    const key = sel.getAttribute("data-mcp-size");
+    if (!mcpPageState[key]) return;
+    mcpPageState[key].size = Number(sel.value) || 25;
+    mcpGoToPage(key, 1);
+  });
+
+  root.addEventListener("click", (e) => {
+    const pageBtn = e.target.closest("[data-mcp-page]");
+    if (pageBtn) {
+      mcpGoToPage(pageBtn.getAttribute("data-mcp-page"), pageBtn.getAttribute("data-mcp-page-to"));
+      return;
+    }
+    const btn = e.target.closest("[data-mcp-copy]");
+    if (!btn) return;
+    const text = btn.getAttribute("data-mcp-copy") || "";
+    copyTextToClipboard(text).then((ok) => {
+      if (!ok) return;
+      const prev = btn.textContent;
+      btn.textContent = "Copied";
+      setTimeout(() => {
+        btn.textContent = prev;
+      }, 1400);
+    });
+  });
+}
+
 bootstrap();
+
+
+/* ---- Grouped navigation ----------------------------------------------------
+ * Dropdown behaviour only. Tab switching still happens through the existing
+ * .tab-btn[data-tab] handler — these buttons are the same buttons, just nested,
+ * so nothing here duplicates activateTab. */
+function closeAllTabGroups(except) {
+  document.querySelectorAll(".tab-group[data-open='1']").forEach((g) => {
+    if (g === except) return;
+    g.removeAttribute("data-open");
+    g.querySelector(".tab-group__toggle")?.setAttribute("aria-expanded", "false");
+  });
+}
+
+function syncActiveTabGroup() {
+  const active = document.querySelector(".tabs .tab-btn.active[data-tab]");
+  const activeTab = active?.getAttribute("data-tab") || "";
+  document.querySelectorAll(".tab-group").forEach((g) => {
+    const owned = (g.getAttribute("data-group-tabs") || "").split(/\s+/).filter(Boolean);
+    g.classList.toggle("tab-group--active", !!activeTab && owned.includes(activeTab));
+  });
+}
+
+function wireTabGroups() {
+  const nav = document.querySelector("nav.tabs");
+  if (!nav || nav.dataset.groupsWired === "1") return;
+  nav.dataset.groupsWired = "1";
+
+  nav.addEventListener("click", (e) => {
+    const toggle = e.target.closest(".tab-group__toggle");
+    if (toggle) {
+      const group = toggle.closest(".tab-group");
+      const open = group.getAttribute("data-open") === "1";
+      closeAllTabGroups(group);
+      if (open) {
+        group.removeAttribute("data-open");
+        toggle.setAttribute("aria-expanded", "false");
+      } else {
+        group.setAttribute("data-open", "1");
+        toggle.setAttribute("aria-expanded", "true");
+      }
+      return;
+    }
+    // Selecting a tab inside a menu closes it; the tab handler does the rest.
+    if (e.target.closest(".tab-group__menu")) {
+      closeAllTabGroups();
+      setTimeout(syncActiveTabGroup, 0);
+    }
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".tab-group")) closeAllTabGroups();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    const open = document.querySelector(".tab-group[data-open='1']");
+    if (!open) return;
+    closeAllTabGroups();
+    open.querySelector(".tab-group__toggle")?.focus();
+  });
+
+  syncActiveTabGroup();
+}
+
+
+/* The grouped nav also renders on /help and /hub, which never call initTabs() — they have no
+ * .tab-btn[data-tab] buttons to bind. Wiring it here too means the dropdowns work on every
+ * page that shows the nav. wireTabGroups() is idempotent (it guards on dataset.groupsWired),
+ * so the dashboard's own initTabs() call remains harmless. */
+if (typeof document !== "undefined") {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => wireTabGroups());
+  } else {
+    wireTabGroups();
+  }
+}

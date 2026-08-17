@@ -8,7 +8,7 @@ from typing import Any
 import yaml
 
 from dev_stack_compose import STACKS_ROOT, _slugify
-from platform_config import _PROJECT_ROOT, base_domain
+from platform_config import _PROJECT_ROOT, public_hostname, router_tls_config
 
 TRAEFIK_DEVSTACKS_FILE = _PROJECT_ROOT / "hosting" / "traefik" / "20-dev-stacks.yml"
 
@@ -18,11 +18,13 @@ def http_container_name(stack_id: str, role: str = "app") -> str:
 
 
 def stack_hostname(stack_id: str) -> str:
-    sid = _slugify(stack_id)
-    dom = (base_domain() or "lh").strip() or "lh"
-    if dom == "lh":
-        return f"{sid}.lh"
-    return f"{sid}.{dom}"
+    """``<stack>.lh`` locally, ``<stack>.<base_domain>`` in cloud mode.
+
+    Delegates to :func:`platform_config.public_hostname` so a dev stack lands on the same domain
+    as everything else on the box; reading ``base_domain`` alone would move dev stacks off
+    ``.lh`` on an install that is still ``deployment_mode: local``, while hosted apps stayed.
+    """
+    return public_hostname(_slugify(stack_id))
 
 
 def load_stack_meta(stack_id: str) -> dict[str, Any]:
@@ -74,7 +76,9 @@ def render_dev_stack_traefik_file() -> Path:
                 "rule": f"Host(`{hostname}`)",
                 "service": svc_key,
                 "entryPoints": ["websecure"],
-                "tls": True,
+                # True locally; {"certResolver": …} under tls.mode: acme, so a dev stack on a
+                # real domain gets a Let's Encrypt certificate instead of Traefik's self-signed one.
+                "tls": router_tls_config(),
             }
     body: dict[str, Any] = {}
     if routers or services:

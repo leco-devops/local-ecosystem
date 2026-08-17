@@ -288,3 +288,13 @@ Cloudflare-local HTTP checks (expects Traefik routing to backends):
 | [HOSTED_APPS_TRAEFIK_RUNBOOK.md](HOSTED_APPS_TRAEFIK_RUNBOOK.md) | Hosted apps: Traefik 502, probes, compose overlays |
 | [../README.md](../README.md) | Landing page |
 | [PROJECT.md](PROJECT.md) | Full repository guide |
+
+## CI/CD webhooks and the control token
+
+`POST /api/cicd/webhook/<pipeline>` is authenticated by its **HMAC signature**, not by
+`DASHBOARD_CONTROL_TOKEN`. A Git host cannot send a custom auth header, so putting this
+endpoint behind the control token would break every webhook while adding no security — the
+signature already proves the request came from the party holding the shared secret.
+
+Everything else that mutates state (`/api/control`, registration, routes) does require the
+control token. See [GIT_AND_CICD.md](GIT_AND_CICD.md) and [PRODUCTION_HARDENING.md](PRODUCTION_HARDENING.md).

@@ -1,11 +1,36 @@
 # Traefik static config with Let's Encrypt (ACME HTTP-01).
-# Mounted when config/leco-platform.yaml tls.mode is acme.
+# Mounted when config/leco-platform.yaml tls.mode is acme — i.e. only on a public server with a
+# real domain. Everything here is written for that threat model; the local .lh config lives in
+# traefik-static.yaml.
+#
+# Four things must all be true for a certificate to be issued. Three are outside this file:
+#
+#   1. Public DNS. Every hostname Traefik serves must have an A/AAAA record pointing at this VM.
+#      A wildcard *.<base_domain> covers the per-app hostnames the register wizard generates.
+#      HTTP-01 cannot validate a wildcard — a wildcard *certificate* needs a DNS-01 resolver —
+#      but individual hosts under a wildcard DNS record validate fine over HTTP-01.
+#   2. Inbound TCP 80 must reach this container. Let's Encrypt connects to
+#      http://<host>/.well-known/acme-challenge/<token> on port 80 and follows no redirect to a
+#      port other than 80/443. The web -> websecure redirection below does NOT break this:
+#      Traefik installs the challenge handler ahead of entrypoint redirection.
+#   3. Routers must name the resolver. A router that only says `tls: true` gets Traefik's
+#      built-in self-signed certificate and never triggers ACME. scripts/render-platform-traefik.py
+#      writes `tls.certResolver: lecoacme` onto every TLS router when base_domain is not `lh`;
+#      it reads the resolver name back out of THIS file, so renaming the resolver below is safe.
+#   4. The store below must survive a restart (see `storage`).
 
 global:
   checkNewVersion: false
 
 api:
-  insecure: true
+  # NOT `insecure: true`. That flag opens an unauthenticated API and dashboard on :8080, which
+  # ecosystem-stack/services/traefik.sh publishes on 0.0.0.0 — on a public VM that hands anyone
+  # /api/rawdata: the full routing table, every backend address, and the TLS configuration.
+  # The API is still reachable through the `api@internal` routers in traefik/dynamic.yml, which
+  # is the path that can be given a middleware. Those routers are themselves unauthenticated
+  # today — put a basicAuth or forwardAuth middleware on them before exposing this host.
+  dashboard: true
+  insecure: false
 
 providers:
   file:
@@ -15,18 +40,44 @@ providers:
 entryPoints:
   web:
     address: ":80"
+    # Kept open (not merely a redirect target) because HTTP-01 is answered here.
     http:
       redirections:
         entryPoint:
           to: websecure
           scheme: https
+    # Same longer read timeouts as traefik-static.yaml: without them, host probes and browser
+    # preconnects that open the socket and then send slowly log "Error while Peeking first byte".
+    transport:
+      respondingTimeouts:
+        readTimeout: 120s
+        idleTimeout: 180s
   websecure:
     address: ":443"
+    transport:
+      respondingTimeouts:
+        readTimeout: 120s
+        idleTimeout: 180s
 
 certificatesResolvers:
   lecoacme:
     acme:
+      # Replace before first start. Let's Encrypt sends expiry warnings here, and an address
+      # that does not exist is the only signal you get that renewal has been failing for weeks.
+      # ecosystem-stack/services/traefik.sh substitutes tls.acme_email from leco-platform.yaml
+      # into a runtime copy of this file.
       email: "ops@example.com"
+      # MUST be on a bind mount or named volume. `restart` does `docker rm -f` and recreates the
+      # container, so an in-container store is destroyed on every restart and Traefik re-requests
+      # every certificate from scratch — five failed authorizations per account per hostname per
+      # hour, and 50 certificates per registered domain per week, will be exhausted quickly and
+      # the block lasts a week. traefik.sh mounts <repo>/certs/acme here; verify with
+      #   docker inspect leco-traefik --format '{{json .Mounts}}' | grep acme
+      # and confirm certs/acme/acme.json is non-empty after the first successful issuance.
       storage: /acme/acme.json
+      # Uncomment to rehearse against the staging CA, whose rate limits are far higher and whose
+      # certificates are untrusted by design. Switching between staging and production requires
+      # deleting acme.json — the account key differs.
+      # caServer: https://acme-staging-v02.api.letsencrypt.org/directory
       httpChallenge:
         entryPoint: web

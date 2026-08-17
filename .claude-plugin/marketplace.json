@@ -1,0 +1,21 @@
+{
+  "name": "leco-devops-open-project",
+  "owner": {
+    "name": "LEco DevOps Open Project",
+    "url": "https://github.com/leco-devops/local-ecosystem"
+  },
+  "description": "Claude Code plugins published from the LEco DevOps Open Project repository.",
+  "plugins": [
+    {
+      "name": "leco",
+      "source": "./tools/claude-plugin",
+      "description": "Operate the LEco DevOps local platform: MCP tools over the dashboard API, the /leco:* command set, an operations skill, and a read-only diagnostician subagent.",
+      "displayName": "LEco DevOps",
+      "version": "0.2.0",
+      "license": "MIT",
+      "homepage": "https://leco-project.us",
+      "repository": "https://github.com/leco-devops/local-ecosystem",
+      "keywords": ["leco", "devops", "docker", "traefik", "cloudflare", "mcp"]
+    }
+  ]
+}

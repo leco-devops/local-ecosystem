@@ -761,6 +761,18 @@ def api_leco_detect():
         warnings.append(
             "No compose or wrangler signals detected. Main URL preview is derived from app id but may not route until you configure infrastructure."
         )
+    # A monorepo that publishes many ports from one container gives no machine-readable link
+    # between a worker and the port it listens on. Ports are taken from compose in order, so
+    # the pairing is a starting point the operator must confirm — say so rather than let a
+    # confident-looking manifest route traffic to the wrong worker.
+    wrangler_count = len(out.get("wrangler_configs") or [])
+    port_count = len(out.get("host_ports") or [])
+    if wrangler_count > 1 and port_count > 1:
+        warnings.append(
+            f"{wrangler_count} Cloudflare Worker configs and {port_count} published ports were found. "
+            "LEco paired them in order; nothing in the repo states which worker owns which port. "
+            "Check infrastructure.runtimes[].port in the generated profile before deploying."
+        )
     out["main_url_warnings"] = warnings
     my, ly = preview_registration_yaml(scan_root, preview_id)
     out["manifest_yaml_preview"] = my
@@ -979,6 +991,182 @@ def api_leco_register_stream():
     )
 
 
+def _git_source_credential(data: dict):
+    """Resolve the credential for a git request (stored id or inline secret).
+
+    Returns ``(credential | None, error | None)``.  The credential dict stays
+    server-side: it is never echoed into a response or a log line.
+
+    Note the field name: ``token`` is reserved by ``check_control_token`` for the
+    dashboard control token, so the git secret travels as ``credential_token``.
+    """
+    from git_source import GitSourceError, resolve_credential
+
+    try:
+        cred = resolve_credential(
+            credential_id_value=(data.get("credential_id") or "").strip(),
+            kind=(data.get("credential_kind") or "").strip(),
+            token=(data.get("credential_token") or ""),
+            username=(data.get("username") or ""),
+            private_key=(data.get("ssh_key") or data.get("private_key") or ""),
+        )
+    except GitSourceError as exc:
+        return None, str(exc)
+    return cred, None
+
+
+@app.get("/api/leco/git/config")
+def api_leco_git_config():
+    """Clone root + stored credentials (masked) for the register wizard."""
+    from git_source import clone_root_info, credentials_for_ui, default_depth, max_clone_bytes, clone_timeout
+
+    out = credentials_for_ui()
+    out["ok"] = True
+    out["clone_root"] = clone_root_info()
+    out["limits"] = {
+        "timeout_seconds": clone_timeout(),
+        "max_clone_mb": max_clone_bytes() // (1024 * 1024),
+        "default_depth": default_depth(),
+    }
+    return jsonify(out)
+
+
+@app.post("/api/leco/git/credentials")
+def api_leco_git_credentials():
+    """Save or delete a git credential in config/git-credentials.yaml (control token)."""
+    from git_source import GitSourceError, credentials_for_ui, delete_credential, save_credential
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    action = (data.get("action") or "save").strip().lower()
+    cid = (data.get("id") or data.get("name") or "").strip()
+    try:
+        if action == "delete":
+            removed = delete_credential(cid)
+            return jsonify({"ok": True, "deleted": removed, **credentials_for_ui()})
+        saved = save_credential(
+            cid,
+            kind=(data.get("kind") or "https-token"),
+            # ``token`` is the control token (check_control_token); the git secret
+            # comes in as ``credential_token`` so the two can never be confused.
+            token=(data.get("credential_token") or ""),
+            username=(data.get("username") or ""),
+            private_key=(data.get("private_key") or data.get("ssh_key") or ""),
+            passphrase=(data.get("passphrase") or ""),
+            host=(data.get("host") or ""),
+        )
+    except GitSourceError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    return jsonify({"ok": True, "saved": saved, **credentials_for_ui()})
+
+
+@app.post("/api/leco/git/inspect")
+def api_leco_git_inspect():
+    """Read-only `git ls-remote`: does the URL resolve, and what refs exist (no clone)."""
+    from git_source import GitSourceError, inspect_remote
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    url = (data.get("url") or data.get("repo_url") or "").strip()
+    if not url:
+        return jsonify({"ok": False, "error": "url required"}), 400
+    cred, err = _git_source_credential(data)
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+    try:
+        out = inspect_remote(url, cred)
+    except GitSourceError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    return jsonify(out), (200 if out.get("ok") else 400)
+
+
+def _git_clone_kwargs(data: dict, cred) -> dict:
+    return {
+        "url": (data.get("url") or data.get("repo_url") or "").strip(),
+        "app_id": (data.get("app_id") or data.get("id") or "").strip(),
+        "dir_name": (data.get("dir_name") or "").strip(),
+        "ref": (data.get("ref") or data.get("branch") or "").strip(),
+        "full_history": bool(data.get("full_history")),
+        "depth": data.get("depth"),
+        "credential": cred,
+        "reset": bool(data.get("reset")),
+    }
+
+
+@app.post("/api/leco/git/clone")
+def api_leco_git_clone():
+    """Clone (or update) a repository into the managed clone root (control token).
+
+    Returns the resolved wizard path (`path_field`), the checked-out ref, the
+    short SHA, the commit subject/date, and whether this was a clone or update.
+    """
+    from git_source import clone_or_update
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    if not (data.get("url") or data.get("repo_url")):
+        return jsonify({"ok": False, "error": "url required"}), 400
+    cred, err = _git_source_credential(data)
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+    out = clone_or_update(**_git_clone_kwargs(data, cred))
+    return jsonify(out), (200 if out.get("ok") else 400)
+
+
+@app.post("/api/leco/git/clone/stream")
+def api_leco_git_clone_stream():
+    """NDJSON stream of the clone (same shape as /api/leco/register/stream)."""
+    from git_source import iter_clone_or_update
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    if not (data.get("url") or data.get("repo_url")):
+        return jsonify({"ok": False, "error": "url required"}), 400
+    cred, err = _git_source_credential(data)
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+    kwargs = _git_clone_kwargs(data, cred)
+
+    @stream_with_context
+    def ndjson():
+        try:
+            for ev in iter_clone_or_update(**kwargs):
+                yield json.dumps(ev, ensure_ascii=False) + "\n"
+        except GeneratorExit:
+            raise
+        except Exception as exc:
+            yield json.dumps(
+                {"type": "done", "result": {"ok": False, "error": str(exc)}},
+                ensure_ascii=False,
+            ) + "\n"
+
+    return Response(
+        ndjson(),
+        mimetype="text/plain; charset=utf-8",
+        headers={
+            "Cache-Control": "no-store, no-transform",
+            "X-Accel-Buffering": "no",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@app.get("/api/leco/git/status")
+def api_leco_git_status():
+    """Git facts for an existing clone: remote, ref, SHA, dirty/clean, ahead/behind."""
+    from git_source import clone_status
+
+    path = (request.args.get("path") or "").strip()
+    if not path:
+        return jsonify({"ok": False, "error": "path required"}), 400
+    out = clone_status(path)
+    return jsonify(out), (200 if out.get("ok") else 400)
+
+
 @app.post("/api/hosted/upload-zip")
 def api_hosted_upload_zip():
     """Extract zip into hosting/app-available/<slug>/; delete archive after extract (control token)."""
@@ -1119,51 +1307,259 @@ def api_ai_settings_update():
     return jsonify({"ok": True, **safe})
 
 
+def _ai_not_configured(provider_name: str) -> dict:
+    """Explain *why* a provider could not be built, in operator language."""
+    reasons = {
+        "none": "No AI provider is selected. Choose one in AI configuration.",
+        "openai": "OpenAI is selected but no API key is stored. Add a key in AI configuration.",
+        "anthropic": "Anthropic is selected but no API key is stored. Add a key in AI configuration.",
+        "google": "Google Gemini is selected but no API key is stored. Add a key in AI configuration.",
+        "openai-compatible": "No base URL is set. Pick a preset (OpenRouter, Groq, …) or enter an endpoint that serves GET /models.",
+        "hybrid": "Hybrid needs both a reachable local provider and a cloud provider with an API key.",
+    }
+    return {
+        "ok": False,
+        "configured": False,
+        "provider": provider_name or "none",
+        "models": [],
+        "error": reasons.get(provider_name, f"Provider '{provider_name}' is not configured."),
+    }
+
+
+def _ai_discover_payload(provider, provider_name: str) -> dict:
+    """Run connect + list-models and shape a bounded, key-free response."""
+    from ai_config import TIER_META, annotate_model
+
+    status = provider.discover()
+    return {
+        "tier_meta": TIER_META,
+        "quality_note": (
+            "Capability tiers are a curated hint from each vendor's own positioning of its "
+            "line-up — not a measured benchmark. Context window and price are reported "
+            "verbatim from the provider."
+        ),
+        "ok": bool(status.ok),
+        "configured": True,
+        "provider": status.provider or provider_name,
+        "message": status.message,
+        "discovery": status.discovery,
+        "curated": status.discovery == "curated",
+        "latency_ms": status.latency_ms,
+        "endpoint": status.endpoint,
+        "model_count": status.total_models,
+        "truncated": status.truncated,
+        "models": [annotate_model(m.to_dict()) for m in status.models],
+        "error": "" if status.ok else (status.message or "Provider unreachable"),
+    }
+
+
 @app.post("/api/ai/test")
 def api_ai_test():
-    """Test connectivity to the configured AI provider."""
-    from ai_config import get_provider_config
+    """Connect to a provider and return its live model list.
+
+    Accepts not-yet-saved screen values (``provider``, ``preset``, ``base_url``,
+    ``api_key``, ``model``, ``timeout``) so the operator can test before saving.
+    A stored key is never forwarded to a base URL the caller changed in the
+    form — see ``ai_config.probe_config``.
+    """
+    from ai_config import probe_config
     from ai_provider import create_provider
 
     data = request.get_json(silent=True) or {}
     if not check_control_token(request, data):
         return jsonify({"ok": False, "error": "unauthorized"}), 401
 
-    provider_name = (data.get("provider") or "").strip()
-    cfg = get_provider_config()
-    if provider_name:
-        cfg["provider"] = provider_name
-    provider = create_provider(cfg)
+    try:
+        cfg = probe_config(data)
+    except Exception as exc:
+        return jsonify({"ok": False, "configured": False, "models": [], "error": str(exc)}), 400
+
+    provider_name = cfg.get("provider", "none")
+    try:
+        provider = create_provider(cfg)
+    except Exception as exc:
+        return jsonify({"ok": False, "configured": False, "provider": provider_name, "models": [], "error": str(exc)})
     if provider is None:
-        return jsonify({"ok": False, "error": f"Provider '{cfg.get('provider', 'none')}' not configured or missing API key"})
-    status = provider.health_check()
-    return jsonify({
-        "ok": status.ok,
-        "provider": status.provider,
-        "message": status.message,
-        "models": [{"name": m.name, "context_window": m.context_window} for m in status.models],
-    })
+        return jsonify(_ai_not_configured(provider_name))
+
+    payload = _ai_discover_payload(provider, provider_name)
+    payload["selected_model"] = (
+        cfg.get("providers", {}).get(provider_name, {}).get("default_model")
+        or cfg.get("default_model")
+        or ""
+    )
+    return jsonify(payload)
+
+
+# Same connect-and-list flow as /api/ai/test, kept as a distinct name so the
+# configuration screen can express intent ("discover models") separately from
+# "test my credentials".  Control-token gated because it may carry a key.
+@app.post("/api/ai/discover")
+def api_ai_discover():
+    """Discover models for saved or submitted provider settings."""
+    return api_ai_test()
 
 
 @app.get("/api/ai/models")
 def api_ai_models():
-    """List models available on the configured AI provider."""
+    """List models available on the *saved* AI provider (read-only, no key)."""
     from ai_config import get_provider_config
     from ai_provider import create_provider
 
     cfg = get_provider_config()
-    provider = create_provider(cfg)
-    if provider is None:
-        return jsonify({"ok": False, "models": [], "error": "No provider configured"})
+    provider_name = cfg.get("provider", "none")
     try:
-        models = provider.list_models()
+        provider = create_provider(cfg)
     except Exception as exc:
-        return jsonify({"ok": False, "models": [], "error": str(exc)})
-    return jsonify({
-        "ok": True,
-        "provider": cfg.get("provider", "none"),
-        "models": [{"name": m.name, "context_window": m.context_window, "description": m.description} for m in models],
-    })
+        # A provider construction bug must degrade to a message, not a 500.
+        return jsonify({"ok": False, "configured": False, "provider": provider_name, "models": [], "error": str(exc)})
+    if provider is None:
+        return jsonify(_ai_not_configured(provider_name))
+    try:
+        payload = _ai_discover_payload(provider, provider_name)
+    except Exception as exc:
+        return jsonify({"ok": False, "configured": True, "provider": provider_name, "models": [], "error": str(exc)})
+    payload["selected_model"] = (
+        cfg.get("providers", {}).get(provider_name, {}).get("default_model")
+        or cfg.get("default_model")
+        or ""
+    )
+    return jsonify(payload)
+
+
+# ---------------------------------------------------------------------------
+# RAG over LEco DevOps' own knowledge (docs corpus + live machine state)
+# ---------------------------------------------------------------------------
+
+
+def _rag_args(data: dict) -> dict:
+    """Normalize and bound the shared /api/ai/rag/ask request body."""
+    from ai_rag import DEFAULT_MAX_CONTEXT_CHARS, DEFAULT_TOP_K, MAX_CONTEXT_CHARS_CEILING, MAX_TOP_K
+
+    live_raw = data.get("live", True)
+    live_enabled = True
+    live_requested = None
+    if isinstance(live_raw, list):
+        live_requested = [str(s).strip() for s in live_raw if str(s).strip()]
+    elif isinstance(live_raw, bool):
+        live_enabled = live_raw
+    elif isinstance(live_raw, str):
+        live_enabled = live_raw.strip().lower() not in ("0", "false", "no", "off")
+
+    try:
+        top_k = int(data.get("top_k") or DEFAULT_TOP_K)
+    except (TypeError, ValueError):
+        top_k = DEFAULT_TOP_K
+    try:
+        max_chars = int(data.get("max_context_chars") or DEFAULT_MAX_CONTEXT_CHARS)
+    except (TypeError, ValueError):
+        max_chars = DEFAULT_MAX_CONTEXT_CHARS
+
+    return {
+        "top_k": max(1, min(top_k, MAX_TOP_K)),
+        "live_enabled": live_enabled,
+        "live_requested": live_requested,
+        "app": str(data.get("app") or data.get("slug") or "").strip(),
+        "max_context_chars": max(2000, min(max_chars, MAX_CONTEXT_CHARS_CEILING)),
+        "use_embeddings": bool(data.get("use_embeddings", True)),
+        "model": str(data.get("model") or "").strip(),
+        "include_prompt": bool(data.get("include_prompt")),
+    }
+
+
+def _rag_ndjson(question: str, kwargs: dict):
+    """Shared NDJSON generator for the streaming RAG answer."""
+    from ai_rag import ask_stream
+
+    @stream_with_context
+    def gen():
+        try:
+            for ev in ask_stream(question, **kwargs):
+                yield json.dumps(ev, ensure_ascii=False, default=str) + "\n"
+        except GeneratorExit:
+            raise
+        except Exception as exc:
+            yield json.dumps({"type": "error", "text": str(exc)}, ensure_ascii=False) + "\n"
+            yield json.dumps({"type": "done", "data": {"ok": False, "error": str(exc)}}, ensure_ascii=False) + "\n"
+
+    return Response(
+        gen(),
+        mimetype="text/plain; charset=utf-8",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.post("/api/ai/rag/ask")
+def api_ai_rag_ask():
+    """Answer a question about LEco DevOps, grounded in its docs + live state.
+
+    Body: ``question`` (required), ``top_k``, ``live`` (bool or list of source
+    ids), ``app`` (hosted-app slug), ``max_context_chars``, ``model``,
+    ``use_embeddings``, ``retrieval_only``, ``stream``.
+
+    With no AI provider configured this still returns the retrieved passages
+    rather than an error, so it is useful on a fresh machine.
+    """
+    from ai_rag import ask
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    question = str(data.get("question") or data.get("q") or "").strip()
+    if not question:
+        return jsonify({"ok": False, "error": "question required"}), 400
+
+    kwargs = _rag_args(data)
+    if data.get("stream"):
+        return _rag_ndjson(question, kwargs)
+    try:
+        return jsonify(ask(question, retrieval_only=bool(data.get("retrieval_only")), **kwargs))
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@app.post("/api/ai/rag/ask/stream")
+def api_ai_rag_ask_stream():
+    """NDJSON stream of the same answer: status → sources → token* → done."""
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    question = str(data.get("question") or data.get("q") or "").strip()
+    if not question:
+        return jsonify({"ok": False, "error": "question required"}), 400
+    return _rag_ndjson(question, _rag_args(data))
+
+
+@app.post("/api/ai/rag/reindex")
+def api_ai_rag_reindex():
+    """Rebuild the static documentation index.
+
+    ``embeddings: true`` additionally builds local Ollama vectors (opt-in);
+    ``embeddings: false`` drops them. Omit the field to leave them untouched.
+    """
+    from ai_rag import reindex
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    emb = data.get("embeddings")
+    emb_flag = emb if isinstance(emb, bool) else None
+    try:
+        return jsonify(reindex(embeddings=emb_flag, embed_model=str(data.get("embed_model") or "").strip()))
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@app.get("/api/ai/rag/status")
+def api_ai_rag_status():
+    """Index size and freshness, embedding state, and provider configuration."""
+    from ai_rag import status as rag_status
+
+    try:
+        return jsonify(rag_status())
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
 
 
 @app.post("/api/leco/ai-analyze/stream")
@@ -1419,6 +1815,223 @@ def api_help_content():
 def api_help_search():
     q = (request.args.get("q") or "").strip()
     return jsonify(search_help(q))
+
+
+@app.get("/api/mcp/insights")
+def api_mcp_insights():
+    """MCP panel payload: connected agents, what they called, against which applications.
+
+    Read-only, so unauthenticated like /api/overview.
+    """
+    from mcp_insights import build_insights
+
+    return jsonify(build_insights(request.args.get("hours"), request.args.get("limit")))
+
+
+@app.get("/api/mcp/activity")
+def api_mcp_activity():
+    from mcp_insights import query_activity
+
+    return jsonify(
+        query_activity(
+            limit=request.args.get("limit"),
+            tool=request.args.get("tool"),
+            session=request.args.get("session"),
+            target=request.args.get("target"),
+            blocked=request.args.get("blocked"),
+            errors_only=request.args.get("errors_only"),
+            hours=request.args.get("hours"),
+            event=request.args.get("event"),
+        )
+    )
+
+
+@app.get("/api/mcp/install")
+def api_mcp_install():
+    from mcp_insights import build_install
+
+    return jsonify(build_install())
+
+
+# ---------------------------------------------------------------------------
+# CI/CD — push → pull → build → deploy → verify → record (dashboard/cicd.py)
+#
+# Mutations reuse the Control token like every other write endpoint.  The webhook receiver
+# below is the deliberate exception: it is authenticated by its HMAC signature, because a Git
+# host cannot send X-Control-Token.  See the note on that route.
+# ---------------------------------------------------------------------------
+
+
+def _cicd_webhook_base() -> str:
+    """Public base URL for webhook URLs shown in the UI (override for a real host name)."""
+    configured = (os.getenv("LECO_PUBLIC_BASE_URL") or os.getenv("DASHBOARD_PUBLIC_BASE_URL") or "").strip()
+    if configured:
+        return configured.rstrip("/")
+    return request.url_root.rstrip("/")
+
+
+@app.get("/api/cicd/overview")
+def api_cicd_overview():
+    """Read-only panel payload (pipelines + recent runs). Secrets are never included."""
+    from cicd import build_overview
+
+    return jsonify(build_overview(webhook_base=_cicd_webhook_base(), runs_limit=25))
+
+
+@app.get("/api/cicd/pipelines")
+def api_cicd_pipelines():
+    from cicd import load_pipelines, public_pipeline
+
+    base = _cicd_webhook_base()
+    return jsonify({"ok": True, "pipelines": [public_pipeline(p, webhook_base=base) for p in load_pipelines()]})
+
+
+@app.post("/api/cicd/pipelines")
+def api_cicd_pipeline_create():
+    """Create a pipeline. The generated webhook secret is returned exactly once, here."""
+    from cicd import PipelineError, create_pipeline, public_pipeline
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    try:
+        pipeline, secret = create_pipeline(data)
+    except PipelineError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    return jsonify(
+        {
+            "ok": True,
+            "pipeline": public_pipeline(pipeline, webhook_base=_cicd_webhook_base()),
+            "secret": secret,
+            "secret_notice": "Copy this now — it is stored server-side only and never shown again.",
+        }
+    ), 201
+
+
+@app.put("/api/cicd/pipelines/<pipeline_id>")
+@app.patch("/api/cicd/pipelines/<pipeline_id>")
+def api_cicd_pipeline_update(pipeline_id: str):
+    from cicd import PipelineError, public_pipeline, update_pipeline
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    try:
+        pipeline = update_pipeline(pipeline_id, data)
+    except PipelineError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    return jsonify({"ok": True, "pipeline": public_pipeline(pipeline, webhook_base=_cicd_webhook_base())})
+
+
+@app.delete("/api/cicd/pipelines/<pipeline_id>")
+def api_cicd_pipeline_delete(pipeline_id: str):
+    from cicd import delete_pipeline
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    removed = delete_pipeline(pipeline_id)
+    if not removed:
+        return jsonify({"ok": False, "error": f"unknown pipeline {pipeline_id!r}"}), 404
+    return jsonify({"ok": True, "deleted": pipeline_id})
+
+
+@app.post("/api/cicd/pipelines/<pipeline_id>/rotate-secret")
+def api_cicd_pipeline_rotate_secret(pipeline_id: str):
+    """Issue a new webhook secret (shown once). The previous secret stops working immediately."""
+    from cicd import PipelineError, rotate_secret
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    try:
+        secret = rotate_secret(pipeline_id)
+    except PipelineError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 404
+    return jsonify(
+        {
+            "ok": True,
+            "secret": secret,
+            "secret_notice": "Copy this now and update the Git host — it is never shown again.",
+        }
+    )
+
+
+@app.post("/api/cicd/pipelines/<pipeline_id>/run")
+def api_cicd_pipeline_run(pipeline_id: str):
+    from cicd import trigger_manual
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    body, status = trigger_manual(pipeline_id)
+    return jsonify(body), status
+
+
+@app.post("/api/cicd/pipelines/<pipeline_id>/rollback")
+def api_cicd_pipeline_rollback(pipeline_id: str):
+    """Redeploy the previously deployed commit. Code only — databases are not migrated back."""
+    from cicd import trigger_rollback
+
+    data = request.get_json(silent=True) or {}
+    if not check_control_token(request, data):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    body, status = trigger_rollback(pipeline_id, str(data.get("sha") or ""))
+    return jsonify(body), status
+
+
+@app.get("/api/cicd/runs")
+def api_cicd_runs():
+    from cicd import list_runs
+
+    return jsonify(
+        list_runs(
+            pipeline_id=request.args.get("pipeline") or None,
+            status=request.args.get("status") or None,
+            trigger=request.args.get("trigger") or None,
+            limit=request.args.get("limit", 25),
+            offset=request.args.get("offset", 0),
+        )
+    )
+
+
+@app.get("/api/cicd/runs/<run_id>")
+def api_cicd_run_detail(run_id: str):
+    from cicd import get_run
+
+    run = get_run(run_id)
+    if not run:
+        return jsonify({"ok": False, "error": "unknown run"}), 404
+    return jsonify({"ok": True, "run": run})
+
+
+@app.post("/api/cicd/webhook/<pipeline_id>")
+def api_cicd_webhook(pipeline_id: str):
+    """Git host push receiver — internet-facing.
+
+    **This endpoint is authenticated by its HMAC signature, not by DASHBOARD_CONTROL_TOKEN.**
+    GitHub and GitLab cannot send an X-Control-Token header, so adding `check_control_token`
+    here would reject every real webhook while looking like a security fix.  The credential is
+    the per-pipeline secret: `cicd.handle_webhook` verifies `X-Hub-Signature-256` (GitHub,
+    HMAC-SHA256 over the raw body), `X-Gitlab-Token` (GitLab) or `X-LEco-Signature` (generic)
+    with `hmac.compare_digest` **before** parsing the payload or touching any state, and every
+    rejection returns the same opaque 403.
+
+    Responds immediately (Git hosts time out); the pipeline runs on a background thread.
+    """
+    from cicd import MAX_WEBHOOK_BODY_BYTES, handle_webhook
+
+    # Refuse an oversized push payload from the Content-Length header, before buffering it.
+    declared = request.content_length
+    if declared is not None and declared > MAX_WEBHOOK_BODY_BYTES:
+        return jsonify({"ok": False, "error": "forbidden"}), 403
+
+    body, status = handle_webhook(pipeline_id, request.headers, request.get_data(cache=False))
+    return jsonify(body), status
 
 
 @app.get("/api/ecosystem/updates")

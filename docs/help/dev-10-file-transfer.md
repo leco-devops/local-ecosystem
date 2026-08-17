@@ -104,6 +104,6 @@ curl -fsS -H 'Host: files.lh' http://127.0.0.1/ | grep -i smoke
 ## Related docs
 
 - Operator: [FTP & SFTP file transfer](help:file-transfer)
-- Architecture: [ARCHITECTURE.md](../../ARCHITECTURE.md) · [HLD.md](../../HLD.md) · [LLD.md](../../LLD.md)
-- [UI credential vault](../../UI_CREDENTIAL_VAULT.md)
+- Architecture: [ARCHITECTURE.md](/?tab=docsTab&doc=architecture-overview) · [HLD.md](/?tab=docsTab&doc=architecture-hld) · [LLD.md](/?tab=docsTab&doc=architecture-lld)
+- [UI credential vault](/?tab=docsTab&doc=ui-credential-vault)
 - [Ecosystem stack](help:dev-ecosystem-stack)

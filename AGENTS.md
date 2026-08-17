@@ -2,6 +2,10 @@
 
 This file gives automation agents the minimum complete context to work safely and effectively in this repository.
 
+> **New here?** [`START_HERE.md`](START_HERE.md) is the route map — install, deploy an app, operate the stack, drive it over MCP, install the Skill and plugin. This file is the guardrails; that one is the path.
+>
+> **Driving the platform rather than editing it?** Use the MCP server — see [`docs/MCP_SERVER.md`](docs/MCP_SERVER.md).
+
 ## Project identity
 
 - Official repository: **https://github.com/leco-devops/local-ecosystem**
@@ -26,6 +30,7 @@ This repo is a local platform with:
 - Orchestration: `ecosystem-stack/ecosystem-stack.sh`, `ecosystem-stack/core.sh`, `ecosystem-stack/services/*.sh`
 - Dashboard: `dashboard/`
 - LEco CLI: `tools/deploy-cli/leco_app/`
+- MCP server (agent access): `tools/mcp-server/leco_mcp/` (`leco-mcp`; stdio + streamable HTTP on `mcp.lh`); Claude Code plugin + skill: `tools/claude-plugin/`
 - Hosting layout: `hosting/app-available/` (optional **`docker-compose.leco-hosting.yml`** + **`additionalComposeFilesFromManifest`** for LEco-only compose merges beside `leco.app.yaml`); reference YAML packs: `hosting/samples/` (not scanned as staging apps)
 - Platform / dev stacks: `platform/` (`platform/README.md`, `platform/dev-stacks/<id>/`); registry in `config/leco-platform.yaml`
 - Registry: `config/leco-registry.yaml`
@@ -79,6 +84,16 @@ This repo is a local platform with:
  - `dashboard/ui_credentials.py`, `dashboard/ui_credential_reset.py`, `dashboard/static/dashboard.js`
  - `traefik/dynamic.yml` (browser hosts only)
  - `docs/FILE_TRANSFER.md`, `docs/help/12-file-transfer.md`, `docs/help/dev-10-file-transfer.md`, `docs/UI_CREDENTIAL_VAULT.md`
+ - When changing the **MCP server** tool surface, also update:
+ - `tools/mcp-server/README.md` and `docs/MCP_SERVER.md` (tool tables)
+ - `tools/claude-plugin/skills/operate/SKILL.md` and `references/tool-map.md`
+ - `docs/help/20-mcp-server.md` (operator), `docs/help/dev-11-mcp-server.md` (developer)
+ - `tools/mcp-server/tests/` — the safety gates and shaping are covered by tests, keep them green
+ - When changing the MCP **transport or container**, also update:
+ - `ecosystem-stack/services/mcp.sh`, `tools/mcp-server/Dockerfile`
+ - `ecosystem-stack/core.sh` (`START_ORDER`, `NETWORK_CONTAINERS`), `ecosystem-stack/config/install-profiles.yaml`
+ - `traefik/dynamic.yml` (`mcp-http` / `mcp-https` / `mcp-service`)
+ - `dashboard/control_targets.py` (`ai-mcp`, `ECOSYSTEM_SERVICE_REQUIRES`), `dashboard/monitor.py` (`SERVICE_MAP`, `INTERNAL_PROBE_BY_CONTAINER`)
  - When changing AirLLM behavior, also update:
      - `dashboard/airllm_models.py`
      - `dashboard/ai_provider.py` (`AirLLMProvider`)
@@ -101,7 +116,8 @@ This repo is a local platform with:
 
 ## Validation checklist for agents
 
-- Python syntax: `python3 -m compileall -q dashboard tools/deploy-cli/leco_app`
+- Python syntax: `python3 -m compileall -q dashboard tools/deploy-cli/leco_app tools/mcp-server/leco_mcp`
+- MCP server changes: `python -m pytest tools/mcp-server/tests -q`, then `leco-mcp doctor`
 - Check for regressions in docs links from `README.md` and `dashboard/docs_catalog.py`
 - If adding docs, ensure paths are repo-root relative and loadable via `/api/docs/content`
 - User-visible changes: add `[Unreleased]` bullet in `CHANGELOG.md`; see `docs/VERSIONING.md` for releases

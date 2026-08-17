@@ -71,7 +71,7 @@ Open **Service hubs → UI access** (`/hub#hub-ui-access`):
 - **Edit** — change username/password/**port**; for SFTP choose **password**, **public key only**, or **both**.
 - **Reset & apply** — restore compose defaults and recreate containers (control token when set).
 
-See also [UI credential vault](../../UI_CREDENTIAL_VAULT.md) in the Docs tab.
+See also [UI credential vault](/?tab=docsTab&doc=ui-credential-vault) in the Docs tab.
 
 ## SFTP public-key auth
 
@@ -97,4 +97,4 @@ See also [UI credential vault](../../UI_CREDENTIAL_VAULT.md) in the Docs tab.
 | Browser 404 | Start **file-browser** service; Traefik routes `files.lh` → `leco-file-browser:8080` |
 | Key auth fails | `.pub` file under `file-transfer/keys/sftp/`; mode **Public key only** uses empty password in `SFTP_USERS` |
 
-Deep reference: [FILE_TRANSFER.md](../../FILE_TRANSFER.md) (Docs tab) · Developer guide: [File transfer (developer)](help:dev-file-transfer)
+Deep reference: [FILE_TRANSFER.md](/?tab=docsTab&doc=file-transfer) (Docs tab) · Developer guide: [File transfer (developer)](help:dev-file-transfer)

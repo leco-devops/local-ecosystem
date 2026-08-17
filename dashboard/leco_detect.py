@@ -18,6 +18,7 @@ from leco_wrangler_paths import (
     pages_runtime_id_from_config,
     pick_primary_wrangler_config,
     read_pages_build_output_dir,
+    enumerate_wrangler_workers,
     runtime_id_from_wrangler_relpath,
 )
 from leco_runtimes import (
@@ -60,7 +61,7 @@ def require_registration_app_id(app_id: str) -> str:
 
 def host_slug_from_app_id(app_id: str) -> str:
     """
-    Host-safe slug for default main URL (`https://<slug>.lh`).
+    Host-safe slug for the default main URL (`https://<slug>.<routing_domain()>`).
 
     Normalizes app id to lowercase DNS-label characters and validates label length/shape.
     """
@@ -76,15 +77,100 @@ def host_slug_from_app_id(app_id: str) -> str:
     return s
 
 
+def _is_valid_dns_domain(dom: str) -> bool:
+    """Every dot-separated part must be a legal DNS label and the whole name must fit in 253 chars."""
+    d = (dom or "").strip().strip(".")
+    if not d or len(d) > 253:
+        return False
+    return all(_HOST_LABEL_RE.match(p) for p in d.split("."))
+
+
+def _platform_config_direct() -> dict[str, Any]:
+    """
+    Read ``config/leco-platform.yaml`` without going through ``platform_config``.
+
+    ``dashboard/Dockerfile`` copies modules into the image with one explicit ``COPY`` line per
+    file and does not list ``dashboard/platform_config.py``. Normally that is harmless — the
+    container runs out of the bind-mounted ``/project/dashboard``, where the module exists — but
+    the image's ``/app`` fallback path (used when ``/project`` is not mounted) has no
+    ``platform_config`` at all. Without this fallback that configuration would quietly revert
+    every hostname to ``.lh``, a failure invisible in testing because ``.lh`` is also the correct
+    answer locally. The YAML is read from ``DASHBOARD_PROJECT_ROOT`` either way.
+    """
+    root = Path(os.getenv("DASHBOARD_PROJECT_ROOT") or Path(__file__).resolve().parents[1])
+    try:
+        raw = yaml.safe_load((root / "config" / "leco-platform.yaml").read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def routing_domain() -> str:
+    """
+    Base DNS domain for every hostname this module generates.
+
+    ``lh`` on a workstation; ``base_domain`` from ``config/leco-platform.yaml`` when
+    ``deployment_mode: cloud``. Mirrors :func:`platform_config.public_hostname` exactly — cloud
+    mode is the only thing that moves apps off ``.lh`` — so a local install keeps producing the
+    identical ``<slug>.lh`` names it always has.
+
+    Never raises: a missing/broken platform config or a ``base_domain`` that is not a legal DNS
+    name falls back to ``lh`` rather than emitting a hostname Traefik cannot route.
+    """
+    try:
+        from platform_config import base_domain, deployment_mode
+
+        mode = deployment_mode()
+        dom = base_domain()
+    except Exception:
+        cfg = _platform_config_direct()
+        mode = str(cfg.get("deployment_mode") or "local")
+        dom = str(cfg.get("base_domain") or "lh")
+    if str(mode).strip().lower() != "cloud":
+        return "lh"
+    dom = str(dom or "lh").strip().strip(".").lower()
+    if dom == "lh" or not _is_valid_dns_domain(dom):
+        return "lh"
+    return dom
+
+
+def app_hostname(host_slug: str, *labels: str) -> str:
+    """
+    Public hostname for a registered app: ``[<label>.]*<slug>.<routing_domain()>``.
+
+    ``app_hostname("myapp")`` → ``myapp.lh`` locally, ``myapp.mydomain.com`` in cloud mode.
+    ``app_hostname("myapp", "api")`` → ``api.myapp.lh`` / ``api.myapp.mydomain.com``.
+
+    Extra labels are normalized to DNS labels so a three-label host stays resolvable when the
+    base domain is itself multi-label (``api.myapp.leco.mydomain.com``).
+    """
+    slug = str(host_slug or "").strip().strip(".")
+    if not _HOST_LABEL_RE.match(slug):
+        raise ValueError(f"host slug is not a valid DNS label: {host_slug!r}")
+    parts = [_host_label_component(x) for x in labels if str(x or "").strip()]
+    parts.append(slug)
+    host = ".".join(parts) + "." + routing_domain()
+    if len(host) > 253:
+        raise ValueError(f"generated hostname exceeds 253 characters: {host!r}")
+    return host
+
+
+def _host_label_component(value: str) -> str:
+    """Normalize an arbitrary id (runtime id, service name) to one legal DNS label."""
+    text = re.sub(r"[^a-zA-Z0-9-]+", "-", str(value or "")).strip("-").lower()
+    text = re.sub(r"-{2,}", "-", text)[:63].strip("-")
+    return text or "svc"
+
+
 def main_url_from_app_id(app_id: str) -> str:
     return main_urls_from_app_id(app_id)["https"]
 
 
 def main_urls_from_app_id(app_id: str) -> dict[str, str]:
-    host = host_slug_from_app_id(app_id)
+    host = app_hostname(host_slug_from_app_id(app_id))
     return {
-        "https": f"https://{host}.lh",
-        "http": f"http://{host}.lh",
+        "https": f"https://{host}",
+        "http": f"http://{host}",
     }
 
 COMPOSE_NAMES = (
@@ -155,19 +241,148 @@ def _scan_compose_ports(root: Path, rel: Path) -> list[int]:
     return sorted(set(host_ports))
 
 
+# Directories that conventionally hold a compose file in a monorepo. Searched in this order
+# after the repo root, because a repo that has both a root compose and an infra/ one means the
+# root file for the whole project and the nested one for a component.
+_COMPOSE_SEARCH_DIRS: tuple[str, ...] = (
+    "docker",
+    "infra/docker",
+    "infra",
+    "deploy",
+    "deployment",
+    "ops",
+    ".docker",
+    "docker/compose",
+    "build",
+    "etc/docker",
+)
+
+
+def _parse_port_pairs(ports_val: Any) -> list[tuple[int, int]]:
+    """``["9401:80", "8787:8787", 3000]`` → ``[(9401, 80), (8787, 8787), (3000, 3000)]``.
+
+    Routing must target the *container* port: Traefik reaches the app over ``lh-network``,
+    where the host-side mapping does not exist. Using the host port happens to work only when
+    both sides are equal.
+    """
+    out: list[tuple[int, int]] = []
+    if ports_val is None:
+        return out
+    items = ports_val if isinstance(ports_val, list) else [ports_val]
+    for p in items:
+        if isinstance(p, int):
+            out.append((p, p))
+            continue
+        if isinstance(p, dict):  # long syntax: {published: 9401, target: 80}
+            try:
+                pub = int(p.get("published"))
+                tgt = int(p.get("target"))
+            except (TypeError, ValueError):
+                continue
+            out.append((pub, tgt))
+            continue
+        if not isinstance(p, str):
+            continue
+        text = p.strip().split("/")[0]  # drop /tcp | /udp
+        parts = [x for x in text.split(":") if x != ""]
+        try:
+            nums = [int(x) for x in parts]
+        except ValueError:
+            continue
+        if not nums:
+            continue
+        if len(nums) == 1:
+            out.append((nums[0], nums[0]))
+        else:
+            # host:container, or ip:host:container
+            out.append((nums[-2], nums[-1]))
+    return out
+
+
+def _scan_compose_ports_by_service(root: Path, rel: Path) -> dict[str, list[int]]:
+    """Published host ports grouped by compose service.
+
+    A worker mesh publishes every worker from one container, while fixtures and sidecars
+    publish one port each. Keeping the grouping lets the caller pair Workers against the
+    mesh's ports instead of against a flat list that also contains an nginx fixture.
+    """
+    path = root / rel
+    if not path.is_file():
+        return {}
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return {}
+    services = data.get("services") or {}
+    if not isinstance(services, dict):
+        return {}
+    out: dict[str, list[int]] = {}
+    for name, spec in services.items():
+        if isinstance(spec, dict):
+            ports = _parse_ports(spec.get("ports"))
+            if ports:
+                out[str(name)] = sorted(set(ports))
+    return out
+
+
+def _primary_port_group(root: Path, compose_files: list[Path]) -> list[int]:
+    """Container ports of the compose service that publishes the most of them.
+
+    That service is the one hosting a multi-process mesh; ties fall back to the flat list so
+    a conventional single-service app is unaffected. Container ports (not host ports) so a
+    runtime's declared port matches the port its route targets — they differ whenever the
+    compose mapping is not 1:1.
+    """
+    if not compose_files:
+        return []
+    path = root / compose_files[0]
+    if not path.is_file():
+        return []
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return []
+    services = data.get("services") or {}
+    if not isinstance(services, dict):
+        return []
+    groups: dict[str, list[int]] = {}
+    for name, spec in services.items():
+        if isinstance(spec, dict):
+            pairs = _parse_port_pairs(spec.get("ports"))
+            if pairs:
+                groups[str(name)] = sorted({c for _h, c in pairs})
+    if not groups:
+        return []
+    best = max(groups.values(), key=len)
+    return best if len(best) > 1 else sorted({p for ports in groups.values() for p in ports})
+
+
 def _list_compose_files(root: Path) -> list[Path]:
+    """Compose files under ``root``, best-first.
+
+    A monorepo routinely keeps its compose file outside the repo root — this project's own
+    target case is ``infra/docker/docker-compose.yml``. Searching only the root (and ``docker/``)
+    reported "no compose signals" for such a repo, and the generated manifest then had no
+    ``dockerCompose`` block at all, so the app registered but could never route.
+    """
     r = root.resolve()
     found: list[Path] = []
-    for name in COMPOSE_NAMES:
-        rel = Path(name)
-        if (r / rel).is_file():
+    seen: set[str] = set()
+
+    def add(rel: Path) -> None:
+        key = rel.as_posix()
+        if key not in seen and (r / rel).is_file():
+            seen.add(key)
             found.append(rel)
-    docker_dir = r / "docker"
-    if docker_dir.is_dir():
+
+    for name in COMPOSE_NAMES:
+        add(Path(name))
+    for sub in _COMPOSE_SEARCH_DIRS:
+        base = r / sub
+        if not base.is_dir():
+            continue
         for name in COMPOSE_NAMES:
-            rel = Path("docker") / name
-            if (r / rel).is_file():
-                found.append(rel)
+            add(Path(sub) / name)
     return found
 
 
@@ -247,8 +462,23 @@ def registration_scan_root(root: Path) -> Path:
     return target if target != r else r
 
 
+def _is_repo_boundary(path: Path) -> bool:
+    """A directory that owns itself — walking above it leaves the application."""
+    for marker in (".git", ".hg", ".svn"):
+        if (path / marker).exists():
+            return True
+    return False
+
+
 def _detect_wrangler_relpath_from_base(base: Path, max_up: int = 6) -> str | None:
-    """Return path relative to ``base`` (may use ``..``) to the nearest wrangler file walking up."""
+    """Path relative to ``base`` (may use ``..``) to the nearest wrangler file walking up.
+
+    The walk stops at a repository boundary. Without that guard it climbed up to six levels
+    out of the application and adopted the first ``wrangler.toml`` it found in an unrelated
+    sibling checkout — silently wiring another project's KV/R2/D1 bindings into this app's
+    manifest. A workspace parent holding dozens of repos made that near-certain for any app
+    that had no wrangler config of its own.
+    """
     b = base.resolve()
     try_root: Path | None = b
     for _ in range(max_up):
@@ -263,6 +493,10 @@ def _detect_wrangler_relpath_from_base(base: Path, max_up: int = 6) -> str | Non
                 return None
             return rel_to_base.replace("\\", "/")
         if try_root.parent == try_root:
+            break
+        # Checked after the lookup so a config sitting beside .git is still found, but the
+        # next level up — outside the repository — is never consulted.
+        if _is_repo_boundary(try_root):
             break
         try_root = try_root.parent
     return None
@@ -930,18 +1164,25 @@ _LECO_RUNTIME_OVERLAY_COMPOSE = "docker-compose.leco-runtime.yml"
 
 
 def _primary_public_hostname_from_routing(entries: list[Any]) -> str | None:
+    """
+    First routing hostname served by this platform's edge.
+
+    ``.lh`` is always accepted so an app registered on a workstation and moved to a server keeps
+    getting its overlay env; in cloud mode the configured ``base_domain`` is accepted too.
+    """
+    suffixes = {".lh", f".{routing_domain()}"}
     for row in entries:
         if not isinstance(row, dict):
             continue
         hn = str(row.get("hostname") or "").strip()
-        if hn.endswith(".lh"):
+        if any(hn.endswith(sfx) for sfx in suffixes):
             return hn
     return None
 
 
 def _lh_overlay_env_for_service(service_name: str, public_hostname: str) -> dict[str, str]:
     """
-    Standard env merges for split Traefik apps: browser uses same origin on *.lh; API allows CORS.
+    Standard env merges for split Traefik apps: browser uses the app's own edge origin; API allows CORS.
     Framework-specific keys are additive (unset backend URL lets CrawlerVision api.js use origin).
     """
     origin_https = f"https://{public_hostname}"
@@ -1090,9 +1331,14 @@ def _load_compose_services_for_localhost(
     try:
         from hosted_app_services import load_compose_services_for_detect
 
-        return load_compose_services_for_detect(localhost, root, manifest)
+        loaded = load_compose_services_for_detect(localhost, root, manifest)
+        if loaded:
+            return loaded
     except Exception:
         pass
+    # That loader needs a written leco.app.yaml, which does not exist while previewing a
+    # not-yet-registered app. Returning its None short-circuited the resolution below, so
+    # preview generation saw no compose services and produced no routing at all.
     base = compute_source_target(root, manifest).resolve()
     infra = localhost.get("infrastructure")
     if not isinstance(infra, dict):
@@ -1116,12 +1362,85 @@ def _load_compose_services_for_localhost(
     return services, dc, infra
 
 
+def _infer_mesh_routing_entries(
+    localhost: dict[str, Any], root: Path, manifest: dict[str, Any], host_slug: str
+) -> list[dict[str, Any]]:
+    """Routing for one container that publishes many ports.
+
+    A Workers mesh (or any multi-process container) serves a different application per port
+    from a single service, which the frontend/API split below cannot express: it looks for two
+    differently-named services and finds one. Without this the profile got no routing at all,
+    so the app registered and then answered nothing.
+
+    The lowest published port is treated as the front door and takes ``<slug>.<domain>``; every
+    other port gets ``<runtime-id>.<slug>.<domain>``, named from ``infrastructure.runtimes`` where
+    a runtime declares that port. Those are deeper hostnames than the front door, which the local
+    certificate generator covers with a ``*.<slug>.lh`` wildcard; on a real domain a wildcard for
+    one extra level (``*.<slug>.<domain>``) needs a DNS-01 resolver, not HTTP-01.
+    """
+    loaded = _load_compose_services_for_localhost(localhost, root, manifest)
+    if not loaded:
+        return []
+    services, dc, infra = loaded
+    project_name = _compose_project_name(dc, host_slug)
+
+    best_name, best_spec, best_pairs = None, None, []
+    for name, spec in services.items():
+        if not isinstance(spec, dict):
+            continue
+        pairs = _parse_port_pairs(spec.get("ports"))
+        if len(pairs) > len(best_pairs):
+            best_name, best_spec, best_pairs = str(name), spec, pairs
+    if not best_name or len(best_pairs) < 2:
+        return []
+    # Route on the container port. Distinct published ports that all forward to the same
+    # container port are one application behind several host bindings, not a mesh.
+    best_ports = sorted({container for _host, container in best_pairs})
+    if len(best_ports) < 2:
+        return []
+
+    backend_host = _compose_service_backend_host(best_name, best_spec, project_name)
+    label_by_port: dict[int, str] = {}
+    runtimes = infra.get("runtimes") if isinstance(infra, dict) else None
+    if isinstance(runtimes, list):
+        for rt in runtimes:
+            if not isinstance(rt, dict):
+                continue
+            try:
+                p = int(rt.get("port"))
+            except (TypeError, ValueError):
+                continue
+            rid = str(rt.get("id") or "").strip()
+            if rid:
+                label_by_port.setdefault(p, rid)
+
+    entries: list[dict[str, Any]] = []
+    for idx, port in enumerate(best_ports):
+        if idx == 0:
+            hostname = app_hostname(host_slug)
+        else:
+            label = label_by_port.get(port) or f"port-{port}"
+            hostname = app_hostname(host_slug, label)
+        # One hostname → one upstream, which the schema expresses as backendHost/backendPort.
+        # The frontend+apiBackend split does not apply: there is no separate API container,
+        # each port *is* a whole application.
+        entries.append(
+            {"hostname": hostname, "backendHost": backend_host, "backendPort": port}
+        )
+    return entries
+
+
+def _slug_component(value: str) -> str:
+    """Lowercase DNS label from a runtime id (``mod-render`` stays, ``Mod_Render`` normalizes)."""
+    return _host_label_component(value)
+
+
 def _infer_compose_routing_entries(
     localhost: dict[str, Any], root: Path, manifest: dict[str, Any], host_slug: str
 ) -> list[dict[str, Any]]:
     """
     Default routing for compose apps with separate UI + API containers:
-      - Single hostname ``<slug>.lh`` with ``apiPathPrefix`` (default ``/api``): Traefik sends
+      - Single hostname ``<slug>.<domain>`` with ``apiPathPrefix`` (default ``/api``): Traefik sends
         ``PathPrefix`` traffic to the API container and the rest to the frontend (same pattern
         as ``leco-devops traefik-fragment`` split mode and default ``urls``).
     """
@@ -1156,7 +1475,7 @@ def _infer_compose_routing_entries(
         return []
     return [
         {
-            "hostname": f"{host_slug}.lh",
+            "hostname": app_hostname(host_slug),
             "apiPathPrefix": "/api",
             "frontend": {"host": frontend[2], "port": frontend[1]},
             "apiBackend": {"host": backend[2], "port": backend[1]},
@@ -1230,6 +1549,11 @@ def _apply_default_routing(localhost: dict[str, Any], root: Path, manifest: dict
     if compose_entries:
         infra["routing"] = {"entries": compose_entries}
         return
+    # Tried after the frontend/API split so a conventional two-service app is unaffected.
+    mesh_entries = _infer_mesh_routing_entries(localhost, root, manifest, host_slug)
+    if mesh_entries:
+        infra["routing"] = {"entries": mesh_entries}
+        return
     if has_wrangler:
         runtimes = infra.get("runtimes")
         api_runtime = "worker"
@@ -1269,7 +1593,7 @@ def _apply_default_routing(localhost: dict[str, Any], root: Path, manifest: dict
         infra["routing"] = {
             "entries": [
                 {
-                    "hostname": f"{host_slug}.lh",
+                    "hostname": app_hostname(host_slug),
                     "upstream": upstream,
                 }
             ]
@@ -1480,9 +1804,10 @@ def build_default_manifest_and_localhost(
     """Generate bridge manifest (v3) + ``leco.yaml`` dict with ``infrastructure`` as source of truth."""
     host_slug = host_slug_from_app_id(app_id)
     main_urls = main_urls_from_app_id(app_id)
+    api_host = app_hostname(host_slug)
     api_urls = {
-        "https": f"https://{host_slug}.lh/api",
-        "http": f"http://{host_slug}.lh/api",
+        "https": f"https://{api_host}/api",
+        "http": f"http://{api_host}/api",
     }
     scan = scan_app_directory(root)
     compose_files = scan.get("compose_files") or []
@@ -1581,18 +1906,45 @@ def build_default_manifest_and_localhost(
             cf["localCfPublicPrefix"] = pfx
         infrastructure["cloudflare"] = cf
         runtimes: list[dict[str, Any]] = []
-        port = 8787
+        # Ports must come from the compose file when there is one. Inventing a sequential
+        # 8787+ range for a monorepo produced a manifest that looked right and mapped every
+        # worker to the wrong port — worse than leaving it unset, because it routes traffic
+        # somewhere plausible and wrong.
+        # Pair against the mesh container's ports, not every published port in the file —
+        # otherwise a fixture origin's port lands on a Worker.
+        discovered_ports = _primary_port_group(r, _list_compose_files(r)) or list(
+            scan.get("host_ports") or []
+        )
+        worker_entries = enumerate_wrangler_workers(r)
+        by_config = {str(e.get("config")): e for e in worker_entries}
+        multi = len(wrangler_configs) > 1
+        port_cursor = 0
         for rel_s in wrangler_configs:
             rel = Path(str(rel_s))
-            runtimes.append(
-                {
-                    "id": runtime_id_from_wrangler_relpath(rel),
-                    "type": "cloudflare-workers",
-                    "config": rel.as_posix(),
-                    "port": port,
-                }
-            )
-            port += 1
+            entry = by_config.get(rel.as_posix()) or {}
+            # enumerate_wrangler_workers dedupes ids across a monorepo; the legacy helper
+            # returns "worker" for every bare wrangler.<ext> and would collide N ways.
+            runtime_id = str(entry.get("runtime_id") or "").strip() or runtime_id_from_wrangler_relpath(rel)
+            item: dict[str, Any] = {
+                "id": runtime_id,
+                "type": "cloudflare-workers",
+                "config": rel.as_posix(),
+            }
+            if entry.get("name"):
+                item["name"] = str(entry["name"])
+            if discovered_ports:
+                if port_cursor < len(discovered_ports):
+                    item["port"] = discovered_ports[port_cursor]
+                    port_cursor += 1
+            elif not multi:
+                # Single worker, no compose: the conventional wrangler dev port is safe.
+                item["port"] = 8787
+            runtimes.append(item)
+        port = (
+            max(discovered_ports) + 1
+            if discovered_ports
+            else 8787 + len(wrangler_configs)
+        )
         pages_configs = list_wrangler_pages_config_files(r)
         for rel in pages_configs:
             cfg_path = (r / rel).resolve()
@@ -1718,6 +2070,147 @@ def preview_registration_yaml(root: Path, app_id: str) -> tuple[str, str]:
     return yaml.safe_dump(m, **dump_kw), yaml.safe_dump(lo, **dump_kw)
 
 
+def plan_manifest_domain_migration(manifest_abs: Path) -> dict[str, Any]:
+    """
+    Report which ``.lh`` hostnames/URLs in an already-registered app would move to the current
+    :func:`routing_domain`.
+
+    Detect never rewrites a manifest that is already on disk: an app registered as ``myapp.lh``
+    keeps answering on ``myapp.lh`` after the platform is switched to ``deployment_mode: cloud``,
+    because silently rebranding an operator's routing on the next scan would break live links and
+    any certificate already issued for the old name. Migration is this explicit, opt-in step.
+
+    Returns ``{"ok", "domain", "changes": [{"kind", "path", "from", "to"}], "manifest", "profile"}``.
+    ``changes`` is empty when nothing needs to move (including every local install, where the
+    domain is still ``lh``).
+    """
+    dom = routing_domain()
+    mp = manifest_abs.resolve()
+    out: dict[str, Any] = {
+        "ok": True,
+        "domain": dom,
+        "manifest": str(mp),
+        "profile": "",
+        "changes": [],
+    }
+    try:
+        manifest = yaml.safe_load(mp.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError) as exc:
+        return {"ok": False, "error": f"read manifest: {exc}", "domain": dom, "changes": []}
+    if not isinstance(manifest, dict):
+        return {"ok": False, "error": "invalid manifest", "domain": dom, "changes": []}
+    prof = str(manifest.get("localHostProfile") or "leco.yaml").strip() or "leco.yaml"
+    prof_path = (mp.parent / prof).resolve()
+    out["profile"] = str(prof_path)
+    if dom == "lh":
+        return out
+    try:
+        localhost = yaml.safe_load(prof_path.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError) as exc:
+        return {"ok": False, "error": f"read localhost profile: {exc}", "domain": dom, "changes": []}
+    if not isinstance(localhost, dict):
+        return {"ok": False, "error": "invalid localhost profile", "domain": dom, "changes": []}
+
+    changes: list[dict[str, str]] = []
+    infra = localhost.get("infrastructure")
+    routing = infra.get("routing") if isinstance(infra, dict) else None
+    entries = routing.get("entries") if isinstance(routing, dict) else None
+    if isinstance(entries, list):
+        for idx, row in enumerate(entries):
+            if not isinstance(row, dict):
+                continue
+            hn = str(row.get("hostname") or "").strip()
+            if hn.endswith(".lh"):
+                changes.append(
+                    {
+                        "kind": "hostname",
+                        "path": f"infrastructure.routing.entries[{idx}].hostname",
+                        "from": hn,
+                        "to": f"{hn[:-3]}.{dom}",
+                    }
+                )
+    urls = localhost.get("urls")
+    if isinstance(urls, list):
+        for idx, row in enumerate(urls):
+            if not isinstance(row, dict):
+                continue
+            u = str(row.get("publicUrl") or "").strip()
+            new_u = _rewrite_lh_url(u, dom)
+            if new_u != u:
+                changes.append(
+                    {
+                        "kind": "url",
+                        "path": f"urls[{idx}].publicUrl",
+                        "from": u,
+                        "to": new_u,
+                    }
+                )
+    out["changes"] = changes
+    return out
+
+
+def _rewrite_lh_url(url: str, dom: str) -> str:
+    u = (url or "").strip()
+    if not u or dom == "lh":
+        return u
+    try:
+        from urllib.parse import urlsplit, urlunsplit
+
+        p = urlsplit(u)
+        if p.hostname and p.hostname.endswith(".lh"):
+            host = f"{p.hostname[:-3]}.{dom}"
+            if p.port:
+                host = f"{host}:{p.port}"
+            return urlunsplit((p.scheme, host, p.path, p.query, p.fragment))
+    except ValueError:
+        return u
+    return u
+
+
+def migrate_manifest_to_domain(manifest_abs: Path, *, apply: bool = False) -> dict[str, Any]:
+    """
+    Move one registered app's ``.lh`` hostnames and URLs onto the current :func:`routing_domain`.
+
+    Dry run by default — pass ``apply=True`` to write ``leco.yaml``. Never called by detect or
+    register; run it deliberately after switching an install to ``deployment_mode: cloud``, then
+    re-apply Traefik routes. Rewriting re-serializes the profile, so YAML comments in ``leco.yaml``
+    are not preserved; review the reported ``changes`` first.
+    """
+    plan = plan_manifest_domain_migration(manifest_abs)
+    if not plan.get("ok") or not apply or not plan.get("changes"):
+        plan["applied"] = False
+        return plan
+    prof_path = Path(str(plan["profile"]))
+    dom = str(plan["domain"])
+    try:
+        localhost = yaml.safe_load(prof_path.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError) as exc:
+        return {**plan, "ok": False, "applied": False, "error": f"read localhost profile: {exc}"}
+    infra = localhost.get("infrastructure")
+    routing = infra.get("routing") if isinstance(infra, dict) else None
+    entries = routing.get("entries") if isinstance(routing, dict) else None
+    if isinstance(entries, list):
+        for row in entries:
+            if isinstance(row, dict):
+                hn = str(row.get("hostname") or "").strip()
+                if hn.endswith(".lh"):
+                    row["hostname"] = f"{hn[:-3]}.{dom}"
+    urls = localhost.get("urls")
+    if isinstance(urls, list):
+        for row in urls:
+            if isinstance(row, dict):
+                row["publicUrl"] = _rewrite_lh_url(str(row.get("publicUrl") or ""), dom)
+    try:
+        prof_path.write_text(
+            yaml.safe_dump(localhost, default_flow_style=False, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        return {**plan, "ok": False, "applied": False, "error": f"write localhost profile: {exc}"}
+    plan["applied"] = True
+    return plan
+
+
 def ensure_lh_network_hosting_overlay(manifest_abs: Path) -> dict[str, Any]:
     """
     Ensure a hosting-only merge file exists beside ``leco.app.yaml`` and that
@@ -1781,7 +2274,8 @@ def ensure_lh_network_hosting_overlay(manifest_abs: Path) -> dict[str, Any]:
         header = (
             "# LEco hosting overlay — attaches Traefik upstream services to the ecosystem edge network.\n"
             "# Referenced from leco.yaml → infrastructure.dockerCompose.additionalComposeFilesFromManifest.\n"
-            "# Includes *.lh-oriented env (CORS, REACT_APP_*) when a routing hostname ends with .lh.\n"
+            f"# Includes *.{routing_domain()}-oriented env (CORS, REACT_APP_*) when a routing hostname"
+            f" ends with .{routing_domain()}.\n"
             "# Also strips upstream host publishes with ports: !reset [] so hosted apps do not collide\n"
             "# with Traefik or other local stacks on :80 / :3000 / :5432 / ... .\n"
             "# Safe to commit under hosting/app-available/<slug>/ without editing the upstream app repo.\n\n"
@@ -2141,6 +2635,10 @@ def normalize_profile_compose_backend_hosts(manifest_abs: Path) -> dict[str, Any
 
 def register_yaml_samples() -> list[dict[str, Any]]:
     """Preset YAML pairs for the registration wizard (documentation-oriented)."""
+    # Samples are copy-paste starting points, so their hostnames must match the domain this
+    # install actually routes — a server on mydomain.com handing out ``wp.lh`` is a wrong answer.
+    wp_host = app_hostname("wp")
+    mono_host = app_hostname("my-monorepo")
     return [
         {
             "id": "compose-minimal",
@@ -2235,7 +2733,7 @@ name: wordpress-site
 root: "."
 localHostProfile: leco.yaml
 """,
-            "localhost_yaml": """schemaVersion: 2
+            "localhost_yaml": f"""schemaVersion: 2
 archetype: wordpress
 infrastructure:
   dockerCompose:
@@ -2243,10 +2741,10 @@ infrastructure:
 urls:
   - role: frontend
     label: Site
-    publicUrl: https://wp.lh
+    publicUrl: https://{wp_host}
   - role: admin
     label: WP Admin
-    publicUrl: https://wp.lh/wp-admin
+    publicUrl: https://{wp_host}/wp-admin
 lifecycle:
   prepare: []
   build: []
@@ -2267,7 +2765,7 @@ configRefs:
   wranglerOnboardingConfig: infra/wrangler.onboarding.toml
   wranglerPagesConfig: infra/wrangler.pages.toml
 """,
-            "localhost_yaml": """schemaVersion: 2
+            "localhost_yaml": f"""schemaVersion: 2
 archetype: generic
 infrastructure:
   cloudflare:
@@ -2288,7 +2786,7 @@ infrastructure:
       pagesBuildOutputDir: apps/dashboard/dist
   routing:
     entries:
-      - hostname: my-monorepo.lh
+      - hostname: {mono_host}
         upstream:
           - prefix: /api
             target: runtime
@@ -2301,10 +2799,10 @@ infrastructure:
 urls:
   - role: frontend
     label: App
-    publicUrl: https://my-monorepo.lh
+    publicUrl: https://{mono_host}
   - role: api
     label: API
-    publicUrl: https://my-monorepo.lh/api
+    publicUrl: https://{mono_host}/api
 lifecycle:
   prepare: []
   build: []
@@ -2347,7 +2845,7 @@ def infer_single_backend_routing_from_services(
         if port is None:
             continue
         bh = _compose_service_backend_host(k, spec, project_name)
-        return [{"hostname": f"{host_slug}.lh", "backendHost": bh, "backendPort": port}]
+        return [{"hostname": app_hostname(host_slug), "backendHost": bh, "backendPort": port}]
     for k, spec in services.items():
         if not isinstance(spec, dict):
             continue
@@ -2355,7 +2853,7 @@ def infer_single_backend_routing_from_services(
         if port not in (8080, 80, 8443, 443, 3000, 8000):
             continue
         bh = _compose_service_backend_host(str(k), spec, project_name)
-        return [{"hostname": f"{host_slug}.lh", "backendHost": bh, "backendPort": port}]
+        return [{"hostname": app_hostname(host_slug), "backendHost": bh, "backendPort": port}]
     return None
 
 

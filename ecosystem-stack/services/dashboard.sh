@@ -94,10 +94,33 @@ start() {
     )
   fi
 
-  # Optional: require a shared secret for Control / Hosted apps / Routes mutations:
-  #   -e "DASHBOARD_CONTROL_TOKEN=your-secret"
-  # Trusted local only — embed same token in HTML and seed the browser (see docs/DEPLOYMENT.md):
-  #   -e "DASHBOARD_INJECT_CONTROL_TOKEN_UI=1"
+  # Shared secret for Control / Hosted apps / Routes mutations. Forwarded only when set in the
+  # environment that starts the service, so an unset variable keeps the historical open-local
+  # behaviour and a set one actually reaches the app.
+  #
+  # This used to be a comment showing the -e flag, with nothing forwarding it: exporting
+  # DASHBOARD_CONTROL_TOKEN appeared to enable authentication while the container never saw the
+  # variable, and control.py fails *open* when it is empty. The Control API shells out to the
+  # stack scripts and this container mounts the Docker socket read-write, so on a reachable host
+  # that combination is unauthenticated remote code execution. See docs/PRODUCTION_HARDENING.md.
+  CONTROL_TOKEN_ENV=()
+  if [ -n "${DASHBOARD_CONTROL_TOKEN:-}" ]; then
+    CONTROL_TOKEN_ENV+=(-e "DASHBOARD_CONTROL_TOKEN=$DASHBOARD_CONTROL_TOKEN")
+    # Trusted local only — embeds the same token in the HTML so the browser can act
+    # (see docs/DEPLOYMENT.md). Never enable this on a publicly reachable host.
+    if [ "${DASHBOARD_INJECT_CONTROL_TOKEN_UI:-}" = "1" ]; then
+      CONTROL_TOKEN_ENV+=(-e "DASHBOARD_INJECT_CONTROL_TOKEN_UI=1")
+    fi
+  fi
+
+  # Public base URL of this dashboard, when it is served on a real domain. Anything that has
+  # to hand out an address someone else will call — the CI/CD webhook URL most obviously —
+  # otherwise derives it from the incoming request and would print http://localhost:8090,
+  # which a Git host cannot reach.
+  PUBLIC_BASE_URL_ENV=()
+  if [ -n "${LECO_PUBLIC_BASE_URL:-}" ]; then
+    PUBLIC_BASE_URL_ENV+=(-e "LECO_PUBLIC_BASE_URL=$LECO_PUBLIC_BASE_URL")
+  fi
 
   # Register/Deploy runs leco-devops here; https://kv.lh from inside the container often hits connection
   # refused (Traefik/DNS not reachable the same way). Talk to cloudflare-local adapters on lh-network;
@@ -120,6 +143,8 @@ start() {
     -e "DASHBOARD_DOCKER_BIND_ROOT=$PROJECT_ROOT" \
     -e "DASHBOARD_PROJECT_ROOT_HOST=$PROJECT_ROOT" \
     -e "LECO_PROJECT_ROOT_HOST=$PROJECT_ROOT" \
+    "${CONTROL_TOKEN_ENV[@]}" \
+    "${PUBLIC_BASE_URL_ENV[@]}" \
     "${LOCAL_CF_INTERNAL[@]}" \
     "${WORKSPACE_PARENT_MOUNT[@]}" \
     $HOST_PROC_MOUNT \

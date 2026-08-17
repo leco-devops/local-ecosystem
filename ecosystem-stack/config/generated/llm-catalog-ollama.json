@@ -1,13 +1,14 @@
 {
   "ok": true,
   "backend": "ollama",
-  "generated_at": "2026-08-02T05:33:18Z",
-  "model_count": 32,
-  "new_online_count": 18,
+  "generated_at": "2026-08-17T02:47:13Z",
+  "model_count": 33,
+  "new_online_count": 19,
   "new_online": [
-    "deepseek-v4-flash",
     "deepseek-v4-flash:0731",
-    "deepseek-v4-pro",
+    "deepseek-v4-flash:preview",
+    "deepseek-v4-pro:0813",
+    "deepseek-v4-pro:preview",
     "gemma4:31b",
     "glm-5.1",
     "glm-5.2",
@@ -369,30 +370,6 @@
       ]
     },
     {
-      "name": "deepseek-v4-flash",
-      "label": "deepseek-v4-flash",
-      "publisher": "DeepSeek",
-      "license": "See ollama.com/library",
-      "parameters": "",
-      "size_disk": "~130.4 GB",
-      "niche": [
-        "discovered"
-      ],
-      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
-      "use_where": [
-        "https://ollama.lh",
-        "https://ai.lh"
-      ],
-      "use_how": "./leco-cli.sh ollama install deepseek-v4-flash",
-      "install_cli": "./leco-cli.sh ollama install deepseek-v4-flash",
-      "source_url": "https://ollama.com/library/deepseek-v4-flash",
-      "tags": [
-        "discovered"
-      ],
-      "discovered_online": true,
-      "modified_at": "2026-04-24T00:00:00Z"
-    },
-    {
       "name": "deepseek-v4-flash:0731",
       "label": "deepseek-v4-flash:0731",
       "publisher": "DeepSeek",
@@ -402,7 +379,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-17).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
@@ -417,22 +394,70 @@
       "modified_at": "2026-07-31T08:00:00-07:00"
     },
     {
-      "name": "deepseek-v4-pro",
-      "label": "deepseek-v4-pro",
+      "name": "deepseek-v4-flash:preview",
+      "label": "deepseek-v4-flash:preview",
       "publisher": "DeepSeek",
       "license": "See ollama.com/library",
-      "parameters": "",
-      "size_disk": "~1.5 TB",
+      "parameters": "preview",
+      "size_disk": "~130.4 GB",
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-17).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
       ],
-      "use_how": "./leco-cli.sh ollama install deepseek-v4-pro",
-      "install_cli": "./leco-cli.sh ollama install deepseek-v4-pro",
+      "use_how": "./leco-cli.sh ollama install deepseek-v4-flash:preview",
+      "install_cli": "./leco-cli.sh ollama install deepseek-v4-flash:preview",
+      "source_url": "https://ollama.com/library/deepseek-v4-flash",
+      "tags": [
+        "discovered"
+      ],
+      "discovered_online": true,
+      "modified_at": "2026-04-24T00:00:00Z"
+    },
+    {
+      "name": "deepseek-v4-pro:0813",
+      "label": "deepseek-v4-pro:0813",
+      "publisher": "DeepSeek",
+      "license": "See ollama.com/library",
+      "parameters": "0813",
+      "size_disk": "~831.4 GB",
+      "niche": [
+        "discovered"
+      ],
+      "specialty": "Listed on Ollama library (discovered 2026-08-17).",
+      "use_where": [
+        "https://ollama.lh",
+        "https://ai.lh"
+      ],
+      "use_how": "./leco-cli.sh ollama install deepseek-v4-pro:0813",
+      "install_cli": "./leco-cli.sh ollama install deepseek-v4-pro:0813",
+      "source_url": "https://ollama.com/library/deepseek-v4-pro",
+      "tags": [
+        "discovered"
+      ],
+      "discovered_online": true,
+      "modified_at": "2026-08-13T08:00:00-07:00"
+    },
+    {
+      "name": "deepseek-v4-pro:preview",
+      "label": "deepseek-v4-pro:preview",
+      "publisher": "DeepSeek",
+      "license": "See ollama.com/library",
+      "parameters": "preview",
+      "size_disk": "~1.5 TB",
+      "niche": [
+        "discovered"
+      ],
+      "specialty": "Listed on Ollama library (discovered 2026-08-17).",
+      "use_where": [
+        "https://ollama.lh",
+        "https://ai.lh"
+      ],
+      "use_how": "./leco-cli.sh ollama install deepseek-v4-pro:preview",
+      "install_cli": "./leco-cli.sh ollama install deepseek-v4-pro:preview",
       "source_url": "https://ollama.com/library/deepseek-v4-pro",
       "tags": [
         "discovered"
@@ -450,7 +475,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-17).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
@@ -474,7 +499,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-17).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
@@ -498,7 +523,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-17).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
@@ -522,7 +547,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-17).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
@@ -546,7 +571,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-17).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
@@ -570,7 +595,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-17).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
@@ -582,7 +607,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "modified_at": "2026-03-31T00:00:00Z"
+      "modified_at": "2026-04-20T00:00:00Z"
     },
     {
       "name": "kimi-k2.7-code",
@@ -594,7 +619,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-17).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
@@ -618,7 +643,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-17).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
@@ -642,7 +667,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-17).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
@@ -666,7 +691,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-17).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
@@ -690,7 +715,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-17).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
@@ -714,7 +739,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-17).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
@@ -738,7 +763,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-17).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
@@ -762,7 +787,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-17).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"
@@ -786,7 +811,7 @@
       "niche": [
         "discovered"
       ],
-      "specialty": "Listed on Ollama library (discovered 2026-08-02).",
+      "specialty": "Listed on Ollama library (discovered 2026-08-17).",
       "use_where": [
         "https://ollama.lh",
         "https://ai.lh"

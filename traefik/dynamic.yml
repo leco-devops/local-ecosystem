@@ -119,6 +119,17 @@ http:
       entryPoints:
       - websecure
       tls: true
+    mcp-http:
+      rule: Host(`mcp.lh`)
+      service: mcp-service
+      entryPoints:
+      - web
+    mcp-https:
+      rule: Host(`mcp.lh`)
+      service: mcp-service
+      entryPoints:
+      - websecure
+      tls: true
     r2-http:
       rule: Host(`r2.lh`)
       service: r2-service
@@ -358,6 +369,13 @@ http:
       loadBalancer:
         servers:
         - url: http://service-dashboard:8090
+    mcp-service:
+      loadBalancer:
+        # MCP streamable HTTP holds long-lived SSE responses; the default idle timeout
+        # would cut a deploy stream off mid-flight.
+        serversTransport: local-relaxed-timeout
+        servers:
+        - url: http://leco-mcp:8099
     r2-service:
       loadBalancer:
         servers:

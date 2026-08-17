@@ -97,6 +97,7 @@ Presets and versions live in **`ecosystem-stack/config/dev-stack-presets.yaml`**
 | **AirLLM** | Ollama-compatible API for very large models on modest VRAM (layer streaming) |
 | **n8n** | Workflow automation on `https://n8n.lh` beside the rest of the stack |
 | **Paperclip** | Multi-agent orchestration on `https://paperclip.lh` — org charts, goals, budgets, and governance |
+| **MCP server** | Claude Code and other AI agents deploy, onboard, and control the stack over the Model Context Protocol — [guide](docs/MCP_SERVER.md) |
 | **AI-assisted onboarding** | Dashboard flows to help scaffold and configure apps with provider abstraction |
 
 ### Cloud-shaped development (optional)
@@ -157,35 +158,45 @@ Use **Platform** profiles and `cloud-install.sh` on a VM with your domain, TLS m
 
 ```mermaid
 flowchart LR
+  Browser["Browser"] --> Traefik
+  Agent["AI agent · Claude Code"] -->|MCP| MCP["leco-mcp"]
+  Repo[("Git repository")] -->|"push · signed webhook"| CICD["CI/CD"]
+
   subgraph You["Your machine or VM"]
-    Browser["Browser"]
-    Traefik["Traefik · *.lh"]
+    Traefik["Traefik · base_domain"]
     Dash["LEco DevOps"]
     Plat["Platform · dev stacks"]
     Apps["Hosted apps"]
     AI["Ollama · WebUI · AirLLM"]
     CF["Cloudflare-local optional"]
   end
-  Repo["Your app repos"]
-  Browser --> Traefik
+
   Traefik --> Dash
   Traefik --> Plat
   Traefik --> Apps
   Traefik --> AI
   Traefik --> CF
-  Repo --> Dash
+
+  MCP --> Dash
+  CICD --> Dash
+  Repo -.->|"clone / detect"| Dash
+
   Dash -->|"read · convert · deploy"| Apps
   Dash --> Plat
 ```
 
+Three ways in, one place where decisions are made: a **browser**, an **AI agent over MCP**, or a **Git push**. Neither the MCP server nor the CI/CD engine touches Docker itself — both act through the dashboard API, so lifecycle rules, safety gates and the control token live in exactly one place.
+
 | Layer | Role |
 |-------|------|
-| **DNS** (`*.lh`) | Resolve friendly hostnames to `127.0.0.1` |
+| **DNS** (`base_domain`) | `*.lh` → `127.0.0.1` locally; a domain you own on a server |
 | **Traefik** | TLS termination and HTTP routing |
 | **ecosystem-stack** | Start order, service scripts, repair, updates |
 | **LEco DevOps** | Dashboard + APIs + docs + onboarding |
 | **Platform** | Cloud/local settings, bundles, isolated dev stacks |
 | **`leco-devops`** | CLI — detect, onboard, platform, dev-stack |
+| **`leco-mcp`** | MCP server — 60 tools so an AI agent can drive all of the above |
+| **CI/CD** | Signed webhooks → pull, deploy, verify, record, roll back |
 
 Deep dive: [Architecture](docs/ARCHITECTURE.md) · [LECo user manual](docs/LECO_USER_MANUAL.md) · [Platform tab](docs/help/03-platform-tab.md) · [Hosted apps runbook](docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md)
 
@@ -218,7 +229,11 @@ Open **http://localhost.lh** or **http://dashboard.lh** for the LEco DevOps dash
 
 | Guide | For |
 |-------|-----|
+| [START_HERE](START_HERE.md) | **Route map** — AI agents and new operators: install → deploy → operate → MCP → Skill |
 | [Setup](docs/SETUP.md) | First machine install |
+| [MCP server](docs/MCP_SERVER.md) | Let AI agents deploy and control the stack |
+| [Production hardening](docs/PRODUCTION_HARDENING.md) | **Read before exposing LEco on a real domain** |
+| [Git & CI/CD](docs/GIT_AND_CICD.md) | Onboard from a repo URL; redeploy on push |
 | [Deployment](docs/DEPLOYMENT.md) | Day-2 operations |
 | [FTP & SFTP file transfer](docs/FILE_TRANSFER.md) | Local file drop, UI access credentials, public-key SFTP |
 | [Platform tab](docs/help/03-platform-tab.md) | Dev stacks and cloud platform UI |

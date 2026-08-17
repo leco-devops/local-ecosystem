@@ -55,7 +55,14 @@ COPY dashboard/requirements.txt .
 RUN pip install --no-cache-dir --retries 5 -r requirements.txt \
   && pip install --no-cache-dir --retries 5 -e /app/tools/deploy-cli
 
+# Onboarding from a Git repository (dashboard/git_source.py) shells out to git; SSH
+# clones need the ssh client. Kept after pip so the dependency layers stay cached.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git openssh-client \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY dashboard/app.py .
+COPY dashboard/git_source.py .
 COPY dashboard/monitor.py .
 COPY dashboard/service_hub.py .
 COPY dashboard/reference_data.py .

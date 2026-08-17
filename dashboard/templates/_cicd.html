@@ -1,0 +1,569 @@
+{# CI/CD tab — self-contained: markup, scoped styles and static/cicd.js only.
+   Nothing here touches dashboard.js or dashboard.css. #}
+<section id="cicdTab" class="tab-content">
+  <h2 class="tab-heading">CI/CD</h2>
+  <p class="tab-lead muted small">
+    Push to a repository, LEco redeploys the app. Each pipeline runs
+    <strong>pull</strong> → <strong>build hook</strong> (optional) → <strong>deploy</strong> → <strong>verify</strong> →
+    <strong>record</strong>. Verify is a real HTTP probe of the app's public URL, so a deploy that leaves the app
+    returning 502 is recorded as a <em>failed</em> run, not a successful one. Every run is kept with its commit,
+    per-step status and captured log, which is also what makes rollback possible.
+  </p>
+
+  <div id="cicdBanner" class="cicd-banner-slot"></div>
+
+  <h3 class="routes-subhead" id="cicd-pipelines">1 · Pipelines</h3>
+  <p class="muted small">
+    One pipeline per application. The webhook URL goes into the Git host (GitHub → <em>Settings → Webhooks</em>,
+    GitLab → <em>Settings → Webhooks</em>); the secret is generated here and shown <strong>once</strong>.
+  </p>
+  <div class="cicd-toolbar">
+    <button type="button" id="cicdReload" class="cicd-btn">Refresh</button>
+    <button type="button" id="cicdNewToggle" class="cicd-btn cicd-btn--primary">New pipeline</button>
+    <span id="cicdPipelinesMeta" class="muted small" role="status"></span>
+  </div>
+
+  <form id="cicdCreateForm" class="cicd-form is-hidden" autocomplete="off">
+    <div class="cicd-form__grid">
+      <label class="cicd-field">
+        <span class="muted small">Application (registry id)</span>
+        <input id="cicdAppSlug" class="uc-input" type="text" list="cicdAppList" placeholder="botfeed" required />
+        <datalist id="cicdAppList"></datalist>
+      </label>
+      <label class="cicd-field">
+        <span class="muted small">Repository URL</span>
+        <input id="cicdRepoUrl" class="uc-input" type="text" placeholder="https://github.com/owner/repo.git" required />
+      </label>
+      <label class="cicd-field">
+        <span class="muted small">Branch to deploy</span>
+        <input id="cicdBranch" class="uc-input" type="text" value="main" required />
+      </label>
+      <label class="cicd-field">
+        <span class="muted small">Git host</span>
+        <select id="cicdProvider" class="uc-input">
+          <option value="auto" selected>Auto (GitHub, GitLab or generic)</option>
+          <option value="github">GitHub only</option>
+          <option value="gitlab">GitLab only</option>
+          <option value="generic">Generic signed</option>
+        </select>
+      </label>
+      <label class="cicd-field">
+        <span class="muted small">Verify URL <span class="cicd-optional">optional</span></span>
+        <input id="cicdVerifyUrl" class="uc-input" type="text" placeholder="derived from the app manifest when empty" />
+      </label>
+      <label class="cicd-field">
+        <span class="muted small">Build/test hook <span class="cicd-optional">optional</span></span>
+        <input id="cicdBuildHook" class="uc-input" type="text" placeholder="compose service, e.g. leco-ci" />
+      </label>
+    </div>
+    <label class="cicd-check"><input type="checkbox" id="cicdAutoDeploy" checked /> Auto-deploy on push</label>
+    <p class="muted small cicd-hint">
+      The build/test hook is a <strong>compose service the application itself declares</strong> — LEco runs
+      <code>docker compose run --rm --no-deps &lt;service&gt;</code> with <em>no</em> command override, so the command
+      lives in the app's own compose file (add it in <code>docker-compose.leco-hosting.yml</code> to leave the upstream
+      repo untouched). Arbitrary shell commands are deliberately not accepted: this config is reachable from an
+      internet-facing webhook, and a command string there would be host-level remote code execution.
+    </p>
+    <div class="cicd-form__actions">
+      <button type="submit" id="cicdCreateSubmit" class="cicd-btn cicd-btn--primary">Create pipeline</button>
+      <button type="button" id="cicdCreateCancel" class="cicd-btn">Cancel</button>
+      <span id="cicdCreateStatus" class="muted small" role="status" aria-live="polite"></span>
+    </div>
+  </form>
+
+  <div id="cicdSecretReveal" class="cicd-secret is-hidden" role="alert">
+    <p class="cicd-secret__title">Webhook secret — shown once</p>
+    <p class="muted small">
+      Copy it into the Git host now. It is stored server-side in <code>config/cicd-pipelines.yaml</code> (gitignored,
+      mode 0600) and is never returned by the API again. If you lose it, rotate the secret and update the Git host.
+    </p>
+    <div class="cicd-copyrow">
+      <code id="cicdSecretValue" class="cicd-secret__value"></code>
+      <button type="button" id="cicdSecretCopy" class="cicd-btn cicd-btn--copy">Copy secret</button>
+    </div>
+    <div class="cicd-copyrow">
+      <code id="cicdSecretUrl" class="cicd-secret__value"></code>
+      <button type="button" id="cicdSecretUrlCopy" class="cicd-btn cicd-btn--copy">Copy webhook URL</button>
+    </div>
+    <p class="muted small" id="cicdSecretHelp"></p>
+    <button type="button" id="cicdSecretDismiss" class="cicd-btn">I have copied it — hide</button>
+  </div>
+
+  <div id="cicdPipelines" class="cicd-pipelines">
+    <p class="muted small">Loading pipelines…</p>
+  </div>
+
+  <h3 class="routes-subhead" id="cicd-runs">2 · Run history</h3>
+  <p class="muted small">
+    Newest first. A run is <span class="cicd-legend cicd-legend--success">success</span> only when the app answered
+    after the deploy; <span class="cicd-legend cicd-legend--failed">failed</span> covers a failed pull, build, deploy
+    <em>or</em> verify. Select a row to see per-step status and the captured log.
+  </p>
+  <div class="mcp-filters">
+    <label class="mcp-filters__field mcp-filters__field--grow">
+      <span class="muted small">Pipeline</span>
+      <select id="cicdRunPipeline" class="uc-input"><option value="">All pipelines</option></select>
+    </label>
+    <label class="mcp-filters__field">
+      <span class="muted small">Status</span>
+      <select id="cicdRunStatus" class="uc-input">
+        <option value="">All statuses</option>
+        <option value="success">success</option>
+        <option value="failed">failed</option>
+        <option value="running">running</option>
+        <option value="queued">queued</option>
+        <option value="interrupted">interrupted</option>
+      </select>
+    </label>
+    <label class="mcp-filters__field">
+      <span class="muted small">Trigger</span>
+      <select id="cicdRunTrigger" class="uc-input">
+        <option value="">All triggers</option>
+        <option value="webhook">webhook</option>
+        <option value="manual">manual</option>
+        <option value="rollback">rollback</option>
+      </select>
+    </label>
+    <label class="mcp-filters__field">
+      <span class="muted small">Rows</span>
+      <select id="cicdRunLimit" class="uc-input">
+        <option value="25" selected>25</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+      </select>
+    </label>
+    <button type="button" id="cicdRunReset" class="cicd-btn">Reset filters</button>
+  </div>
+  <p id="cicdRunsMeta" class="muted small" role="status"></p>
+  <div class="routes-table-wrap">
+    <table class="routes-table cicd-table" aria-label="CI/CD run history">
+      <thead>
+        <tr>
+          <th>Started</th>
+          <th>Pipeline</th>
+          <th>Trigger</th>
+          <th>Commit</th>
+          <th>Steps</th>
+          <th>Duration</th>
+          <th>Result</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="cicdRunsBody"></tbody>
+    </table>
+  </div>
+  <div class="mcp-pager" id="cicdRunsPager"></div>
+
+  <h3 class="routes-subhead" id="cicd-run-detail">3 · Run detail</h3>
+  <div id="cicdRunDetail" class="cicd-detail">
+    <p class="muted small">Select a run above to see its steps and log.</p>
+  </div>
+
+  <h3 class="routes-subhead" id="cicd-rollback-scope">4 · What rollback does and does not cover</h3>
+  <ul class="cicd-scope">
+    <li>
+      <strong>Covers:</strong> re-checkout of the previously deployed commit and a full redeploy of the app's compose
+      project, followed by the same verify probe. The run is recorded like any other.
+    </li>
+    <li>
+      <strong>Does not cover:</strong> database schema and data. A migration that ran on the way forward is
+      <em>not</em> reversed — old code against a new schema can fail in ways a green verify probe will not catch.
+    </li>
+    <li>
+      <strong>Does not cover:</strong> volumes, uploaded files, caches, queues, or anything written by the release
+      being rolled back; nor changes made outside the repository (env files, secrets, Traefik edits).
+    </li>
+    <li>
+      <strong>Rollback target:</strong> the SHA recorded as deployed before the current one. It exists only after this
+      pipeline has deployed at least twice.
+    </li>
+  </ul>
+</section>
+
+<style>
+  /* Scoped to the CI/CD tab. Solid surfaces only — this project does not use gradients. */
+  #cicdTab .cicd-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 10px 0 14px;
+  }
+
+  #cicdTab .cicd-btn {
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border-subtle);
+    background-color: var(--surface-muted);
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  #cicdTab .cicd-btn:hover:not([disabled]) {
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  #cicdTab .cicd-btn[disabled] {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  #cicdTab .cicd-btn--primary {
+    background-color: var(--accent-strong);
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  #cicdTab .cicd-btn--danger {
+    border-color: rgba(251, 113, 133, 0.55);
+    color: #fecdd3;
+  }
+
+  #cicdTab .cicd-btn--danger:hover:not([disabled]) {
+    border-color: var(--coral);
+    color: #fff;
+  }
+
+  #cicdTab .cicd-btn--copy {
+    white-space: nowrap;
+  }
+
+  #cicdTab .is-hidden {
+    display: none !important;
+  }
+
+  #cicdTab .cicd-banner-slot:empty {
+    display: none;
+  }
+
+  #cicdTab .cicd-banner {
+    border: 1px solid rgba(251, 191, 36, 0.5);
+    background-color: rgba(251, 191, 36, 0.08);
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin: 12px 0;
+    font-size: 13px;
+    color: #fde68a;
+  }
+
+  #cicdTab .cicd-banner--bad {
+    border-color: rgba(251, 113, 133, 0.5);
+    background-color: rgba(251, 113, 133, 0.08);
+    color: #fecdd3;
+  }
+
+  #cicdTab .cicd-form {
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 14px 16px 16px;
+    background-color: var(--bg-card);
+    margin-bottom: 16px;
+  }
+
+  #cicdTab .cicd-form__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 12px;
+  }
+
+  #cicdTab .cicd-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  #cicdTab .cicd-optional {
+    color: #94a3b8;
+    font-style: italic;
+  }
+
+  #cicdTab .cicd-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #cbd5e1;
+    margin: 12px 0 4px;
+  }
+
+  #cicdTab .cicd-hint {
+    margin: 6px 0 10px;
+    line-height: 1.5;
+  }
+
+  #cicdTab .cicd-form__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  #cicdTab .cicd-secret {
+    border: 1px solid var(--amber);
+    border-radius: 10px;
+    background-color: rgba(251, 191, 36, 0.07);
+    padding: 14px 16px;
+    margin-bottom: 16px;
+  }
+
+  #cicdTab .cicd-secret__title {
+    margin: 0 0 6px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--amber);
+  }
+
+  #cicdTab .cicd-copyrow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0;
+  }
+
+  #cicdTab .cicd-secret__value {
+    flex: 1 1 320px;
+    min-width: 0;
+    padding: 6px 9px;
+    border-radius: 6px;
+    background-color: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    font-size: 12px;
+    word-break: break-all;
+  }
+
+  #cicdTab .cicd-pipelines {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 14px;
+    margin-bottom: 10px;
+  }
+
+  #cicdTab .cicd-card {
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    background-color: var(--bg-card);
+    padding: 14px 16px 16px;
+  }
+
+  #cicdTab .cicd-card__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  #cicdTab .cicd-card__title {
+    margin: 0;
+    font-size: 15px;
+    color: var(--cyan);
+  }
+
+  #cicdTab .cicd-card dl,
+  #cicdTab .cicd-detail dl {
+    display: grid;
+    grid-template-columns: minmax(90px, max-content) 1fr;
+    gap: 4px 12px;
+    margin: 10px 0;
+    font-size: 12px;
+    align-items: baseline;
+  }
+
+  #cicdTab .cicd-card dt,
+  #cicdTab .cicd-detail dt {
+    grid-column: 1;
+    color: var(--text-muted);
+  }
+
+  #cicdTab .cicd-card dd,
+  #cicdTab .cicd-detail dd {
+    grid-column: 2;
+    margin: 0;
+    word-break: break-word;
+  }
+
+  #cicdTab .cicd-card__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed rgba(148, 163, 184, 0.28);
+  }
+
+  #cicdTab .cicd-status {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+
+  #cicdTab .cicd-status--success {
+    background-color: rgba(52, 211, 153, 0.16);
+    border-color: rgba(52, 211, 153, 0.5);
+    color: #a7f3d0;
+  }
+
+  #cicdTab .cicd-status--failed {
+    background-color: rgba(251, 113, 133, 0.16);
+    border-color: rgba(251, 113, 133, 0.5);
+    color: #fecdd3;
+  }
+
+  #cicdTab .cicd-status--running,
+  #cicdTab .cicd-status--queued {
+    background-color: rgba(56, 189, 248, 0.14);
+    border-color: rgba(56, 189, 248, 0.55);
+    color: #bae6fd;
+  }
+
+  #cicdTab .cicd-status--interrupted {
+    background-color: rgba(251, 191, 36, 0.14);
+    border-color: rgba(251, 191, 36, 0.5);
+    color: #fde68a;
+  }
+
+  #cicdTab .cicd-status--none,
+  #cicdTab .cicd-status--skipped {
+    background-color: rgba(148, 163, 184, 0.12);
+    border-color: rgba(148, 163, 184, 0.42);
+    color: #cbd5e1;
+  }
+
+  #cicdTab .cicd-legend {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 1px 7px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+  }
+
+  #cicdTab .cicd-legend--success {
+    background-color: rgba(52, 211, 153, 0.16);
+    border-color: rgba(52, 211, 153, 0.5);
+    color: #a7f3d0;
+  }
+
+  #cicdTab .cicd-legend--failed {
+    background-color: rgba(251, 113, 133, 0.16);
+    border-color: rgba(251, 113, 133, 0.5);
+    color: #fecdd3;
+  }
+
+  #cicdTab .cicd-table {
+    min-width: 900px;
+  }
+
+  #cicdTab .cicd-steps {
+    display: inline-flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  #cicdTab .cicd-step-dot {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background-color: var(--surface-muted);
+    color: #cbd5e1;
+    white-space: nowrap;
+  }
+
+  #cicdTab .cicd-step-dot--ok {
+    border-color: rgba(52, 211, 153, 0.55);
+    color: #a7f3d0;
+  }
+
+  #cicdTab .cicd-step-dot--failed {
+    border-color: rgba(251, 113, 133, 0.55);
+    color: #fecdd3;
+  }
+
+  #cicdTab .cicd-step-dot--running {
+    border-color: rgba(56, 189, 248, 0.55);
+    color: #bae6fd;
+  }
+
+  #cicdTab .cicd-row--selected td {
+    background-color: rgba(139, 92, 246, 0.12);
+  }
+
+  #cicdTab .cicd-detail {
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    background-color: var(--bg-card);
+    padding: 14px 16px 16px;
+    margin-bottom: 18px;
+  }
+
+  #cicdTab .cicd-detail__steps {
+    display: grid;
+    gap: 6px;
+    margin: 12px 0;
+  }
+
+  #cicdTab .cicd-detail__step {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 10px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border-subtle);
+    background-color: var(--bg-elevated);
+    font-size: 12px;
+  }
+
+  #cicdTab .cicd-detail__step-name {
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 11px;
+    min-width: 62px;
+  }
+
+  #cicdTab .cicd-detail__step-detail {
+    flex: 1 1 240px;
+    color: #cbd5e1;
+    word-break: break-word;
+  }
+
+  #cicdTab .cicd-log {
+    max-height: 420px;
+    overflow: auto;
+    margin: 0;
+    padding: 12px;
+    border-radius: 8px;
+    background-color: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    font-size: 11.5px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  #cicdTab .cicd-scope {
+    margin: 8px 0 24px;
+    padding-left: 20px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #cbd5e1;
+  }
+
+  #cicdTab .cicd-scope li {
+    margin-bottom: 6px;
+  }
+</style>
+<script src="/static/cicd.js?v=20260817c" defer></script>

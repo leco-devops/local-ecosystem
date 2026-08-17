@@ -2,11 +2,14 @@
 
 When your application lives in a **sibling repository** (or any read-only mount), LEco **materializes** manifests under `hosting/app-available/<slug>/` and links to the real tree with a **`source`** symlink. You do not copy the whole upstream repo into hosting.
 
+> **Onboarding from a Git URL instead?** You will not need any of this. **Source: Git repository** clones into `hosting/app-sources/<id>/` — a writable directory inside the repo — and fills the App root path for you. There is no read-only mount to work around, so no `source` symlink is created. See [Onboarding new apps](help:onboarding-overview) and [Git onboarding & CI/CD](help:git-cicd). This page is for the **Local folder** source when the folder is somewhere LEco cannot write.
+
 ## Path prefixes
 
 | Prefix / form | Meaning |
 |---------------|---------|
 | `/project/...` | Path inside the ecosystem repo (writable when under `hosting/`). |
+| `hosting/app-sources/<id>` | A repository the wizard cloned for you (gitignored, writable) — no materialize needed. |
 | `wsp:MyRepo/apps/api` | **Workspace parent** sibling: `DASHBOARD_WORKSPACE_PARENT` / `LECO_WORKSPACE_PARENT_HOST` — typically read-only. |
 | Absolute host path | Mapped via `DASHBOARD_*_HOST` env vars on Docker Desktop. |
 
@@ -83,12 +86,17 @@ leco-devops ecosystem-register -E "$LECO_ECOSYSTEM_ROOT" \
   --merge-traefik
 ```
 
-## Zip instead of wsp:
+## Alternatives to `wsp:`
 
-Upload a zip → `hosting/app-available/<slug>/` contains the full tree (no `source` symlink required). Use **Detect** then **Register**.
+| Instead of a read-only sibling mount | What happens |
+|---|---|
+| **Git repository** source in the wizard | Clones to `hosting/app-sources/<id>/` (writable, gitignored) and fills App root path — no `source` symlink, no materialize step. Best on a server. |
+| **Zip upload** | `hosting/app-available/<slug>/` contains the full tree. Use **Detect** then **Register**. |
 
 ## Related
 
+- [Onboarding new apps](help:onboarding-overview)
+- [Git onboarding & CI/CD](help:git-cicd)
 - [Hosting layout](help:hosting-layout)
 - [Multi-Wrangler monorepos](help:multi-wrangler-monorepo)
 - [Overriding upstream apps](help:hosting-overrides)

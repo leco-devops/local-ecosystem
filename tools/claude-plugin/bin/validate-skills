@@ -1,0 +1,109 @@
+#!/usr/bin/env python3
+"""Assert every SKILL.md in this plugin has legal frontmatter.
+
+Claude Code accepts exactly six keys in SKILL.md frontmatter. Anything else is
+rejected with "Unexpected key(s) in SKILL.md frontmatter" and that *one* skill
+silently stops loading — the plugin still validates, still installs, and the
+command just is not there. `argument-hint`, which is legal in a legacy
+commands/*.md file, is the trap this script exists to catch after the
+commands-into-skills migration.
+
+Usage:  bin/validate-skills [plugin_dir]     (default: the plugin root)
+Exit:   0 all good, 1 something is wrong.
+"""
+
+from __future__ import annotations
+
+import pathlib
+import sys
+
+ALLOWED = {"allowed-tools", "compatibility", "description", "license", "metadata", "name"}
+REQUIRED = {"name", "description"}
+
+
+def parse_frontmatter(text: str) -> dict:
+    """Return the frontmatter mapping. Raises ValueError if it is not one."""
+    if not text.startswith("---\n"):
+        raise ValueError("file does not start with a --- frontmatter block")
+    try:
+        end = text.index("\n---\n", 3)
+    except ValueError as exc:  # noqa: PERF203
+        raise ValueError("frontmatter block is never closed") from exc
+    raw = text[4 : end + 1]
+
+    try:
+        import yaml  # noqa: PLC0415
+    except ImportError:
+        # Strict flat fallback: `key: value` only. Anything else is refused
+        # rather than guessed at, so a pass here means the same as a YAML pass.
+        data: dict = {}
+        for lineno, line in enumerate(raw.splitlines(), start=2):
+            if not line.strip() or line.lstrip().startswith("#"):
+                continue
+            if line[:1].isspace() or ":" not in line:
+                raise ValueError(
+                    f"line {lineno}: install PyYAML to validate non-flat frontmatter"
+                )
+            key, _, value = line.partition(":")
+            data[key.strip()] = value.strip().strip("\"'")
+        return data
+
+    loaded = yaml.safe_load(raw)
+    if not isinstance(loaded, dict):
+        raise ValueError("frontmatter is not a key/value mapping")
+    return loaded
+
+
+def main(argv: list[str]) -> int:
+    root = pathlib.Path(argv[1]) if len(argv) > 1 else pathlib.Path(__file__).resolve().parent.parent
+    plugin_name = "leco"
+    manifest = root / ".claude-plugin" / "plugin.json"
+    if manifest.is_file():
+        import json  # noqa: PLC0415
+
+        plugin_name = json.loads(manifest.read_text()).get("name", plugin_name)
+
+    skills = sorted(root.glob("skills/*/SKILL.md"))
+    if not skills:
+        print(f"FAIL: no skills found under {root}/skills", file=sys.stderr)
+        return 1
+
+    failures = 0
+    seen: dict[str, pathlib.Path] = {}
+    for path in skills:
+        label = path.parent.name
+        try:
+            front = parse_frontmatter(path.read_text())
+        except ValueError as exc:
+            print(f"FAIL {label}: {exc}")
+            failures += 1
+            continue
+
+        unexpected = sorted(set(front) - ALLOWED)
+        if unexpected:
+            print(f"FAIL {label}: unexpected key(s) in frontmatter: {', '.join(unexpected)}")
+            failures += 1
+            continue
+        missing = sorted(REQUIRED - set(front))
+        if missing:
+            print(f"FAIL {label}: missing required key(s): {', '.join(missing)}")
+            failures += 1
+            continue
+
+        name = str(front["name"])
+        if name in seen:
+            print(f"FAIL {label}: name '{name}' already used by {seen[name].parent.name}")
+            failures += 1
+            continue
+        seen[name] = path
+        if name != label:
+            print(f"WARN {label}: frontmatter name '{name}' differs from its directory")
+
+        print(f"ok   /{plugin_name}:{name}")
+
+    print(f"\n{len(skills)} skill(s) checked, {failures} failure(s).")
+    return 1 if failures else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))

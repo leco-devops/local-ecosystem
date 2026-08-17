@@ -53,6 +53,12 @@ profiles:
     bundles:
       - file-transfer-full
 
+  agent-full:
+    description: Minimal + MCP server so AI agents can drive the platform
+    extends: minimal
+    services:
+      - mcp
+
   full:
     description: All ecosystem services and bundles
     services:
@@ -65,6 +71,7 @@ profiles:
       - paperclip-postgres
       - paperclip
       - dashboard
+      - mcp
       - update-catalog
       - cloudflare-local
       - infra

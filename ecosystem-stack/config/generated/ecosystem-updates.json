@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "generated_at": "2026-08-02T05:33:18Z",
+  "generated_at": "2026-08-17T02:47:13Z",
   "services": [
     {
       "id": "traefik",
@@ -28,7 +28,11 @@
         "Models persist in Docker volume ollama"
       ],
       "source": "docker_hub",
-      "latest": null
+      "latest": {
+        "tag": "0.0.13",
+        "updated": "2023-08-04T04:30:07.039025Z",
+        "full": "ollama/ollama:0.0.13"
+      }
     },
     {
       "id": "airllm",
@@ -74,7 +78,11 @@
         "./ecosystem-stack/ecosystem-stack.sh restart n8n"
       ],
       "source": "docker_hub",
-      "latest": null
+      "latest": {
+        "tag": "0.1.2",
+        "updated": "2019-06-23T15:34:57.369403Z",
+        "full": "n8nio/n8n:0.1.2"
+      }
     },
     {
       "id": "paperclip",
@@ -106,7 +114,11 @@
         "./ecosystem-stack/ecosystem-stack.sh restart paperclip-postgres"
       ],
       "source": "docker_hub",
-      "latest": null
+      "latest": {
+        "tag": "9.1.17",
+        "updated": "2015-06-04T22:35:58Z",
+        "full": "postgres:9.1.17"
+      }
     },
     {
       "id": "postgres",
@@ -120,7 +132,11 @@
         "./ecosystem-stack/ecosystem-stack.sh restart postgres"
       ],
       "source": "docker_hub",
-      "latest": null
+      "latest": {
+        "tag": "9.1.16",
+        "updated": "2015-06-03T02:21:53Z",
+        "full": "postgres:9.1.16"
+      }
     },
     {
       "id": "dashboard",
@@ -143,13 +159,6 @@
   "model_alerts": [
     {
       "type": "ollama_model",
-      "name": "deepseek-v4-flash",
-      "message": "New or trending on Ollama library: deepseek-v4-flash",
-      "install": "./leco-cli.sh ollama install deepseek-v4-flash",
-      "help": "ollama"
-    },
-    {
-      "type": "ollama_model",
       "name": "deepseek-v4-flash:0731",
       "message": "New or trending on Ollama library: deepseek-v4-flash:0731",
       "install": "./leco-cli.sh ollama install deepseek-v4-flash:0731",
@@ -157,9 +166,23 @@
     },
     {
       "type": "ollama_model",
-      "name": "deepseek-v4-pro",
-      "message": "New or trending on Ollama library: deepseek-v4-pro",
-      "install": "./leco-cli.sh ollama install deepseek-v4-pro",
+      "name": "deepseek-v4-flash:preview",
+      "message": "New or trending on Ollama library: deepseek-v4-flash:preview",
+      "install": "./leco-cli.sh ollama install deepseek-v4-flash:preview",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "deepseek-v4-pro:0813",
+      "message": "New or trending on Ollama library: deepseek-v4-pro:0813",
+      "install": "./leco-cli.sh ollama install deepseek-v4-pro:0813",
+      "help": "ollama"
+    },
+    {
+      "type": "ollama_model",
+      "name": "deepseek-v4-pro:preview",
+      "message": "New or trending on Ollama library: deepseek-v4-pro:preview",
+      "install": "./leco-cli.sh ollama install deepseek-v4-pro:preview",
       "help": "ollama"
     },
     {
@@ -268,6 +291,6 @@
       "help": "ollama"
     }
   ],
-  "ollama_new_count": 18,
-  "airllm_catalog_count": 19
+  "ollama_new_count": 19,
+  "airllm_catalog_count": 17
 }
