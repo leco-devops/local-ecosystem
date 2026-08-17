@@ -38,12 +38,17 @@ Registering it with Claude Code, either way:
 
 ```bash
 # as this plugin (skill + /leco:* commands + MCP in one install)
-claude plugin marketplace add ./
+claude plugin marketplace add /absolute/path/to/local-ecosystem
 claude plugin install leco@leco-devops-open-project
 
 # or the bare server
 claude mcp add leco-devops -- leco-mcp stdio
 ```
+
+> Use the **absolute path** to this checkout rather than `./` — `marketplace add` resolves a
+> relative path against your current directory, and you are usually standing in the app you are
+> onboarding. The GitHub form clones the repo's **default branch**; if the plugin is not merged
+> there you get "Marketplace file not found", which means *wrong branch*, not broken install.
 
 `claude mcp list` should then report the `leco-devops` server **Connected**. A plugin that
 installs but yields no tools almost always means `leco-mcp` itself is not importable.

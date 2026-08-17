@@ -72,16 +72,38 @@ Three ways in. They do the same thing; pick one.
 Bundles the MCP server, the `operate` skill and the slash commands in one install.
 
 ```bash
-claude plugin marketplace add ./              # from this checkout
+claude plugin marketplace add /absolute/path/to/local-ecosystem
 claude plugin install leco@leco-devops-open-project
 ```
 
-From anywhere (no checkout needed):
+**Use the absolute path, not `./`.** `marketplace add` resolves a relative path against your
+shell's working directory, and the natural moment to run this is while you are standing in the
+*application* you want to onboard — not in this repo. The dashboard prints this machine's real
+path under **MCP → 2 · Install on an agent**.
+
+### The GitHub form, and why it may fail
 
 ```bash
 claude plugin marketplace add leco-devops/local-ecosystem
-claude plugin install leco@leco-devops-open-project
 ```
+
+This clones the repository's **default branch**. If the plugin has not been merged there yet, the
+clone succeeds, the marketplace file is absent, and you get:
+
+```
+✘ Failed to add marketplace: Marketplace file not found at
+  ~/.claude/plugins/marketplaces/leco-devops-local-ecosystem/.claude-plugin/marketplace.json
+```
+
+That message reads like a broken install; it actually means *this branch does not carry the
+plugin*. Check before blaming the tool:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' \
+  https://raw.githubusercontent.com/leco-devops/local-ecosystem/main/.claude-plugin/marketplace.json
+```
+
+`404` → use the local-path form above. There is no `--branch` flag on `marketplace add`.
 
 Then `/leco:status`, `/leco:onboard`, `/leco:diagnose`, `/leco:routes`, `/leco:up`, and more — the
 **MCP → 3 · Plugin commands** table lists every one with its description.

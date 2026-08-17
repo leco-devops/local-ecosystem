@@ -14,7 +14,7 @@ See [deploy-cli/README.md](deploy-cli/README.md) and [docs/DEPLOY_CLI.md](../doc
 ## Claude Code plugin
 
 - **Path:** [`claude-plugin/`](claude-plugin/)
-- **Install:** `claude plugin marketplace add ./` (repo root) then `claude plugin install leco@leco-devops-open-project`
+- **Install:** `claude plugin marketplace add <absolute path to this repo>` (not `./` — it resolves against your current directory) then `claude plugin install leco@leco-devops-open-project`
 
 Packages the **`leco-devops` MCP server** ([`mcp-server/`](mcp-server/)) with an operations skill, the `/leco:status`, `/leco:up`, `/leco:diagnose`, `/leco:onboard`, and `/leco:routes` commands, and a read-only `leco-diagnostician` subagent. Requires `pip install -e tools/mcp-server` first.
 

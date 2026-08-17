@@ -59,9 +59,13 @@ leco-mcp doctor          # connectivity + configuration report; non-zero exit if
 Then add this repository as a plugin marketplace and install the plugin:
 
 ```bash
-claude plugin marketplace add ./            # from the repository root
+claude plugin marketplace add /absolute/path/to/local-ecosystem
 claude plugin install leco@leco-devops-open-project
 ```
+
+> Give it the **absolute path**, not `./`. `marketplace add` resolves a relative path against your
+> shell's working directory, and you are usually standing in the application you are onboarding
+> rather than in this repository.
 
 From another checkout or over the network, point the marketplace at the repository instead:
 
@@ -69,6 +73,16 @@ From another checkout or over the network, point the marketplace at the reposito
 claude plugin marketplace add leco-devops/local-ecosystem
 claude plugin install leco@leco-devops-open-project
 ```
+
+> This clones the repository's **default branch**. Until the plugin is merged there, it fails with
+> `Marketplace file not found at …/.claude-plugin/marketplace.json` — which means *that branch does
+> not carry the plugin*, not that anything is broken. `marketplace add` has no `--branch` flag, so
+> use the local-path form until the merge lands. Check with:
+>
+> ```bash
+> curl -s -o /dev/null -w '%{http_code}\n' \
+>   https://raw.githubusercontent.com/leco-devops/local-ecosystem/main/.claude-plugin/marketplace.json
+> ```
 
 Verify:
 

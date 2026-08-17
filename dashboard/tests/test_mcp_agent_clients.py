@@ -88,3 +88,29 @@ def test_claude_code_offers_the_plugin_first(clients):
     steps = clients["claude-code"]["steps"]
     assert "marketplace add" in steps[0]["command"]
     assert QUALIFIED in steps[1]["command"]
+
+
+def test_marketplace_command_uses_an_absolute_path(clients, monkeypatch):
+    """`marketplace add ./` fails from any directory but this repo's root.
+
+    The reported failure was run from a sibling application directory, which is exactly where an
+    operator stands when they decide to onboard it. A relative path is wrong there, and the error
+    Claude Code prints ("Marketplace file not found") points at the marketplace file rather than
+    at the working directory, so it does not lead you to the cause.
+    """
+    import mcp_insights
+
+    monkeypatch.setattr(
+        "project_paths.host_project_root", lambda: "/Users/someone/GitHub/local-ecosystem"
+    )
+    payload = mcp_insights.build_install()
+
+    local = payload["plugin"]["marketplace_local"]
+    assert local.endswith("/local-ecosystem"), local
+    assert not local.rstrip().endswith("./"), "relative path only works from the repo root"
+
+    # The GitHub form is kept, but the UI must be able to explain the default-branch trap.
+    assert payload["plugin"]["marketplace_github_requires_default_branch"] is True
+
+    step = clients["claude-code"]["steps"][0]["command"]
+    assert " ./" not in step and step.rstrip() != "claude plugin marketplace add ./"

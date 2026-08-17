@@ -26,9 +26,14 @@ You do not need the container for local Claude Code use.
 The quickest path installs everything at once — MCP tools, a skill that teaches the platform, and slash commands:
 
 ```bash
-claude plugin marketplace add ./
+claude plugin marketplace add /absolute/path/to/local-ecosystem
 claude plugin install leco@leco-devops-open-project
 ```
+
+> Use the **absolute path** to this checkout rather than `./` — `marketplace add` resolves a
+> relative path against your current directory, and you are usually standing in the app you are
+> onboarding. The GitHub form clones the repo's **default branch**; if the plugin is not merged
+> there you get "Marketplace file not found", which means *wrong branch*, not broken install.
 
 That gives you `/leco:status`, `/leco:up`, `/leco:diagnose`, `/leco:onboard`, and `/leco:routes`.
 

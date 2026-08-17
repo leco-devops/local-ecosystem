@@ -14388,8 +14388,16 @@ function renderMcpInstallPanel(install) {
   const cards = [];
 
   const pluginCmds = [
-    mcpCommandRow("Add the marketplace (local checkout)", plugin.marketplace_local, "", { available: plugin.available }),
-    mcpCommandRow("Add the marketplace (from GitHub)", plugin.marketplace_github),
+    mcpCommandRow("Add the marketplace (this machine)", plugin.marketplace_local, "Absolute path — works from any directory, including the app you are onboarding.", {
+      available: plugin.available,
+    }),
+    mcpCommandRow(
+      "Add the marketplace (from GitHub)",
+      plugin.marketplace_github,
+      plugin.marketplace_github_requires_default_branch
+        ? "Clones the repository's <strong>default branch</strong>. If the plugin has not been merged there, this fails with <em>“Marketplace file not found”</em> — use the command above instead."
+        : ""
+    ),
     mcpCommandRow("Install the plugin", plugin.install, "", { available: plugin.available }),
   ]
     .filter(Boolean)

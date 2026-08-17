@@ -6,12 +6,12 @@ _Written by `atlas worklog`. Measured from git and the corpus; no prompt text, a
 
 | | |
 |---|---|
-| Commits | 7 |
-| Lines | +36,022 / −2,869 |
+| Commits | 8 |
+| Lines | +37,092 / −2,880 |
 | Desks | local-ecosystem |
-| Rework rate | 43.7% — a file re-touched within 3 days |
+| Rework rate | 44% — a file re-touched within 3 days |
 | Reverts | 0 |
-| Documentation | 308 blocking finding(s) at end of day |
+| Documentation | 312 blocking finding(s) at end of day |
 
 ## Plan items advanced
 
@@ -26,6 +26,7 @@ _None named. Work that names no item is work the plan cannot see._
 - `0f12a6b` fix(ai-onboarding): stop destroying existing config, and see the files that matter
 - `8dff835` feat(mcp): evidence-driven onboarding and route verification for complex apps
 - `95fc6c2` docs: refresh the day's worklog after the MCP onboarding work
+- `6ab57a0` feat(mcp): per-agent setup guidance, and stop harvesting cert names from app data
 
 ---
 

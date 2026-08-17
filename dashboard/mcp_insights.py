@@ -986,6 +986,8 @@ def build_plugin_commands(plugin_name: str, repository: str) -> list[dict[str, A
 
 def build_install() -> dict[str, Any]:
     """Everything needed to install the tooling on an agent, verified against disk."""
+    from project_paths import host_project_root
+
     root = project_root()
     plugin_manifest = _read_json(root / PLUGIN_REL / ".claude-plugin" / "plugin.json") or {}
     marketplace = _read_json(root / ".claude-plugin" / "marketplace.json") or {}
@@ -1047,8 +1049,17 @@ def build_install() -> dict[str, Any]:
         "repository": repository,
         "plugin": {
             "name": qualified,
-            "marketplace_local": "claude plugin marketplace add ./",
+            # Absolute, not "./". `marketplace add` resolves a relative path against the shell's
+            # working directory, so "./" only works when you happen to be standing in this repo —
+            # and the natural moment to run it is while you are inside the *application* you are
+            # onboarding. The absolute path works from anywhere.
+            "marketplace_local": f"claude plugin marketplace add {host_project_root().rstrip('/')}",
+            # `marketplace add <owner>/<repo>` clones the repository's DEFAULT branch. If the
+            # plugin has not been merged there yet, the clone succeeds and the marketplace file is
+            # missing, which surfaces as "Marketplace file not found at …" — an error that reads
+            # like a broken install rather than a branch that does not carry the plugin.
             "marketplace_github": f"claude plugin marketplace add {_repo_slug(repository)}",
+            "marketplace_github_requires_default_branch": True,
             "install": f"claude plugin install {qualified}",
             "path": PLUGIN_REL,
             "url": tree_url(PLUGIN_REL),
@@ -1117,7 +1128,11 @@ def build_agent_clients(qualified_plugin: str) -> list[dict[str, Any]]:
             "verified": True,
             "summary": "The plugin is the fastest path: it brings the MCP server, the operate skill and the slash commands in one install.",
             "steps": [
-                {"label": "Add the marketplace", "command": "claude plugin marketplace add ./"},
+                {
+                    "label": "Add the marketplace",
+                    "command": f"claude plugin marketplace add {host_root}",
+                    "hint": "Absolute path, so it works from whatever directory you happen to be in.",
+                },
                 {"label": "Install the plugin", "command": f"claude plugin install {qualified_plugin}"},
                 {
                     "label": "Or register HTTP directly (nothing to install)",

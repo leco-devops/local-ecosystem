@@ -50,9 +50,14 @@ claude mcp add leco-devops -- leco-mcp stdio
 ### As a Claude Code plugin (skill + commands + MCP in one install)
 
 ```bash
-claude plugin marketplace add ./
+claude plugin marketplace add /absolute/path/to/local-ecosystem
 claude plugin install leco@leco-devops-open-project
 ```
+
+> Use the **absolute path** to this checkout rather than `./` — `marketplace add` resolves a
+> relative path against your current directory, and you are usually standing in the app you are
+> onboarding. The GitHub form clones the repo's **default branch**; if the plugin is not merged
+> there you get "Marketplace file not found", which means *wrong branch*, not broken install.
 
 This installs the MCP server **plus** the `leco-devops` skill (operating rules and workflows), the `/leco:status`, `/leco:up`, `/leco:diagnose`, `/leco:onboard`, `/leco:routes` commands, and a read-only diagnostician subagent. See [`tools/claude-plugin/README.md`](../tools/claude-plugin/README.md).
 
