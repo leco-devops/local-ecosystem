@@ -1108,7 +1108,14 @@ def build_agent_clients(qualified_plugin: str) -> list[dict[str, Any]]:
     from project_paths import host_project_root
 
     host_root = host_project_root().rstrip("/")
-    venv_bin = f"{host_root}/{MCP_PACKAGE_REL}/.venv/bin/leco-mcp"
+    # A venv puts its executables in bin/ on macOS and Linux but Scripts/ on Windows, and
+    # the binary gains a .exe suffix there. The dashboard runs in a Linux container and
+    # cannot know the client's OS, so — as with config_paths_other above — emit the POSIX
+    # form as the primary and carry the Windows form alongside it rather than handing a
+    # Windows user a path that silently does not exist.
+    venv_dir = f"{host_root}/{MCP_PACKAGE_REL}/.venv"
+    venv_bin = f"{venv_dir}/bin/leco-mcp"
+    venv_bin_windows = f"{venv_dir}\\Scripts\\leco-mcp.exe".replace("/", "\\")
     http_local = ENDPOINTS["host"]
 
     def stdio_json(key: str = "mcpServers") -> str:
@@ -1154,7 +1161,22 @@ def build_agent_clients(qualified_plugin: str) -> list[dict[str, Any]]:
                 "Linux: ~/.config/Claude/claude_desktop_config.json",
             ],
             "config": stdio_json(),
-            "steps": [{"label": "Install the server first (stdio needs it)", "command": f"python3 -m venv {host_root}/{MCP_PACKAGE_REL}/.venv && {host_root}/{MCP_PACKAGE_REL}/.venv/bin/pip install -e {host_root}/{MCP_PACKAGE_REL}"}],
+            "steps": [
+                {
+                    "label": "Install the server first (stdio needs it)",
+                    "command": f"python3 -m venv {venv_dir} && {venv_dir}/bin/pip install -e {host_root}/{MCP_PACKAGE_REL}",
+                },
+                {
+                    "label": "On Windows, the venv layout differs — use this command instead",
+                    "command": f"py -m venv {venv_dir} && {venv_dir}\\Scripts\\pip install -e {host_root}/{MCP_PACKAGE_REL}".replace(
+                        host_root + "/", host_root.replace("/", "\\") + "\\"
+                    ),
+                },
+                {
+                    "label": "…and this as the \"command\" value in the config above",
+                    "command": venv_bin_windows,
+                },
+            ],
             "note": "<strong>Merge</strong> into the existing <code>mcpServers</code> object rather than replacing the file. Then quit and reopen the app fully — closing the window is not a restart. Remote (HTTP) servers go through Settings → Connectors instead, and a connector cannot reach a <code>localhost</code> URL.",
         },
         {

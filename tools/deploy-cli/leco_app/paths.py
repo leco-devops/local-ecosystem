@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import posixpath
 from pathlib import Path
 
 _WSP_CONTAINER_DEFAULT = "/workspace-parent"
@@ -47,11 +48,17 @@ def remap_workspace_parent_path(
     Map ``/workspace-parent/UtilityServer/foo`` → host sibling checkout when running
     ``leco-devops`` on the workstation (outside ``service-dashboard``).
     """
-    ts = os.path.normpath(str(target))
+    # Both sides are compared in POSIX form. `target` is a *container* path, which is
+    # always POSIX regardless of the host — but os.path.normpath rewrites separators to
+    # the host's, so on Windows this produced "\workspace-parent\x" and compared it
+    # against "/workspace-parent", never matched, and returned None for every input.
+    # Callers read that as "no remap needed" and fall through to resolving the raw
+    # container path on the host, which fails much later as a missing compose file.
+    ts = posixpath.normpath(Path(target).as_posix())
     wsp_c = (os.environ.get("LECO_WORKSPACE_PARENT_CONTAINER") or _WSP_CONTAINER_DEFAULT).rstrip("/")
-    if not (ts == wsp_c or ts.startswith(wsp_c + os.sep)):
+    if not (ts == wsp_c or ts.startswith(wsp_c + "/")):
         return None
-    rel = ts[len(wsp_c) :].lstrip(os.sep)
+    rel = ts[len(wsp_c) :].lstrip("/")
     host_wsp = (os.environ.get("LECO_WORKSPACE_PARENT_HOST") or "").strip()
     if not host_wsp and ecosystem_root is not None:
         host_wsp = str(ecosystem_root.parent)

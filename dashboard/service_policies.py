@@ -43,7 +43,11 @@ def load_policies() -> dict[str, Any]:
     """Return {target_id: policy_str} for every known target."""
     raw: dict[str, str] = {}
     try:
-        with open(_POLICIES_FILE, "r") as f:
+        # Explicit encoding: Python's text default is the locale's, which is cp1252 on a
+        # Windows host. This file is written as UTF-8 by the Linux container, and cp1252
+        # has a mapping for almost every byte, so a mismatch corrupts silently instead of
+        # raising — the worst possible failure for a config file two processes share.
+        with open(_POLICIES_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
         for entry in data.get("policies", []):
             tid = entry.get("target_id", "")
@@ -69,7 +73,7 @@ def save_policies(updates: dict[str, str]) -> dict[str, Any]:
     ]
     payload = {"_comment": "Per-service default policies. See docs/CF_LECO_SERVICE_MAP.md.", "policies": entries}
     os.makedirs(os.path.dirname(_POLICIES_FILE), exist_ok=True)
-    with open(_POLICIES_FILE, "w") as f:
+    with open(_POLICIES_FILE, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2, ensure_ascii=False)
         f.write("\n")
     return current
