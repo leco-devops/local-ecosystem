@@ -368,15 +368,54 @@ venv is gitignored. This is the path verified on this machine.
 
 ### Option B — pipx, for `leco-mcp` on your `PATH`
 
+pipx is not part of Python — install it first. Pick your platform:
+
+**macOS**
+
 ```bash
-brew install pipx && pipx ensurepath     # macOS; apt/dnf elsewhere
-pipx install ./tools/mcp-server
+brew install pipx && pipx ensurepath
+# no Homebrew:
+python3 -m pip install --user pipx && python3 -m pipx ensurepath
 ```
 
-Open a new shell afterwards so `PATH` picks it up.
+**Linux**
+
+```bash
+sudo apt install pipx          # Debian / Ubuntu 23.04+
+sudo dnf install pipx          # Fedora / RHEL
+sudo pacman -S python-pipx     # Arch
+python3 -m pip install --user pipx   # older distros, no package available
+pipx ensurepath
+```
+
+**Windows**
+
+LEco DevOps itself runs under **WSL2** — inside the WSL shell, use the Linux commands above. You
+only need native Windows pipx when the *client* is a Windows app (Claude Desktop, Cursor) speaking
+**stdio**; in PowerShell:
+
+```powershell
+py -m pip install --user pipx
+py -m pipx ensurepath
+# or, with Scoop:  scoop install pipx
+```
+
+> On Windows, the **HTTP transport** (§0) sidesteps this entirely — the container already serves it
+> and nothing needs installing on the Windows side. Prefer it.
+
+Then, from the repo root:
+
+```bash
+pipx install ./tools/mcp-server
+leco-mcp doctor
+```
+
+Open a new shell afterwards so `PATH` picks up `~/.local/bin` (pipx's app directory).
 
 > `pip install --user` is **not** a third option on modern macOS/Linux: a Homebrew or
 > distro Python refuses it under PEP 668 (`externally-managed-environment`). Use a venv or pipx.
+> That refusal applies to `pip install -e tools/mcp-server` too, which is why the plain `pip`
+> form is not offered above.
 
 ### Option C — point the launcher at any of the above
 
@@ -415,7 +454,10 @@ tools/mcp-server/.venv/bin/leco-mcp doctor   # stdio install
 | Tool count is **60, not 65** | Same — image predates the current tools | As above |
 | GUI app: server never appears, no error | Bare `leco-mcp` not on the app's `PATH` | Use the absolute venv path (§2) |
 | `command not found: leco-mcp` | Not installed | §7 |
+| `command not found: pipx` | pipx is not bundled with Python | Install it per-platform (§7, Option B) |
+| `leco-mcp` installs but stays "not found" | `~/.local/bin` not on `PATH` yet | `pipx ensurepath`, then open a new shell |
 | `externally-managed-environment` | PEP 668 blocking `pip install` | venv or pipx (§7) |
+| Launcher prints an install hint, client shows `CONNECTION_CLOSED` | Source tree found, dependencies missing — nothing is installed | §7 |
 | HTTP 406 from the endpoint | `Accept` missing `text/event-stream` | Send both content types (§0) |
 | Remote entry ignored | Client wants a different key than `url` | Try `serverUrl` / `httpUrl` / `"type":"http"`, else stdio (§5) |
 | TLS failure on `https://mcp.lh/mcp` | Root cert missing on that machine | Install it, or use `http://…:8099/mcp` |

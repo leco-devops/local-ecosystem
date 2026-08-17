@@ -64,11 +64,29 @@ tools/mcp-server/.venv/bin/pip install -e tools/mcp-server
 tools/mcp-server/.venv/bin/leco-mcp doctor
 ```
 
-Use the absolute path to `tools/mcp-server/.venv/bin/leco-mcp` in your client config. `pipx install
-./tools/mcp-server` is the alternative if you want it on your `PATH`.
+Use the absolute path to `tools/mcp-server/.venv/bin/leco-mcp` in your client config.
+
+`pipx install ./tools/mcp-server` is the alternative if you want it on your `PATH` — but pipx does
+not ship with Python, so install pipx first:
+
+| Platform | Command |
+|---|---|
+| macOS | `brew install pipx && pipx ensurepath` |
+| Debian / Ubuntu | `sudo apt install pipx && pipx ensurepath` |
+| Fedora / RHEL | `sudo dnf install pipx && pipx ensurepath` |
+| Arch | `sudo pacman -S python-pipx && pipx ensurepath` |
+| No package available | `python3 -m pip install --user pipx && python3 -m pipx ensurepath` |
+| Windows (WSL2) | Use the Linux row for your distro, inside the WSL shell |
+| Windows (native client) | `py -m pip install --user pipx` then `py -m pipx ensurepath` |
+
+Open a new shell afterwards so `PATH` picks up `~/.local/bin`.
 
 > `pip install --user` will not work on a current macOS or Linux Python — it refuses with
-> `externally-managed-environment`. Use the venv above or pipx.
+> `externally-managed-environment` (PEP 668). So will `pip install -e tools/mcp-server`. Use the
+> venv above or pipx.
+
+> On Windows, the HTTP transport avoids all of this — the container serves it and nothing needs
+> installing on the Windows side.
 
 ## What an agent may do
 

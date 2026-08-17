@@ -45,6 +45,14 @@ leco-mcp doctor                          # always verify before wiring it up
 claude mcp add leco-devops -- leco-mcp stdio
 ```
 
+> **`pipx: command not found`** — pipx is not part of Python. `brew install pipx` on macOS,
+> `sudo apt install pipx` / `sudo dnf install pipx` / `sudo pacman -S python-pipx` on Linux,
+> `py -m pip install --user pipx` on Windows; then `pipx ensurepath` and a new shell. Per-platform
+> detail and the venv alternative: [Connect an AI agent](help:connect-ai-agents).
+>
+> `pip install -e tools/mcp-server` is not a shortcut — a Homebrew or distro Python refuses it
+> under PEP 668 (`externally-managed-environment`).
+
 Shared HTTP endpoint for agents on other machines:
 
 ```bash

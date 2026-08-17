@@ -38,13 +38,29 @@ This page is the **route map**: pick the row that matches what you were asked to
 ```bash
 git clone https://github.com/leco-devops/local-ecosystem.git
 cd local-ecosystem
-./ecosystem-stack/install-foundation.sh      # checks dependencies, asks per service
-./ecosystem-stack/ecosystem-stack.sh start   # or: … menu
+./setup.sh                  # dependencies, service selection, DNS, TLS, dashboard login
+./start.sh                  # start what you selected, in dependency order
 ```
+
+`./setup.sh --yes` runs the whole thing without a single prompt — every question has a
+default, so it works unattended in CI or on a headless box. `traefik` and `dashboard` are
+essential and always installed; everything else is opt-in and can be added later.
 
 Open **`http://dashboard.lh`**.
 
-Prerequisites are real: without `*.lh` DNS and a trusted mkcert root, routing and HTTPS will not work. Do not skip [`docs/SETUP.md`](docs/SETUP.md).
+Day-to-day entry points:
+
+| Command | Does |
+|---|---|
+| `./start.sh` · `--stop` · `--restart` · `--status` | stack lifecycle, in dependency order |
+| `./ecosystem-stack/scripts/dns-setup.sh` | make `*.lh` resolve (`--check`, `--remove`) |
+| `./ecosystem-stack/scripts/install-autostart.sh` | start at boot (systemd / launchd, `--system` for a headless Mac) |
+| `./uninstall.sh --dry-run` | show everything an install put on this machine |
+| `windows\Install-LecoWindows.ps1` | the Windows-side half of a WSL2 install |
+
+Prerequisites are real: without `*.lh` DNS and a trusted mkcert root, routing and HTTPS will not work. `./setup.sh` handles both, and [`docs/SETUP.md`](docs/SETUP.md) explains what it did.
+
+**Windows:** the platform runs inside **WSL2** — there is no native port. See [`windows/README.md`](windows/README.md) for the two things WSL2 cannot do for itself (wildcard DNS for the Windows browser, and trusting the CA in the Windows certificate store).
 
 **Install profiles** ([`ecosystem-stack/config/install-profiles.yaml`](ecosystem-stack/config/install-profiles.yaml)) decide which services you get:
 
@@ -108,6 +124,11 @@ pipx install ./tools/mcp-server
 leco-mcp doctor                              # verify connectivity first
 claude mcp add leco-devops -- leco-mcp stdio
 ```
+
+No pipx yet? `brew install pipx` (macOS) · `sudo apt install pipx` / `sudo dnf install pipx` /
+`sudo pacman -S python-pipx` (Linux) · `py -m pip install --user pipx` (Windows) — then
+`pipx ensurepath` and a new shell. Plain `pip install` is refused by Homebrew and distro Pythons
+under PEP 668; per-platform detail is in [`docs/CONNECT_AI_AGENTS.md`](docs/CONNECT_AI_AGENTS.md#7-installing-leco-mcp-for-stdio).
 
 Shared endpoint for remote agents: `./ecosystem-stack/services/mcp.sh start` → `https://mcp.lh/mcp`.
 

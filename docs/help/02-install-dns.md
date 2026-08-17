@@ -2,13 +2,54 @@
 
 Local hostnames use the **`.lh`** TLD (e.g. `localhost.lh`, `ollama.lh`, `airllm.lh`).
 
-## macOS / Linux — `/etc/hosts`
+## macOS / Linux — one command
 
-Add lines (or use your project's install script if provided):
+```bash
+./ecosystem-stack/scripts/dns-setup.sh
+```
+
+It picks the right mechanism for the host and is idempotent — safe to re-run, and
+`--remove` undoes it:
+
+| Platform | Mechanism |
+|---|---|
+| macOS | dnsmasq + `/etc/resolver/lh` |
+| Linux with systemd-resolved | a `resolved` drop-in routing the `lh` domain at a local dnsmasq |
+| Anything else | a marked block in `/etc/hosts` |
+
+Check what is in force without changing anything:
+
+```bash
+./ecosystem-stack/scripts/dns-setup.sh --check
+```
+
+### Wildcard vs. a fixed list
+
+The first two mechanisms are **wildcards**: `*.lh` resolves, so an app you onboard
+tomorrow works immediately. The `/etc/hosts` fallback is a **fixed list** — it only covers
+the hostnames that existed when it was written, and a newly onboarded app will fail to
+resolve until you re-run the script.
+
+That is the whole reason to prefer a resolver over hosts entries. If you are editing
+`/etc/hosts` by hand, this is what the fallback writes for you:
 
 ```text
 127.0.0.1 localhost.lh dashboard.lh traefik.lh ollama.lh airllm.lh ai.lh n8n.lh paperclip.lh
 ```
+
+Force that mode deliberately with `./ecosystem-stack/scripts/dns-setup.sh --hosts`.
+
+## Windows
+
+WSL2 runs the stack, but your browser is a Windows application using the Windows
+resolver — which cannot see anything configured inside the distro. Run this from an
+elevated PowerShell on the Windows side:
+
+```powershell
+windows\Install-LhDns.ps1
+```
+
+See [`windows/README.md`](https://github.com/leco-devops/local-ecosystem/blob/main/windows/README.md).
 
 Traefik terminates TLS with the certificate pair in the repo's `certs/` directory. Generate it with:
 

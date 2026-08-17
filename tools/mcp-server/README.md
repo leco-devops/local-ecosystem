@@ -27,6 +27,25 @@ pipx install ./tools/mcp-server          # or: uv tool install ./tools/mcp-serve
 leco-mcp doctor                          # connectivity + configuration report
 ```
 
+**Need pipx first?** It does not ship with Python:
+
+| Platform | Command |
+|---|---|
+| macOS | `brew install pipx` |
+| Debian / Ubuntu 23.04+ | `sudo apt install pipx` |
+| Fedora / RHEL | `sudo dnf install pipx` |
+| Arch | `sudo pacman -S python-pipx` |
+| Anywhere else | `python3 -m pip install --user pipx` |
+| Windows (WSL2) | Use your distro's row, inside the WSL shell |
+| Windows (native) | `py -m pip install --user pipx` |
+
+Then `pipx ensurepath` and open a new shell so `~/.local/bin` is on `PATH`.
+
+> Do **not** reach for `pip install -e .` instead. A Homebrew or distro Python refuses it under
+> PEP 668 with `externally-managed-environment`. If you want no new tooling, use a venv:
+> `python3 -m venv .venv && .venv/bin/pip install -e .`, then point `LECO_MCP_BIN` at
+> `.venv/bin/leco-mcp`.
+
 Register it with Claude Code:
 
 ```bash

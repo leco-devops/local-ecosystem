@@ -49,6 +49,22 @@ cd "$REPO"
 
 ## 4. Local DNS (`*.lh`)
 
+**Do this with one command:**
+
+```bash
+./ecosystem-stack/scripts/dns-setup.sh          # configure (idempotent)
+./ecosystem-stack/scripts/dns-setup.sh --check  # report only
+./ecosystem-stack/scripts/dns-setup.sh --remove # undo
+```
+
+It selects the mechanism for the host — dnsmasq + `/etc/resolver/lh` on macOS, a
+systemd-resolved drop-in on Linux, an `/etc/hosts` block where neither is available — and
+verifies the result. On Windows, run `windows\Install-LhDns.ps1` from an elevated
+PowerShell as well: the WSL2 resolver is invisible to the Windows browser.
+
+The rest of this section documents what that script does, for anyone configuring it by
+hand or debugging it.
+
 ### 4.1 Install and configure dnsmasq (macOS / Homebrew)
 
 ```bash

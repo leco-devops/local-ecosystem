@@ -47,6 +47,15 @@ leco-mcp doctor                        # connectivity + configuration report
 claude mcp add leco-devops -- leco-mcp stdio
 ```
 
+> **`pipx: command not found`?** pipx does not ship with Python. `brew install pipx` (macOS),
+> `sudo apt install pipx` / `sudo dnf install pipx` / `sudo pacman -S python-pipx` (Linux),
+> `py -m pip install --user pipx` (Windows), then `pipx ensurepath` and a new shell. Full
+> per-platform instructions, including WSL2 and the venv alternative, are in
+> [`CONNECT_AI_AGENTS.md` §7](CONNECT_AI_AGENTS.md#7-installing-leco-mcp-for-stdio).
+>
+> Plain `pip install -e tools/mcp-server` is **not** a shortcut: a Homebrew or distro Python
+> refuses it under PEP 668 (`externally-managed-environment`). Use pipx, `uv`, or a venv.
+
 ### As a Claude Code plugin (skill + commands + MCP in one install)
 
 ```bash

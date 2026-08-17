@@ -195,7 +195,7 @@ Three ways in, one place where decisions are made: a **browser**, an **AI agent 
 | **LEco DevOps** | Dashboard + APIs + docs + onboarding |
 | **Platform** | Cloud/local settings, bundles, isolated dev stacks |
 | **`leco-devops`** | CLI — detect, onboard, platform, dev-stack |
-| **`leco-mcp`** | MCP server — 60 tools so an AI agent can drive all of the above |
+| **`leco-mcp`** | MCP server — 65 tools so an AI agent can drive all of the above |
 | **CI/CD** | Signed webhooks → pull, deploy, verify, record, roll back |
 
 Deep dive: [Architecture](docs/ARCHITECTURE.md) · [LECo user manual](docs/LECO_USER_MANUAL.md) · [Platform tab](docs/help/03-platform-tab.md) · [Hosted apps runbook](docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md)
