@@ -14,7 +14,7 @@ The plugin identifier is **`leco`**, which is what makes the commands namespace 
 
 | Component | Name | Purpose |
 |-----------|------|---------|
-| **MCP server** | `leco-devops` | 60 tools over the LEco DevOps dashboard API — observability, control, hosted apps, onboarding, platform/dev stacks, routing, models, knowledge, credentials |
+| **MCP server** | `leco-devops` | 65 tools over the LEco DevOps dashboard API — observability, control, hosted apps, onboarding, platform/dev stacks, routing, models, knowledge, credentials |
 | **Skill** | `/leco:operate` | How the platform is wired, which tool to reach for, the order operations must happen in, and the failure modes that actually occur. Progressive disclosure: a tight `SKILL.md` plus five reference files loaded on demand. Auto-loads on LEco work |
 | **Commands** | `/leco:*` | Eighteen workflow skills — see the table below |
 | **Subagent** | `leco-diagnostician` | Read-only investigator. Burns the tool calls that diagnosis needs (logs, probes, snapshots) in its own context and returns a root cause plus a proposed minimal fix |

@@ -111,14 +111,14 @@ A blocked call fails with a message naming **both** gates and what was attempted
 
 ## Tools
 
-60 tools. Read-only tools declare `read_only_hint`; lifecycle tools declare `destructive_hint`, so a client can surface the difference before calling.
+65 tools. Read-only tools declare `read_only_hint`; lifecycle tools declare `destructive_hint`, so a client can surface the difference before calling.
 
 | Family | Tools |
 |--------|-------|
 | **Observe** | `leco_server_info` `leco_status` `leco_services` `leco_logs` `leco_urls` `leco_metrics` `leco_cloudflare_local` `leco_traefik_routes` `leco_version` |
 | **Control** | `leco_control_targets` `leco_control` `leco_control_policies` |
-| **Hosted apps** | `leco_apps` `leco_app_snapshot` `leco_app_control` `leco_app_logs` `leco_app_insights` `leco_app_metrics` `leco_app_validate` `leco_app_bind_dev_stack` `leco_app_data_import_plan` `leco_app_data_import` `leco_app_offboard` |
-| **Onboarding** | `leco_browse` `leco_detect` `leco_manifest_status` `leco_manifest_generate` `leco_manifest_read` `leco_manifest_validate` `leco_manifest_save` `leco_manifest_urls` `leco_manifest_samples` `leco_register` `leco_onboard` |
+| **Hosted apps** | `leco_apps` `leco_app_snapshot` `leco_app_control` `leco_app_logs` `leco_app_insights` `leco_app_metrics` `leco_app_validate` `leco_app_bind_dev_stack` `leco_app_data_import_plan` `leco_app_data_import` `leco_app_offboard` `leco_verify` `leco_certs_refresh` |
+| **Onboarding** | `leco_browse` `leco_detect` `leco_app_evidence` `leco_compose_validate` `leco_manifest_status` `leco_manifest_generate` `leco_manifest_read` `leco_manifest_validate` `leco_manifest_overlay` `leco_manifest_save` `leco_manifest_urls` `leco_manifest_samples` `leco_register` `leco_onboard` |
 | **Platform** | `leco_platform_config` `leco_platform_catalog` `leco_platform_services` `leco_platform_service_action` `leco_platform_traefik_apply` |
 | **Dev stacks** | `leco_dev_stacks` `leco_dev_stack_create` `leco_dev_stack_action` `leco_dev_stack_snapshot` `leco_dev_stack_access` `leco_dev_stack_files` `leco_dev_stack_reset_admin` |
 | **Routing** | `leco_route_fragment_from_app` `leco_route_merge_fragment` `leco_route_strip_keys` |
@@ -137,6 +137,37 @@ leco_browse → leco_detect → leco_manifest_generate → [leco_manifest_save] 
 ```
 
 `leco_onboard(path, app_id)` runs the whole path in one call — detect → generate manifest → register → deploy → verify — and reports **each stage separately** so a failure is attributable. Use the step tools when an app needs hand-tuned routes or ports.
+
+#### Complex applications: ask for evidence, never guess a port
+
+`leco_detect` answers *what kind of app is this*. It is not enough for an app whose ports live in
+its own topology file, whose compose sits three directories down, or which runs ten services in one
+container. For those, the failure mode is specific and silent: the agent invents a plausible port,
+the stack builds, starts, and serves nothing.
+
+`leco_app_evidence(path)` exists to remove the guess. It returns which compose service owns which
+port, the container name Traefik must target, what each published port maps to **inside** the
+container, which Workers exist — and every attributed port carries an `owner_source` naming the
+file the number came from. What it could not determine is listed in `unknowns` rather than filled
+in. **A port without an `owner_source` is not evidence; leave it out of the manifest and say so.**
+
+```
+leco_app_evidence → leco_manifest_generate → leco_compose_validate → leco_manifest_overlay → leco_register → leco_verify
+```
+
+- `leco_compose_validate` merges the app's compose with a proposed overlay and reports what
+  Docker actually resolves. It catches the merge traps that look correct in YAML — notably
+  `ports: !reset`, which yields *zero* published ports where `!override` was meant.
+- `leco_manifest_overlay` writes overlay files without clobbering: an existing file is backed up,
+  never silently replaced.
+- `leco_verify(slug)` probes every declared URL and classifies each as `ok` / `route_missing` /
+  `backend_unreachable` / `tls_invalid` / `unhealthy`, with the resolved Traefik router and
+  declared backend attached. Those need different fixes, and a bare 502 names none of them.
+- `leco_certs_refresh` reissues the local certificate after new hostnames are added, so
+  `tls_invalid` does not become the permanent state of a correctly routed app.
+
+Worked example, including why the front door answering **404** is a pass rather than a failure:
+[Onboarding a complex application](ONBOARDING_COMPLEX_APPS.md).
 
 Application paths use the dashboard's allowed-path form: `wsp:MyApp` for a repo under the workspace parent, or a repo-relative path. `leco_browse` lists what is reachable; `leco_detect` echoes the canonical form back as `path_field`.
 

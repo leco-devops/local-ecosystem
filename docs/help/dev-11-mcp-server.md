@@ -21,6 +21,7 @@ How the **Model Context Protocol** server is wired into the LEco DevOps Open Pro
 | `traefik/dynamic.yml` | `mcp-http` / `mcp-https` routers → `mcp-service` |
 | `dashboard/control_targets.py` | `ai-mcp` target; `mcp` requires `dashboard` |
 | `dashboard/monitor.py` | `SERVICE_MAP` entry + `INTERNAL_PROBE_BY_CONTAINER["leco-mcp"]` |
+| `dashboard/app_evidence.py` | Backs `leco_app_evidence` / `leco_compose_validate` / `leco_verify` — port attribution with an `owner_source` per port, compose merge resolution, and route probing that classifies rather than asserting a status code |
 | `tools/claude-plugin/` | Claude Code plugin: bundles this server plus a skill and commands |
 
 ## Architecture: why it is a proxy, not a second brain

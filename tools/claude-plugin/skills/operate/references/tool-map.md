@@ -1,4 +1,4 @@
-# Tool map — which of the 60 tools to reach for
+# Tool map — which of the 65 tools to reach for
 
 Every tool is prefixed `leco_`. All of them are HTTP calls to the LEco DevOps dashboard API;
 none touch Docker directly. Tool descriptions are authoritative for parameters — this file
@@ -77,6 +77,8 @@ Pass `set_policies={...}` to change (merged, not replaced).
 | `leco_app_bind_dev_stack(slug, dev_stack_id)` | Writes `platform.devStackId`. **Redeploy afterwards** or nothing changes. `dev_stack_id=""` unbinds |
 | `leco_app_data_import_plan(slug)` → `leco_app_data_import(slug, dry_run=…)` | Seed data. `dry_run=True` is the default and should stay that way until the plan has been reviewed with the user |
 | `leco_app_offboard(slug, confirm=True)` | Unregister + strip routes + drop registry row. Keeps containers |
+| `leco_verify(slug\|urls=[…])` | Probes every declared URL and says **why** each does or does not answer: `ok` / `route_missing` / `backend_unreachable` / `tls_invalid` / `unhealthy`, with the resolved router and declared backend. Use this instead of curling for a 200 — a non-200 can be correct (a front-door router legitimately 404s for a hostname with no tenant, and `leco_verify` scores that `ok`) |
+| `leco_certs_refresh()` | Reissue the local certificate after adding hostnames. The fix for a `tls_invalid` classification |
 
 ---
 
@@ -85,10 +87,26 @@ Pass `set_policies={...}` to change (merged, not replaced).
 `leco_browse` → `leco_detect` → `leco_onboard` is the fast path.
 `leco_manifest_*` + `leco_register` is the hand-tuned path. See `onboarding.md`.
 
+**Complex app?** (ports declared in a source file, compose below the root, many services in one
+container, several public origins) — take the evidence path instead:
+
+```
+leco_app_evidence → leco_manifest_generate → leco_compose_validate → leco_manifest_overlay → leco_register → leco_verify
+```
+
+> **Never write a port you cannot cite.** `leco_app_evidence` returns an `owner_source` naming the
+> file each port came from. A port with no `owner_source` is a guess, and a guessed port yields a
+> stack that builds, starts and serves nothing. Leave it out and say it is undetermined — that is
+> a better answer than a plausible number. This is not hypothetical: it is exactly how an earlier
+> run routed a live app to a port on a container that did not exist.
+
 | Tool | Note |
 |------|------|
 | `leco_browse(root="wsp"\|"project", path=)` | Use the returned `path_field` verbatim |
 | `leco_detect(path, app_id, full=)` | Writes nothing. **Read `main_url_warnings`** |
+| `leco_app_evidence(path)` | Which service owns which port, container names, container-vs-published ports, Workers — each with `owner_source`. Read `unknowns`: it lists what genuinely could not be determined |
+| `leco_compose_validate(path, overlay=)` | Merges app compose + overlay and reports what Docker really resolves. Catches `ports: !reset` (clears the list — you want `!override`) |
+| `leco_manifest_overlay(path, content)` | Writes an overlay file; backs up an existing one instead of clobbering it |
 | `leco_manifest_status(path, app_id)` | Check before generating — generate overwrites |
 | `leco_manifest_generate(path, app_id)` | Overwrites existing LEco manifests |
 | `leco_manifest_read` / `leco_manifest_validate` / `leco_manifest_save` | Edit loop. Invalid YAML is rejected, not written |

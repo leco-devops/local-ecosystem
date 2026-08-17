@@ -7,6 +7,9 @@ services, using the ``leco-stack-<slug>`` target id.
 
 from __future__ import annotations
 
+import re
+import subprocess
+from pathlib import Path
 from typing import Any, Literal
 
 from mcp.server.mcpserver import Context, MCPServer
@@ -17,7 +20,16 @@ from ..safety import guard_destructive, guard_explicit_destructive, is_destructi
 from ..shaping import compact_hosted_app, guard_size, pick, tail
 
 READ_ONLY = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True)
+WRITES = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False)
 MUTATING = ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=False)
+
+CERT_SCRIPT_RELPATH = ("certs", "generate-certs.sh")
+CERT_SCRIPT_TIMEOUT = 180
+TRAEFIK_TARGET_ID = "ai-traefik"
+
+#: A hostname passed to the certificate script. Restrictive on purpose: these become argv
+#: entries, and nothing that is not a hostname has any business being one.
+_HOSTNAME_RE = re.compile(r"^(?=.{1,253}$)[a-z0-9*]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9*]([a-z0-9-]*[a-z0-9])?)*$")
 
 APP_ACTIONS = frozenset(
     {"start", "stop", "restart", "pause", "unpause", "deploy", "recreate", "remove", "reset"}
@@ -242,6 +254,145 @@ def register(server: MCPServer, deps: Deps) -> None:
             ),
             settings.max_response_chars,
         )
+
+    @server.tool(name="leco_verify", annotations=READ_ONLY)
+    async def leco_verify(
+        slug: str = "",
+        urls: list[str] | None = None,
+        timeout: float = 8.0,
+    ) -> dict[str, Any]:
+        """Probe every declared URL of an app and classify why each does or does not answer.
+
+        leco_app_validate checks the manifest against the schema and the files on disk. This
+        checks reality: it asks the edge, for every URL the app declares, and returns per URL
+        the HTTP status, whether TLS validated, the latency, and the Traefik router and
+        backend that matched.
+
+        The classification is the point — a bare 502 is not actionable, and these need
+        completely different fixes:
+
+          ok                   answered
+          route_missing        no Traefik router matches this hostname. The app's routes were
+                               never merged: leco_register, or leco_route_merge_fragment
+          backend_unreachable  a router matches but the backend refused. The app is down, or
+                               the route points at the wrong container or the wrong port —
+                               compare the reported backend against leco_app_evidence
+          tls_invalid          the certificate the edge serves does not cover this hostname
+                               (the usual cause of a "new hostname" failure): leco_certs_refresh
+          unhealthy            answered 5xx — reachable, erroring. leco_app_logs
+
+        Route and certificate are judged before the status code, so a hostname missing from
+        the certificate reports tls_invalid even while the backend is also down: regenerating
+        the certificate has to happen first either way.
+
+        slug: a registered app — its URLs come from its manifest and localhost profile
+        urls: extra or standalone URLs to check (works without a slug)
+        """
+        body: dict[str, Any] = {"timeout": max(1.0, min(float(timeout), 30.0))}
+        if slug.strip():
+            body["slug"] = slug.strip()
+        if urls:
+            body["urls"] = [str(u).strip() for u in urls if str(u).strip()]
+        if "slug" not in body and not body.get("urls"):
+            raise ValueError("Pass a registered slug, a list of urls, or both.")
+        return guard_size(
+            await client.post("/api/leco/verify", json_body=body, authed=False),
+            settings.max_response_chars,
+        )
+
+    @server.tool(name="leco_certs_refresh", annotations=MUTATING)
+    async def leco_certs_refresh(
+        hostnames: list[str] | None = None,
+        restart_traefik: bool = True,
+        dry_run: bool = False,
+        ctx: Context | None = None,
+    ) -> dict[str, Any]:
+        """Regenerate the local `*.lh` certificate and reload Traefik so new hostnames validate.
+
+        Run this after registering an app that introduced hostnames the current certificate
+        does not list — otherwise every new origin fails TLS while HTTP works, which reads
+        like an app problem and is not one. leco_verify reports exactly this as `tls_invalid`.
+
+        There is no wildcard shortcut: `*.lh` is rejected by every TLS client (a wildcard
+        directly below a TLD would assert ownership of the whole TLD), so certs/generate-certs.sh
+        discovers the hostnames actually in use and issues one certificate with an explicit SAN
+        per name. Adding a hostname therefore *requires* re-issuing.
+
+        Mutating: it runs a script and restarts the edge. The Traefik restart drops all routing
+        for a second or two — every hosted app, not just yours.
+
+        hostnames:       extra names to include beyond the discovered set (validated as hostnames)
+        dry_run=True:    run the script's --list mode; nothing is written and Traefik is untouched
+        restart_traefik: Traefik reads the certificate at start, so a new one is inert until it
+                         restarts. Set False only if you are restarting it yourself.
+
+        Requires the repository on local disk (a stdio MCP server); the HTTP container mounts
+        no repository and cannot run this.
+        """
+        root = Path(settings.project_root)
+        script = root.joinpath(*CERT_SCRIPT_RELPATH)
+        if not script.is_file():
+            raise ValueError(
+                f"{script} not found. This MCP server has no LEco repository on disk — the "
+                "HTTP container mounts only its generated config. Run certificate refresh from "
+                "a stdio server on the machine running LEco."
+            )
+
+        extra: list[str] = []
+        for raw in hostnames or []:
+            name = str(raw).strip().lower()
+            if not _HOSTNAME_RE.match(name):
+                raise ValueError(f"Not a valid hostname: {raw!r}")
+            extra.append(name)
+
+        argv = ["bash", str(script)] + (["--list"] if dry_run else []) + extra
+        try:
+            proc = subprocess.run(  # noqa: S603 - argv list, validated members, never a shell
+                argv,
+                cwd=str(root),
+                capture_output=True,
+                text=True,
+                timeout=CERT_SCRIPT_TIMEOUT,
+                check=False,
+            )
+        except FileNotFoundError as exc:
+            raise ValueError(f"could not run {script}: {exc}") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise ValueError(
+                f"certs/generate-certs.sh did not finish within {CERT_SCRIPT_TIMEOUT}s"
+            ) from exc
+
+        out: dict[str, Any] = {
+            "ok": proc.returncode == 0,
+            "dry_run": bool(dry_run),
+            "script": str(script),
+            "exit_code": proc.returncode,
+            "extra_hostnames": extra,
+            "output": tail((proc.stdout or "") + (proc.stderr or ""), settings.max_log_chars),
+        }
+        if not out["ok"] or dry_run or not restart_traefik:
+            out["traefik_restarted"] = False
+            if not dry_run and restart_traefik and not out["ok"]:
+                out["_hint"] = "Certificate generation failed; Traefik was not restarted."
+            elif not dry_run and not restart_traefik:
+                out["_hint"] = (
+                    "Traefik still holds the old certificate. Restart it with "
+                    f"leco_control(target_id='{TRAEFIK_TARGET_ID}', action='restart')."
+                )
+            return guard_size(out, settings.max_response_chars)
+
+        restart = await deps.run_stream(
+            "/api/control/stream",
+            {"target_id": TRAEFIK_TARGET_ID, "action": "restart"},
+            ctx=ctx,
+            progress_label="restart traefik",
+        )
+        out["traefik_restarted"] = bool(restart.get("ok"))
+        out["traefik_result"] = restart.get("result")
+        out["traefik_log"] = restart.get("log")
+        out["ok"] = bool(out["ok"] and restart.get("ok"))
+        out["_next"] = "leco_verify(slug=...) to confirm every origin now reports valid TLS."
+        return guard_size(out, settings.max_response_chars)
 
     @server.tool(name="leco_app_bind_dev_stack", annotations=MUTATING)
     async def leco_app_bind_dev_stack(slug: str, dev_stack_id: str = "") -> dict[str, Any]:

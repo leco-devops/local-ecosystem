@@ -221,4 +221,37 @@ keeping, as a reference for what a correct manifest looks like here:
   answers 404 for a hostname with no tenant, so a naive check reports the mesh unhealthy exactly when it is
   working.
 
-Say the word and it will be restored; it was left alone here because this task was read-only.
+**Restored, and now verified serving** (2026-08-17). All four properties above are back in
+`hosting/app-available/utility-server-edge/`; the AI's output is kept under `.ai-output-20260817-2040/`
+for reference. The stack was deployed through LEco's own control path and probed with the new
+`leco_verify`:
+
+```
+utility-server.lh          ok   tls=True  http=404
+www.utility-server.lh      ok   tls=True  http=200
+panel.utility-server.lh    ok   tls=True  http=200
+ops.utility-server.lh      ok   tls=True  http=200
+```
+
+The 404 on the bare front door is the correct answer, for the reason given above — which is why
+`leco_verify` classifies instead of asserting a status code.
+
+---
+
+## 8. What was fixed, against the list in §5
+
+| # | Fix | Status |
+|---|---|---|
+| 1 | Never overwrite without consent | **Done** — `write_generated_files` skips existing files unless `overwrite`, and backs up to `*.bak-<stamp>` |
+| 2 | Dedup by resolved path | **Done** — keyed on `(st_dev, st_ino)`; `resolve()` alone is insufficient on a case-insensitive filesystem |
+| 3 | Accept `.mjs`/`.cjs`/`.mts` | **Done** |
+| 4 | Add `wrangler.jsonc` | **Done** |
+| 5 | Follow paths in `package.json` scripts; glob for compose/wrangler | **Done** — collection went from 7 files to 25 on this app |
+| 6 | Widen the script-key allowlist | **Done** — any script whose command starts with a known runtime |
+| 7 | Prefer an existing compose | **Done** |
+| 8 | Never invent a port — require a source | **Done, and this is the structural one.** `leco_app_evidence` returns an `owner_source` naming the file each port came from, and lists what it could not determine under `unknowns`. On this app it now resolves all ten worker ports from `infra/dev/topology.mjs`, including `FRONT_DOOR_PORT: 8787` — the exact number the model previously guessed as 3000 — and reports the two unattributed fixture ports as UNKNOWN rather than filling them in |
+| 9 | Fix the service counter | **Done** — `_count_services` handles the list, dict and inline shapes |
+| 10 | `workers-runtime` / Miniflare 2 gap | **Documented, not closed.** The adapter still pins Miniflare 2. The division of labour in §3 — app brings the runtime, LEco supplies the edge — is now written up in [ONBOARDING_COMPLEX_APPS.md](ONBOARDING_COMPLEX_APPS.md) §6 |
+
+The encouraging reading in §6 held up: almost every wrong answer traced to a file the collector
+could not reach, and the fixes were small and in one place.

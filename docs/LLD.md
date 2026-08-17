@@ -71,7 +71,7 @@ Provider ids: `none`, `ollama`, `airllm`, `openai`, `anthropic`, `google`, `open
 | `prompts.py` | Reusable workflow prompts exposed to MCP clients |
 | `runtime.py` | `Deps` handed to every tool module |
 | `healthcheck.py` | Container healthcheck for the streamable-HTTP transport |
-| `tools/` | 9 modules — `observe`, `control`, `hosted`, `onboarding`, `platform`, `routing`, `models`, `knowledge`, `credentials` — 60 tools total |
+| `tools/` | 9 modules — `observe`, `control`, `hosted`, `onboarding`, `platform`, `routing`, `models`, `knowledge`, `credentials` — 65 tools total |
 
 Tool tables, transports, environment variables and the safety model are canonical in [`MCP_SERVER.md`](MCP_SERVER.md); do not duplicate them here.
 

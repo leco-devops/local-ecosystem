@@ -682,6 +682,123 @@ def api_traefik_routes():
     return jsonify(traefik_routes_with_hosted_hints())
 
 
+@app.get("/api/leco/evidence")
+def api_leco_evidence():
+    """Structured infrastructure facts for an allowed app directory (no token, read-only).
+
+    Where ``/api/leco/detect`` answers *what kind of app is this*, this answers the questions
+    that decide whether a generated manifest routes: which compose service owns which port,
+    what its container is called, what each published port maps to **inside** the container,
+    which Workers exist, whether the repo declares its ports as data — and, explicitly, what
+    could not be determined. See ``dashboard/app_evidence.py``.
+    """
+    from app_evidence import collect_evidence
+    from leco_detect import registration_path_field_for_ui, registration_scan_root, resolve_registration_path
+
+    p = (request.args.get("path") or "").strip()
+    if not p:
+        return jsonify({"ok": False, "error": "path required"}), 400
+    try:
+        root = resolve_registration_path(p)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    scan_root = registration_scan_root(root)
+    payload = collect_evidence(scan_root, hosting_dir=root)
+    payload["path_field"] = registration_path_field_for_ui(root)
+    payload["scan_root_path_field"] = registration_path_field_for_ui(scan_root)
+    return jsonify({"ok": True, **payload})
+
+
+@app.post("/api/leco/compose/validate")
+def api_leco_compose_validate():
+    """Run ``docker compose config`` on a compose file plus overlays and return the merge.
+
+    Proves an overlay does what its author meant before it is deployed: a plain ``ports:``
+    appends to the inherited list, ``!override`` replaces it, and ``!reset`` clears it — three
+    very different results from files that all merge without error.
+
+    Body: ``{path, compose_file, overlay_files[], overlay_yaml?, project_name?, timeout?}``.
+    ``path`` is an allowed directory (same form as /api/leco/detect); every compose file must
+    resolve underneath it. ``overlay_yaml`` validates un-saved overlay text by materializing
+    it to a temporary file inside that directory, which is removed before returning.
+    """
+    from app_evidence import COMPOSE_CONFIG_TIMEOUT_DEFAULT, validate_compose_merge
+    from leco_detect import resolve_registration_path
+
+    data = request.get_json(silent=True) or {}
+    p = (data.get("path") or "").strip()
+    compose_file = (data.get("compose_file") or "").strip()
+    if not p or not compose_file:
+        return jsonify({"ok": False, "error": "path and compose_file are required"}), 400
+    try:
+        base = resolve_registration_path(p)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    overlays = [str(x).strip() for x in (data.get("overlay_files") or []) if str(x).strip()]
+    inline = data.get("overlay_yaml")
+    tmp_overlay: Path | None = None
+    try:
+        if isinstance(inline, str) and inline.strip():
+            import tempfile
+
+            fd, tmp_name = tempfile.mkstemp(
+                prefix=".leco-overlay-validate-", suffix=".yml", dir=str(base)
+            )
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(inline)
+            tmp_overlay = Path(tmp_name)
+            overlays.append(tmp_overlay.name)
+        result = validate_compose_merge(
+            base,
+            compose_file,
+            overlays,
+            project_name=str(data.get("project_name") or "").strip(),
+            timeout=int(data.get("timeout") or COMPOSE_CONFIG_TIMEOUT_DEFAULT),
+        )
+    except (OSError, ValueError) as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    finally:
+        if tmp_overlay is not None:
+            try:
+                tmp_overlay.unlink()
+            except OSError:
+                pass
+    if tmp_overlay is not None:
+        result["overlay_source"] = "inline overlay_yaml (temporary file, removed)"
+        result["compose_files"] = [
+            f for f in (result.get("compose_files") or []) if not f.endswith(tmp_overlay.name)
+        ] + ["<inline overlay_yaml>"]
+    # A merge that docker rejected is a *result*, not a request error: the caller asked a
+    # legitimate question and the answer is "this does not merge, here is docker's stderr".
+    # Only a bad request (path outside the allowed roots, missing file) is a 400 — otherwise
+    # the stderr an agent needs is delivered as an exception instead of a payload.
+    ran_docker = "exit_code" in result
+    return jsonify(result), (200 if result.get("ok") or ran_docker else 400)
+
+
+@app.post("/api/leco/verify")
+def api_leco_verify():
+    """Probe every declared URL of an app and classify why each one does or does not answer.
+
+    Body: ``{slug?, urls?[], timeout?}``. Returns per URL: status, TLS validity, latency, the
+    resolved Traefik backend, and one of ok / route_missing / backend_unreachable /
+    tls_invalid / unhealthy — because those need different fixes and a bare 502 names none
+    of them. No control token: this only reads and probes.
+    """
+    from app_evidence import VERIFY_TIMEOUT_DEFAULT, verify_app
+
+    data = request.get_json(silent=True) or {}
+    slug = str(data.get("slug") or "").strip()
+    urls = [str(u).strip() for u in (data.get("urls") or []) if str(u).strip()]
+    if not slug and not urls:
+        return jsonify({"ok": False, "error": "slug or urls[] required"}), 400
+    payload = verify_app(
+        slug, urls, timeout=float(data.get("timeout") or VERIFY_TIMEOUT_DEFAULT)
+    )
+    return jsonify(payload), (200 if payload.get("ok") else 400)
+
+
 @app.get("/api/leco/browse")
 def api_leco_browse():
     """List subdirectories under project or workspace-parent (safe path)."""

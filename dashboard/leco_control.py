@@ -13,12 +13,15 @@ rows until ``ecosystem-register`` adds them.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 try:
     from leco_app.compose_runner import path_for_docker_daemon
@@ -450,11 +453,22 @@ def materialized_hosting_apps_not_in_registry() -> list[dict[str, Any]]:
 
 
 def _leco_meta_from_resolved_manifest(mp: str, leco_slug: str, label: str) -> dict[str, Any] | None:
-    parsed = (
-        parse_leco_manifest_for_compose(mp)
-        or parse_leco_effective_manifest_for_compose(mp)
-        or _compose_meta_worker_only(mp)
-    )
+    # One unreadable app must not take the whole listing down with it. These parsers walk the
+    # `root:` symlink into a sibling checkout, so they raise OSError for causes that are entirely
+    # local to a single app: a dangling `source` link, a checkout that has been moved or
+    # unmounted, or a bind mount whose view of a freshly created symlink is stale (Docker
+    # Desktop answers EINVAL to stat() for those until the container is restarted). Letting that
+    # escape turned `/api/hosted-apps` into a 500 and hid *every* healthy app behind one broken
+    # slot. Degrade to "this app is not resolvable", log which one and why, and keep going.
+    try:
+        parsed = (
+            parse_leco_manifest_for_compose(mp)
+            or parse_leco_effective_manifest_for_compose(mp)
+            or _compose_meta_worker_only(mp)
+        )
+    except OSError as exc:
+        logger.warning("leco app %r: cannot resolve manifest %s: %s", leco_slug, mp, exc)
+        return None
     if not parsed:
         return None
     return {

@@ -116,7 +116,7 @@ The UI credential vault seeds well-known local defaults, and the file-transfer s
 
 ### 6. The MCP server, if exposed — **medium**
 
-`https://mcp.<domain>/mcp` grants an agent the same 60 tools that drive your stack. Destructive tools are double-gated (`confirm=true` **and** `LECO_MCP_ALLOW_DESTRUCTIVE=1`, both off by default), which is real protection — but read tools still expose logs, routes and configuration.
+`https://mcp.<domain>/mcp` grants an agent the same 65 tools that drive your stack. Destructive tools are double-gated (`confirm=true` **and** `LECO_MCP_ALLOW_DESTRUCTIVE=1`, both off by default), which is real protection — but read tools still expose logs, routes and configuration.
 
 **Fix:** keep `LECO_MCP_ALLOW_DESTRUCTIVE` and `LECO_MCP_ALLOW_CREDENTIALS` unset in production, set `LECO_MCP_CONTROL_TOKEN` to match the dashboard token, and put the endpoint behind authentication or a private network. For a single operator, the **stdio** transport needs no exposed port at all — prefer it.
 

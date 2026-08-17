@@ -103,15 +103,15 @@ accurately instead of hunting for a workaround.
 
 ## Tools
 
-60 tools across nine families. Read-only tools carry `read_only_hint`; lifecycle tools
+65 tools across ten families. Read-only tools carry `read_only_hint`; lifecycle tools
 carry `destructive_hint`.
 
 | Family | Tools |
 |--------|-------|
 | **Observe** | `leco_server_info` `leco_status` `leco_services` `leco_logs` `leco_urls` `leco_metrics` `leco_cloudflare_local` `leco_traefik_routes` `leco_version` |
 | **Control** | `leco_control_targets` `leco_control` `leco_control_policies` |
-| **Hosted apps** | `leco_apps` `leco_app_snapshot` `leco_app_control` `leco_app_logs` `leco_app_insights` `leco_app_metrics` `leco_app_validate` `leco_app_bind_dev_stack` `leco_app_data_import_plan` `leco_app_data_import` `leco_app_offboard` |
-| **Onboarding** | `leco_browse` `leco_detect` `leco_manifest_status` `leco_manifest_generate` `leco_manifest_read` `leco_manifest_validate` `leco_manifest_save` `leco_manifest_urls` `leco_manifest_samples` `leco_register` `leco_onboard` |
+| **Hosted apps** | `leco_apps` `leco_app_snapshot` `leco_app_control` `leco_app_logs` `leco_app_insights` `leco_app_metrics` `leco_app_validate` `leco_app_bind_dev_stack` `leco_app_data_import_plan` `leco_app_data_import` `leco_app_offboard` `leco_verify` `leco_certs_refresh` |
+| **Onboarding** | `leco_browse` `leco_detect` `leco_app_evidence` `leco_compose_validate` `leco_manifest_status` `leco_manifest_generate` `leco_manifest_read` `leco_manifest_validate` `leco_manifest_overlay` `leco_manifest_save` `leco_manifest_urls` `leco_manifest_samples` `leco_register` `leco_onboard` |
 | **Platform** | `leco_platform_config` `leco_platform_catalog` `leco_platform_services` `leco_platform_service_action` `leco_platform_traefik_apply` |
 | **Dev stacks** | `leco_dev_stacks` `leco_dev_stack_create` `leco_dev_stack_action` `leco_dev_stack_snapshot` `leco_dev_stack_access` `leco_dev_stack_files` `leco_dev_stack_reset_admin` |
 | **Routing** | `leco_route_fragment_from_app` `leco_route_merge_fragment` `leco_route_strip_keys` |

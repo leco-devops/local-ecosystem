@@ -28,10 +28,45 @@ Where to start
 - leco_status        overall health (service counts, URL probes, alerts)
 - leco_control_targets  everything you can start/stop/deploy, with live state
 
-Onboarding an app repo
+Onboarding a SIMPLE app repo (one service, one port, one hostname)
   leco_browse -> leco_detect -> leco_onboard (detect + manifest + register + deploy)
+
+Onboarding a COMPLEX app — anything with more than one public hostname, a container that
+publishes several ports, a compose file of its own, or many workers/processes in one
+container. leco_onboard alone will register it and it will not route. Do this instead:
+
+  1 leco_app_evidence(path)        facts: services, container names, {published, target}
+                                   port pairs, workers, declared port tables, and `unknowns`
+  2 author the manifest, then leco_manifest_save
+  3 leco_manifest_overlay(slug, action="write")   join lh-network, remap host ports
+  4 leco_compose_validate(...)     prove the merge resolves as intended before deploying
+  5 leco_register(path, app_id)    registry + Traefik + deploy
+  6 leco_certs_refresh()           a new hostname is not in the certificate until you re-issue
+  7 leco_verify(slug=app_id)       every declared origin, classified
+
+Non-negotiable in that flow:
+- **Ports come from evidence, never from invention.** Every port must trace to a compose port
+  pair or a declared port table with a named source file. If the evidence does not say which
+  port a component listens on, ask — do not choose a plausible number. A wrong port yields a
+  stack that builds, starts, and serves nothing, and reads as an app bug for hours.
+- **Route to the container port.** A container publishing many ports needs one route per
+  *container* (`target`) port — not per published host port, and not one route for the whole
+  container. Traefik reaches the container over lh-network, where the host publish does not
+  exist.
+- **In an overlay, `ports: !override` replaces the inherited list; `ports: !reset` clears it**
+  and drops everything written under it; a plain `ports:` appends. All three merge without
+  error, so run leco_compose_validate and read the resolved ports rather than trusting the
+  file you wrote.
+- **Never overwrite a manifest or overlay blind.** leco_manifest_overlay reports an existing,
+  differing file instead of replacing it; pass overwrite=true deliberately, which keeps a
+  timestamped backup. Hosting slots are gitignored — a silent overwrite is unrecoverable.
+
 Use the step tools (leco_manifest_generate / leco_manifest_save / leco_register) when the
 app needs hand-tuned routes or ports.
+
+Diagnosing a URL that does not answer
+  leco_verify classifies each origin as ok / route_missing / backend_unreachable /
+  tls_invalid / unhealthy. Those need different fixes; a bare 502 names none of them.
 
 Infrastructure on/off
   leco_control(target_id, action). Bulk targets exist: stack-ecosystem-all,

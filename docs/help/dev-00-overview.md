@@ -8,7 +8,7 @@ This section is for contributors who **extend**, **fix**, or **debug** LEco DevO
 |------|----------------|
 | `dashboard/` | Flask UI + REST APIs (overview, control, hosted apps, LEco wizard, AI + RAG, Git source, CI/CD, MCP insights, Traefik editor, help) |
 | `tools/deploy-cli/leco_app/` | `leco-devops` CLI — schema, compose, register, Traefik merge, CF provision |
-| `tools/mcp-server/leco_mcp/` | `leco-mcp` MCP server — 60 tools, stdio + streamable HTTP, proxy over the dashboard API |
+| `tools/mcp-server/leco_mcp/` | `leco-mcp` MCP server — 65 tools, stdio + streamable HTTP, proxy over the dashboard API |
 | `tools/claude-plugin/` | Claude Code plugin — MCP server, skill, commands, read-only diagnostician subagent |
 | `ecosystem-stack/` | `ecosystem-stack.sh`, `core.sh`, `services/*.sh` — Docker lifecycle |
 | `ecosystem-stack/config/generated/` | Machine-written state — MCP activity log, CI/CD runs, RAG index |

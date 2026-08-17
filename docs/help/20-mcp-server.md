@@ -86,7 +86,7 @@ leco-mcp doctor                          # local install
 docker exec leco-mcp leco-mcp doctor     # HTTP service
 ```
 
-You should see `reachable: true`, the dashboard URL it resolved, and 60 tools. If the dashboard requires a control token and the MCP server does not have it, `doctor` warns you — that is the case where reads work but every action fails with 401.
+You should see `reachable: true`, the dashboard URL it resolved, and 65 tools. If the dashboard requires a control token and the MCP server does not have it, `doctor` warns you — that is the case where reads work but every action fails with 401.
 
 ## If something is wrong
 
@@ -103,4 +103,4 @@ More: [502 / routing](help:ts-502) · [Troubleshooting](help:ts-common)
 
 ## Full reference
 
-The complete guide — configuration, all 60 tools, response shaping, and the design rationale — is [MCP_SERVER.md](/?tab=docsTab&doc=mcp-server) in the **Docs** tab. Developer detail: [MCP server (developer)](help:dev-mcp-server).
+The complete guide — configuration, all 65 tools, response shaping, and the design rationale — is [MCP_SERVER.md](/?tab=docsTab&doc=mcp-server) in the **Docs** tab. Developer detail: [MCP server (developer)](help:dev-mcp-server).
