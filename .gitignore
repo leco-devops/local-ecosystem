@@ -92,3 +92,7 @@ ecosystem-stack/config/generated/ai-rag-*.tmp
 # every doc diff and can never disagree with the sources without being rebuilt.
 docs/_wiki/
 .atlas/
+
+# Local Python virtualenvs (MCP server stdio install; see docs/CONNECT_AI_AGENTS.md)
+.venv/
+venv/

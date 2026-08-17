@@ -220,7 +220,21 @@ DOC_MODULES = [
         "title": "MCP server — AI agent access",
         "category": "DevOps",
         "rel_path": "docs/MCP_SERVER.md",
-        "blurb": "Model Context Protocol access for AI agents: 60 tools for deploy, onboarding, infrastructure control, and monitoring; stdio and HTTP transports; double-gated destructive actions.",
+        "blurb": "Model Context Protocol access for AI agents: 65 tools for deploy, onboarding, infrastructure control, and monitoring; stdio and HTTP transports; double-gated destructive actions.",
+    },
+    {
+        "id": "connect-ai-agents",
+        "title": "Connect an AI agent — step by step",
+        "category": "DevOps",
+        "rel_path": "docs/CONNECT_AI_AGENTS.md",
+        "blurb": "Per-agent setup for Claude Code, Claude Desktop and Cowork, Codex, Antigravity, Cursor, VS Code and any MCP client: which transport to pick, exact config files and snippets, and a troubleshooting table.",
+    },
+    {
+        "id": "onboarding-complex-apps",
+        "title": "Onboarding a complex application",
+        "category": "DevOps",
+        "rel_path": "docs/ONBOARDING_COMPLEX_APPS.md",
+        "blurb": "For apps whose ports live in a source file, whose compose sits below the root, or that run many services in one container: ask for evidence, never guess a port, and read the verify classification.",
     },
     {
         "id": "agent-route-map",

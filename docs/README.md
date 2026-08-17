@@ -17,6 +17,8 @@ New to the project entirely? Start with **[`../START_HERE.md`](../START_HERE.md)
 | Put an application on a hostname | [LECO_APP_BLUEPRINT.md](LECO_APP_BLUEPRINT.md) |
 | Onboard from a Git URL, or deploy on push | [GIT_AND_CICD.md](GIT_AND_CICD.md) |
 | Let an AI agent drive the platform | [MCP_SERVER.md](MCP_SERVER.md) |
+| Connect a specific agent (Claude Code, Desktop, Codex, Antigravity, Cursor…) | [CONNECT_AI_AGENTS.md](CONNECT_AI_AGENTS.md) |
+| Onboard an app detection cannot read | [ONBOARDING_COMPLEX_APPS.md](ONBOARDING_COMPLEX_APPS.md) |
 | Run this on a real domain | **[PRODUCTION_HARDENING.md](PRODUCTION_HARDENING.md) first**, then [CLOUD_VM_DEPLOYMENT.md](CLOUD_VM_DEPLOYMENT.md) |
 | Fix a 502, a 404, or a route | [HOSTED_APPS_TRAEFIK_RUNBOOK.md](HOSTED_APPS_TRAEFIK_RUNBOOK.md) |
 | Spin up WordPress / Magento / Laravel | [DEV_STACK_ISOLATION.md](DEV_STACK_ISOLATION.md) |
@@ -33,7 +35,7 @@ This distinction is invisible from a filename and expensive to learn the hard wa
 **Authoritative — these are maintained and describe current behaviour:**
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) · [HLD.md](HLD.md) · [LLD.md](LLD.md) — design, current as of 2026-08-17
-- [MCP_SERVER.md](MCP_SERVER.md) · [GIT_AND_CICD.md](GIT_AND_CICD.md) · [PRODUCTION_HARDENING.md](PRODUCTION_HARDENING.md)
+- [MCP_SERVER.md](MCP_SERVER.md) · [CONNECT_AI_AGENTS.md](CONNECT_AI_AGENTS.md) · [ONBOARDING_COMPLEX_APPS.md](ONBOARDING_COMPLEX_APPS.md) · [GIT_AND_CICD.md](GIT_AND_CICD.md) · [PRODUCTION_HARDENING.md](PRODUCTION_HARDENING.md)
 - [LECO_APP_BLUEPRINT.md](LECO_APP_BLUEPRINT.md) · [DEPLOY_CLI.md](DEPLOY_CLI.md) · [SETUP.md](SETUP.md) · [DEPLOYMENT.md](DEPLOYMENT.md)
 - Everything under [`help/`](help/) — served live in the dashboard's **Help** tab, so drift is visible to users
 

@@ -113,6 +113,8 @@ Shared endpoint for remote agents: `./ecosystem-stack/services/mcp.sh start` →
 
 **Full reference → [`docs/MCP_SERVER.md`](docs/MCP_SERVER.md)** · package [`tools/mcp-server/`](tools/mcp-server/)
 
+**Wiring up a specific agent** — Claude Code, Claude Desktop and Cowork, Codex, Antigravity, Cursor, VS Code, or anything speaking MCP → [`docs/CONNECT_AI_AGENTS.md`](docs/CONNECT_AI_AGENTS.md). Start with the HTTP transport: the container already serves it, so there is nothing to install.
+
 Four things an agent must internalise:
 
 1. **Discover ids, never guess them.** `leco_control_targets` for services, `leco_apps` for applications, `leco_browse` for paths.
@@ -172,6 +174,7 @@ Add a bullet under `[Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md) for anything
 | "It returns 502 / 404 / does not route" | [`docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md`](docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md) |
 | "Why is the stack unhealthy?" | `leco_status` → `leco_urls(only_unhealthy=true)` → `leco_logs` |
 | "Let agents control this" | §4 → [`docs/MCP_SERVER.md`](docs/MCP_SERVER.md) |
+| "Connect *my* agent to it" | [`docs/CONNECT_AI_AGENTS.md`](docs/CONNECT_AI_AGENTS.md) |
 | "Run it on a cloud VM with a real domain" | [`docs/PRODUCTION_HARDENING.md`](docs/PRODUCTION_HARDENING.md) **first**, then [`docs/CLOUD_VM_DEPLOYMENT.md`](docs/CLOUD_VM_DEPLOYMENT.md) · [`docs/CLOUDFLARE_SSL_INSTALL.md`](docs/CLOUDFLARE_SSL_INSTALL.md) |
 | "Add a feature / fix a bug here" | §6 → [`AGENTS.md`](AGENTS.md) |
 | "Set up FTP/SFTP" | [`docs/FILE_TRANSFER.md`](docs/FILE_TRANSFER.md) |

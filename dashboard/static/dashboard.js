@@ -14466,7 +14466,10 @@ function renderMcpInstallPanel(install) {
     </article>`);
   }
 
+  const clientBlock = renderMcpClientPicker(install.clients || []);
+
   const docLinks = [
+    mcpDocLink("Connect an AI agent", docs.connect_agents),
     mcpDocLink("MCP server guide", docs.guide),
     mcpDocLink("Route map", docs.route_map),
     mcpDocLink("Plugin README", docs.plugin_readme),
@@ -14475,15 +14478,108 @@ function renderMcpInstallPanel(install) {
     .filter(Boolean)
     .join("");
 
-  if (!cards.length) {
+  if (!cards.length && !clientBlock) {
     el.innerHTML = `<p class="muted small">No install commands were returned by <code>/api/mcp/install</code>.</p>${
       docLinks ? `<div class="mcp-doc-links">${docLinks}</div>` : ""
     }`;
     return;
   }
-  el.innerHTML = `<div class="mcp-install-grid">${cards.join("")}</div>${
+  el.innerHTML = `<div class="mcp-install-grid">${cards.join("")}</div>${clientBlock}${
     docLinks ? `<div class="mcp-doc-links"><span class="mcp-label">Read more</span>${docLinks}</div>` : ""
   }`;
+  wireMcpClientPicker(el);
+}
+
+/* The whole MCP tab re-renders on the dashboard's refresh interval. Without remembering the
+ * choice here, the picker would snap back to the first agent every few seconds — mid-read, and
+ * mid-copy. Survives re-render because it lives outside the render function. */
+let mcpSelectedClient = "";
+
+/** Per-agent setup, one panel at a time. Everything is generated server-side with real host
+ *  paths, so the snippets are copy-paste rather than fill-in-the-blank. */
+function renderMcpClientPicker(clients) {
+  if (!Array.isArray(clients) || !clients.length) return "";
+
+  // Fall back to the first agent when nothing is chosen yet, or when a remembered id no longer
+  // exists (the client list is server-driven and can change between releases).
+  const ids = clients.map((c) => String(c.id));
+  const selected = ids.includes(mcpSelectedClient) ? mcpSelectedClient : ids[0];
+
+  const tabs = clients
+    .map(
+      (c) =>
+        `<button type="button" class="mcp-client-tab${
+          String(c.id) === selected ? " is-active" : ""
+        }" data-mcp-client="${escapeHtml(String(c.id))}">${c.label}${
+          c.verified ? '<span class="mcp-pill mcp-pill--ok">verified</span>' : ""
+        }</button>`
+    )
+    .join("");
+
+  const panels = clients
+    .map((c) => {
+      const steps = (c.steps || []).map((s) => mcpCommandRow(s.label, s.command, s.hint || "")).join("");
+      const pathRow = c.config_path ? mcpCommandRow("Config file", c.config_path) : "";
+      const otherPaths = (c.config_paths_other || []).length
+        ? `<ul class="mcp-cmd-list">${c.config_paths_other.map((p) => `<li>${escapeHtml(String(p))}</li>`).join("")}</ul>`
+        : "";
+      const cfg = c.config
+        ? `<div class="mcp-cmd"><div class="mcp-cmd__head"><span class="mcp-cmd__label">${escapeHtml(
+            c.config_lang === "toml" ? "Config (TOML)" : "Config (JSON)"
+          )}</span>${mcpCopyBtn(c.config)}</div><pre class="mcp-cmd__code mcp-cmd__code--block">${escapeHtml(
+            String(c.config)
+          )}</pre></div>`
+        : "";
+      const cfgAlt = c.config_alt
+        ? `<div class="mcp-cmd"><div class="mcp-cmd__head"><span class="mcp-cmd__label">${escapeHtml(
+            String(c.config_alt_label || "Alternative")
+          )}</span>${mcpCopyBtn(c.config_alt)}</div><pre class="mcp-cmd__code mcp-cmd__code--block">${escapeHtml(
+            String(c.config_alt)
+          )}</pre></div>`
+        : "";
+      const paths = (c.paths || []).length
+        ? `<div class="mcp-install-card__sub"><span class="mcp-label">Where each client keeps it</span><ul class="mcp-cmd-list">${c.paths
+            .map((p) => `<li>${escapeHtml(String(p))}</li>`)
+            .join("")}</ul></div>`
+        : "";
+      return `<div class="mcp-client-panel${
+        String(c.id) === selected ? " is-active" : ""
+      }" data-mcp-client-panel="${escapeHtml(String(c.id))}">
+        <p class="muted small">${c.summary || ""}</p>
+        ${
+          c.verified === false
+            ? '<p class="muted small mcp-client-untested"><strong>Not exercised here.</strong> The LEco values are verified; the surrounding key names are the client\'s own and vary between them.</p>'
+            : ""
+        }
+        ${steps}${pathRow}${otherPaths}${cfg}${cfgAlt}${paths}
+        ${c.note ? `<p class="muted small mcp-install-card__foot">${c.note}</p>` : ""}
+      </div>`;
+    })
+    .join("");
+
+  return `<section class="mcp-clients" id="mcp-clients">
+    <header class="mcp-clients__head">
+      <h4>Set up a specific agent</h4>
+      <p class="muted small">Pick your agent. Paths below are this machine's real ones — a GUI app does not inherit your shell <code>PATH</code>, so a bare <code>leco-mcp</code> works in a terminal and fails silently inside the app.</p>
+    </header>
+    <div class="mcp-client-tabs" role="tablist">${tabs}</div>
+    <div class="mcp-client-panels">${panels}</div>
+  </section>`;
+}
+
+function wireMcpClientPicker(scope) {
+  const root = scope || document;
+  root.querySelectorAll("[data-mcp-client]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-mcp-client");
+      // Remember it, so the next refresh re-renders with this agent still selected.
+      mcpSelectedClient = id;
+      root.querySelectorAll("[data-mcp-client]").forEach((b) => b.classList.toggle("is-active", b === btn));
+      root
+        .querySelectorAll("[data-mcp-client-panel]")
+        .forEach((p) => p.classList.toggle("is-active", p.getAttribute("data-mcp-client-panel") === id));
+    });
+  });
 }
 
 /* ---------- shared paging for the MCP tables -------------------------------

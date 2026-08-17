@@ -8498,3 +8498,96 @@ ul.devstack-config-files .devstack-config-file-row {
     right: 0;
   }
 }
+
+/* ---- MCP · per-agent setup picker (section 2) ---------------------------- */
+
+.mcp-clients {
+  margin-top: 18px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(129, 140, 248, 0.28);
+  background-color: var(--bg-card);
+  min-width: 0;
+}
+
+.mcp-clients__head h4 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  color: #c7d2fe;
+}
+
+.mcp-clients__head p {
+  margin: 0 0 12px;
+}
+
+.mcp-client-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.mcp-client-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(129, 140, 248, 0.35);
+  background: transparent;
+  color: #cbd5e1;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.mcp-client-tab:hover {
+  border-color: rgba(129, 140, 248, 0.7);
+  color: #e2e8f0;
+}
+
+.mcp-client-tab.is-active {
+  background-color: rgba(129, 140, 248, 0.18);
+  border-color: rgba(129, 140, 248, 0.85);
+  color: #ede9fe;
+}
+
+/* Panels are swapped by class rather than removed, so copy buttons keep their
+   listeners and the picker does not rebuild on every click. */
+.mcp-client-panel {
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mcp-client-panel.is-active {
+  display: flex;
+}
+
+.mcp-cmd__code--block {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre;
+  tab-size: 2;
+}
+
+.mcp-client-untested {
+  margin: 0;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border-left: 3px solid rgba(250, 204, 21, 0.7);
+  background-color: rgba(250, 204, 21, 0.08);
+  color: #fde68a;
+}
+
+@media (max-width: 640px) {
+  .mcp-client-tabs {
+    flex-direction: column;
+  }
+  .mcp-client-tab {
+    width: 100%;
+    justify-content: space-between;
+  }
+}

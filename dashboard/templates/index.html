@@ -1297,8 +1297,14 @@
         <h3 class="routes-subhead" id="mcp-install">2 · Install on an agent</h3>
         <p class="muted small">
           Pick one transport per agent. The <strong>plugin</strong> is the fastest path for Claude Code (it bundles the skill,
-          the MCP server and its slash commands — see section 3); <strong>stdio</strong> suits a single machine;
-          <strong>HTTP</strong> suits agents running elsewhere on the LAN.
+          the MCP server and its slash commands — see section 3); <strong>HTTP</strong> needs nothing installed, because the
+          <code>leco-mcp</code> container already serves it — start there; <strong>stdio</strong> is for clients that cannot
+          speak HTTP MCP, and needs a Python install first.
+        </p>
+        <p class="muted small">
+          Using Claude Desktop or Cowork, Codex, Antigravity, Cursor, VS Code or another MCP client? Jump to
+          <strong>Set up a specific agent</strong> at the foot of this section — the snippets there carry this machine's real
+          absolute paths, which is what a GUI app needs.
         </p>
         <div id="mcpInstallPanel" class="mcp-install">
           <p class="muted small">Loading install commands…</p>

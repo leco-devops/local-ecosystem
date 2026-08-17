@@ -57,6 +57,7 @@ HELP_TREE: list[dict] = [
         "children": [
             {"id": "paperclip", "title": "Paperclip (agent orchestration)", "file": "06-paperclip.md"},
             {"id": "mcp-server", "title": "MCP server (agents run LEco)", "file": "20-mcp-server.md"},
+            {"id": "connect-ai-agents", "title": "Connect your AI agent", "file": "22-connect-ai-agents.md"},
         ],
     },
     {

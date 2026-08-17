@@ -1030,6 +1030,7 @@ def build_install() -> dict[str, Any]:
         "guide": "docs/MCP_SERVER.md",
         "route_map": "START_HERE.md",
         "plugin_readme": "tools/claude-plugin/README.md",
+        "connect_agents": "docs/CONNECT_AI_AGENTS.md",
     }
     try:
         docs_available = all((root / rel).is_file() for rel in docs.values())
@@ -1073,8 +1074,121 @@ def build_install() -> dict[str, Any]:
             "doctor": "leco-mcp doctor",
             "available": mcp_available,
         },
+        "clients": build_agent_clients(qualified),
         "docs": {**docs, "available": docs_available},
     }
+
+
+def build_agent_clients(qualified_plugin: str) -> list[dict[str, Any]]:
+    """Per-client setup steps for section 2 of the MCP tab.
+
+    Two things make this worth generating rather than writing into the template:
+
+    * **Absolute host paths.** A GUI agent (Claude Desktop, Antigravity, JetBrains) does not
+      inherit the shell ``PATH``, so a bare ``leco-mcp`` resolves when you test it in a terminal
+      and fails silently inside the app. That is the single most common setup failure, so every
+      stdio snippet here carries the real host path — which the dashboard can only know because
+      ``host_project_root()`` maps ``/project`` back to where the repo actually lives.
+    * **Honesty about what was tested.** ``verified`` marks the clients exercised on a real
+      machine. The rest carry standard MCP config shapes; the LEco-specific values are right, the
+      surrounding key names are the client's business and they disagree with each other (``url``
+      vs ``serverUrl`` vs ``httpUrl``). Saying so is more useful than implying every row was run.
+    """
+    from project_paths import host_project_root
+
+    host_root = host_project_root().rstrip("/")
+    venv_bin = f"{host_root}/{MCP_PACKAGE_REL}/.venv/bin/leco-mcp"
+    http_local = ENDPOINTS["host"]
+
+    def stdio_json(key: str = "mcpServers") -> str:
+        return json.dumps(
+            {key: {"leco-devops": {"command": venv_bin, "args": ["stdio"]}}},
+            indent=2,
+        )
+
+    def http_json(url_key: str = "url", key: str = "mcpServers") -> str:
+        return json.dumps({key: {"leco-devops": {url_key: http_local}}}, indent=2)
+
+    return [
+        {
+            "id": "claude-code",
+            "label": "Claude Code (CLI)",
+            "transport": "plugin · stdio · HTTP",
+            "verified": True,
+            "summary": "The plugin is the fastest path: it brings the MCP server, the operate skill and the slash commands in one install.",
+            "steps": [
+                {"label": "Add the marketplace", "command": "claude plugin marketplace add ./"},
+                {"label": "Install the plugin", "command": f"claude plugin install {qualified_plugin}"},
+                {
+                    "label": "Or register HTTP directly (nothing to install)",
+                    "command": f"claude mcp add --transport http leco-devops {http_local}",
+                },
+                {"label": "Verify", "command": "claude mcp list"},
+            ],
+            "note": "This repo also ships <code>.mcp.json</code>, so opening Claude Code in this checkout offers the server with no setup at all.",
+        },
+        {
+            "id": "claude-desktop",
+            "label": "Claude Desktop &amp; Cowork",
+            "transport": "stdio",
+            "verified": True,
+            "summary": "Both read the same file — configuring one configures the other.",
+            "config_path": "~/Library/Application Support/Claude/claude_desktop_config.json",
+            "config_paths_other": [
+                "Windows: %APPDATA%\\Claude\\claude_desktop_config.json",
+                "Linux: ~/.config/Claude/claude_desktop_config.json",
+            ],
+            "config": stdio_json(),
+            "steps": [{"label": "Install the server first (stdio needs it)", "command": f"python3 -m venv {host_root}/{MCP_PACKAGE_REL}/.venv && {host_root}/{MCP_PACKAGE_REL}/.venv/bin/pip install -e {host_root}/{MCP_PACKAGE_REL}"}],
+            "note": "<strong>Merge</strong> into the existing <code>mcpServers</code> object rather than replacing the file. Then quit and reopen the app fully — closing the window is not a restart. Remote (HTTP) servers go through Settings → Connectors instead, and a connector cannot reach a <code>localhost</code> URL.",
+        },
+        {
+            "id": "codex",
+            "label": "Codex CLI",
+            "transport": "HTTP · stdio",
+            "verified": True,
+            "summary": "Verified working over streamable HTTP — no install needed.",
+            "steps": [
+                {"label": "Register (HTTP)", "command": f"codex mcp add leco-devops --url {http_local}"},
+                {"label": "Verify", "command": "codex mcp get leco-devops"},
+                {"label": "Remove", "command": "codex mcp remove leco-devops"},
+            ],
+            "config_path": "~/.codex/config.toml",
+            "config": f'[mcp_servers.leco-devops]\nurl = "{http_local}"',
+            "config_lang": "toml",
+            "note": "The hand-edited table is <code>mcp_servers</code> — underscore, not the <code>mcpServers</code> spelling every JSON client uses.",
+        },
+        {
+            "id": "antigravity",
+            "label": "Antigravity (Google)",
+            "transport": "HTTP · stdio",
+            "verified": False,
+            "summary": "Config file location confirmed on this machine; the accepted remote-URL key was not exercised.",
+            "config_path": "~/.gemini/antigravity/mcp_config.json",
+            "config": http_json("serverUrl"),
+            "note": "If the remote form does not connect, use the stdio block from the generic section — no client disagrees about that one.",
+        },
+        {
+            "id": "generic",
+            "label": "Cursor · VS Code · Windsurf · Cline · Zed · others",
+            "transport": "HTTP · stdio",
+            "verified": False,
+            "summary": "Standard MCP client config. The LEco values are verified; the surrounding key names vary by client.",
+            "config": stdio_json(),
+            "config_alt_label": "HTTP form",
+            "config_alt": http_json(),
+            "paths": [
+                "Cursor: ~/.cursor/mcp.json (global) or .cursor/mcp.json (per project)",
+                "VS Code / Copilot: .vscode/mcp.json — uses a `servers` key, not `mcpServers`",
+                "Windsurf: ~/.codeium/windsurf/mcp_config.json",
+                "Zed: settings.json → context_servers",
+                "Continue: ~/.continue/config.yaml",
+                "Gemini CLI: ~/.gemini/settings.json",
+                "JetBrains AI: Settings → Tools → AI Assistant → MCP",
+            ],
+            "note": "Clients disagree on the remote key — <code>url</code>, <code>serverUrl</code>, <code>httpUrl</code>, or a <code>type: http</code> field. Check that first when a remote entry is ignored, then fall back to stdio.",
+        },
+    ]
 
 
 def _repo_slug(repository: str) -> str:

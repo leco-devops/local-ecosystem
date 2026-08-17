@@ -193,6 +193,33 @@ fi
 
 # ---------------------------------------------------------------- discovery
 
+# Directories that never declare a hostname but can be enormous: seeded databases, dependency
+# trees, build output. `hosting/app-available/<app>/data/` is the one that bites — it holds an
+# application's seed data, 3.1 GB of BSON in one real case here.
+#
+# Two reasons this pruning is not merely an optimisation:
+#
+#   * **Speed.** `grep -r` over that tree took ~95 s, and BSD grep (what this script gets on
+#     macOS) follows symlinks, so a `source` link into an app checkout drags its `node_modules`
+#     in too. Pruning takes it to ~0.03 s.
+#   * **Correctness.** Every match becomes a SAN on the certificate this machine trusts. Grepping
+#     binary database dumps means any byte sequence that happens to look like `http://x.lh` —
+#     inside a captured HTTP log, say — silently lands in the certificate. Hostnames should come
+#     from configuration, never from an application's data.
+PRUNE_DIRS=(node_modules data .git dist build vendor __pycache__ .venv venv coverage tmp)
+
+find_config_files() {
+  # -print0/-0 so paths with spaces survive; the repo sits under "Working/GitHub" here but a
+  # user's checkout may not be so lucky.
+  local dir="$1" expr=()
+  local d
+  for d in "${PRUNE_DIRS[@]}"; do
+    expr+=(-name "$d" -o)
+  done
+  unset 'expr[${#expr[@]}-1]'
+  find "$dir" \( "${expr[@]}" \) -prune -o -type f -print0 2>/dev/null
+}
+
 discover_hosts() {
   # Traefik router rules: Host(`something.lh`)
   grep -rhoE 'Host\(`[^`]+`\)' \
@@ -201,10 +228,15 @@ discover_hosts() {
     2>/dev/null | sed -E 's/Host\(`([^`]+)`\)/\1/' || true
 
   # Registered and materialized apps may declare URLs Traefik has not merged yet.
-  grep -rhoE 'https?://[a-zA-Z0-9][a-zA-Z0-9.-]*\.lh' \
+  grep -hoE 'https?://[a-zA-Z0-9][a-zA-Z0-9.-]*\.lh' \
     "$PROJECT_ROOT/config/leco-registry.yaml" \
-    "$PROJECT_ROOT/hosting/app-available/" \
     2>/dev/null | sed -E 's|https?://||' || true
+
+  if [ -d "$PROJECT_ROOT/hosting/app-available" ]; then
+    find_config_files "$PROJECT_ROOT/hosting/app-available" \
+      | xargs -0 grep -hoE 'https?://[a-zA-Z0-9][a-zA-Z0-9.-]*\.lh' 2>/dev/null \
+      | sed -E 's|https?://||' || true
+  fi
 }
 
 # A hostname with three or more labels (panel.myapp.lh) also contributes a legal wildcard
