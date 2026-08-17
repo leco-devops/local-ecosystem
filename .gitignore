@@ -86,3 +86,9 @@ ecosystem-stack/config/generated/ai-rag-embeddings.json
 ecosystem-stack/config/generated/ai-rag-*.tmp
 
 /Backup
+
+# project-atlas derived site — regenerable from the markdown with `atlas build`.
+# The documents are the source of truth; committing 336 generated files would churn
+# every doc diff and can never disagree with the sources without being rebuilt.
+docs/_wiki/
+.atlas/

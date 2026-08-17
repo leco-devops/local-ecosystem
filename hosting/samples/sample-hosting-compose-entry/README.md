@@ -51,5 +51,5 @@ Compose variable warnings (**`SQL_USER`**, **`HMDM_URL`**, …) mean the upstrea
 ## See also
 
 - **`hosting/samples/sample-leco-hosting-overlay/`** — lighter pattern (**`composeFile`** + **`additionalComposeFilesFromManifest`**) when an extra hosting overlay is enough. New hosted-app onboarding now auto-generates **`ports: !reset []`** there for upstream services that publish host ports.
-- **[docs/DEPLOY_CLI.md](../../docs/DEPLOY_CLI.md)** — **`composeFileFromManifest`** field reference.
-- **[docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md](../../docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md)** — port **80** conflicts and Traefik.
+- **[docs/DEPLOY_CLI.md](../../../docs/DEPLOY_CLI.md)** — **`composeFileFromManifest`** field reference.
+- **[docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md](../../../docs/HOSTED_APPS_TRAEFIK_RUNBOOK.md)** — port **80** conflicts and Traefik.

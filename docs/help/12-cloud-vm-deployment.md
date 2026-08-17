@@ -1,4 +1,4 @@
-# Cloud VM deployment
+# Cloud VM — deploy on a real server
 
 Use this guide when LEco DevOps runs on a **Linux cloud VM** (development or preproduction) instead of a local Mac/Windows workstation with `*.lh`.
 

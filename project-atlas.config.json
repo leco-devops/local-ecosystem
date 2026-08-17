@@ -1,0 +1,179 @@
+{
+  "$schema": "https://github.com/rmaurya/project-atlas/schema/v1",
+  "siteTitle": "local-ecosystem",
+  "output": "docs/_wiki",
+  "trackedOnly": true,
+  "exclude": [
+    "node_modules/**",
+    ".git/**",
+    "dist/**",
+    "build/**",
+    "out/**",
+    "vendor/**",
+    "target/**",
+    ".claude/worktrees/**",
+    "**/_wiki/**",
+    "**/CHANGELOG.md",
+    "**/LICENSE.md",
+    "**/node_modules/**",
+    "worklog/**"
+  ],
+  "clusters": [
+    {
+      "id": "start",
+      "title": "Start here",
+      "blurb": "The entry path for someone who has never seen this repository.",
+      "match": [
+        "README.md",
+        "docs/README.md",
+        "START_HERE.md",
+        "CONTRIBUTING.md",
+        "docs/PROJECT.md",
+        "index.md"
+      ]
+    },
+    {
+      "id": "agent",
+      "title": "Agent instructions",
+      "blurb": "What an assistant loads: the plugin skills, and the guardrails that frame them.",
+      "match": [
+        "**/SKILL.md",
+        "**/skills/**",
+        "AGENTS.md",
+        "CLAUDE.md",
+        "**/AGENT*.md",
+        "tools/claude-plugin/**"
+      ]
+    },
+    {
+      "id": "manuals",
+      "title": "Operator & developer manuals",
+      "blurb": "The in-dashboard Help tree: task-shaped pages served at /help.",
+      "match": [
+        "docs/help/**",
+        "**/*MANUAL*.md",
+        "**/*manual*.md"
+      ]
+    },
+    {
+      "id": "architecture",
+      "title": "Architecture & design",
+      "blurb": "How the platform is put together, and why.",
+      "match": [
+        "**/ARCHITECTURE.md",
+        "**/HLD.md",
+        "**/LLD.md",
+        "docs/AI_ONBOARDING_PLAN.md",
+        "docs/CF_LECO_SERVICE_MAP.md",
+        "docs/SRS*.md",
+        "**/DESIGN*.md",
+        "docs/design/**"
+      ]
+    },
+    {
+      "id": "apps",
+      "title": "Applications & onboarding",
+      "blurb": "Getting an application onto the platform: manifests, hosting slots, Git sources, CI/CD.",
+      "match": [
+        "docs/LECO_APP_BLUEPRINT.md",
+        "docs/DEPLOY_CLI.md",
+        "docs/LECO_TOOLING.md",
+        "docs/GIT_AND_CICD.md",
+        "docs/HOSTED_APPS*.md",
+        "docs/DEV_STACK_ISOLATION.md",
+        "hosting/**",
+        "docs/DEPLOY_CUSTOM_APPS.md"
+      ]
+    },
+    {
+      "id": "platform-ops",
+      "title": "Install & operations",
+      "blurb": "Standing the platform up and keeping it running \u2014 including on a real server.",
+      "match": [
+        "docs/SETUP.md",
+        "docs/DEPLOYMENT.md",
+        "docs/DEVOPS_GUIDE.md",
+        "docs/PRODUCTION_HARDENING.md",
+        "docs/CLOUD_VM_DEPLOYMENT.md",
+        "docs/CLOUDFLARE_SSL_INSTALL.md",
+        "docs/DEV_STACK*.md",
+        "**/SECURITY.md",
+        "**/INSTALL*.md",
+        "docs/DEVELOPMENT_PLAYBOOK.md"
+      ]
+    },
+    {
+      "id": "integrations",
+      "title": "Integrations & services",
+      "blurb": "The services the platform hosts or speaks to: MCP, AI runtimes, Cloudflare-local, file transfer.",
+      "match": [
+        "docs/MCP_SERVER.md",
+        "docs/AIRLLM_INTEGRATION.md",
+        "docs/FILE_TRANSFER.md",
+        "docs/UI_CREDENTIAL_VAULT.md",
+        "cloudflare-local/**",
+        "tools/mcp-server/**",
+        "platform/**"
+      ]
+    },
+    {
+      "id": "releases",
+      "title": "Releases & history",
+      "blurb": "What shipped, when, and under what version policy.",
+      "match": [
+        "CHANGELOG.md",
+        "releases/**",
+        "docs/RELEASE*.md",
+        "docs/VERSIONING.md",
+        "**/NOTICE.md",
+        "docs/OPEN_SOURCE.md",
+        "docs/SEO_GEO_LLM.md",
+        "LICENSE.md"
+      ]
+    }
+  ],
+  "fallbackCluster": "uncategorised",
+  "blocking": [
+    "H1",
+    "H3",
+    "H8",
+    "H10",
+    "H12"
+  ],
+  "staleDays": 90,
+  "forbiddenTerms": [],
+  "crossref": [],
+  "suppress": [
+    {
+      "signal": "H1",
+      "path": "docs/help/**",
+      "reason": "Help pages link with the dashboard's in-app routing schemes (help:<id> and /?tab=docsTab&doc=<id>), which are resolved at render time by dashboard/help_manual.py and dashboard/docs_catalog.py \u2014 not by the filesystem. Atlas reads them as relative paths. Those ids ARE validated, against HELP_TREE and DOC_MODULES; that check currently reports zero broken references."
+    },
+    {
+      "signal": "H1",
+      "path": "docs/ARCHITECTURE.md",
+      "reason": "Links the architecture diagrams via /help?topic=\u2026 because 13-architecture-diagrams.md is a Help page, not a Docs-catalog entry \u2014 a relative link would 404 in the Docs reader. Verified 200."
+    },
+    {
+      "signal": "H1",
+      "path": "docs/LLD.md",
+      "reason": "Same /help?topic=\u2026 app route as ARCHITECTURE.md, for the same reason."
+    },
+    {
+      "signal": "H8",
+      "path": "tools/claude-plugin/**",
+      "reason": "Claude Code SKILL.md and agent files are defined by YAML frontmatter (name, description); an H1 is not part of that format and the six-key frontmatter rule is enforced by tools/claude-plugin/bin/validate-skills. These are agent instruction files, not corpus documents."
+    },
+    {
+      "signal": "H3",
+      "path": "index.md",
+      "reason": "The GitHub Pages landing page intentionally carries the project name, the same title as README.md. Jekyll builds the public site from it; they are the same document for two audiences."
+    },
+    {
+      "signal": "H3",
+      "path": "README.md",
+      "reason": "Paired with index.md by design: index.md is the GitHub Pages landing page Jekyll builds from the same project identity. H3 files a finding against both halves of a pair, so both paths are named here."
+    }
+  ],
+  "planning": {}
+}

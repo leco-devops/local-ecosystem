@@ -1,12 +1,12 @@
 # Ecosystem updates (auto-generated)
 
-_Generated at **2026-08-17T02:47:13Z** by `leco-update-catalog`. [Refresh service](/help?topic=ecosystem-updates)_
+_Generated at **2026-08-17T10:07:22Z** by `leco-update-catalog`. [Refresh service](/help?topic=ecosystem-updates)_
 
 ## Stack service versions
 
 | Service | Status | Running | Latest | Upgrade |
 |---------|--------|---------|--------|---------|
-| Traefik | **not_running** | `—` | `—` | Edit traefik/dynamic.yml in git if stack routes changed<br>./ecosystem-stack/ecosystem-stack.sh heal traefik |
+| Traefik | **not_running** | `—` | `traefik:v1.0.0` | Edit traefik/dynamic.yml in git if stack routes changed<br>./ecosystem-stack/ecosystem-stack.sh heal traefik |
 | Ollama | **not_running** | `—` | `ollama/ollama:0.0.13` | ./ecosystem-stack/ecosystem-stack.sh restart ollama<br>Models persist in Docker volume ollama |
 | AirLLM shim | **not_running** | `—` | `local-airllm:latest` | ./leco-cli.sh airllm build<br>./leco-cli.sh airllm start |
 | Open WebUI | **not_running** | `—` | `ghcr.io/open-webui/open-webui:0.11.0` | ./ecosystem-stack/ecosystem-stack.sh restart webui |
