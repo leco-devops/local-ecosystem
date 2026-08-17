@@ -102,14 +102,48 @@ _traefik_tls_mode() {
     echo "mkcert"
     return 0
   fi
-  python3 - <<'PY' 2>/dev/null || echo "mkcert"
+  # The lib path travels in the environment rather than being interpolated into the
+  # heredoc. A quoted heredoc ('PY') does not expand $DOCKER_BIND, so interpolating it
+  # here silently produced a literal "$DOCKER_BIND/..." on sys.path — the import then
+  # always failed and this function always answered "mkcert", regardless of configured
+  # tls.mode. That silently disabled ACME and kept the insecure Traefik API published.
+  # Passing it through the environment keeps the heredoc quoted (no shell expansion of
+  # the Python source) while still delivering the real path, spaces and all.
+  local _mode _err _status
+  _err="$(mktemp -t leco-tls-mode)"
+  _mode="$(LECO_LIB_DIR="$DOCKER_BIND/ecosystem-stack/lib" python3 - <<'PY' 2>"$_err"
+import os
 import sys
-sys.path.insert(0, "$DOCKER_BIND/ecosystem-stack/lib")
+sys.path.insert(0, os.environ["LECO_LIB_DIR"])
 from platform_config import load_platform_config
 cfg = load_platform_config() or {}
 tls = cfg.get("tls") if isinstance(cfg.get("tls"), dict) else {}
 print(str(tls.get("mode") or "mkcert").strip().lower() or "mkcert")
 PY
+)"
+  _status=$?
+
+  if [ "$_status" -eq 0 ] && [ -n "$_mode" ]; then
+    rm -f "$_err"
+    printf '%s\n' "$_mode"
+    return 0
+  fi
+
+  # A config file exists but could not be read. Falling back to "mkcert" silently is how
+  # a cloud deployment ends up serving traefik-static.yaml — which publishes the Traefik
+  # API unauthenticated on 0.0.0.0:8080 — while the operator believes tls.mode: acme is
+  # in force. Say so loudly; the fallback still happens so the stack can start.
+  echo "⚠️  Could not read tls.mode from config/leco-platform.yaml — assuming 'mkcert'." >&2
+  if grep -q "No module named 'yaml'" "$_err" 2>/dev/null; then
+    echo "    Cause: PyYAML is not installed for $(command -v python3)." >&2
+    echo "    Fix:   python3 -m pip install --user pyyaml   (or: pip install -r ecosystem-stack/requirements.txt)" >&2
+  elif [ -s "$_err" ]; then
+    sed 's/^/    /' "$_err" >&2
+  fi
+  echo "    If this host is meant to use ACME or a real certificate, do NOT expose it until this is resolved:" >&2
+  echo "    the mkcert fallback loads traefik-static.yaml, which serves the Traefik API insecurely on :8080." >&2
+  rm -f "$_err"
+  echo "mkcert"
 }
 
 _traefik_static_config() {
@@ -130,13 +164,17 @@ _prepare_acme_static() {
     echo "❌ Missing $src"
     return 1
   fi
-  python3 - <<PY || cp "$src" "$dst"
+  LECO_LIB_DIR="$DOCKER_BIND/ecosystem-stack/lib" \
+  LECO_ACME_SRC="$src" \
+  LECO_ACME_DST="$dst" \
+  python3 - <<'PY' || cp "$src" "$dst"
+import os
 import sys
 from pathlib import Path
-sys.path.insert(0, "$DOCKER_BIND/ecosystem-stack/lib")
+sys.path.insert(0, os.environ["LECO_LIB_DIR"])
 from platform_config import load_platform_config
-src = Path("$src")
-dst = Path("$dst")
+src = Path(os.environ["LECO_ACME_SRC"])
+dst = Path(os.environ["LECO_ACME_DST"])
 text = src.read_text(encoding="utf-8")
 cfg = load_platform_config() or {}
 tls = cfg.get("tls") if isinstance(cfg.get("tls"), dict) else {}

@@ -1,5 +1,11 @@
 CORE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$CORE_DIR/.." && pwd)"
+
+# Cross-platform primitives (OS + distro + package manager detection, sudo handling,
+# LibreSSL-vs-OpenSSL differences). Sourced here so every service script, the CLI and
+# the installer inherit it without each having to find it.
+# shellcheck source=/dev/null
+[ -f "$CORE_DIR/lib/compat.sh" ] && . "$CORE_DIR/lib/compat.sh"
 SERVICES_DIR="$CORE_DIR/services"
 NETWORK_NAME="${NETWORK_NAME:-lh-network}"
 NETWORK_CONTAINERS="traefik open-webui ollama airllm n8n_postgres n8n paperclip_postgres paperclip service-dashboard leco-update-catalog leco-mcp minio valkey r2-adapter kv-adapter d1-adapter browser-rendering-local workers-runtime autoscaler autoscale-demo mysql redis mailpit telegram-gateway cache-nginx cache-varnish adminer redis-commander leco-sftp leco-ftp leco-file-browser"
@@ -17,11 +23,56 @@ _platform_enabled_services() {
      [ ! -f "$CORE_DIR/config/install-selection.env" ]; then
     return 0
   fi
-  python3 "$CORE_DIR/lib/platform_config.py" enabled-services 2>/dev/null || return 0
+
+  local _out _err _status
+  _err="$(mktemp -t leco-enabled-services)"
+  _out="$(python3 "$CORE_DIR/lib/platform_config.py" enabled-services 2>"$_err")"
+  _status=$?
+
+  if [ "$_status" -eq 0 ]; then
+    rm -f "$_err"
+    printf '%s\n' "$_out"
+    return 0
+  fi
+
+  # Returning empty here means "unrestricted", so every service in START_ORDER starts —
+  # the opposite of what an operator who curated enabled_services asked for. The warning
+  # itself is emitted by _platform_config_warn_if_broken, which runs in the caller's
+  # shell; this function is always invoked inside a command substitution, so a guard
+  # variable set here would be discarded with the subshell and warn on every call.
+  rm -f "$_err"
+  return 0
+}
+
+# Warn once per shell if the platform config cannot be read. Must be called from the
+# parent shell, not inside "$( )", for the guard variable to persist.
+_platform_config_warn_if_broken() {
+  [ -n "${_LECO_WARNED_PLATFORM_CONFIG:-}" ] && return 0
+  if [ ! -f "$PROJECT_ROOT/config/leco-platform.yaml" ] && \
+     [ ! -f "$CORE_DIR/config/install-selection.env" ]; then
+    return 0
+  fi
+  local _err
+  _err="$(mktemp -t leco-enabled-services)"
+  if python3 "$CORE_DIR/lib/platform_config.py" enabled-services >/dev/null 2>"$_err"; then
+    rm -f "$_err"
+    return 0
+  fi
+  _LECO_WARNED_PLATFORM_CONFIG=1
+  echo "⚠️  Could not read enabled_services from config/leco-platform.yaml — starting ALL services." >&2
+  if grep -q "No module named 'yaml'" "$_err" 2>/dev/null; then
+    echo "    Cause: PyYAML is not installed for $(command -v python3)." >&2
+    echo "    Fix:   python3 -m pip install --user pyyaml   (or: pip install -r ecosystem-stack/requirements.txt)" >&2
+  elif [ -s "$_err" ]; then
+    sed 's/^/    /' "$_err" >&2
+  fi
+  rm -f "$_err"
+  return 0
 }
 
 get_services_in_start_order() {
   local filtered
+  _platform_config_warn_if_broken
   filtered="$(_platform_enabled_services)"
   if [ -n "$filtered" ]; then
     while IFS= read -r svc; do
