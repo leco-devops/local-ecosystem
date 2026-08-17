@@ -106,6 +106,7 @@ PROVIDER_META: dict[str, dict[str, Any]] = {
         "discovery": "api",
         "supports_presets": False,
         "docs_url": "https://ollama.com/library",
+        "site_url": "https://ollama.com",
         "privacy_note": "Runs on this machine. Source code never leaves the host.",
     },
     "airllm": {
@@ -116,6 +117,7 @@ PROVIDER_META: dict[str, dict[str, Any]] = {
         "discovery": "api",
         "supports_presets": False,
         "docs_url": "https://github.com/lyogavin/airllm",
+        "site_url": "https://github.com/lyogavin/airllm",
         "privacy_note": "Runs on this machine. Source code never leaves the host.",
     },
     "openai": {
@@ -126,6 +128,7 @@ PROVIDER_META: dict[str, dict[str, Any]] = {
         "discovery": "api",
         "supports_presets": False,
         "docs_url": "https://platform.openai.com/docs/models",
+        "site_url": "https://openai.com",
         "key_hint": "sk-…",
         "privacy_note": "Source excerpts (truncated) are sent to OpenAI's API for analysis.",
     },
@@ -137,6 +140,7 @@ PROVIDER_META: dict[str, dict[str, Any]] = {
         "discovery": "api+curated",
         "supports_presets": False,
         "docs_url": "https://docs.anthropic.com/en/docs/about-claude/models",
+        "site_url": "https://www.anthropic.com",
         "key_hint": "sk-ant-…",
         "privacy_note": "Source excerpts (truncated) are sent to Anthropic's API for analysis.",
     },
@@ -148,6 +152,7 @@ PROVIDER_META: dict[str, dict[str, Any]] = {
         "discovery": "api",
         "supports_presets": False,
         "docs_url": "https://ai.google.dev/gemini-api/docs/models",
+        "site_url": "https://ai.google.dev",
         "key_hint": "AIza…",
         "privacy_note": "Source excerpts (truncated) are sent to Google's Generative Language API.",
     },
@@ -194,6 +199,7 @@ PROVIDER_PRESETS: dict[str, dict[str, Any]] = {
         "kind": "aggregator",
         "privacy": "cloud",
         "docs_url": "https://www.edenai.co/docs/v3/llms/listing-models",
+        "site_url": "https://www.edenai.co",
         "key_hint": "Bearer token from the Eden AI console",
         "note": (
             "One key across many vendors; model ids are 'provider/model' (e.g. openai/gpt-4o). "
@@ -211,6 +217,7 @@ PROVIDER_PRESETS: dict[str, dict[str, Any]] = {
         "kind": "aggregator",
         "privacy": "cloud",
         "docs_url": "https://openrouter.ai/docs/quickstart",
+        "site_url": "https://openrouter.ai",
         "key_hint": "sk-or-v1-…",
         "note": "300+ models from many vendors behind one key.",
         "verified": True,
@@ -222,6 +229,7 @@ PROVIDER_PRESETS: dict[str, dict[str, Any]] = {
         "kind": "aggregator",
         "privacy": "cloud",
         "docs_url": "https://console.groq.com/docs/openai",
+        "site_url": "https://groq.com",
         "key_hint": "gsk_…",
         "verified": "partial",
         "verified_note": "Endpoint and auth path reached live (a wrong key is correctly rejected). Listing with a valid key was not exercised.",
@@ -232,6 +240,7 @@ PROVIDER_PRESETS: dict[str, dict[str, Any]] = {
         "kind": "aggregator",
         "privacy": "cloud",
         "docs_url": "https://docs.together.ai/docs/openai-api-compatibility",
+        "site_url": "https://www.together.ai",
     },
     "deepinfra": {
         "label": "DeepInfra",
@@ -239,6 +248,7 @@ PROVIDER_PRESETS: dict[str, dict[str, Any]] = {
         "kind": "aggregator",
         "privacy": "cloud",
         "docs_url": "https://deepinfra.com/docs/openai_api",
+        "site_url": "https://deepinfra.com",
     },
     "fireworks": {
         "label": "Fireworks AI",
@@ -246,6 +256,7 @@ PROVIDER_PRESETS: dict[str, dict[str, Any]] = {
         "kind": "aggregator",
         "privacy": "cloud",
         "docs_url": "https://docs.fireworks.ai/tools-sdks/openai-compatibility",
+        "site_url": "https://fireworks.ai",
     },
     "deepseek": {
         "label": "DeepSeek",
@@ -253,6 +264,7 @@ PROVIDER_PRESETS: dict[str, dict[str, Any]] = {
         "kind": "vendor",
         "privacy": "cloud",
         "docs_url": "https://api-docs.deepseek.com/",
+        "site_url": "https://www.deepseek.com",
     },
     "mistral": {
         "label": "Mistral AI",
@@ -260,6 +272,7 @@ PROVIDER_PRESETS: dict[str, dict[str, Any]] = {
         "kind": "vendor",
         "privacy": "cloud",
         "docs_url": "https://docs.mistral.ai/api/",
+        "site_url": "https://mistral.ai",
     },
     "xai": {
         "label": "xAI (Grok)",
@@ -267,6 +280,7 @@ PROVIDER_PRESETS: dict[str, dict[str, Any]] = {
         "kind": "vendor",
         "privacy": "cloud",
         "docs_url": "https://docs.x.ai/docs/api-reference",
+        "site_url": "https://x.ai",
         "key_hint": "xai-…",
     },
     "cerebras": {
@@ -275,6 +289,7 @@ PROVIDER_PRESETS: dict[str, dict[str, Any]] = {
         "kind": "aggregator",
         "privacy": "cloud",
         "docs_url": "https://inference-docs.cerebras.ai/",
+        "site_url": "https://www.cerebras.ai",
         "key_hint": "csk-…",
     },
     "nvidia-nim": {
@@ -283,6 +298,7 @@ PROVIDER_PRESETS: dict[str, dict[str, Any]] = {
         "kind": "aggregator",
         "privacy": "cloud",
         "docs_url": "https://docs.nvidia.com/nim/",
+        "site_url": "https://build.nvidia.com",
         "key_hint": "nvapi-…",
     },
     "litellm": {
@@ -291,6 +307,7 @@ PROVIDER_PRESETS: dict[str, dict[str, Any]] = {
         "kind": "gateway",
         "privacy": "depends",
         "docs_url": "https://docs.litellm.ai/docs/simple_proxy",
+        "site_url": "https://www.litellm.ai",
         "note": "Self-hosted gateway — privacy depends on the upstreams it fans out to.",
     },
     "vllm": {
@@ -299,6 +316,7 @@ PROVIDER_PRESETS: dict[str, dict[str, Any]] = {
         "kind": "local",
         "privacy": "full",
         "docs_url": "https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html",
+        "site_url": "https://docs.vllm.ai",
     },
     "lmstudio": {
         "label": "LM Studio (local app)",
@@ -306,6 +324,7 @@ PROVIDER_PRESETS: dict[str, dict[str, Any]] = {
         "kind": "local",
         "privacy": "full",
         "docs_url": "https://lmstudio.ai/docs/app/api/endpoints/openai",
+        "site_url": "https://lmstudio.ai",
         "note": "LM Studio runs on the host; the dashboard reaches it via host.docker.internal.",
     },
     "localai": {
@@ -314,6 +333,7 @@ PROVIDER_PRESETS: dict[str, dict[str, Any]] = {
         "kind": "local",
         "privacy": "full",
         "docs_url": "https://localai.io/features/openai-functions/",
+        "site_url": "https://localai.io",
     },
     "ollama-openai": {
         "label": "Ollama (OpenAI-compatible shim)",
@@ -321,6 +341,7 @@ PROVIDER_PRESETS: dict[str, dict[str, Any]] = {
         "kind": "local",
         "privacy": "full",
         "docs_url": "https://ollama.com/blog/openai-compatibility",
+        "site_url": "https://ollama.com",
         "note": "Use the dedicated Ollama provider unless you need the OpenAI wire format.",
     },
 }

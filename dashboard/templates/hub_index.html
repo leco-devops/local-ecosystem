@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Service hubs — LEco DevOps</title>
     {% include "_head_icons.html" %}
-    <link rel="stylesheet" href="/static/dashboard.css?v=20260544" />
+    <link rel="stylesheet" href="/static/dashboard.css?v=20260545" />
     <link rel="stylesheet" href="/static/service_hub.css" />
   </head>
   <body>
@@ -85,6 +85,7 @@
                   <span class="ai-cfg__inline">
                     <select id="aiCfgPreset" aria-label="Provider preset"></select>
                     <a href="#" id="aiCfgPresetDocs" class="ai-cfg__docs" target="_blank" rel="noopener noreferrer" hidden>API docs ↗</a>
+                    <a href="#" id="aiCfgPresetSite" class="ai-cfg__docs" target="_blank" rel="noopener noreferrer" hidden>Website ↗</a>
                   </span>
                   <span class="ai-cfg__hint muted small" id="aiCfgPresetNote"></span>
                 </label>
@@ -199,6 +200,6 @@
     </div>
     {% include "_app_modal.html" %}
     <script type="application/json" id="dashboard-boot-config">{{ dashboard_boot | tojson }}</script>
-    <script src="/static/dashboard.js?v=20260544"></script>
+    <script src="/static/dashboard.js?v=20260545"></script>
   </body>
 </html>

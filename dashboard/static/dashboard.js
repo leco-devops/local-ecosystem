@@ -11488,6 +11488,9 @@ function applyAiCfgPreset(userInitiated) {
   const preset = aiCurrentPreset();
   const urlIn = aiCfgEl("aiCfgUrl");
   const docs = aiCfgEl("aiCfgPresetDocs");
+  // The vendor's own homepage, separate from its API reference: useful for pricing,
+  // sign-up and which models a provider actually offers before you commit a key.
+  const site = aiCfgEl("aiCfgPresetSite");
   const note = aiCfgEl("aiCfgPresetNote");
   if (urlIn) {
     if (preset.id === "custom" && userInitiated) urlIn.value = "";
@@ -11496,6 +11499,10 @@ function applyAiCfgPreset(userInitiated) {
   if (docs) {
     if (preset.docs_url) { docs.hidden = false; docs.href = preset.docs_url; }
     else docs.hidden = true;
+  }
+  if (site) {
+    if (preset.site_url) { site.hidden = false; site.href = preset.site_url; }
+    else site.hidden = true;
   }
   if (note) {
     const priv = AI_PRIVACY_LABEL[preset.privacy] || AI_PRIVACY_LABEL.depends;
