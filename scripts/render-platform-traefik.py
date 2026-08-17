@@ -102,17 +102,85 @@ def apply_tls_policy(text: str, *, resolver: str | None, drop_local_certificates
     return yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, allow_unicode=True)
 
 
-def render(base_domain: str, tls_mode: str = "mkcert") -> str:
-    text = SOURCE.read_text(encoding="utf-8")
-    if base_domain == "lh":
-        # Local install: unchanged, comments and all.
+DASHBOARD_SERVICE = "dashboard-service"
+DASHBOARD_AUTH_MIDDLEWARE = "leco-dashboard-auth"
+
+
+def apply_dashboard_auth(text: str, users: list[str]) -> str:
+    """Put HTTP basic auth in front of every router that serves the dashboard.
+
+    The dashboard's own control token only guards *mutating* API calls; everything a
+    reader can see — app inventory, logs, metrics, config — is unauthenticated. This adds
+    a Traefik ``basicAuth`` middleware instead of changing the dashboard, so the guarantee
+    holds for every route regardless of what the application does internally.
+
+    Routers are selected by the service they point at rather than by name, so a router
+    added to ``traefik/dynamic.yml`` later is covered automatically.
+
+    Note: this protects the Traefik-fronted hostname. The dashboard container also
+    publishes host port 8090 directly, which bypasses Traefik entirely — bind it to
+    127.0.0.1 (or firewall it) on any host that is not a private workstation.
+    """
+    if not users:
         return text
+    try:
+        doc = yaml.safe_load(text) or {}
+    except yaml.YAMLError as exc:
+        raise SystemExit(f"traefik/dynamic.yml is not valid YAML: {exc}") from exc
+    if not isinstance(doc, dict):
+        raise SystemExit("traefik/dynamic.yml did not parse to a mapping")
+
+    http = doc.get("http")
+    if not isinstance(http, dict):
+        return text
+
+    middlewares = http.get("middlewares")
+    if not isinstance(middlewares, dict):
+        middlewares = {}
+        http["middlewares"] = middlewares
+    middlewares[DASHBOARD_AUTH_MIDDLEWARE] = {"basicAuth": {"users": list(users)}}
+
+    routers = http.get("routers")
+    if isinstance(routers, dict):
+        for _name, router in routers.items():
+            if not isinstance(router, dict):
+                continue
+            if str(router.get("service") or "").strip() != DASHBOARD_SERVICE:
+                continue
+            existing = router.get("middlewares")
+            chain = list(existing) if isinstance(existing, list) else []
+            if DASHBOARD_AUTH_MIDDLEWARE not in chain:
+                chain.append(DASHBOARD_AUTH_MIDDLEWARE)
+            router["middlewares"] = chain
+
+    return yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, allow_unicode=True)
+
+
+def dashboard_auth_users(cfg: dict[str, Any]) -> list[str]:
+    """``user:hash`` entries from ``dashboard_auth``, or [] when auth is off."""
+    block = cfg.get("dashboard_auth")
+    if not isinstance(block, dict) or not block.get("enabled"):
+        return []
+    users = block.get("users")
+    if not isinstance(users, list):
+        return []
+    return [str(u).strip() for u in users if str(u).strip()]
+
+
+def render(base_domain: str, tls_mode: str = "mkcert", auth_users: list[str] | None = None) -> str:
+    text = SOURCE.read_text(encoding="utf-8")
+    auth_users = auth_users or []
+    if base_domain == "lh":
+        # Local install: unchanged, comments and all — unless auth is on, which requires
+        # re-serializing the document and therefore drops the comments.
+        return apply_dashboard_auth(text, auth_users) if auth_users else text
     text = rewrite_hosts(text, base_domain)
-    return apply_tls_policy(
+    text = apply_tls_policy(
         text,
         resolver=acme_resolver_name() if tls_mode == "acme" else None,
         drop_local_certificates=tls_mode != "mkcert",
     )
+    return apply_dashboard_auth(text, auth_users)
 
 
 def main() -> int:
@@ -123,13 +191,19 @@ def main() -> int:
     dom = str(cfg.get("base_domain") or "lh").strip() or "lh"
     tls_cfg = cfg.get("tls") if isinstance(cfg.get("tls"), dict) else {}
     tls_mode = str(tls_cfg.get("mode") or "mkcert").strip() or "mkcert"
-    body = render(dom, tls_mode)
+    auth_users = dashboard_auth_users(cfg)
+    body = render(dom, tls_mode, auth_users)
     if args.write:
         OUT.parent.mkdir(parents=True, exist_ok=True)
         OUT.write_text(body, encoding="utf-8")
         print(f"Wrote {OUT} (base_domain={dom}, tls.mode={tls_mode}, config={PLATFORM_FILE})")
         if dom != "lh" and tls_mode == "acme":
             print(f"  routers now reference certResolver: {acme_resolver_name()}")
+        if auth_users:
+            names = ", ".join(u.split(":", 1)[0] for u in auth_users)
+            print(f"  dashboard routers now require basic auth (users: {names})")
+        else:
+            print("  dashboard is UNAUTHENTICATED (dashboard_auth.enabled is not set)")
     else:
         print(body[:500])
     return 0
