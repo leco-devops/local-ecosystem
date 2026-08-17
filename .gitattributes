@@ -1,0 +1,65 @@
+# Line-ending policy.
+#
+# Git for Windows ships with core.autocrlf=true, so a Windows clone rewrites every
+# LF to CRLF on checkout. For anything with a shebang that is fatal rather than
+# cosmetic: the kernel reads the interpreter path up to the newline, so `#!/usr/bin/env
+# bash\r` asks for an interpreter literally named "bash\r" and WSL2 answers
+#
+#     bad interpreter: /usr/bin/env bash^M: no such file or directory
+#
+# before a single line of the script runs. The same CRLF also breaks `case` patterns,
+# heredoc terminators and any `read`-into-variable comparison, so a script that
+# survives its shebang can still fail in ways that look like logic bugs.
+#
+# Forcing eol=lf on everything the platform interprets makes a Windows clone behave
+# identically to a macOS or Linux one. This is checkout policy, so it only takes
+# effect on a fresh clone or after `git add --renormalize .`.
+
+# Default: let Git decide what is text, but never rewrite line endings on checkout.
+*               text=auto eol=lf
+
+# --- Executed directly (shebang matters most here) --------------------------------
+*.sh            text eol=lf
+leco-cli.sh     text eol=lf
+tools/claude-plugin/bin/leco-mcp-launch     text eol=lf
+tools/claude-plugin/bin/validate-skills     text eol=lf
+
+# --- Interpreted or parsed (CRLF is silently corrupting rather than fatal) ---------
+*.py            text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.json          text eol=lf
+*.toml          text eol=lf
+*.md            text eol=lf
+*.env           text eol=lf
+Dockerfile      text eol=lf
+*.Dockerfile    text eol=lf
+.gitignore      text eol=lf
+.dockerignore   text eol=lf
+
+# --- Copied into containers verbatim ----------------------------------------------
+infra/runtimes/**/entrypoint.sh             text eol=lf
+ecosystem-stack/**/*.sh                     text eol=lf
+
+# --- Never touch: byte-exact content ----------------------------------------------
+*.pem           binary
+*.crt           binary
+*.key           binary
+*.p12           binary
+*.pfx           binary
+*.der           binary
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.gif           binary
+*.ico           binary
+*.webp          binary
+*.woff          binary
+*.woff2         binary
+*.ttf           binary
+*.zip           binary
+*.gz            binary
+*.tgz           binary
+*.db            binary
+*.sqlite        binary
+*.sqlite3       binary
