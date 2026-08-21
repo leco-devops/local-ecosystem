@@ -175,5 +175,8 @@
       "reason": "Paired with index.md by design: index.md is the GitHub Pages landing page Jekyll builds from the same project identity. H3 files a finding against both halves of a pair, so both paths are named here."
     }
   ],
-  "planning": {}
+  "planning": {},
+  "publish": {
+    "remote": "git@github.com:leco-devops/local-ecosystem.git"
+  }
 }
