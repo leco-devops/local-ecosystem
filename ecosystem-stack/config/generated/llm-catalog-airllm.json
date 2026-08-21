@@ -1,7 +1,7 @@
 {
   "ok": true,
   "backend": "airllm",
-  "generated_at": "2026-08-17T19:43:17Z",
+  "generated_at": "2026-08-20T15:22:17Z",
   "model_count": 17,
   "new_online_count": 7,
   "new_online": [
@@ -41,7 +41,7 @@
         "smoke-test"
       ],
       "online_seen": true,
-      "hf_downloads": 6821681
+      "hf_downloads": 6909544
     },
     {
       "name": "Qwen/Qwen2.5-1.5B-Instruct",
@@ -64,7 +64,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 10681138
+      "hf_downloads": 9981080
     },
     {
       "name": "Qwen/Qwen2.5-14B-Instruct",
@@ -87,7 +87,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 3027230
+      "hf_downloads": 2822835
     },
     {
       "name": "Qwen/Qwen2.5-3B-Instruct",
@@ -110,7 +110,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 6734189
+      "hf_downloads": 6969839
     },
     {
       "name": "Qwen/Qwen2.5-72B-Instruct",
@@ -161,7 +161,7 @@
         "default"
       ],
       "online_seen": true,
-      "hf_downloads": 12245511
+      "hf_downloads": 12116825
     },
     {
       "name": "Qwen/Qwen2.5-7B-Instruct-AWQ",
@@ -184,7 +184,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 4623846
+      "hf_downloads": 4536521
     },
     {
       "name": "Qwen/Qwen2.5-Coder-7B-Instruct",
@@ -229,7 +229,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 3317001
+      "hf_downloads": 3277786
     },
     {
       "name": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
@@ -330,7 +330,7 @@
         "gated"
       ],
       "online_seen": true,
-      "hf_downloads": 7316110
+      "hf_downloads": 7069520
     },
     {
       "name": "meta-llama/Llama-3.2-1B-Instruct",
@@ -353,7 +353,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 8764927
+      "hf_downloads": 8486493
     },
     {
       "name": "meta-llama/Llama-3.2-3B-Instruct",
@@ -423,7 +423,7 @@
         "discovered"
       ],
       "discovered_online": true,
-      "hf_downloads": 10174497
+      "hf_downloads": 11504682
     }
   ]
 }

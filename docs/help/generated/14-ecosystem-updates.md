@@ -1,6 +1,6 @@
 # Ecosystem updates (auto-generated)
 
-_Generated at **2026-08-17T19:43:17Z** by `leco-update-catalog`. [Refresh service](/help?topic=ecosystem-updates)_
+_Generated at **2026-08-20T15:22:17Z** by `leco-update-catalog`. [Refresh service](/help?topic=ecosystem-updates)_
 
 ## Stack service versions
 
@@ -11,7 +11,7 @@ _Generated at **2026-08-17T19:43:17Z** by `leco-update-catalog`. [Refresh servic
 | AirLLM shim | **not_running** | `—` | `local-airllm:latest` | ./leco-cli.sh airllm build<br>./leco-cli.sh airllm start |
 | Open WebUI | **not_running** | `—` | `ghcr.io/open-webui/open-webui:0.11.0` | ./ecosystem-stack/ecosystem-stack.sh restart webui |
 | n8n | **not_running** | `—` | `n8nio/n8n:0.1.2` | ./ecosystem-stack/ecosystem-stack.sh restart n8n |
-| Paperclip | **not_running** | `—` | `ghcr.io/paperclipai/paperclip:2026.722.0` | ./ecosystem-stack/ecosystem-stack.sh restart paperclip<br>Data persists in Docker volumes paperclip_data and paperclip_postgres_data |
+| Paperclip | **not_running** | `—` | `ghcr.io/paperclipai/paperclip:2026.817.0` | ./ecosystem-stack/ecosystem-stack.sh restart paperclip<br>Data persists in Docker volumes paperclip_data and paperclip_postgres_data |
 | PostgreSQL (Paperclip) | **not_running** | `—` | `postgres:9.1.17` | Back up Paperclip data before major Postgres upgrades<br>./ecosystem-stack/ecosystem-stack.sh restart paperclip-postgres |
 | PostgreSQL (n8n) | **not_running** | `—` | `postgres:9.1.16` | Back up n8n data before major Postgres upgrades<br>./ecosystem-stack/ecosystem-stack.sh restart postgres |
 | LEco DevOps dashboard | **not_running** | `—` | `local/service-dashboard:latest` | ./ecosystem-stack/ecosystem-stack.sh restart dashboard<br>Or: bash ./ecosystem-stack/services/dashboard.sh deploy |
