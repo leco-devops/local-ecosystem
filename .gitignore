@@ -96,3 +96,9 @@ docs/_wiki/
 # Local Python virtualenvs (MCP server stdio install; see docs/CONNECT_AI_AGENTS.md)
 .venv/
 venv/
+
+# Social publishing kits — the LinkedIn article and group assets. Rendered PNGs beside
+# their SVG sources, ~2 MB, produced with rsvg-convert and consumed by hand when posting.
+# Nothing in the site or the docs links them, so the repository gains nothing by carrying
+# them; each kit's README documents the re-render command.
+assets/social/

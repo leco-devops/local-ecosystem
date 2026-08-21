@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "generated_at": "2026-08-17T19:43:17Z",
+  "generated_at": "2026-08-20T15:22:17Z",
   "services": [
     {
       "id": "traefik",
@@ -101,9 +101,9 @@
       ],
       "source": "docker_hub",
       "latest": {
-        "tag": "2026.722.0",
-        "updated": "2026-07-22T23:05:41Z",
-        "full": "ghcr.io/paperclipai/paperclip:2026.722.0"
+        "tag": "2026.817.0",
+        "updated": "2026-08-18T03:17:29Z",
+        "full": "ghcr.io/paperclipai/paperclip:2026.817.0"
       }
     },
     {
