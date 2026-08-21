@@ -27,6 +27,7 @@ Deploy first, configure later. Read → Convert → Orchestrate → Deploy. No m
 - [FAQ](https://leco-project.us/#faq): common questions
 - [Setup](https://github.com/leco-devops/local-ecosystem/blob/main/docs/SETUP.md): first install
 - [Technical guide](https://github.com/leco-devops/local-ecosystem/blob/main/docs/PROJECT.md): repository documentation
+- [Wiki](https://github.com/leco-devops/local-ecosystem/wiki): generated knowledgebase — every document in the repository, clustered and cross-linked
 - [Platform tab guide](https://github.com/leco-devops/local-ecosystem/blob/main/docs/help/03-platform-tab.md)
 - [CLI](https://github.com/leco-devops/local-ecosystem/blob/main/docs/DEPLOY_CLI.md): `leco-devops` commands
 - [Contributing](https://github.com/leco-devops/local-ecosystem/blob/main/CONTRIBUTING.md)

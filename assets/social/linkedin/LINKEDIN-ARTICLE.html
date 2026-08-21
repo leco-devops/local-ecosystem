@@ -1,0 +1,232 @@
+<title>LEco Article Paste Source</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&display=swap">
+<style>
+  :root{
+    --paper:#fbfaf7; --card:#ffffff; --ink:#1b1d24; --soft:#5a5f6e; --line:#dcd9d0;
+    --mark:#0b6b7d; --flag:#b4531a; --flag-bg:#fdf2e7;
+    --sans:"IBM Plex Sans","Helvetica Neue",Helvetica,Arial,sans-serif;
+    --mono:"IBM Plex Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:var(--sans); font-size:17px; line-height:1.65; padding:0 20px 80px;
+  }
+  .shell{max-width:760px; margin:0 auto}
+
+  .howto{
+    background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:24px 26px; margin:32px 0 0;
+  }
+  .howto h1{font-size:19px; margin:0; letter-spacing:-.01em}
+  .howto p{font-size:15px; color:var(--soft)}
+  .howto ol{margin:16px 0 0; padding-left:22px; font-size:15px; color:var(--soft)}
+  .howto li{margin:9px 0}
+  .howto code{font-family:var(--mono); font-size:13.5px; background:#f1efe9; padding:1px 5px; border-radius:4px; color:var(--ink)}
+  .btn{
+    margin-top:20px; font:600 15px var(--sans); color:#fff; background:var(--ink);
+    border:0; border-radius:8px; padding:11px 18px; cursor:pointer;
+  }
+  .btn:hover{background:#000}
+  .btn:focus-visible{outline:2px solid var(--mark); outline-offset:3px}
+  .hint{font-size:13.5px; color:var(--soft); margin-top:10px}
+
+  .titlefield{
+    margin:26px 0 0; background:var(--card); border:1px solid var(--line);
+    border-left:3px solid var(--mark); border-radius:0 10px 10px 0; padding:18px 22px;
+  }
+  .titlefield .lbl{font-family:var(--mono); font-size:11.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--soft)}
+  .titlefield .val{font-size:20px; font-weight:600; margin-top:6px; line-height:1.35}
+
+  .startmark,.endmark{
+    font-family:var(--mono); font-size:12px; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--soft); border-top:1px dashed var(--line); padding-top:10px; margin:34px 0 0;
+  }
+  .endmark{border-top:1px dashed var(--line); border-bottom:0}
+
+  /* ---- the region that gets copied ---- */
+  #body{
+    background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:34px 38px; margin-top:12px;
+  }
+  #body h2{font-size:25px; line-height:1.25; margin:40px 0 0; letter-spacing:-.01em}
+  #body h2:first-child{margin-top:0}
+  #body p{margin:16px 0 0}
+  #body ul{margin:16px 0 0; padding-left:22px}
+  #body li{margin:8px 0}
+  #body blockquote{
+    margin:26px 0 0; padding:14px 20px; border-left:3px solid var(--mark);
+    background:#f3f7f8; font-size:19px; font-weight:600;
+  }
+  #body .ph{
+    background:var(--flag-bg); border:1px dashed #e0b892; border-radius:8px;
+    padding:14px 18px; margin:26px 0 0; font-family:var(--mono); font-size:14px; color:var(--flag);
+  }
+  #body .ph b{font-weight:500; display:block; margin-top:6px; color:var(--soft); font-family:var(--sans)}
+  #body .cmds{font-family:var(--mono); font-size:14.5px; line-height:1.9; margin:16px 0 0; white-space:pre-wrap}
+  #body .tags{margin-top:26px; color:var(--mark)}
+  @media (max-width:640px){ body{font-size:16px; padding:0 14px 60px} #body{padding:24px 20px} }
+</style>
+
+<div class="shell">
+  <section class="howto">
+    <h1>LinkedIn article — paste source</h1>
+    <p>This page is pre-formatted. Copying from here keeps the headings, bold text and lists, so you do not have to re-apply them inside LinkedIn.</p>
+    <ol>
+      <li>On LinkedIn: <b>Home → Write article</b>.</li>
+      <li><b>Cover image:</b> upload <code>01-banner-cover.png</code>.</li>
+      <li><b>Title:</b> copy the title below into the title field.</li>
+      <li><b>Body:</b> press the button, then <code>⌘C</code> / <code>Ctrl+C</code>, and paste into the LinkedIn body.</li>
+      <li>Replace each orange placeholder block with that image: delete the block, click the <b>+</b> in the left margin, choose Image, upload the named file, and paste its caption into LinkedIn's caption box.</li>
+    </ol>
+    <button class="btn" id="sel">Select the article body</button>
+    <p class="hint">Then press ⌘C (Mac) or Ctrl+C (Windows) to copy the selection.</p>
+  </section>
+
+  <div class="titlefield">
+    <div class="lbl">Title field · 82 of 100 characters</div>
+    <div class="val">Deploy first. Configure never. Inside LEco DevOps, an open-source local cloud edge</div>
+  </div>
+
+  <p class="startmark">Article body starts</p>
+
+  <article id="body">
+    <p>Every team I have worked with has the same folder on someone's laptop: a README with eleven setup steps, four of which are wrong, and a comment near the bottom that says "ask Priya about the ports."</p>
+
+    <p>We accept this. We accept that the app runs on localhost:3000 locally and behind a real hostname in production, that cookies and CORS behave differently in each, that a new hire loses two days to a port conflict, and that "works on my machine" is a joke instead of a bug report.</p>
+
+    <p><b>LEco DevOps</b> is our attempt to delete that gap. It is a free, MIT-licensed <b>local cloud edge</b>: point it at a repository, and it reads what you already built, converts it into platform manifests, wires Traefik and Docker Compose, and serves your app on a real hostname with TLS your browser trusts. https://myapp.lh instead of http://localhost:3000.</p>
+
+    <p>The project is community-governed and lives at github.com/leco-devops/local-ecosystem</p>
+
+    <h2>It reads your repo instead of asking you to rewrite it</h2>
+
+    <p>Most platforms ask you to adopt them. You write their YAML, restructure your services, learn their abstractions, and then you find out whether it works.</p>
+
+    <p>LEco inverts that: <b>read, convert, orchestrate, deploy</b>.</p>
+
+    <div class="ph">[ IMAGE → 05-read-write.png ]
+      <b>Caption: LEco reads what you already built and writes the platform wiring next to it, never into it.</b></div>
+
+    <p>It scans docker-compose.yml, including monorepos that hide it in infra/, deploy/, ops/ or .docker/. It reads every wrangler.toml, .json and .jsonc in the workspace, plus .env files, Dockerfiles and declared port tables. Then it writes the platform wiring <b>beside your repository, never inside it</b>: a bridge manifest, a profile, a Compose overlay that joins the shared network, a Traefik fragment, and a registry row. Your checkout keeps a symlink and nothing else. Pull it, branch it, delete it, and LEco leaves no residue.</p>
+
+    <p>One rule underpins the whole thing, and it is the rule most tools quietly break:</p>
+
+    <blockquote>Ports come from evidence, never from invention.</blockquote>
+
+    <p>Every port must trace back to a Compose port pair or a declared port table in a named file. If the evidence does not say which port a component listens on, LEco lists it under "unknowns" and asks. A plausible-looking guess produces a stack that builds, starts, and serves nothing, and it reads as an application bug for hours. We would rather stop and ask.</p>
+
+    <p>That discipline was tested against an 18-worker Cloudflare Workers monorepo that convention-based detection could not see at all. Four public origins, onboarded, deployed and verified over valid TLS.</p>
+
+    <h2>Three ways in, one place where decisions are made</h2>
+
+    <div class="ph">[ IMAGE → 03-data-flow.png ]
+      <b>Caption: Three ways in. One control plane. Every deploy ends in a real HTTP probe.</b></div>
+
+    <p>There are three doors into a LEco machine: a browser, an AI agent over MCP, and a Git push. There is exactly one room behind them.</p>
+
+    <p>Neither the MCP server nor the CI/CD runner touches Docker. Both act through the dashboard API, so the control token, the lifecycle rules, the destructive-action gates and the audit log live in <b>one</b> place instead of three. If you have ever debugged a platform where the CLI, the UI and the automation each had their own opinion about what "restart" means, you know why this matters.</p>
+
+    <p>And every deploy ends where it should: with a real HTTP probe. A deployment that leaves the app returning 502 is recorded as <b>failed</b>, not as deployed. Verification classifies each origin as ok, route_missing, backend_unreachable, tls_invalid or unhealthy, because those need four different fixes and a bare 502 names none of them.</p>
+
+    <h2>What actually runs on one machine</h2>
+
+    <div class="ph">[ IMAGE → 04-runtime-topology.png ]
+      <b>Caption: One wildcard domain, one Docker network, one lifecycle, whether it is a laptop or a cloud VM.</b></div>
+
+    <ul>
+      <li><b>Traefik</b> on ports 80 and 443 does TLS termination and Host-rule routing, so :8080, :3000 and :5432 leave your head and your bookmarks.</li>
+      <li><b>Wildcard *.lh DNS</b> with mkcert certificates the browser actually trusts.</li>
+      <li><b>Hosted apps</b> get one slot per repo, including split frontend and /api routes, the same pattern as a production edge.</li>
+      <li><b>Isolated dev stacks:</b> 30 presets covering WordPress, Magento, Laravel, Django, Rails, NestJS, LAMP and MEAN, plus 17 components. Each stack is its own Compose project and network, so one client project cannot collide with another.</li>
+      <li><b>Local AI:</b> Ollama, AirLLM for large models on modest VRAM via layer streaming, Open WebUI on ai.lh, plus n8n and Paperclip for automation and agent orchestration.</li>
+      <li><b>Cloudflare-local:</b> KV, R2, D1 and Workers-style adapters, so you can exercise bindings without touching production Cloudflare.</li>
+    </ul>
+
+    <h2>Built for agents, not just for people</h2>
+
+    <p>This is the part I did not expect to matter as much as it does.</p>
+
+    <p>LEco ships an <b>MCP server with 65 tools</b> over stdio and streamable HTTP, a Claude Code plugin, and a read-only diagnostician subagent. An agent can check stack health, onboard an application, merge routes, pull a model, read logs and verify hostnames, through the same API the UI uses, with no Docker socket of its own.</p>
+
+    <p>The safety model is deliberately boring. Destructive tools such as remove, destroy, reinstall, offboard, route strip and model delete require <b>both</b> confirm=true on the call <b>and</b> LECO_MCP_ALLOW_DESTRUCTIVE=1 on the server, and credential tools are gated separately. Blocked calls report both gates, so the agent surfaces a refusal instead of inventing a workaround. Every tool call is appended to an audit log with argument values passed through a scalar whitelist, so the dashboard can answer "which agent touched which application, and when" without ever giving credentials a route into the log.</p>
+
+    <p>There is also <b>Ask LEco</b>: retrieval-grounded answering over the platform's own documentation, 112 files and 918 heading-aligned chunks, plus live machine state such as stack status, app snapshots, Traefik routes and logs, pulled only when the question calls for it. Answers cite their sources, secrets are scrubbed at index time and again from live state, and tests plant a fake key and assert it never reaches a prompt.</p>
+
+    <h2>Everything in one MIT-licensed repo</h2>
+
+    <div class="ph">[ IMAGE → 06-capability-map.png ]
+      <b>Caption: One product, five surfaces. The dashboard, CLI, MCP server, dev stacks and adapters all share one API.</b></div>
+
+    <h2>It does not stop at the laptop</h2>
+
+    <p>Deployment mode, base domain and TLS mode are first-class inputs, not hardcoded assumptions. The same platform installs on a Linux VM with your real domain and ACME, Cloudflare, or static certificates. It is a preproduction environment for teams who do not want Kubernetes to be the price of entry.</p>
+
+    <p>Push-to-deploy comes with it. HMAC-signed GitHub and GitLab webhooks run pull, build hook, deploy, verify and record, with per-step logs, branch filtering, one run at a time per pipeline, and rollback to the previously deployed commit.</p>
+
+    <p>One honest caveat, because I would rather say it than have you discover it: the defaults are tuned for a laptop. Before you expose LEco on a public host, read PRODUCTION_HARDENING.md in the repo. We wrote it as an audit of our own defaults, including the ones that were wrong, and it tells you exactly what to change.</p>
+
+    <h2>The difference on day one</h2>
+
+    <div class="ph">[ IMAGE → 07-before-after.png ]
+      <b>Caption: Same containers. Different address space, and a routing shape you can actually ship.</b></div>
+
+    <h2>Principles we keep coming back to</h2>
+
+    <ul>
+      <li><b>Evidence over invention.</b> If we cannot prove a port, a hostname, or a service boundary from a named file, we ask instead of guessing.</li>
+      <li><b>One control plane.</b> Every entry point acts through the same API, so safety rules cannot be bypassed by picking a different door.</li>
+      <li><b>Nothing written into your repository.</b> Your source tree is an input, not a hostage.</li>
+      <li><b>Verify, do not assume.</b> A deploy is not done until an HTTP probe says so.</li>
+      <li><b>Say what is not true yet.</b> Clients we have not tested are marked untested. Known-weak defaults are documented, not hidden.</li>
+    </ul>
+
+    <h2>Start in minutes</h2>
+
+    <p class="cmds">git clone https://github.com/leco-devops/local-ecosystem.git
+cd local-ecosystem
+./ecosystem-stack/install-foundation.sh
+./ecosystem-stack/ecosystem-stack.sh start</p>
+
+    <p>Then open http://dashboard.lh and register your first app, or let an agent do it for you.</p>
+
+    <p>Repo: github.com/leco-devops/local-ecosystem<br>Site: leco-project.us<br>License: MIT</p>
+
+    <p>If you run more than two applications on one machine, or you have ever lost an afternoon to a port map, I would genuinely like your issues and pull requests. The roadmap belongs to whoever shows up.</p>
+
+    <h2>LEco and project-atlas work hand in hand</h2>
+
+    <p>These two are halves of the same loop, and I run them together every day.</p>
+
+    <p><b>project-atlas makes a repository legible to an agent.</b> It indexes the markdown you already have, detects rot mechanically — dead links, forked documents, architecture pages citing source files that have all changed since, orphan pages, SOPs past their review date — and generates a searchable knowledgebase, a dashboard, a health report and an agent knowledge graph. Your markdown stays the source of truth, and everything it produces regenerates byte-identically, so the output cannot fork from your docs.</p>
+
+    <p><b>LEco DevOps makes the machine operable by that same agent.</b> 65 MCP tools, one control plane, ports taken from evidence, and a verify step that proves the hostname actually answers.</p>
+
+    <p><b>Put them together and the loop closes: the agent reads documentation it can trust, then acts on infrastructure that refuses to guess.</b></p>
+
+    <p>No stale README. No invented port. No "ask Priya about the ports." A coding agent can go from a fresh clone to a deployed, TLS-verified hostname on its own, without a human stitching the two halves together at every step. Both are MIT, and both ship a Claude Code plugin and an MCP server, so it is one agent session rather than a toolchain you have to assemble.</p>
+
+    <p>project-atlas gets its own article next. github.com/rmaurya/project-atlas</p>
+
+    <p><i>LEco DevOps Open Project is MIT-licensed and community-governed, with operational stewardship from Techtonic Systems Media And Research LLC.</i></p>
+
+    <p class="tags">#DevOps #OpenSource #Docker #Traefik #DeveloperExperience #LocalDevelopment #AI #MCP #Cloudflare #PlatformEngineering</p>
+  </article>
+
+  <p class="endmark">Article body ends</p>
+</div>
+
+<script>
+  document.getElementById('sel').addEventListener('click', function () {
+    var el = document.getElementById('body');
+    var range = document.createRange();
+    range.selectNodeContents(el);
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    this.textContent = 'Selected — now press ⌘C / Ctrl+C';
+  });
+</script>
