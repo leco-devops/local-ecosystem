@@ -17,6 +17,7 @@ title: LEco DevOps Open Project
   <a href="#use-cases">Use cases</a>
   <a href="#faq">FAQ</a>
   <a href="https://github.com/leco-devops/local-ecosystem/blob/main/docs/PROJECT.md">Technical guide</a>
+  <a href="https://github.com/leco-devops/local-ecosystem/wiki">Wiki</a>
   <a href="https://github.com/leco-devops/local-ecosystem">Source</a>
 </nav>
 
